@@ -1,8 +1,11 @@
 use log::{error, info, warn};
-use rusqlite::ToSql;
+//use rusqlite::ToSql;
 pub use rusqlite::{params, types::Null, Connection, Result, Transaction};
+pub use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, ValueRef};
 use std::panic;
 use std::path::Path;
+use crate::vec_of_strings;
+
 /// Returns an open connection to use.
 pub fn dbinit(dbpath: &String) -> Connection {
     //Engaging Transaction Handling
@@ -45,54 +48,46 @@ impl Main {
             panic!("No database write perms or file not created");
         }
 
-        self.execute(
-            "CREATE TABLE if not exists File(
-                                            id INTEGER,
-                                            hash text,
-                                            filename text,
-                                            size real,
-                                            ext text)"
-                .to_string(),
-        );
-        self.execute(
-            "CREATE TABLE Relationship(
-                                            fileid INTEGER,
-                                            tagid INTEGER)"
-                .to_string(),
-        );
-        self.execute(
-            "CREATE TABLE Tags(
-                                            id INTEGER,
-                                            name text,
-                                            parents INTEGER,
-                                            namespace INTEGER)"
-                .to_string(),
-        );
-        self.execute(
-            "CREATE TABLE Parents(
-                                            id INTEGER,
-                                            name text,
-                                            children text,
-                                            namespace INTEGER)"
-                .to_string(),
-        );
-        self.execute(
-            "CREATE TABLE Namespace(
-                                            id INTEGER,
-                                            name text,
-                                            description text)"
-                .to_string(),
-        );
-        self.execute(
-            "CREATE TABLE Settings(
-                                            name text,
-                                            pretty text,
-                                            num INTEGER,
-                                            param text)"
-                .to_string(),
-        );
+        // Making File Table
+        let mut name = "File".to_string();
+        let mut keys = vec_of_strings!["id", "hash", "filename", "size"];
+        let mut vals = vec_of_strings!["INTEGER", "TEXT", "TEXT", "REAL"];
+        self.table_create(&name, &keys, &vals);
+
+        // Making Relationship Table
+        name = "Relationship".to_string();
+        keys = vec_of_strings!["fileid", "tagid"];
+        vals = vec_of_strings!["INTEGER", "INTEGER"];
+        self.table_create(&name, &keys, &vals);
+
+        // Making Tags Table
+        name = "Tags".to_string();
+        keys = vec_of_strings!["id", "name", "parents", "namespace"];
+        vals = vec_of_strings!["INTEGER", "TEXT", "INTEGER", "INTEGER"];
+        self.table_create(&name, &keys, &vals);
+
+        // Making Parents Table
+        name = "Parents".to_string();
+        keys = vec_of_strings!["id", "name", "children", "namespace"];
+        vals = vec_of_strings!["INTEGER", "TEXT", "TEXT", "INTEGER"];
+        self.table_create(&name, &keys, &vals);
+
+        // Making Namespace Table
+        name = "Namespace".to_string();
+        keys = vec_of_strings!["id", "name", "description"];
+        vals = vec_of_strings!["INTEGER", "TEXT", "TEXT"];
+        self.table_create(&name, &keys, &vals);
+
+        // Making Settings Table
+        name = "Settings".to_string();
+        keys = vec_of_strings!["name", "pretty", "num", "param"];
+        vals = vec_of_strings!["TEXT", "TEXT", "INTEGER", "TEXT"];
+        self.table_create(&name, &keys, &vals);
     }
     pub fn updatedb(&mut self) {
+
+        let a = vec_of_strings!["a", "b"];
+
         self.add_setting(
             "VERSION".to_string(),
             "Version that the database is currently on.".to_string(),
@@ -121,12 +116,50 @@ impl Main {
         self.transaction_flush();
     }
 
+    ///
+    /// Creates a table
+    /// name: The table name
+    /// key: List of Collumn lables.
+    /// dtype: List of Collumn types. NOTE Passed into SQLITE DIRECTLY THIS IS BAD :C
+    ///
+    pub fn table_create(&mut self, name: &String, key: &Vec<String>, dtype: &Vec<String>) {
+        //Sanity checking...
+        assert_eq!(key.len(), dtype.len(), "Warning table create was 2 Vecs weren't balanced. Lengths: {} {}", key.len(), dtype.len());
+
+        //Not sure if theirs a better way to dynamically allocate a string based on two vec strings at run time.
+        //Let me know if im doing something stupid.
+        let mut concat = true;
+        let mut c = 0;
+        let mut stocat = "".to_string();
+        while concat {
+            let ke = &key[c];
+            let dt = &dtype[c];
+            stocat = [stocat, ke.to_string(), " ".to_string(), dt.to_string(), ", ".to_string()].concat();
+            c += 1;
+            if c >= key.len()-1 {
+                concat=false;
+            }
+        }
+        let ke = &key[key.len()-1];
+        let dt = &dtype[dtype.len()-1];
+
+        let endresult = ["CREATE TABLE IF NOT EXISTS ".to_string(), name.to_string(), " (".to_string(), stocat, ke.to_string(), " ".to_string(), dt.to_string(),")".to_string()].concat();
+
+        info!("Creating table as: {}", endresult);
+        stocat = endresult;
+
+        self.execute(stocat);
+    }
+
+    ///
     /// Sets advanced settings for journaling.
     /// NOTE Experimental badness
+    ///
     pub fn db_open(&mut self) {
         //self.execute("PRAGMA journal_mode = MEMORY".to_string());
         self.execute("PRAGMA synchronous = OFF".to_string());
-        println!("db_open");
+        info!("Setting synchronous = OFF");
+        //println!("db_open");
     }
     ///
     /// Adds a setting to the Settings Table.
@@ -213,6 +246,7 @@ impl Main {
 
         match _out {
             Err(_out) => {
+                println!("SQLITE STRING:: {}", inp);
                 println!("BAD CALL {}", _out);
                 error!("BAD CALL {}", _out);
                 panic!("BAD CALL {}", _out);

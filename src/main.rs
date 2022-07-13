@@ -7,7 +7,18 @@ mod scr {
     pub mod database;
     pub mod file;
     pub mod logging;
+    pub mod cli;
 }
+///
+/// I dont want to keep writing .to_string on EVERY vector of strings.
+/// Keeps me lazy.
+/// vec_of_strings["one", "two"];
+///
+#[macro_export]
+macro_rules! vec_of_strings {
+    ($($x:expr),*) => (vec![$($x.to_string()),*]);
+}
+
 
 ///
 /// This code is trash. lmao.
@@ -29,6 +40,8 @@ fn makedb(dbloc: &str) -> scr::database::Main {
 
     let mut data = scr::database::Main::new(dbcon, path, vers.try_into().unwrap());
     data.db_open();
+
+    data.vacuum();
 
     data.transaction_start();
 
@@ -64,6 +77,8 @@ fn db_file_sanity(dbloc: &str) {
     }
 }
 
+fn cli_parser() {println!("Not yet implements");}
+
 /// Makes logging happen
 fn makelog(logloc: &str) {
     //Inits logging::main at log.txt
@@ -83,16 +98,29 @@ fn main() {
     //Inits Database.
     let mut data = makedb(dbloc);
 
+    let tname = "temp".to_string();
+    let mut t1 = Vec::<String>::new();
+    let mut t2 = Vec::<String>::new();
+    let a2 = ["wa","sd","be","ass"];
+    let b2 = ["TEXT","TEXT","TEXT", "TEXT"];
+    for a in a2.iter(){
+        t1.push(a.to_string());
+    }
+    for a in b2.iter(){
+        t2.push(a.to_string());
+    }
+
+    data.table_create(&tname, &t1, &t2);
+
+    let t3 = vec_of_strings!["row", "lable"];
+    let t4 = vec_of_strings!["INTEGER", "INTEGER"];
+
+    data.table_create(&"peans".to_string(), &t3, &t4);
+
     //let mut vec = vec![1, 2, 3, "4"];
     data.transaction_flush();
-    for a in 1..999999 {
-        data.add_setting(
-            "Test".to_string(),
-            "None".to_string(),
-            a,
-            "./Files/".to_string(),
-        );
-    }
+    //TODO Put code here
+    scr::cli::main();
 
     //Finalizing wrapup.
     data.transaction_close();

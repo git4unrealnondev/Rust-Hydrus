@@ -11,6 +11,7 @@ ratelimit="0.4.4"
 rusqlite = "0.27.0"
 fast_log = "1.5.22"
 chrono = "0.4"
+clap = "3.2.8"
 log = "0.4"
 
 [profile.release]
