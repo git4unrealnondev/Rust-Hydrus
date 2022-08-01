@@ -1,7 +1,5 @@
-use std::cmp;
 use std::fs;
-use std::io::{Error, ErrorKind};
-use std::path::Path;
+use std::io::Error;
 
 /// Returns OK or Err if file size is eq to inint.
 pub fn size_eq(input: String, inint: u64) -> std::io::Result<()> {

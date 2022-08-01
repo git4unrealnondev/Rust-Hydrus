@@ -1,5 +1,5 @@
 use fast_log;
-use log::{error, info, warn};
+use log::info;
 
 /// TODO Needs to make check if I have access to folder before I write db.
 pub fn main(loglock: &str) {

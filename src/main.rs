@@ -4,11 +4,14 @@ use std::path::Path;
 extern crate ratelimit;
 
 mod scr {
+    pub mod cli;
     pub mod database;
     pub mod file;
+    pub mod jobs;
     pub mod logging;
-    pub mod cli;
+    pub mod time;
 }
+
 ///
 /// I dont want to keep writing .to_string on EVERY vector of strings.
 /// Keeps me lazy.
@@ -18,7 +21,6 @@ mod scr {
 macro_rules! vec_of_strings {
     ($($x:expr),*) => (vec![$($x.to_string()),*]);
 }
-
 
 ///
 /// This code is trash. lmao.
@@ -47,12 +49,12 @@ fn makedb(dbloc: &str) -> scr::database::Main {
 
     if !dbexist {
         data.first_db();
+        data.updatedb();
     } else {
         println!("Database Exists: {} : Skipping creation.", dbexist);
         info!("Database Exists: {} : Skipping creation.", dbexist);
     }
 
-    data.updatedb();
     return data;
 }
 
@@ -77,12 +79,14 @@ fn db_file_sanity(dbloc: &str) {
     }
 }
 
-fn cli_parser() {println!("Not yet implements");}
+fn cli_parser() {
+    println!("Not yet implements");
+}
 
 /// Makes logging happen
 fn makelog(logloc: &str) {
     //Inits logging::main at log.txt
-    scr::logging::main(&logloc);
+    scr::logging::main(&logloc)
 }
 
 /// Main function.
@@ -98,31 +102,37 @@ fn main() {
     //Inits Database.
     let mut data = makedb(dbloc);
 
-    let tname = "temp".to_string();
-    let mut t1 = Vec::<String>::new();
-    let mut t2 = Vec::<String>::new();
-    let a2 = ["wa","sd","be","ass"];
-    let b2 = ["TEXT","TEXT","TEXT", "TEXT"];
-    for a in a2.iter(){
-        t1.push(a.to_string());
-    }
-    for a in b2.iter(){
-        t2.push(a.to_string());
-    }
-
-    data.table_create(&tname, &t1, &t2);
-
-    let t3 = vec_of_strings!["row", "lable"];
-    let t4 = vec_of_strings!["INTEGER", "INTEGER"];
-
-    data.table_create(&"peans".to_string(), &t3, &t4);
-
-    //let mut vec = vec![1, 2, 3, "4"];
     data.transaction_flush();
+    data.check_version();
     //TODO Put code here
-    scr::cli::main();
+
+    //Gets Args from cli
+    //puts: parsed commands
+    //trig
+    let (puts, name, trig, run) = scr::cli::main();
+
+    println!("{:?} {} {} job:{}", puts, trig, run, name);
+
+    let mut jobmanager = scr::jobs::Jobs::new();
+
+    if run {
+        if trig {
+            println!("true");
+        } else {
+            println!("false");
+            data.jobs_add(
+                puts[2].to_string(),
+                0.to_string(),
+                puts[0].to_string(),
+                puts[1].to_string(),
+            );
+        }
+    }
+
+    data = jobmanager.jobs_get(data);
 
     //Finalizing wrapup.
+    data.transaction_flush();
     data.transaction_close();
 
     log::logger().flush();
