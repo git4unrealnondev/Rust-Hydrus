@@ -43,11 +43,11 @@ struct Memdb {
     _file_max_id: u128,
     _file_hash: AHashMap<u128, String>,
     _file_filename: AHashMap<u128, String>,
-    _file_size: AHashMap<u128, f64>,
+    _file_size: AHashMap<u128, u64>,
 
     _jobs_max_id: u128,
-    _jobs_time: AHashMap<u128, String>,
-    _jobs_rep: AHashMap<u128, String>,
+    _jobs_time: AHashMap<u128, u128>,
+    _jobs_rep: AHashMap<u128, u128>,
     _jobs_site: AHashMap<u128, String>,
     _jobs_param: AHashMap<u128, String>,
 
@@ -149,7 +149,13 @@ impl Memdb {
     ///
     /// Adds job to memdb.
     ///
-    fn jobs_add(&mut self, jobs_time: String, jobs_rep: String,jobs_site: String, jobs_param: String) -> u128 {
+    fn jobs_add(
+        &mut self,
+        jobs_time: u128,
+        jobs_rep: u128,
+        jobs_site: String,
+        jobs_param: String,
+    ) -> u128 {
         self._jobs_time.insert(self._jobs_max_id, jobs_time);
         self._jobs_site.insert(self._jobs_max_id, jobs_site);
         self._jobs_rep.insert(self._jobs_max_id, jobs_rep);
@@ -161,7 +167,7 @@ impl Memdb {
     ///
     /// Pulls jobs from memdb
     ///
-    fn jobs_get(&mut self, id: u128) -> (String, String, String, String) {
+    fn jobs_get(&self, id: u128) -> (String, String, String, String) {
         if self._jobs_time.contains_key(&id) {
             let a = self._jobs_time[&id].to_string();
             let d = self._jobs_rep[&id].to_string();
@@ -180,11 +186,17 @@ impl Memdb {
     ///
     /// Checks if job exists in current memdb.
     ///
-    pub fn jobs_exist(&mut self, id: u128) -> bool {
+    pub fn jobs_exist(&self, id: u128) -> bool {
         self._jobs_time.contains_key(&id)
     }
 
     ///
+    /// Returns total jobs in db.
+    ///
+    pub fn jobs_total(&self) -> u128 {
+        self._jobs_max_id
+    }
+
     /// Gets max_id from every max_id field.
     /// let (fid, nid, pid, rid, sid, tid, jid) = self.max_id_return();
     ///
@@ -201,9 +213,9 @@ impl Memdb {
     }
 
     ///
-    /// Adds a file to memdb.
+    /// Adds a file to memdb.Jobs
     ///
-    pub fn file_put(&mut self, hash: String, filename: String, size: f64) {
+    pub fn file_put(&mut self, hash: String, filename: String, size: u64) {
         let (fid, _nid, _pid, _rid, _sid, _tid, _jid) = self.max_id_return();
 
         self._file_hash.insert(fid, hash);
@@ -215,7 +227,7 @@ impl Memdb {
     ///
     /// Gets a file from memdb.
     ///
-    pub fn file_get(&mut self, id: u128) -> (&String, &String, &f64) {
+    pub fn file_get(&mut self, id: u128) -> (&String, &String, &u64) {
         return (
             &self._file_hash[&id],
             &self._file_filename[&id],
@@ -239,22 +251,59 @@ impl Main {
     }
 
     ///
+    /// Pulls db into memdb.
+    ///
+    pub fn load_mem(&mut self) {
+        //TODO ADD SUPPORT FOR LOADING TAGS & FILES & RELATIONSHIPS.
+        let mut jobex = self._conn.prepare("SELECT * FROM Jobs").unwrap();
+        let mut jobs = jobex.query(params![]).unwrap();
+
+        while let Some(job) = jobs.next().unwrap() {
+            let a1: String = job.get(0).unwrap();
+            let b1: String = job.get(1).unwrap();
+            let a: u128 = a1.parse::<u128>().unwrap();
+            let b: u128 = b1.parse::<u128>().unwrap();
+            self._inmemdb
+                .jobs_add(a, b, job.get(2).unwrap(), job.get(3).unwrap());
+        }
+
+        let mut fiex = self._conn.prepare("SELECT * FROM File").unwrap();
+        let mut files = fiex.query(params![]).unwrap();
+        while let Some(file) = files.next().unwrap() {
+            self._inmemdb.file_put(
+                file.get(0).unwrap(),
+                file.get(1).unwrap(),
+                file.get(2).unwrap(),
+            );
+        }
+    }
+
+    ///
     /// Adds job to system.
     /// Will not add job to system if time is now.
     ///
-    pub fn jobs_add(&mut self, jobs_time: String, jobs_rep: String, jobs_site: String, jobs_param: String) {
+    pub fn jobs_add(
+        &mut self,
+        jobs_time: String,
+        jobs_rep: String,
+        jobs_site: String,
+        jobs_param: String,
+        does_loop: bool,
+    ) {
+        let time_offset: u128 = time::time_conv(jobs_rep);
         self._inmemdb.jobs_add(
-            jobs_time.to_string(),
-            jobs_rep.to_string(),
+            jobs_time.parse::<u128>().unwrap(),
+            time_offset,
             jobs_site.to_string(),
             jobs_param.to_string(),
         );
-        if &jobs_time != "now" {
-            let inp = "INSERT INTO Jobs VALUES(?, ?, ?)";
+        if &jobs_time != "now" && does_loop {
+            let inp = "INSERT INTO Jobs VALUES(?, ?, ?, ?)";
             let _out = self._conn.execute(
                 &inp,
                 params![
-                    time::time_secs() - &jobs_time.parse::<u64>().unwrap(),
+                    time::time_secs().to_string(),
+                    &time_offset.to_string(),
                     &jobs_site,
                     &jobs_param
                 ],
@@ -272,14 +321,42 @@ impl Main {
             return;
         }
     }
-
+    ///
     /// Pull job by id
-    pub fn jobs_get(&mut self, id: u128) -> (String, String, String, String) {
+    /// TODO NEEDS TO ADD IN PROPER POLLING FROM DB.
+    ///
+    pub fn jobs_get(&self, id: u128) -> (String, String, String, String) {
         if self._inmemdb.jobs_exist(id) {
             return self._inmemdb.jobs_get(id);
         } else {
-            return ("".to_string(), "".to_string(), "".to_string(), "".to_string());
+            return (
+                "".to_string(),
+                "".to_string(),
+                "".to_string(),
+                "".to_string(),
+            );
         }
+    }
+
+    ///
+    /// Returns total jobs from _inmemdb
+    ///
+    pub fn jobs_get_max(&self) -> u128 {
+        self._inmemdb.jobs_total()
+    }
+
+    ///
+    /// Gets all jobs from db.
+    ///
+    pub fn jobs_get_all(self) -> (Vec<String>, Vec<String>, Vec<String>, Vec<String>) {
+        let (time, reptime, site, param) = (
+            Vec::<String>::new(),
+            Vec::<String>::new(),
+            Vec::<String>::new(),
+            Vec::<String>::new(),
+        );
+
+        return (time, reptime, site, param);
     }
 
     /// Vacuums database. cleans everything.
@@ -408,7 +485,7 @@ impl Main {
         // Making File Table
         let mut name = "File".to_string();
         let mut keys = vec_of_strings!["id", "hash", "filename", "size"];
-        let mut vals = vec_of_strings!["INTEGER", "TEXT", "TEXT", "REAL"];
+        let mut vals = vec_of_strings!["INTEGER", "TEXT", "TEXT", "INTEGER"];
         self.table_create(&name, &keys, &vals);
 
         // Making Relationship Table
@@ -472,6 +549,18 @@ impl Main {
             "None".to_string(),
             0,
             "DIYHydrus/5.0 (Windows NT x.y; rv:10.0) Gecko/20100101 DIYHydrus/10.0".to_string(),
+        );
+        self.add_setting(
+            "pluginloadloc".to_string(),
+            "Where plugins get loaded into.".to_string(),
+            0,
+            "./plugins".to_string(),
+        );
+        self.add_setting(
+            "fileloc".to_string(),
+            "Where files get stored by default.".to_string(),
+            0,
+            "./client_files".to_string(),
         );
         self.transaction_flush();
     }

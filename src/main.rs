@@ -101,35 +101,30 @@ fn main() {
 
     //Inits Database.
     let mut data = makedb(dbloc);
+    data.load_mem();
 
     data.transaction_flush();
     data.check_version();
     //TODO Put code here
 
-    //Gets Args from cli
-    //puts: parsed commands
-    //trig
+    //TODO NEEDS MAIN INFO PULLER HERE. PULLS IN EVERYTHING INTO DB.
     let (puts, name, trig, run) = scr::cli::main();
 
-    println!("{:?} {} {} job:{}", puts, trig, run, name);
+    //println!("{:?} {} {} job:{}", puts, trig, run, name);
 
     let mut jobmanager = scr::jobs::Jobs::new();
 
     if run {
-        if trig {
-            println!("true");
-        } else {
-            println!("false");
-            data.jobs_add(
-                puts[2].to_string(),
-                0.to_string(),
-                puts[0].to_string(),
-                puts[1].to_string(),
-            );
-        }
+        data.jobs_add(
+            0.to_string(),
+            puts[2].to_string(),
+            puts[0].to_string(),
+            puts[1].to_string(),
+            trig,
+        );
     }
-
-    data = jobmanager.jobs_get(data);
+jobmanager.jobs_get(&data);
+jobmanager.jobs_run();
 
     //Finalizing wrapup.
     data.transaction_flush();

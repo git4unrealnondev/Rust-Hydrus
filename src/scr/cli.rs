@@ -135,7 +135,13 @@ pub fn main() -> (Vec<String>, String, bool, bool) {
             panic!("NO COMMANDS PASSED TO JOB.");
             //return ([&"".to_string(),&"".to_string()].to_vec(), false, false)
         }
-        _ => unreachable!("Exhausted list of subcommands and subcommand_required prevents `None`"),
+        _ => {
+            let msg = "No commands were passed into Rust-Hydrus.";
+            println!("{}", msg);
+            info!("{}", msg);
+
+            (vec!["".to_string()], "".to_string(), false, false)
+        }
     }
 
     // Extract the actual name
