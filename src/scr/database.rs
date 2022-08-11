@@ -120,6 +120,28 @@ impl Memdb {
     }
 
     ///
+    /// Displays all stuff in the memory db.
+    ///
+    pub fn dbg_show_internals(&self) {
+        for each in 0..self._file_max_id {
+            println!(
+                "FIL DB DBG: {} {} {} {}",
+                each, self._file_hash[&each], self._file_filename[&each], self._file_size[&each]
+            );
+        }
+        for e in 0..self._jobs_max_id {
+            println!(
+                "JOB DB DBG: {} {} {} {} {}",
+                e,
+                self._jobs_time[&e],
+                self._jobs_rep[&e],
+                self._jobs_site[&e],
+                self._jobs_param[&e]
+            );
+        }
+    }
+
+    ///
     /// Increments All counters.
     ///
     fn max_increment(&mut self) {
@@ -144,6 +166,23 @@ impl Memdb {
     ///
     fn max_jobs_increment(&mut self) {
         self._jobs_max_id += 1;
+    }
+    ///
+    /// Increments the jobs counter.
+    ///
+    fn max_settings_increment(&mut self) {
+        self._settings_max_id += 1;
+    }
+
+    ///
+    /// Adds Setting to memdb.
+    ///
+    fn settings_add(&mut self, name: String, pretty: String, num: u128, param: String) {
+        self._settings_name.insert(self._settings_max_id, name);
+        self._settings_pretty.insert(self._settings_max_id, pretty);
+        self._settings_num.insert(self._settings_max_id, num);
+        self._settings_param.insert(self._settings_max_id, param);
+        self.max_settings_increment();
     }
 
     ///
@@ -249,7 +288,12 @@ impl Main {
             _inmemdb: Memdb::new(),
         }
     }
-
+    ///
+    /// Shows internals in db
+    ///
+    pub fn dbg_show_internals(&self) {
+        self._inmemdb.dbg_show_internals();
+    }
     ///
     /// Pulls db into memdb.
     ///
@@ -556,12 +600,6 @@ impl Main {
             0,
             "./plugins".to_string(),
         );
-        self.add_setting(
-            "fileloc".to_string(),
-            "Where files get stored by default.".to_string(),
-            0,
-            "./client_files".to_string(),
-        );
         self.transaction_flush();
     }
 
@@ -694,6 +732,13 @@ impl Main {
                 );
             }
             Ok(_ex) => (),
+        }
+        // Adds setting into memdbb
+        if num >= 0 {
+            self._inmemdb
+                .settings_add(name, pretty, num.try_into().unwrap(), param);
+        } else {
+            self._inmemdb.settings_add(name, pretty, 0, param);
         }
     }
 

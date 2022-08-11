@@ -12,8 +12,8 @@ pub fn time_secs() -> u128 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
-        .as_secs().into()
-
+        .as_secs()
+        .into()
 }
 
 ///

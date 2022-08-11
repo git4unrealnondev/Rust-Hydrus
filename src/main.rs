@@ -9,6 +9,7 @@ mod scr {
     pub mod file;
     pub mod jobs;
     pub mod logging;
+    pub mod scraper;
     pub mod time;
 }
 
@@ -107,10 +108,16 @@ fn main() {
     data.check_version();
     //TODO Put code here
 
+    // Makes new scraper manager.
+    let mut scraper_manager = scr::scraper::ScraperManager::new();
+    scraper_manager.load(
+        "./scrapers".to_string(),
+        "/target/release/".to_string(),
+        "so".to_string(),
+    );
+
     //TODO NEEDS MAIN INFO PULLER HERE. PULLS IN EVERYTHING INTO DB.
     let (puts, name, trig, run) = scr::cli::main();
-
-    //println!("{:?} {} {} job:{}", puts, trig, run, name);
 
     let mut jobmanager = scr::jobs::Jobs::new();
 
@@ -123,8 +130,8 @@ fn main() {
             trig,
         );
     }
-jobmanager.jobs_get(&data);
-jobmanager.jobs_run();
+    jobmanager.jobs_get(&data, scraper_manager);
+    jobmanager.jobs_run();
 
     //Finalizing wrapup.
     data.transaction_flush();
