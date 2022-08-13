@@ -762,7 +762,7 @@ impl Main {
     pub fn write(&mut self) {
         //self._conn.execute("COMMIT", params![],).unwrap();
         let tx = self._conn.transaction().unwrap();
-        tx.commit();
+        tx.commit().unwrap();
     }
 
     /// Returns db location as String refernce.
@@ -820,6 +820,6 @@ impl Main {
 
     /// Handles transactional pushes.
     pub fn transaction_execute(trans: Transaction, inp: String) {
-        trans.execute(&inp, params![]);
+        trans.execute(&inp, params![]).unwrap();
     }
 }

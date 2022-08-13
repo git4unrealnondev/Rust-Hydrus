@@ -12,12 +12,12 @@ reqwest="0.9.18"
 ratelimit="0.4.4"
 tower-limit = "0.3.1"
 rusqlite = "0.27.0"
-fast_log = "1.5.22"
+fast_log = "1.5.25"
 ahash = "0.7.6"
 chrono = "0.4"
 clap = "3.2.8"
 urlparse = "0.7.3"
-log = "0.4"
+log = {version="0.4.0", features = ["max_level_debug", "release_max_level_info"]}
 
 [profile.release]
 opt-level = "z"
@@ -25,5 +25,3 @@ lto=true
 codegenunits=1
 strip = true
 
-[workspaces]
-members = ["scrapers/e6scraper"]

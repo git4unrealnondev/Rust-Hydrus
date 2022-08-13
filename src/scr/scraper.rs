@@ -1,8 +1,8 @@
 use libloading;
 use log::{error, info, warn};
-use std::env;
+
 use std::fs;
-use std::mem;
+
 use std::path::Path;
 
 static SUPPORTED_VERS: f32 = 0.001;
@@ -68,12 +68,10 @@ impl ScraperManager {
     }
 
     pub fn load(&mut self, scraperfolder: String, libpath: String, libext: String) {
-        let scrapersdir: String = "./scrapers".to_string();
         let path = Path::new(&scraperfolder);
-        let mut paths: Vec<String> = Vec::new();
 
         if !path.exists() {
-            fs::create_dir_all(&scraperfolder);
+            fs::create_dir_all(&scraperfolder).unwrap();
         }
 
         let dirs = fs::read_dir(&scraperfolder).unwrap();
@@ -83,6 +81,9 @@ impl ScraperManager {
             let name = root.split("/");
             let vec: Vec<&str> = name.collect();
             let path = format!("{}{}lib{}.{}", &root, &libpath, vec[vec.len() - 1], &libext);
+
+            info!("Loading scraper at: {}", path);
+
             if Path::new(&path).exists() {
                 self._string.push(path.to_string());
                 unsafe {
@@ -94,7 +95,6 @@ impl ScraperManager {
                 warn!("{}", err);
             }
         }
-        let mut cnt = 0;
         for each in &mut self._library {
             //let mut internal: Vec<libloading::Symbol<unsafe extern  fn() -> InternalScraper>> = Vec::new();
             //let mut internal = Vec::new();
@@ -122,7 +122,7 @@ impl ScraperManager {
             self._sites.push(sites);
 
             //unsafe{println!("{:?}", internal[0]().version_get());}
-            cnt += 1;
+
         }
     }
 }

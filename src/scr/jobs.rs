@@ -31,13 +31,12 @@ impl Jobs {
     ///
     pub fn jobs_get(&mut self, db: &database::Main, scraper_manager: scraper::ScraperManager) {
         self._secs = time::time_secs();
-        let jobs_to_run: Vec<u16> = Vec::new();
         let ttl = db.jobs_get_max();
         if ttl > 0 {
             for each in 0..ttl {
                 let (a, b, c, d) = db.jobs_get(each);
                 let auint = a.parse::<u128>().unwrap();
-                let mut cuint = c.parse::<u128>().unwrap();
+                let cuint = c.parse::<u128>().unwrap();
                 let mut add = false;
 
                 //Working with uint. CANT BE NEGATIVE.
@@ -67,7 +66,7 @@ impl Jobs {
         }
 
         let msg = format!(
-            "Loaded {} jobs out of {} jobs due to time..",
+            "Loaded {} jobs out of {} jobs due to time or no scraper available.",
             self._jobstorun.len(),
             db.jobs_get_max()
         );

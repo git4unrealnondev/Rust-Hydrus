@@ -1,8 +1,3 @@
-extern crate chrono;
-use ahash::AHashMap;
-use std::collections::HashMap;
-
-use chrono::NaiveDateTime;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 ///
@@ -12,16 +7,10 @@ pub fn time_secs() -> u128 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
-        .as_secs()
-        .into()
+        .as_secs().into()
 }
 
-///
-/// Converts time as seconds to UTC.
-///
-pub fn time_utc(inp: isize) -> NaiveDateTime {
-    NaiveDateTime::from_timestamp(inp.try_into().unwrap(), 0)
-}
+
 
 ///
 /// Converts hour & day & minute repeatability.

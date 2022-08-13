@@ -1,6 +1,6 @@
 use log::{error, info, warn};
 use std::path::Path;
-
+use log;
 extern crate ratelimit;
 
 mod scr {
@@ -80,10 +80,6 @@ fn db_file_sanity(dbloc: &str) {
     }
 }
 
-fn cli_parser() {
-    println!("Not yet implements");
-}
-
 /// Makes logging happen
 fn makelog(logloc: &str) {
     //Inits logging::main at log.txt
@@ -96,6 +92,7 @@ fn main() {
 
     // Makes Logging work
     makelog("./log.txt");
+
 
     // Checks main.db log location.
     db_file_sanity(dbloc);
@@ -136,6 +133,6 @@ fn main() {
     //Finalizing wrapup.
     data.transaction_flush();
     data.transaction_close();
-
+    info!("UNLOADING");
     log::logger().flush();
 }

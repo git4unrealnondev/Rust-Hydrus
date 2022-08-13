@@ -1,6 +1,6 @@
 extern crate clap;
 
-use clap::{App, Arg, Command, SubCommand};
+use clap::{App, Arg, SubCommand};
 use log::{error, info};
 
 pub fn main() -> (Vec<String>, String, bool, bool) {
@@ -72,7 +72,7 @@ pub fn main() -> (Vec<String>, String, bool, bool) {
                 .to_vec();
 
                 let lenjobs = 4;
-                let retme = [valvec[0], valvec[1], valvec[2], valvec[3]].to_vec();
+
                 if valvec.len() != lenjobs {
                     println!("{:?}", valvec);
                     println!("{}", valvec[0]);
@@ -85,7 +85,6 @@ pub fn main() -> (Vec<String>, String, bool, bool) {
                     error!("{}", msg);
                     panic!("{}", msg);
                 } else {
-                    let one = String::from(valvec[0]);
                     let radd = "add".to_string();
                     if valvec[3] == "true" {
                         return (valret, radd, true, true);
