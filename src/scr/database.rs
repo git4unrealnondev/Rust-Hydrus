@@ -1,3 +1,5 @@
+#![forbid(unsafe_code)]
+
 use ahash::AHashMap;
 use log::{error, info};
 //use rusqlite::ToSql;
@@ -65,7 +67,7 @@ struct Memdb {
     _relationship_tagid: AHashMap<u128, u128>,
 
     _settings_max_id: u128,
-    _settings_name: AHashMap<u128, String>,
+    _settings_name: AHashMap<String, u128>,
     _settings_pretty: AHashMap<u128, String>,
     _settings_num: AHashMap<u128, u128>,
     _settings_param: AHashMap<u128, String>,
@@ -178,11 +180,27 @@ impl Memdb {
     /// Adds Setting to memdb.
     ///
     fn settings_add(&mut self, name: String, pretty: String, num: u128, param: String) {
-        self._settings_name.insert(self._settings_max_id, name);
+        self._settings_name.insert(name, self._settings_max_id);
         self._settings_pretty.insert(self._settings_max_id, pretty);
         self._settings_num.insert(self._settings_max_id, num);
         self._settings_param.insert(self._settings_max_id, param);
         self.max_settings_increment();
+    }
+    ///
+    /// Gets Setting from memdb.
+    /// Returns the num & param from memdb.
+    ///
+    fn settings_get_name(&self, name: &String) -> Result<(u128, String), &str> {
+        dbg!(
+            &self._settings_name,
+            &self._settings_num,
+            &self._settings_param
+        );
+        if !self._settings_name.contains_key(name) {
+            return Err("None");
+        }
+        let val = self._settings_name[name];
+        return Ok((val, self._settings_param[&val].to_string()));
     }
 
     ///
@@ -301,7 +319,6 @@ impl Main {
         //TODO ADD SUPPORT FOR LOADING TAGS & FILES & RELATIONSHIPS.
         let mut jobex = self._conn.prepare("SELECT * FROM Jobs").unwrap();
         let mut jobs = jobex.query(params![]).unwrap();
-
         while let Some(job) = jobs.next().unwrap() {
             let a1: String = job.get(0).unwrap();
             let b1: String = job.get(1).unwrap();
@@ -319,6 +336,22 @@ impl Main {
                 file.get(1).unwrap(),
                 file.get(2).unwrap(),
             );
+        }
+        let mut setex = self._conn.prepare("SELECT * FROM Settings").unwrap();
+        let mut sets = setex.query(params![]).unwrap();
+        while let Some(set) = sets.next().unwrap() {
+            let b1: isize = set.get(2).unwrap();
+            let b: u128 = b1.try_into().unwrap();
+            let re1: String = match set.get(1) {
+                Ok(re1) => re1,
+                Err(error) => "".to_string(),
+            };
+            let re3: String = match set.get(3) {
+                Ok(re3) => re3,
+                Err(error) => "".to_string(),
+            };
+
+            self._inmemdb.settings_add(set.get(0).unwrap(), re1, b, re3);
         }
     }
 
@@ -382,25 +415,15 @@ impl Main {
         }
     }
 
+    pub fn settings_get_name(&self, name: &String) -> Result<(u128, String), &str> {
+        self._inmemdb.settings_get_name(&name)
+    }
+
     ///
     /// Returns total jobs from _inmemdb
     ///
     pub fn jobs_get_max(&self) -> u128 {
         self._inmemdb.jobs_total()
-    }
-
-    ///
-    /// Gets all jobs from db.
-    ///
-    pub fn jobs_get_all(self) -> (Vec<String>, Vec<String>, Vec<String>, Vec<String>) {
-        let (time, reptime, site, param) = (
-            Vec::<String>::new(),
-            Vec::<String>::new(),
-            Vec::<String>::new(),
-            Vec::<String>::new(),
-        );
-
-        return (time, reptime, site, param);
     }
 
     /// Vacuums database. cleans everything.
@@ -567,6 +590,8 @@ impl Main {
         keys = vec_of_strings!["time", "reptime", "site", "param"];
         vals = vec_of_strings!["TEXT", "TEXT", "TEXT", "TEXT"];
         self.table_create(&name, &keys, &vals);
+
+        self.transaction_flush();
     }
     pub fn updatedb(&mut self) {
         self.add_setting(
@@ -756,13 +781,6 @@ impl Main {
     // Closes a transaction for bulk inserts.
     pub fn transaction_close(&mut self) {
         self.execute("COMMIT".to_string());
-    }
-
-    /// Pushes writes to db.
-    pub fn write(&mut self) {
-        //self._conn.execute("COMMIT", params![],).unwrap();
-        let tx = self._conn.transaction().unwrap();
-        tx.commit().unwrap();
     }
 
     /// Returns db location as String refernce.

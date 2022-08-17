@@ -1,6 +1,6 @@
+use log;
 use log::{error, info, warn};
 use std::path::Path;
-use log;
 extern crate ratelimit;
 
 mod scr {
@@ -93,7 +93,6 @@ fn main() {
     // Makes Logging work
     makelog("./log.txt");
 
-
     // Checks main.db log location.
     db_file_sanity(dbloc);
 
@@ -116,7 +115,7 @@ fn main() {
     //TODO NEEDS MAIN INFO PULLER HERE. PULLS IN EVERYTHING INTO DB.
     let (puts, name, trig, run) = scr::cli::main();
 
-    let mut jobmanager = scr::jobs::Jobs::new();
+    let mut jobmanager = scr::jobs::Jobs::new(scraper_manager);
 
     if run {
         data.jobs_add(
@@ -127,8 +126,8 @@ fn main() {
             trig,
         );
     }
-    jobmanager.jobs_get(&data, scraper_manager);
-    jobmanager.jobs_run();
+    jobmanager.jobs_get(&data);
+    jobmanager.jobs_run(&mut data);
 
     //Finalizing wrapup.
     data.transaction_flush();

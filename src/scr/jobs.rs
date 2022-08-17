@@ -10,26 +10,28 @@ pub struct Jobs {
     _params: Vec<String>,
     //References jobid in _inmemdb hashmap :D
     _jobstorun: Vec<u16>,
+    scrapermanager: scraper::ScraperManager,
 }
 
 ///
 /// Jobs manager creates & manages jobs
 ///
 impl Jobs {
-    pub fn new() -> Self {
+    pub fn new(newmanager: scraper::ScraperManager) -> Self {
         Jobs {
             _jobid: Vec::new(),
             _sites: Vec::new(),
             _params: Vec::new(),
             _secs: 0,
             _jobstorun: Vec::new(),
+            scrapermanager: newmanager,
         }
     }
 
     ///
     /// Loads jobs to run into _jobstorun
     ///
-    pub fn jobs_get(&mut self, db: &database::Main, scraper_manager: scraper::ScraperManager) {
+    pub fn jobs_get(&mut self, db: &database::Main) {
         self._secs = time::time_secs();
         let ttl = db.jobs_get_max();
         if ttl > 0 {
@@ -44,16 +46,18 @@ impl Jobs {
                 if cuint > auint {
                     continue;
                 }
-
-                for eacha in scraper_manager.sites_get() {
+                let beans = self.scrapermanager.sites_get();
+                let mut cnt = 0;
+                for eacha in beans {
                     if eacha.contains(&b.to_string()) {
                         add = true;
                         continue;
                     }
+                    cnt += 1;
                 }
                 let test = auint + cuint;
                 if self._secs >= test && add {
-                    self._jobstorun.push(each.try_into().unwrap());
+                    self._jobstorun.push(cnt);
                     self._params.push(d);
                     self._sites.push(b);
                 } else {
@@ -78,12 +82,81 @@ impl Jobs {
     ///
     /// Runs jobs as they are needed to.
     ///
-    pub fn jobs_run(self) {
+    pub fn jobs_run(&mut self, db: &mut database::Main) {
+        // Sets up and checks scrapers
+        for each in 0..self.scrapermanager.scraper_get().len() {
+            let name = self.scrapermanager.scraper_get()[each].name_get();
+
+            dbg!(&format!("manual_{}", name));
+
+            let name_result = db.settings_get_name(&format!("manual_{}", name));
+            match name_result {
+                Ok(_) => println!("Dont have to add manual to db."),
+                Err("None") => {
+                    let (cookie, cookie_name) = self.library_cookie_needed(
+                        self._jobstorun[each].into(),
+                        self._params[each].to_string(),
+                    );
+                    db.add_setting(
+                        format!(
+                            "manual_{}",
+                            self.scrapermanager.scraper_get()[each].name_get()
+                        ),
+                        "Manually controlled scraper.".to_string(),
+                        0,
+                        cookie_name.to_string(),
+                    );
+                }
+                Err(&_) => continue,
+            };
+        let name = db.settings_get_name(&format!("manual_{}", name)).unwrap();
+        dbg!(name);
+        }
+
+        // setup for scraping jobs will probably outsource this to another file :D.
         for each in 0..self._jobstorun.len() {
             println!(
                 "Running Job: {} {} {}",
                 self._jobstorun[each], self._sites[each], self._params[each]
             );
+
+            let parzd: Vec<&str> = self._params[each].split(" ").collect::<Vec<&str>>();
+            let mut parsed: Vec<String> = Vec::new();
+            for a in parzd {
+                parsed.push(a.to_string());
+            }
+
+            let index: usize = self._jobstorun[each].into();
+
+            // url is the output from the designated scraper that has the correct
+            let url =
+                self.library_url_get(self._jobstorun[each].into(), self._params[each].to_string());
+            dbg!(url);
+            //println!("{:?}", self.library_url_dump(self._jobstorun[each].into(), self._params[each].to_string()) );
         }
+        // Initilazing the scrapers.
+    }
+
+    /// ALL of the lower functions are just wrappers for the scraper library.
+    /// This is nice because their's no unsafe code anywhere else inside code base.
+
+    ///
+    /// Returns a url to grab for.
+    ///
+    pub fn library_url_get(&mut self, memid: usize, params: String) -> String {
+        return self.scrapermanager.url_load(memid, params);
+    }
+
+    ///
+    /// Returns a url to grab for.
+    ///
+    pub fn library_url_dump(&mut self, memid: usize, params: String) -> Vec<String> {
+        return self.scrapermanager.url_dump(memid, params);
+    }
+    ///
+    /// pub fn cookie_needed(&mut self, id: usize, params: String) -> (bool, String)
+    ///
+    pub fn library_cookie_needed(&self, memid: usize, params: String) -> (String, String) {
+        return self.scrapermanager.cookie_needed(memid, params);
     }
 }

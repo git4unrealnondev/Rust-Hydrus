@@ -45,6 +45,10 @@ impl InternalScraper {
         }
         return vecs;
     }
+
+    pub fn url_get(&self, params: Vec<String>) -> String {
+        "a".to_string()
+    }
 }
 
 pub struct ScraperManager {
@@ -52,6 +56,7 @@ pub struct ScraperManager {
     _sites: Vec<Vec<String>>,
     _loaded: Vec<bool>,
     _library: Vec<libloading::Library>,
+    _scraper: Vec<InternalScraper>,
 }
 impl ScraperManager {
     pub fn new() -> Self {
@@ -60,11 +65,20 @@ impl ScraperManager {
             _sites: Vec::new(),
             _loaded: Vec::new(),
             _library: Vec::new(),
+            _scraper: Vec::new(),
         }
     }
 
     pub fn sites_get(&self) -> &Vec<Vec<String>> {
         &self._sites
+    }
+
+    pub fn scraper_get(&self) -> &Vec<InternalScraper> {
+        &self._scraper
+    }
+
+    pub fn library_get(&self) -> &Vec<libloading::Library> {
+        &self._library
     }
 
     pub fn load(&mut self, scraperfolder: String, libpath: String, libext: String) {
@@ -86,12 +100,13 @@ impl ScraperManager {
 
             if Path::new(&path).exists() {
                 self._string.push(path.to_string());
-                unsafe {
-                    self._library
-                        .push(libloading::Library::new(path.to_string()).unwrap());
-                }
+                self._library
+                    .push(unsafe { libloading::Library::new(path.to_string()).unwrap() })
             } else {
-                let err = format!("Loading scraper could not find {}", &path);
+                let err = format!(
+                    "Loading scraper couInternalScraper::neld not find {}",
+                    &path
+                );
                 warn!("{}", err);
             }
         }
@@ -101,10 +116,10 @@ impl ScraperManager {
             let funtwo: Result<
                 libloading::Symbol<unsafe extern "C" fn() -> InternalScraper>,
                 libloading::Error,
-            > = unsafe { each.get(b"new\0") };
+            > = unsafe { each.get(b"new") };
 
             // Loads version in memsafe way from scraper
-            let scraper = unsafe { &funtwo.as_ref().unwrap()() };
+            let scraper = unsafe { funtwo.as_ref().unwrap()() };
             let version: f32 = scraper.version_get();
 
             if version < SUPPORTED_VERS {
@@ -120,9 +135,26 @@ impl ScraperManager {
             let sites: Vec<String> = scraper.sites_get();
 
             self._sites.push(sites);
-
+            self._scraper.push(scraper);
             //unsafe{println!("{:?}", internal[0]().version_get());}
-
         }
+    }
+    pub fn url_load(&mut self, id: usize, params: String) -> String {
+        let temp: libloading::Symbol<unsafe extern "C" fn(&String) -> String> =
+            unsafe { self._library[id].get(b"url_get\0").unwrap() };
+        let abs = unsafe { temp(&params) };
+        return abs;
+    }
+    pub fn url_dump(& self, id: usize, params: String) -> Vec<String> {
+        let temp: libloading::Symbol<unsafe extern "C" fn(&String) -> Vec<String>> =
+            unsafe { self._library[id].get(b"url_dump\0").unwrap() };
+        let abs = unsafe { temp(&params) };
+        return abs;
+    }
+    pub fn cookie_needed(&self, id: usize, params: String) -> (String, String) {
+        let temp: libloading::Symbol<unsafe extern "C" fn() -> (String, String)> =
+            unsafe { self._library[id].get(b"cookie_needed\0").unwrap() };
+        let abs = unsafe { temp() };
+        return abs;
     }
 }
