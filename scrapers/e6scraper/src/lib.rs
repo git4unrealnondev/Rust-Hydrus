@@ -41,12 +41,33 @@ impl InternalScraper {
 ///
 /// Builds the URL for scraping activities.
 ///
-fn build_url(params: String, pagenum: u64) -> String {
+fn build_url(params: &Vec<String>, pagenum: u64) -> String {
     let url = "https://e621.net/posts.json";
-    let tag_store = "?tags=";
+    let tag_store = "&tags=";
     let page = "&page=";
     let startpage = 1;
-    let mut formatted = format!("{}{}{}", &url, &tag_store, &params.replace(" ", "+"));
+    let mut formatted: String = "".to_string();
+
+    if params.len() == 0 {return "".to_string();}
+
+    if params.len() == 1 {
+
+        formatted = format!("{}{}{}", &url, &tag_store, &params[0].replace(" ", "+"));
+    return format!("{}{}{}", formatted, page, pagenum);}
+
+    if params.len() == 2 {
+
+        for each in params {
+            dbg!(each);
+        }
+
+        formatted= format!("{}{}{}{}", &url, &params[1], &tag_store, &params[0].replace(" ", "+"));
+
+    }
+
+
+     return format!("{}{}{}", formatted, page, pagenum);
+    /*let mut formatted = format!("{}{}{}", &url, &tag_store, &params.replace(" ", "+"));
     let parzd: Vec<&str> = params.split(" ").collect::<Vec<&str>>();
     let mut parsed: Vec<String> = Vec::new();
     for a in parzd {
@@ -58,7 +79,7 @@ fn build_url(params: String, pagenum: u64) -> String {
     if pagenum > startpage {
         formatted = format!("{}{}{}", formatted, page,pagenum);
     }
-    return formatted;
+    return formatted;*/
 }
 ///
 /// Reutrns an internal scraper object.
@@ -72,18 +93,18 @@ pub fn new() -> InternalScraper {
 /// Returns one url from the parameters.
 ///
 #[no_mangle]
-pub fn url_get(params: &String) -> String {
-    build_url(params.to_string(), 1)
+pub fn url_get(params: &Vec<String>) -> String {
+    build_url(params, 1)
 }
 ///
 /// Dumps a list of urls to scrape
 ///
 #[no_mangle]
-pub fn url_dump(params: &String) -> Vec<String> {
+pub fn url_dump(params: &Vec<String>) -> Vec<String> {
     let mut ret = Vec::new();
     let hardlimit = 751;
     for i in 1..hardlimit {
-        let a = build_url(params.to_string(), i);
+        let a = build_url(params, i);
         ret.push(a);
     }
     return ret;

@@ -1,5 +1,6 @@
 use crate::scr::database;
 use crate::scr::scraper;
+use ahash::AHashMap;
 use crate::scr::time;
 use log::info;
 
@@ -84,20 +85,33 @@ impl Jobs {
     ///
     pub fn jobs_run(&mut self, db: &mut database::Main) {
         // Sets up and checks scrapers
+
+        let mut loaded_params: AHashMap<u128, Vec<String>> = AHashMap::new();
+
+        if self.scrapermanager.scraper_get().len() == 0 {println!("No jobs to run..."); return}
+
         for each in 0..self.scrapermanager.scraper_get().len() {
             let name = self.scrapermanager.scraper_get()[each].name_get();
 
             dbg!(&format!("manual_{}", name));
 
             let name_result = db.settings_get_name(&format!("manual_{}", name));
+            let each_u128: u128 = each.try_into().unwrap();
+            let mut to_load = Vec::new();
             match name_result {
-                Ok(_) => println!("Dont have to add manual to db."),
+                Ok(_) => {println!("Dont have to add manual to db.");
+
+                    to_load.push(self._params[each].to_string());
+                    to_load.push(name_result.unwrap().1.to_string());
+
+                    loaded_params.insert(each_u128, to_load);
+                },
                 Err("None") => {
                     let (cookie, cookie_name) = self.library_cookie_needed(
                         self._jobstorun[each].into(),
                         self._params[each].to_string(),
                     );
-                    db.add_setting(
+                    db.setting_add(
                         format!(
                             "manual_{}",
                             self.scrapermanager.scraper_get()[each].name_get()
@@ -105,16 +119,20 @@ impl Jobs {
                         "Manually controlled scraper.".to_string(),
                         0,
                         cookie_name.to_string(),
+                        true,
                     );
+                    to_load.push(self._params[each].to_string());
+                    loaded_params.insert(each_u128, to_load);
+
                 }
                 Err(&_) => continue,
             };
-        let name = db.settings_get_name(&format!("manual_{}", name)).unwrap();
-        dbg!(name);
         }
 
         // setup for scraping jobs will probably outsource this to another file :D.
         for each in 0..self._jobstorun.len() {
+
+            let each_u128: u128 = each.try_into().unwrap();
             println!(
                 "Running Job: {} {} {}",
                 self._jobstorun[each], self._sites[each], self._params[each]
@@ -129,8 +147,11 @@ impl Jobs {
             let index: usize = self._jobstorun[each].into();
 
             // url is the output from the designated scraper that has the correct
-            let url =
-                self.library_url_get(self._jobstorun[each].into(), self._params[each].to_string());
+
+            let mut url: String = "".to_string();
+
+            url =
+                self.library_url_get(self._jobstorun[each].into(), &loaded_params[&each_u128]);
             dbg!(url);
             //println!("{:?}", self.library_url_dump(self._jobstorun[each].into(), self._params[each].to_string()) );
         }
@@ -143,14 +164,14 @@ impl Jobs {
     ///
     /// Returns a url to grab for.
     ///
-    pub fn library_url_get(&mut self, memid: usize, params: String) -> String {
-        return self.scrapermanager.url_load(memid, params);
+    pub fn library_url_get(&mut self, memid: usize, params: &Vec<String>) -> String {
+        return self.scrapermanager.url_load(memid, params.to_vec());
     }
 
     ///
     /// Returns a url to grab for.
     ///
-    pub fn library_url_dump(&mut self, memid: usize, params: String) -> Vec<String> {
+    pub fn library_url_dump(&mut self, memid: usize, params: Vec<String>) -> Vec<String> {
         return self.scrapermanager.url_dump(memid, params);
     }
     ///

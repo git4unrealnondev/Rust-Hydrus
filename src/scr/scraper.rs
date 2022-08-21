@@ -139,14 +139,14 @@ impl ScraperManager {
             //unsafe{println!("{:?}", internal[0]().version_get());}
         }
     }
-    pub fn url_load(&mut self, id: usize, params: String) -> String {
-        let temp: libloading::Symbol<unsafe extern "C" fn(&String) -> String> =
+    pub fn url_load(&mut self, id: usize, params:  Vec<String>) -> String {
+        let temp: libloading::Symbol<unsafe extern "C" fn(&Vec<String>) -> String> =
             unsafe { self._library[id].get(b"url_get\0").unwrap() };
         let abs = unsafe { temp(&params) };
         return abs;
     }
-    pub fn url_dump(& self, id: usize, params: String) -> Vec<String> {
-        let temp: libloading::Symbol<unsafe extern "C" fn(&String) -> Vec<String>> =
+    pub fn url_dump(&self, id: usize, params:  Vec<String>) -> Vec<String> {
+        let temp: libloading::Symbol<unsafe extern "C" fn(&Vec<String>) -> Vec<String>> =
             unsafe { self._library[id].get(b"url_dump\0").unwrap() };
         let abs = unsafe { temp(&params) };
         return abs;
@@ -154,6 +154,25 @@ impl ScraperManager {
     pub fn cookie_needed(&self, id: usize, params: String) -> (String, String) {
         let temp: libloading::Symbol<unsafe extern "C" fn() -> (String, String)> =
             unsafe { self._library[id].get(b"cookie_needed\0").unwrap() };
+        let abs = unsafe { temp() };
+        return abs;
+    }
+    ///
+    /// Tells downloader to allow scraper to download.
+    ///
+    pub fn scraper_download_get(&self, id: usize, params: String) -> bool {
+        let temp: libloading::Symbol<unsafe extern "C" fn() -> bool> =
+            unsafe { self._library[id].get(b"scraper_download_get\0").unwrap() };
+        let abs = unsafe { temp() };
+        return abs;
+    }
+    ///
+    /// Should only be called when scraper needs to download something assuming scraper_download_get returns true.
+    /// TODO NOT YET IMPLEMENTED PROPERLY.
+    ///
+    pub fn scraper_download(&self, id: usize, params: String) -> bool {
+        let temp: libloading::Symbol<unsafe extern "C" fn() -> bool> =
+            unsafe { self._library[id].get(b"scraper_download\0").unwrap() };
         let abs = unsafe { temp() };
         return abs;
     }

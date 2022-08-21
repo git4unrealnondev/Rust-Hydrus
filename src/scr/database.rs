@@ -191,11 +191,6 @@ impl Memdb {
     /// Returns the num & param from memdb.
     ///
     fn settings_get_name(&self, name: &String) -> Result<(u128, String), &str> {
-        dbg!(
-            &self._settings_name,
-            &self._settings_num,
-            &self._settings_param
-        );
         if !self._settings_name.contains_key(name) {
             return Err("None");
         }
@@ -317,31 +312,87 @@ impl Main {
     ///
     pub fn load_mem(&mut self) {
         //TODO ADD SUPPORT FOR LOADING TAGS & FILES & RELATIONSHIPS.
+
+        // Loads data from db into memory. CAN BE SLOW SHOULD OPTIMIZE WITH HASHMAP MAYBE??
+        let mut fiex = self._conn.prepare("SELECT * FROM File").unwrap();
+        let mut files = fiex.query(params![]).unwrap();
         let mut jobex = self._conn.prepare("SELECT * FROM Jobs").unwrap();
         let mut jobs = jobex.query(params![]).unwrap();
+        let mut naex = self._conn.prepare("SELECT * FROM Namespace").unwrap();
+        let mut names = naex.query(params![]).unwrap();
+        let mut paex = self._conn.prepare("SELECT * FROM Parents").unwrap();
+        let mut paes = paex.query(params![]).unwrap();
+        let mut relx = self._conn.prepare("SELECT * FROM Relationship").unwrap();
+        let mut rels = relx.query(params![]).unwrap();
+        let mut taex = self._conn.prepare("SELECT * FROM Tags").unwrap();
+        let mut tags = taex.query(params![]).unwrap();
+        let mut setex = self._conn.prepare("SELECT * FROM Settings").unwrap();
+        let mut sets = setex.query(params![]).unwrap();
+
+        //Preserves mutability of database while we have an active connection to database.
+        let mut file_vec: Vec<(u128, String, u128)> = Vec::new();
+        let mut job_vec: Vec<(u128, u128, String, String)> = Vec::new();
+        let mut parents_vec: Vec<(u128, String, String, u128)> = Vec::new();
+        let mut namespace_vec: Vec<(u128, String, String)> = Vec::new();
+        let mut relationship_vec: Vec<(u128, u128)> = Vec::new();
+        let mut tag_vec: Vec<(u128, String, u128, u128)> = Vec::new();
+        let mut setting_vec: Vec<(String, String, isize, String)> = Vec::new();
+
+        while let Some(file) = files.next().unwrap() {
+            let a: String = file.get(0).unwrap();
+            let a1: u128 = a.parse::<u128>().unwrap();
+            let b: String = file.get(2).unwrap();
+            let b1: u128 = a.parse::<u128>().unwrap();
+            file_vec.push((a1, file.get(1).unwrap(), b1));
+        }
+
         while let Some(job) = jobs.next().unwrap() {
             let a1: String = job.get(0).unwrap();
             let b1: String = job.get(1).unwrap();
             let a: u128 = a1.parse::<u128>().unwrap();
             let b: u128 = b1.parse::<u128>().unwrap();
-            self._inmemdb
-                .jobs_add(a, b, job.get(2).unwrap(), job.get(3).unwrap());
+            job_vec.push((a, b, job.get(2).unwrap(), job.get(3).unwrap()));
+            //self.jobs_add(a, b, job.get(2).unwrap(), job.get(3).unwrap(),true);
         }
 
-        let mut fiex = self._conn.prepare("SELECT * FROM File").unwrap();
-        let mut files = fiex.query(params![]).unwrap();
-        while let Some(file) = files.next().unwrap() {
-            self._inmemdb.file_put(
-                file.get(0).unwrap(),
-                file.get(1).unwrap(),
-                file.get(2).unwrap(),
-            );
+        while let Some(name) = names.next().unwrap() {
+            let a1: String = name.get(0).unwrap();
+            let b1: String = name.get(2).unwrap();
+            let a: u128 = a1.parse::<u128>().unwrap();
+            let b: u128 = b1.parse::<u128>().unwrap();
+            namespace_vec.push((a, name.get(1).unwrap(), b.to_string()));
         }
-        let mut setex = self._conn.prepare("SELECT * FROM Settings").unwrap();
-        let mut sets = setex.query(params![]).unwrap();
+
+        while let Some(name) = paes.next().unwrap() {
+            let a1: String = name.get(0).unwrap();
+            let b1: String = name.get(3).unwrap();
+            let a: u128 = a1.parse::<u128>().unwrap();
+            let b: u128 = b1.parse::<u128>().unwrap();
+            parents_vec.push((a, name.get(1).unwrap(), name.get(2).unwrap(), b));
+        }
+
+        while let Some(tag) = rels.next().unwrap() {
+            let a1: String = tag.get(0).unwrap();
+            let b1: String = tag.get(1).unwrap();
+            let a: u128 = a1.parse::<u128>().unwrap();
+            let b: u128 = b1.parse::<u128>().unwrap();
+            relationship_vec.push((a, b));
+        }
+
+        while let Some(tag) = tags.next().unwrap() {
+            let a1: String = tag.get(2).unwrap();
+            let b1: String = tag.get(3).unwrap();
+            let c1: String = tag.get(0).unwrap();
+            let a: u128 = a1.parse::<u128>().unwrap();
+            let b: u128 = b1.parse::<u128>().unwrap();
+            let c: u128 = c1.parse::<u128>().unwrap();
+            tag_vec.push((c, tag.get(1).unwrap(), a, b));
+        }
+
         while let Some(set) = sets.next().unwrap() {
-            let b1: isize = set.get(2).unwrap();
-            let b: u128 = b1.try_into().unwrap();
+
+            let b1: isize = 0; //set.get(2).unwrap() FIXME
+            let b: isize = b1.try_into().unwrap();
             let re1: String = match set.get(1) {
                 Ok(re1) => re1,
                 Err(error) => "".to_string(),
@@ -351,15 +402,54 @@ impl Main {
                 Err(error) => "".to_string(),
             };
 
-            self._inmemdb.settings_add(set.get(0).unwrap(), re1, b, re3);
+            setting_vec.push((set.get(0).unwrap(), re1, b, re3));
         }
+
+        // Drops database connections.
+        // Theirs probably a betterway to do this.
+        // query makes things act weird...
+        drop(files);
+        drop(jobs);
+        drop(names);
+        drop(paes);
+        drop(rels);
+        drop(tags);
+        drop(sets);
+        drop(fiex);
+        drop(jobex);
+        drop(naex);
+        drop(paex);
+        drop(relx);
+        drop(taex);
+        drop(setex);
+
+        // This adds the data gathered into memdb.
+        for each in file_vec {
+            self.file_add(each.0, each.1, each.2, false);
+        }
+        for each in job_vec {
+            self.jobs_add(each.0, each.1, each.2, each.3, false);
+        }
+        for each in parents_vec {
+            self.parents_add(each.0, each.1, each.2, each.3, false);
+        }
+        for each in namespace_vec {
+            self.namespace_add(each.0, each.1, each.2, false);
+        }
+        for each in relationship_vec{
+            self.relationship_add(each.0, each.1, false);}
+        for each in tag_vec{
+            self.tag_add(each.0, each.1, each.2, each.3, false);}
+        for each in setting_vec{
+        self.setting_add(each.0, each.1, each.2, each.3, false);}
+
     }
 
     ///
     /// Adds job to system.
     /// Will not add job to system if time is now.
     ///
-    pub fn jobs_add(
+    pub fn jobs_add_main(
         &mut self,
         jobs_time: String,
         jobs_rep: String,
@@ -367,36 +457,29 @@ impl Main {
         jobs_param: String,
         does_loop: bool,
     ) {
-        let time_offset: u128 = time::time_conv(jobs_rep);
-        self._inmemdb.jobs_add(
+        let time_offset: u128 = time::time_conv(jobs_rep.to_string());
+
+        /*self._inmemdb.jobs_add(
             jobs_time.parse::<u128>().unwrap(),
             time_offset,
             jobs_site.to_string(),
             jobs_param.to_string(),
-        );
+        );*/
+        let a1: String = jobs_time.to_string();
+        let a: u128 = a1.parse::<u128>().unwrap();
         if &jobs_time != "now" && does_loop {
-            let inp = "INSERT INTO Jobs VALUES(?, ?, ?, ?)";
-            let _out = self._conn.execute(
-                &inp,
-                params![
-                    time::time_secs().to_string(),
-                    &time_offset.to_string(),
-                    &jobs_site,
-                    &jobs_param
-                ],
-            );
 
-            match _out {
-                Err(_out) => {
-                    println!("SQLITE STRING:: {}", inp);
-                    println!("BAD CALL {}", _out);
-                    error!("BAD CALL {}", _out);
-                    panic!("BAD CALL {}", _out);
-                }
-                Ok(_out) => (_out),
-            };
-            return;
+        let b1: String = jobs_rep.to_string();
+        dbg!(&b1);
+
+        let b: u128 = b1.parse::<u128>().unwrap();
+            self.jobs_add(a, b, jobs_site, jobs_param, true);
+        } else {
+            self.jobs_add(a, 0, jobs_site, jobs_param, false);
         }
+
+
+
     }
     ///
     /// Pull job by id
@@ -463,7 +546,6 @@ impl Main {
     pub fn table_collumns(&mut self, table: String) -> (Vec<String>, Vec<String>, Vec<String>) {
         let mut t1: Vec<String> = Vec::new();
         let mut t2: Vec<String> = Vec::new();
-
         let parsedstring = format!(
             "SELECT sql FROM sqlite_master WHERE tbl_name='{}' AND type = 'table';",
             &table.as_str()
@@ -552,37 +634,38 @@ impl Main {
         // Making File Table
         let mut name = "File".to_string();
         let mut keys = vec_of_strings!["id", "hash", "filename", "size"];
-        let mut vals = vec_of_strings!["INTEGER", "TEXT", "TEXT", "INTEGER"];
+        let mut vals = vec_of_strings!["TEXT", "TEXT", "TEXT", "TEXT"];
         self.table_create(&name, &keys, &vals);
 
         // Making Relationship Table
         name = "Relationship".to_string();
         keys = vec_of_strings!["fileid", "tagid"];
-        vals = vec_of_strings!["INTEGER", "INTEGER"];
+        vals = vec_of_strings!["TEXT", "TEXT"];
         self.table_create(&name, &keys, &vals);
 
         // Making Tags Table
         name = "Tags".to_string();
         keys = vec_of_strings!["id", "name", "parents", "namespace"];
-        vals = vec_of_strings!["INTEGER", "TEXT", "INTEGER", "INTEGER"];
+        vals = vec_of_strings!["TEXT", "TEXT", "TEXT", "TEXT"];
         self.table_create(&name, &keys, &vals);
 
         // Making Parents Table
         name = "Parents".to_string();
         keys = vec_of_strings!["id", "name", "children", "namespace"];
-        vals = vec_of_strings!["INTEGER", "TEXT", "TEXT", "INTEGER"];
+        vals = vec_of_strings!["TEXT", "TEXT", "TEXT", "TEXT"];
         self.table_create(&name, &keys, &vals);
 
         // Making Namespace Table
         name = "Namespace".to_string();
         keys = vec_of_strings!["id", "name", "description"];
-        vals = vec_of_strings!["INTEGER", "TEXT", "TEXT"];
+
+        vals = vec_of_strings!["TEXT", "TEXT", "TEXT"];
         self.table_create(&name, &keys, &vals);
 
         // Making Settings Table
         name = "Settings".to_string();
         keys = vec_of_strings!["name", "pretty", "num", "param"];
-        vals = vec_of_strings!["TEXT", "TEXT", "INTEGER", "TEXT"];
+        vals = vec_of_strings!["TEXT", "TEXT", "TEXT", "TEXT"];
         self.table_create(&name, &keys, &vals);
 
         // Making Jobs Table
@@ -594,36 +677,41 @@ impl Main {
         self.transaction_flush();
     }
     pub fn updatedb(&mut self) {
-        self.add_setting(
+        self.setting_add(
             "VERSION".to_string(),
             "Version that the database is currently on.".to_string(),
             self._vers,
             "None".to_string(),
+            true,
         );
         info!("Set VERSION to 1.");
-        self.add_setting(
+        self.setting_add(
             "DEFAULTRATELIMIT".to_string(),
             "None".to_string(),
             5,
             "None".to_string(),
+            true,
         );
-        self.add_setting(
+        self.setting_add(
             "FilesLoc".to_string(),
             "None".to_string(),
             0,
             "./Files/".to_string(),
+            true,
         );
-        self.add_setting(
+        self.setting_add(
             "DEFAULTUSERAGENT".to_string(),
             "None".to_string(),
             0,
             "DIYHydrus/5.0 (Windows NT x.y; rv:10.0) Gecko/20100101 DIYHydrus/10.0".to_string(),
+            true,
         );
-        self.add_setting(
+        self.setting_add(
             "pluginloadloc".to_string(),
             "Where plugins get loaded into.".to_string(),
             0,
             "./plugins".to_string(),
+            true,
         );
         self.transaction_flush();
     }
@@ -686,13 +774,13 @@ impl Main {
         self.execute(stocat);
     }
 
-    ///
+    ///u128
     /// Checks if db version is consistent.
     ///
 
     pub fn check_version(&mut self) {
         let g1 = self
-            .quer_int("SELECT num FROM Settings WHERE name is 'VERSION';".to_string())
+            .quer_int("SELECT num FROM Settings WHERE name='VERSION';".to_string())
             .unwrap();
 
         if self._vers != g1[0] {
@@ -712,6 +800,67 @@ impl Main {
         info!("Setting synchronous = OFF");
         //println!("db_open");
     }
+
+    ///
+    /// Adds a file into the db.
+    /// Do this first.
+    ///
+    pub fn file_add(&mut self, id: u128, hash: String, size: u128, addtodb: bool) {}
+
+    pub fn namespace_add(&mut self, id: u128, name: String, description: String, addtodb: bool) {}
+
+    pub fn parents_add(
+        &mut self,
+        id: u128,
+        name: String,
+        children: String,
+        namespace: u128,
+        addtodb: bool,
+    ) {
+    }
+
+    pub fn tag_add(
+        &mut self,
+        id: u128,
+        name: String,
+        parents: u128,
+        namespace: u128,
+        addtodb: bool,
+    ) {
+    }
+
+    pub fn relationship_add(&mut self, file: u128, tag: u128, addtodb: bool) {}
+
+    pub fn jobs_add(
+        &mut self,
+        time: u128,
+        reptime: u128,
+        site: String,
+        param: String,
+        addtodb: bool,
+    ) {
+
+    if addtodb {
+        let inp = "INSERT INTO Jobs VALUES(?, ?, ?, ?)";
+            let _out = self._conn.execute(
+                &inp,
+                params![
+                    &time.to_string(),
+                    &reptime.to_string(),
+                    &site.to_string(),
+                    &param.to_string()
+                ],
+            );
+    }
+    self._inmemdb.jobs_add(
+            time,
+            reptime,
+            site,
+            param,
+        );
+
+    }
+
     ///
     /// Adds a setting to the Settings Table.
     /// name: str   , Setting name
@@ -719,44 +868,54 @@ impl Main {
     /// num: u64    , unsigned u64 largest int is 18446744073709551615 smallest is 0
     /// param: str  , Parameter to allow (value)
     ///
-    pub fn add_setting(&mut self, name: String, pretty: String, num: isize, param: String) {
+    pub fn setting_add(
+        &mut self,
+        name: String,
+        pretty: String,
+        num: isize,
+        param: String,
+        addtodb: bool,
+    ) {
         let temp: isize = -9999;
-        let _ex = self._conn.execute(
-            "INSERT INTO Settings(name, pretty, num, param) VALUES (?1, ?2, ?3, ?4)",
-            params![
-                &name,
-                //Hella jank workaround. can only pass 1 type into a function without doing workaround.
-                //This makes it work should be fine for one offs.
-                if &pretty == "None" {
-                    &Null as &dyn ToSql
-                } else {
-                    &pretty
-                },
-                if &num == &temp {
-                    &Null as &dyn ToSql
-                } else {
-                    &num
-                },
-                if &param == "None" {
-                    &Null as &dyn ToSql
-                } else {
-                    &param
-                }
-            ],
-        );
 
-        match _ex {
-            Err(_ex) => {
-                println!(
-                    "add_setting: Their was an error with inserting {} into db. {}",
-                    &name, &_ex
-                );
-                error!(
-                    "add_setting: Their was an error with inserting {} into db. {}",
-                    &name, &_ex
-                );
+        if addtodb {
+            let _ex = self._conn.execute(
+                "INSERT INTO Settings(name, pretty, num, param) VALUES (?1, ?2, ?3, ?4)",
+                params![
+                    &name,
+                    //Hella jank workaround. can only pass 1 type into a function without doing workaround.
+                    //This makes it work should be fine for one offs.
+                    if &pretty == "None" {
+                        &Null as &dyn ToSql
+                    } else {
+                        &pretty
+                    },
+                    if &num == &temp {
+                        &Null as &dyn ToSql
+                    } else {
+                        &num
+                    },
+                    if &param == "None" {
+                        &Null as &dyn ToSql
+                    } else {
+                        &param
+                    }
+                ],
+            );
+
+            match _ex {
+                Err(_ex) => {
+                    println!(
+                        "setting_add: Their was an error with inserting {} into db. {}",
+                        &name, &_ex
+                    );
+                    error!(
+                        "setting_add: Their was an error with inserting {} into db. {}",
+                        &name, &_ex
+                    );
+                }
+                Ok(_ex) => (),
             }
-            Ok(_ex) => (),
         }
         // Adds setting into memdbb
         if num >= 0 {
@@ -808,12 +967,16 @@ impl Main {
     /// NOTE USE THIS ONY FOR RESULTS THAT RETURN INTS
     ///
     pub fn quer_int(&mut self, inp: String) -> Result<Vec<isize>> {
+
+        dbg!(&inp);
+
         let mut toexec = self._conn.prepare(&inp).unwrap();
         let rows = toexec.query_map([], |row| row.get(0)).unwrap();
-        let mut out = Vec::new();
+        let mut out: Vec<isize> = Vec::new();
 
         for each in rows {
-            out.push(each.unwrap());
+            let temp: String = each.unwrap();
+            out.push(temp.parse::<isize>().unwrap());
         }
         return Ok(out);
     }

@@ -118,7 +118,7 @@ fn main() {
     let mut jobmanager = scr::jobs::Jobs::new(scraper_manager);
 
     if run {
-        data.jobs_add(
+        data.jobs_add_main(
             0.to_string(),
             puts[2].to_string(),
             puts[0].to_string(),
