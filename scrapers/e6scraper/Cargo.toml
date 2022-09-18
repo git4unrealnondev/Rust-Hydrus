@@ -17,4 +17,5 @@ name = "e6scraper"
 path = "src/lib.rs"
 crate-type = ["dylib"]
 
-
+[dependencies]
+json = "0.12.4"

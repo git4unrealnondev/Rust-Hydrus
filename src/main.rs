@@ -6,6 +6,7 @@ extern crate ratelimit;
 mod scr {
     pub mod cli;
     pub mod database;
+    pub mod download;
     pub mod file;
     pub mod jobs;
     pub mod logging;

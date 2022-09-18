@@ -8,14 +8,21 @@ edition = "2021"
 [dependencies]
 
 libloading = "0.7.3"
-reqwest="0.9.18"
+reqwest = { version = "0.11.11" }
+tokio = { version = "1", features = ["full"] }
+url = "2.3.1"
+http = "0.2.8"
+json = "0.12.4"
 ratelimit="0.4.4"
+async-std = { version = "1", features = ["attributes", "tokio1"] }
+tower ={ version = "0.4.13", features = ["full"]}
 tower-limit = "0.3.1"
 rusqlite = "0.27.0"
 fast_log = "1.5.25"
 ahash = "0.7.6"
 chrono = "0.4"
 clap = "3.2.8"
+sha2 = "0.10.6"
 urlparse = "0.7.3"
 log = {version="0.4.0", features = ["max_level_debug", "release_max_level_info"]}
 

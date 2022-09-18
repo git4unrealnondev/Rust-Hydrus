@@ -1,5 +1,10 @@
+use json;
+use std::collections::HashMap;
+use std::fs::File;
 use std::io;
 use std::io::BufRead;
+use std::io::Write;
+use std::time::Duration;
 
 #[macro_export]
 macro_rules! vec_of_strings {
@@ -10,6 +15,7 @@ pub struct InternalScraper {
     _version: f32,
     _name: String,
     _sites: Vec<String>,
+    _ratelimit: (u64, Duration),
 }
 
 impl InternalScraper {
@@ -18,6 +24,7 @@ impl InternalScraper {
             _version: 0.001,
             _name: "e6scraper".to_string(),
             _sites: vec_of_strings!("e6", "e621", "e621.net"),
+            _ratelimit: (2, Duration::new(1, 0)),
         }
     }
     pub fn version_get(&self) -> f32 {
@@ -48,38 +55,25 @@ fn build_url(params: &Vec<String>, pagenum: u64) -> String {
     let startpage = 1;
     let mut formatted: String = "".to_string();
 
-    if params.len() == 0 {return "".to_string();}
+    if params.len() == 0 {
+        return "".to_string();
+    }
 
     if params.len() == 1 {
-
         formatted = format!("{}{}{}", &url, &tag_store, &params[0].replace(" ", "+"));
-    return format!("{}{}{}", formatted, page, pagenum);}
+        return format!("{}{}{}", formatted, page, pagenum);
+    }
 
     if params.len() == 2 {
-
-        for each in params {
-            dbg!(each);
-        }
-
-        formatted= format!("{}{}{}{}", &url, &params[1], &tag_store, &params[0].replace(" ", "+"));
-
+        formatted = format!(
+            "{}{}{}{}",
+            &url,
+            &params[1],
+            &tag_store,
+            &params[0].replace(" ", "+")
+        );
     }
-
-
-     return format!("{}{}{}", formatted, page, pagenum);
-    /*let mut formatted = format!("{}{}{}", &url, &tag_store, &params.replace(" ", "+"));
-    let parzd: Vec<&str> = params.split(" ").collect::<Vec<&str>>();
-    let mut parsed: Vec<String> = Vec::new();
-    for a in parzd {
-        parsed.push(a.to_string());
-    }
-    if pagenum == startpage {
-        formatted = format!("{}{}{}", formatted, page, pagenum);
-    }
-    if pagenum > startpage {
-        formatted = format!("{}{}{}", formatted, page,pagenum);
-    }
-    return formatted;*/
+    return format!("{}{}{}", formatted, page, pagenum);
 }
 ///
 /// Reutrns an internal scraper object.
@@ -93,8 +87,10 @@ pub fn new() -> InternalScraper {
 /// Returns one url from the parameters.
 ///
 #[no_mangle]
-pub fn url_get(params: &Vec<String>) -> String {
-    build_url(params, 1)
+pub fn url_get(params: &Vec<String>) -> Vec<String> {
+    let mut ret = Vec::new();
+    ret.push(build_url(params, 1));
+    return ret;
 }
 ///
 /// Dumps a list of urls to scrape
@@ -119,7 +115,10 @@ pub fn cookie_needed() -> (String, String) {
     println!("Enter E6 API Key");
     let api = io::stdin().lock().lines().next().unwrap().unwrap();
 
-    return ("manual".to_string(), format!("?login={}&api_key={}", user, api))
+    return (
+        "manual".to_string(),
+        format!("?login={}&api_key={}", user, api),
+    );
 }
 ///
 /// Gets url to query cookie url.
@@ -127,5 +126,70 @@ pub fn cookie_needed() -> (String, String) {
 ///
 #[no_mangle]
 pub fn cookie_url() -> String {
-    return "e6scraper_cookie".to_string()
+    return "e6scraper_cookie".to_string();
+}
+
+///
+/// Gets all items from array in json and returns it into the hashmap.
+/// The key is the sub value.
+///
+fn retvec(vecstr: &mut HashMap<String, Vec<String>>, jso: &json::JsonValue, sub: &str) {
+    let mut vec = Vec::new();
+
+    for each in jso[sub].members() {
+                vec.push(each.to_string());
+            }
+    vecstr.insert(sub.to_string(), vec);
+}
+
+///
+/// Parses return from download.
+///
+#[no_mangle]
+pub fn parser(params: &Vec<String>) -> HashMap<String, HashMap<String, Vec<String>>> {
+    let mut vecvecstr: HashMap<String, HashMap<String, Vec<String>>> = HashMap::new();
+    for each in params {
+        let js = json::parse(&each).unwrap();
+        //dbg!(&js["posts"]);
+        //dbg!(&js["posts"].len());
+        let mut file = File::create("main1.json").unwrap();
+
+        // Write a &str in the file (ignoring the result).
+        writeln!(&mut file, "{}", js.to_string()).unwrap();
+
+        //let vecstr: HashMap<String> = Vec::new();
+        //let vecvecstr: Vec<Vec<String>> = Vec::new();
+
+        //for each in 0..js["posts"].len() {
+        //    dbg!(&js["posts"][each]);
+        //}
+        //dbg!(&js[each]);
+        for inc in 0..js["posts"].len() {
+            let mut vecstr: HashMap<String, Vec<String>> = HashMap::new();
+            //dbg!(&js["posts"][inc]["tags"]["general"].entries());
+            retvec(&mut vecstr, &js["posts"][inc]["tags"], "general");
+            retvec(&mut vecstr, &js["posts"][inc]["tags"], "species");
+            retvec(&mut vecstr, &js["posts"][inc]["tags"], "character");
+            retvec(&mut vecstr, &js["posts"][inc]["tags"], "copyright");
+            retvec(&mut vecstr, &js["posts"][inc]["tags"], "artist");
+            retvec(&mut vecstr, &js["posts"][inc]["tags"], "lore");
+            retvec(&mut vecstr, &js["posts"][inc]["tags"], "meta");
+            retvec(&mut vecstr, &js["posts"][inc], "sources");
+            retvec(&mut vecstr, &js["posts"][inc], "pools");
+
+            vecstr.insert("md5".to_string(), [js["posts"][inc]["file"]["md5"].to_string()].to_vec());
+            vecstr.insert("id".to_string(), [js["posts"][inc]["id"].to_string()].to_vec());
+
+            vecvecstr.insert(js["posts"][inc]["file"]["url"].to_string(), vecstr);
+
+        }
+    }
+    return vecvecstr;
+}
+///
+/// Should this scraper handle anything relating to downloading.
+///
+#[no_mangle]
+pub fn scraper_download_get() -> bool {
+    false
 }

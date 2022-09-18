@@ -1,9 +1,9 @@
 use libloading;
 use log::{error, info, warn};
-
 use std::fs;
-
 use std::path::Path;
+use std::time::Duration;
+use std::collections::HashMap;
 
 static SUPPORTED_VERS: f32 = 0.001;
 
@@ -11,6 +11,7 @@ pub struct InternalScraper {
     _version: f32,
     _name: String,
     _sites: Vec<String>,
+    _ratelimit: (u64, Duration),
 }
 
 ///
@@ -24,6 +25,7 @@ impl InternalScraper {
             _version: 0.001,
             _name: "test.to_string".to_string(),
             _sites: crate::vec_of_strings!("example", "example1"),
+            _ratelimit: (2, Duration::new(2, 0)),
         }
     }
     pub fn version_get(&self) -> f32 {
@@ -48,6 +50,10 @@ impl InternalScraper {
 
     pub fn url_get(&self, params: Vec<String>) -> String {
         "a".to_string()
+    }
+
+    pub fn ratelimit_get(&self) -> (u64, Duration) {
+        self._ratelimit
     }
 }
 
@@ -139,15 +145,21 @@ impl ScraperManager {
             //unsafe{println!("{:?}", internal[0]().version_get());}
         }
     }
-    pub fn url_load(&mut self, id: usize, params:  Vec<String>) -> String {
-        let temp: libloading::Symbol<unsafe extern "C" fn(&Vec<String>) -> String> =
+    pub fn url_load(&mut self, id: usize, params: Vec<String>) -> Vec<String> {
+        let temp: libloading::Symbol<unsafe extern "C" fn(&Vec<String>) -> Vec<String>> =
             unsafe { self._library[id].get(b"url_get\0").unwrap() };
         let abs = unsafe { temp(&params) };
         return abs;
     }
-    pub fn url_dump(&self, id: usize, params:  Vec<String>) -> Vec<String> {
+    pub fn url_dump(&self, id: usize, params: Vec<String>) -> Vec<String> {
         let temp: libloading::Symbol<unsafe extern "C" fn(&Vec<String>) -> Vec<String>> =
             unsafe { self._library[id].get(b"url_dump\0").unwrap() };
+        let abs = unsafe { temp(&params) };
+        return abs;
+    }
+    pub fn parser_call(&self, id: usize, params: Vec<String>) -> HashMap<String, HashMap<String, Vec<String>>> {
+        let temp: libloading::Symbol<unsafe extern "C" fn(&Vec<String>) -> HashMap<String, HashMap<String, Vec<String>>>> =
+            unsafe { self._library[id].get(b"parser\0").unwrap() };
         let abs = unsafe { temp(&params) };
         return abs;
     }
@@ -160,7 +172,7 @@ impl ScraperManager {
     ///
     /// Tells downloader to allow scraper to download.
     ///
-    pub fn scraper_download_get(&self, id: usize, params: String) -> bool {
+    pub fn scraper_download_get(&self, id: usize) -> bool {
         let temp: libloading::Symbol<unsafe extern "C" fn() -> bool> =
             unsafe { self._library[id].get(b"scraper_download_get\0").unwrap() };
         let abs = unsafe { temp() };

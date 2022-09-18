@@ -1,8 +1,12 @@
 use crate::scr::database;
+use crate::scr::download;
 use crate::scr::scraper;
-use ahash::AHashMap;
 use crate::scr::time;
+use ahash::AHashMap;
+use sha2::Sha512;
 use log::info;
+use std::collections::HashMap;
+use std::time::Duration;
 
 pub struct Jobs {
     _jobid: Vec<u128>,
@@ -87,8 +91,14 @@ impl Jobs {
         // Sets up and checks scrapers
 
         let mut loaded_params: AHashMap<u128, Vec<String>> = AHashMap::new();
+        let mut loaded_params: AHashMap<u128, Vec<String>> = AHashMap::new();
+        let mut ratelimit: AHashMap<u128, (u64, Duration)> = AHashMap::new();
 
-        if self.scrapermanager.scraper_get().len() == 0 {println!("No jobs to run..."); return}
+        // Handles any thing if theirs nothing to load.
+        if self.scrapermanager.scraper_get().len() == 0 || self._params.len() == 0 {
+            println!("No jobs to run...");
+            return;
+        }
 
         for each in 0..self.scrapermanager.scraper_get().len() {
             let name = self.scrapermanager.scraper_get()[each].name_get();
@@ -99,14 +109,18 @@ impl Jobs {
             let each_u128: u128 = each.try_into().unwrap();
             let mut to_load = Vec::new();
             match name_result {
-                Ok(_) => {println!("Dont have to add manual to db.");
+                Ok(_) => {
+                    println!("Dont have to add manual to db.");
 
+                    let rlimit = self.scrapermanager.scraper_get()[each].ratelimit_get();
                     to_load.push(self._params[each].to_string());
                     to_load.push(name_result.unwrap().1.to_string());
 
                     loaded_params.insert(each_u128, to_load);
-                },
+                    ratelimit.insert(each_u128, rlimit);
+                }
                 Err("None") => {
+                    let rlimit = self.scrapermanager.scraper_get()[each].ratelimit_get();
                     let (cookie, cookie_name) = self.library_cookie_needed(
                         self._jobstorun[each].into(),
                         self._params[each].to_string(),
@@ -123,7 +137,7 @@ impl Jobs {
                     );
                     to_load.push(self._params[each].to_string());
                     loaded_params.insert(each_u128, to_load);
-
+                    ratelimit.insert(each_u128, rlimit);
                 }
                 Err(&_) => continue,
             };
@@ -131,8 +145,8 @@ impl Jobs {
 
         // setup for scraping jobs will probably outsource this to another file :D.
         for each in 0..self._jobstorun.len() {
-
             let each_u128: u128 = each.try_into().unwrap();
+            let mut ratelimiter = download::ratelimiter_create(ratelimit[&each_u128]);
             println!(
                 "Running Job: {} {} {}",
                 self._jobstorun[each], self._sites[each], self._params[each]
@@ -148,11 +162,20 @@ impl Jobs {
 
             // url is the output from the designated scraper that has the correct
 
-            let mut url: String = "".to_string();
+            let mut url: Vec<String> = Vec::new();
+            let mut bools: Vec<bool> = Vec::new();
 
-            url =
-                self.library_url_get(self._jobstorun[each].into(), &loaded_params[&each_u128]);
-            dbg!(url);
+            url = self.library_url_get(self._jobstorun[each].into(), &loaded_params[&each_u128]);
+            //dbg!(url);
+
+            let boo = self.library_download_get(self._jobstorun[each].into());
+
+            if !boo {
+                let out = download::dltext(&mut ratelimiter, url);
+                let beans = self.library_parser_call(self._jobstorun[each].into(), &out);
+                let url_vec = db.parse_input(&beans);
+                download::file_download(&mut ratelimiter, &beans);
+            }
             //println!("{:?}", self.library_url_dump(self._jobstorun[each].into(), self._params[each].to_string()) );
         }
         // Initilazing the scrapers.
@@ -164,20 +187,34 @@ impl Jobs {
     ///
     /// Returns a url to grab for.
     ///
-    pub fn library_url_get(&mut self, memid: usize, params: &Vec<String>) -> String {
+    pub fn library_url_get(&mut self, memid: usize, params: &Vec<String>) -> Vec<String> {
         return self.scrapermanager.url_load(memid, params.to_vec());
+    }
+
+    ///
+    /// Parses stuff from dltext.
+    ///
+    pub fn library_parser_call(&mut self, memid: usize, params: &Vec<String>) -> HashMap<String, HashMap<String, Vec<String>>> {
+        return self.scrapermanager.parser_call(memid, params.to_vec());
     }
 
     ///
     /// Returns a url to grab for.
     ///
-    pub fn library_url_dump(&mut self, memid: usize, params: Vec<String>) -> Vec<String> {
-        return self.scrapermanager.url_dump(memid, params);
+    pub fn library_url_dump(&mut self, memid: usize, params: &Vec<String>) -> Vec<String> {
+        return self.scrapermanager.url_dump(memid, params.to_vec());
     }
     ///
     /// pub fn cookie_needed(&mut self, id: usize, params: String) -> (bool, String)
     ///
     pub fn library_cookie_needed(&self, memid: usize, params: String) -> (String, String) {
         return self.scrapermanager.cookie_needed(memid, params);
+    }
+
+    ///
+    /// Tells system if scraper should handle downloads.
+    ///
+    pub fn library_download_get(&self, memid: usize) -> bool {
+        return self.scrapermanager.scraper_download_get(memid);
     }
 }
