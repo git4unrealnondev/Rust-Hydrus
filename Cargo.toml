@@ -22,7 +22,9 @@ fast_log = "1.5.25"
 ahash = "0.7.6"
 chrono = "0.4"
 clap = "3.2.8"
+bytes = "1.2.1"
 sha2 = "0.10.6"
+futures = "0.3.24"
 urlparse = "0.7.3"
 log = {version="0.4.0", features = ["max_level_debug", "release_max_level_info"]}
 

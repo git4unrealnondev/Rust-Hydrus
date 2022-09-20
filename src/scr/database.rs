@@ -7,9 +7,9 @@ pub use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutp
 //use rusqlite::OptionalExtension;
 use crate::scr::time;
 pub use rusqlite::{params, types::Null, Connection, Result, Transaction};
+use std::collections::HashMap;
 use std::panic;
 use std::path::Path;
-use std::collections::HashMap;
 
 /// Returns an open connection to use.
 pub fn dbinit(dbpath: &String) -> Connection {
@@ -40,9 +40,9 @@ struct Memdb {
     ),
 
     _file_max_id: u128,
-    _file_hash: AHashMap<u128, String>,
-    _file_filename: AHashMap<u128, String>,
-    _file_location: AHashMap<u128, u64>,
+    _file_hash: AHashMap<String, u128>,
+    _file_extension: AHashMap<String, u128>,
+    _file_location: AHashMap<String, u128>,
 
     _jobs_max_id: u128,
     _jobs_time: AHashMap<u128, u128>,
@@ -85,7 +85,7 @@ impl Memdb {
             //_table_names: ,
             //_file_id: AHashMap::new(),
             _file_hash: AHashMap::new(),
-            _file_filename: AHashMap::new(),
+            _file_extension: AHashMap::new(),
             _file_location: AHashMap::new(),
             _jobs_time: AHashMap::new(),
             _jobs_rep: AHashMap::new(),
@@ -122,12 +122,6 @@ impl Memdb {
     /// Displays all stuff in the memory db.
     ///
     pub fn dbg_show_internals(&self) {
-        for each in 0..self._file_max_id {
-            println!(
-                "FIL DB DBG: {} {} {} {}",
-                each, self._file_hash[&each], self._file_filename[&each], self._file_location[&each]
-            );
-        }
         for e in 0..self._jobs_max_id {
             println!(
                 "JOB DB DBG: {} {} {} {} {}",
@@ -181,10 +175,16 @@ impl Memdb {
         self._jobs_max_id += 1;
     }
     ///
-    /// Increments the jobs counter.
+    /// Increments the settings counter.
     ///
     fn max_settings_increment(&mut self) {
         self._settings_max_id += 1;
+    }
+    ///
+    /// Increments the relationship counter.
+    ///
+    fn max_relationship_increment(&mut self) {
+        self._relationship_max_id += 1;
     }
 
     ///
@@ -225,6 +225,26 @@ impl Memdb {
         self._jobs_param.insert(self._jobs_max_id, jobs_param);
         self.max_jobs_increment();
         return self._jobs_max_id - 1;
+    }
+
+    ///
+    /// Checks if relationship exists in db.
+    ///
+    fn relationship_get(&mut self, file: &u128, tag: &u128) -> bool {
+        if self._relationship_fileid.contains_key(file)
+            && self._relationship_tagid.contains_key(tag)
+        {
+            return true;
+        }
+        false
+    }
+
+    ///
+    /// Adds relationship to db.
+    ///
+    fn relationship_add(&mut self, file: u128, tag: u128) {
+        self._relationship_fileid.insert(file, file);
+        self._relationship_tagid.insert(tag, tag);
     }
 
     ///
@@ -278,50 +298,74 @@ impl Memdb {
     ///
     /// Adds a file to memdb.Jobs
     ///
-    pub fn file_put(&mut self, hash: String, filename: String, size: u64) {
+    pub fn file_put(&mut self, hash: &String, extension: &String, location: &String) -> u128 {
+        if self._file_hash.contains_key(&hash.to_string()) {
+            return self._file_hash[&hash.to_string()];
+        }
+        let ret_name: u128 = self._file_max_id;
         let (fid, _nid, _pid, _rid, _sid, _tid, _jid) = self.max_id_return();
 
-        self._file_hash.insert(fid, hash);
-        self._file_filename.insert(fid, filename);
-        self._file_location.insert(fid, size);
+        self._file_hash.insert(hash.to_string(), fid);
+        self._file_extension.insert(extension.to_string(), fid);
+        self._file_location.insert(location.to_string(), fid);
         self.max_file_increment();
+
+        return ret_name;
     }
 
     ///
-    /// Gets a file from memdb.
+    /// Gets a file from memdb via hash.
     ///
-    pub fn file_get(&mut self, id: u128) -> (&String, &String, &u64) {
-        return (
-            &self._file_hash[&id],
-            &self._file_filename[&id],
-            &self._file_location[&id],
-        );
+    pub fn file_get_hash(&mut self, hash: &String) -> (u128, bool) {
+        if self._file_hash.contains_key(hash) {
+            return (self._file_hash[hash], true);
+        } else {
+            return (0, false);
+        }
+    }
+
+    ///
+    /// Gets a tag from memdb via name.
+    ///
+    pub fn tag_get_name(&mut self, name: &String, namespace: &u128) -> (u128, bool) {
+        if self._tags_name.contains_key(name) && self._tags_namespace.contains_key(namespace) {
+            return (self._tags_name[name], true);
+        } else {
+            return (0, false);
+        }
     }
 
     ///
     /// Does namespace exist? If so return number.
     ///
     pub fn namespace_put(&mut self, name: &String) -> u128 {
-        if self._namespace_name.contains_key(name) {return self._namespace_name[name]}
+        if self._namespace_name.contains_key(name) {
+            return self._namespace_name[name];
+        }
         let ret_name: u128 = self._namespace_max_id;
         self._namespace_name.insert(name.to_string(), ret_name);
         self.max_namespace_increment();
-        return ret_name
+        return ret_name;
     }
 
     ///
     /// Does namespace contain key?
     ///
     pub fn namespace_get(&mut self, name: &String) -> (u128, bool) {
-        if self._namespace_name.contains_key(name) {return (self._namespace_name[name], true)}
-        else {return (0, false)}
+        if self._namespace_name.contains_key(name) {
+            return (self._namespace_name[name], true);
+        } else {
+            return (0, false);
+        }
     }
 
     ///
     /// Adds a file to memdb.Tags
     ///
     pub fn tags_name_put(&mut self, tag: String, namespace: &String) -> u128 {
-        if self._tags_name.contains_key(&tag) {return self._tags_name[&tag]}
+        if self._tags_name.contains_key(&tag) {
+            return self._tags_name[&tag];
+        }
         let ret_name: u128 = self._tags_max_id;
 
         self._tags_name.insert(tag, ret_name);
@@ -332,31 +376,37 @@ impl Memdb {
 
         self.max_tags_increment();
 
-        return ret_tag
+        return ret_tag;
     }
 
-        ///
+    ///
     /// Adds a file to memdb.Tags
     ///
     pub fn tags_put(&mut self, tag: &String, namespace: &u128) -> u128 {
-        if self._tags_name.contains_key(tag) {return self._tags_name[tag]}
+        if self._tags_name.contains_key(tag) {
+            return self._tags_name[tag];
+        }
         let ret_name: u128 = self._tags_max_id;
 
         self._tags_name.insert(tag.to_string(), ret_name);
+        self._tags_namespace.insert(*namespace, 0);
 
         let ret_tag: u128 = self._tags_max_id;
 
         self.max_tags_increment();
 
-        return ret_tag
+        return ret_tag;
     }
 
     ///
     /// Does tags contain key?
     ///
     pub fn tags_get(&mut self, tags: &String) -> (u128, bool) {
-        if self._tags_name.contains_key(tags) {return (self._tags_name[tags], true)}
-        else {return (0, false)}
+        if self._tags_name.contains_key(tags) {
+            return (self._tags_name[tags], true);
+        } else {
+            return (0, false);
+        }
     }
 }
 
@@ -383,8 +433,6 @@ impl Main {
     /// Pulls db into memdb.
     ///
     pub fn load_mem(&mut self) {
-        //TODO ADD SUPPORT FOR LOADING TAGS & FILES & RELATIONSHIPS.
-
         // Loads data from db into memory. CAN BE SLOW SHOULD OPTIMIZE WITH HASHMAP MAYBE??
         let mut fiex = self._conn.prepare("SELECT * FROM File").unwrap();
         let mut files = fiex.query(params![]).unwrap();
@@ -402,7 +450,7 @@ impl Main {
         let mut sets = setex.query(params![]).unwrap();
 
         //Preserves mutability of database while we have an active connection to database.
-        let mut file_vec: Vec<(u128, String, u128)> = Vec::new();
+        let mut file_vec: Vec<(u128, String, String, String)> = Vec::new();
         let mut job_vec: Vec<(u128, u128, String, String)> = Vec::new();
         let mut parents_vec: Vec<(u128, String, String, u128)> = Vec::new();
         let mut namespace_vec: Vec<(u128, String, String)> = Vec::new();
@@ -415,7 +463,12 @@ impl Main {
             let a1: u128 = a.parse::<u128>().unwrap();
             let b: String = file.get(2).unwrap();
             let b1: u128 = a.parse::<u128>().unwrap();
-            file_vec.push((a1, file.get(1).unwrap(), b1));
+            file_vec.push((
+                a1,
+                file.get(1).unwrap(),
+                file.get(2).unwrap(),
+                file.get(3).unwrap(),
+            ));
         }
 
         while let Some(job) = jobs.next().unwrap() {
@@ -496,7 +549,7 @@ impl Main {
 
         // This adds the data gathered into memdb.
         for each in file_vec {
-            self.file_add(each.0, each.1, each.2, false);
+            self.file_add(each.0, each.1, each.2, each.3, false);
         }
         for each in job_vec {
             self.jobs_add(each.0, each.1, each.2, each.3, false);
@@ -702,7 +755,7 @@ impl Main {
 
         // Making File Table
         let mut name = "File".to_string();
-        let mut keys = vec_of_strings!["id", "hash", "filename", "location"];
+        let mut keys = vec_of_strings!["id", "hash", "extension", "location"];
         let mut vals = vec_of_strings!["TEXT", "TEXT", "TEXT", "TEXT"];
         self.table_create(&name, &keys, &vals);
 
@@ -871,16 +924,61 @@ impl Main {
     }
 
     ///
+    /// Wrapper
+    ///
+    pub fn file_get_hash(&mut self, hash: &String) -> (u128, bool) {
+        self._inmemdb.file_get_hash(hash)
+    }
+
+    ///
+    /// Wrapper
+    ///
+    pub fn tag_get_name(&mut self, tag: &String, namespace: &u128) -> (u128, bool) {
+        self._inmemdb.tag_get_name(tag, namespace)
+    }
+
+    ///
+    /// Wrapper
+    ///
+    pub fn namespace_get_name(&mut self, name: &String) -> (u128, bool) {
+        self._inmemdb.namespace_get(&name)
+    }
+
+    ///
     /// Adds a file into the db.
     /// Do this first.
     ///
-    pub fn file_add(&mut self, id: u128, hash: String, size: u128, addtodb: bool) {}
+    pub fn file_add(
+        &mut self,
+        id: u128,
+        hash: String,
+        extension: String,
+        location: String,
+        addtodb: bool,
+    ) {
+        let file_grab: (u128, bool) = self._inmemdb.file_get_hash(&hash);
+
+        let file_id = self._inmemdb.file_put(&hash, &extension, &location);
+
+        if addtodb && file_grab.1 == false {
+            let inp = "INSERT INTO File VALUES(?, ?, ?, ?)";
+            let _out = self._conn.execute(
+                &inp,
+                params![
+                    &file_id.to_string(),
+                    &hash.to_string(),
+                    &extension.to_string(),
+                    &location.to_string()
+                ],
+            );
+        }
+    }
 
     pub fn namespace_add(&mut self, id: u128, name: String, description: String, addtodb: bool) {
         let namespace_grab: (u128, bool) = self._inmemdb.namespace_get(&name);
 
         let name_id = self._inmemdb.namespace_put(&name);
-        if addtodb && namespace_grab.1 == false{
+        if addtodb && namespace_grab.1 == false {
             let inp = "INSERT INTO Namespace VALUES(?, ?, ?)";
             let _out = self._conn.execute(
                 &inp,
@@ -891,7 +989,6 @@ impl Main {
                 ],
             );
         }
-
     }
 
     pub fn parents_add(
@@ -904,17 +1001,10 @@ impl Main {
     ) {
     }
 
-    pub fn tag_add(
-        &mut self,
-        tags: String,
-        parents: String,
-        namespace: u128,
-        addtodb: bool,
-    ) {
-
+    pub fn tag_add(&mut self, tags: String, parents: String, namespace: u128, addtodb: bool) {
         let tags_grab: (u128, bool) = self._inmemdb.tags_get(&tags);
         let tag_id = self._inmemdb.tags_put(&tags, &namespace);
-        if addtodb && tags_grab.1 == false{
+        if addtodb && tags_grab.1 == false {
             //let namespace_id = self._inmemdb.namespace_put(&namespace);
             let inp = "INSERT INTO Tags VALUES(?, ?, ?, ?)";
             let _out = self._conn.execute(
@@ -927,10 +1017,21 @@ impl Main {
                 ],
             );
         }
-
     }
 
-    pub fn relationship_add(&mut self, file: u128, tag: u128, addtodb: bool) {}
+    ///
+    /// Adds relationship into DB.
+    /// Inherently trusts user user to not duplicate stuff.
+    ///
+    pub fn relationship_add(&mut self, file: u128, tag: u128, addtodb: bool) {
+        if addtodb {
+            let inp = "INSERT INTO Relationship VALUES(?, ?)";
+            let _out = self
+                ._conn
+                .execute(&inp, params![&file.to_string(), &tag.to_string()]);
+        }
+        self._inmemdb.relationship_add(file, tag);
+    }
 
     pub fn jobs_add(
         &mut self,
@@ -958,20 +1059,36 @@ impl Main {
     ///
     /// Adds namespace & relationship & tags data
     /// into db.
+    /// TODO: Needs to add in support for url namespace and url tag adding.
     ///
-    pub fn parse_input(&mut self, parsed_data: &HashMap<String, HashMap<String, Vec<String>>>) -> Vec<String> {
+    pub fn parse_input(
+        &mut self,
+        parsed_data: &HashMap<String, HashMap<String, Vec<String>>>,
+    ) -> Vec<String> {
         let mut url_vec: Vec<String> = Vec::new();
 
-        if parsed_data.is_empty() {return url_vec}
+        if parsed_data.is_empty() {
+            return url_vec;
+        }
 
         for each in parsed_data.values().next().unwrap().keys() {
             self.namespace_add(0, each.to_string(), "".to_string(), true);
         }
 
+        // Adds support for storing the source URL of the file.
+        self.namespace_add(0, "parsed_url".to_string(), "".to_string(), true);
+        let url_id = self._inmemdb.namespace_get(&"parsed_url".to_string());
+
+        // Loops through the source urls and adds tags w/ namespace into db.
         for each in parsed_data.keys() {
+            // Remove url from list to download if already in db. Does not search by namespace. ONLY TAG can probably fix this but lazy and it works
+            if self._inmemdb.tag_get_name(&each.to_string(), &url_id.0).1 {
+                continue;
+            }
+            self.tag_add(each.to_string(), "".to_string(), url_id.0, true);
+            url_vec.push(each.to_string());
             //dbg!(&parsed_data[each]);
             for every in &parsed_data[each] {
-                url_vec.push(every.0.to_string());
                 //dbg!(every.0);
                 let namespace_id = self._inmemdb.namespace_get(&every.0);
                 for ene in every.1 {
@@ -979,7 +1096,7 @@ impl Main {
                 }
             }
         }
-        return url_vec
+        return url_vec;
     }
 
     ///

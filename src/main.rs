@@ -103,6 +103,10 @@ fn main() {
 
     data.transaction_flush();
     data.check_version();
+
+    let location = data.settings_get_name(&"FilesLoc".to_string()).unwrap().1;
+    scr::file::folder_make(&format!("./{}", &location));
+
     //TODO Put code here
 
     // Makes new scraper manager.

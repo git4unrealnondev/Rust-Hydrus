@@ -1,11 +1,13 @@
 use crate::scr::database;
 use crate::scr::download;
+use crate::scr::file;
 use crate::scr::scraper;
 use crate::scr::time;
 use ahash::AHashMap;
-use sha2::Sha512;
+use futures::executor::block_on;
 use log::info;
 use std::collections::HashMap;
+use std::io::Cursor;
 use std::time::Duration;
 
 pub struct Jobs {
@@ -87,7 +89,8 @@ impl Jobs {
     ///
     /// Runs jobs as they are needed to.
     ///
-    pub fn jobs_run(&mut self, db: &mut database::Main) {
+    #[tokio::main]
+    pub async fn jobs_run(&mut self, db: &mut database::Main) {
         // Sets up and checks scrapers
 
         let mut loaded_params: AHashMap<u128, Vec<String>> = AHashMap::new();
@@ -146,7 +149,7 @@ impl Jobs {
         // setup for scraping jobs will probably outsource this to another file :D.
         for each in 0..self._jobstorun.len() {
             let each_u128: u128 = each.try_into().unwrap();
-            let mut ratelimiter = download::ratelimiter_create(ratelimit[&each_u128]);
+
             println!(
                 "Running Job: {} {} {}",
                 self._jobstorun[each], self._sites[each], self._params[each]
@@ -169,16 +172,45 @@ impl Jobs {
             //dbg!(url);
 
             let boo = self.library_download_get(self._jobstorun[each].into());
-
+            let mut ratelimiter = block_on(download::ratelimiter_create(ratelimit[&each_u128]));
             if !boo {
-                let out = download::dltext(&mut ratelimiter, url);
+                let out = block_on(download::dltext(&mut ratelimiter, url));
+
                 let beans = self.library_parser_call(self._jobstorun[each].into(), &out);
+
                 let url_vec = db.parse_input(&beans);
-                download::file_download(&mut ratelimiter, &beans);
+                let location = db.settings_get_name(&"FilesLoc".to_string()).unwrap().1;
+                file::folder_make(&format!("./{}", &location));
+                let map: (HashMap<String, String>, Vec<String>) =
+                    download::file_download(&mut ratelimiter, &url_vec, &location).await;
+                let mut cnt = 0;
+
+                // Populates the db with files.
+                for every in map.0.keys() {
+                    db.file_add(
+                        0,
+                        map.0[every].to_string(),
+                        map.1[cnt].to_string(),
+                        location.to_string(),
+                        true,
+                    );
+                    cnt += 1;
+                }
+
+                // Populates the db with relations.
+                for every in url_vec {
+                    let hash = db.file_get_hash(&map.0[&every].to_string()).0;
+
+                    for ea in &beans[&every] {
+                        for ev in ea.1 {
+                            let name_id = db.namespace_get_name(ea.0).0;
+                            let tagid = db.tag_get_name(ev, &name_id).0;
+                            db.relationship_add(hash, tagid, true)
+                        }
+                    }
+                }
             }
-            //println!("{:?}", self.library_url_dump(self._jobstorun[each].into(), self._params[each].to_string()) );
         }
-        // Initilazing the scrapers.
     }
 
     /// ALL of the lower functions are just wrappers for the scraper library.
@@ -194,7 +226,11 @@ impl Jobs {
     ///
     /// Parses stuff from dltext.
     ///
-    pub fn library_parser_call(&mut self, memid: usize, params: &Vec<String>) -> HashMap<String, HashMap<String, Vec<String>>> {
+    pub fn library_parser_call(
+        &mut self,
+        memid: usize,
+        params: &Vec<String>,
+    ) -> HashMap<String, HashMap<String, Vec<String>>> {
         return self.scrapermanager.parser_call(memid, params.to_vec());
     }
 

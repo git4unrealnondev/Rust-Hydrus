@@ -17,3 +17,10 @@ pub fn remove_file(input: String) -> std::io::Result<()> {
     fs::remove_file(input)?;
     Ok(())
 }
+
+///
+/// Make Folder
+///
+pub fn folder_make(location: &String) {
+    std::fs::create_dir_all(location).unwrap();
+}

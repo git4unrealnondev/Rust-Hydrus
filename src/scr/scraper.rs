@@ -1,9 +1,9 @@
 use libloading;
 use log::{error, info, warn};
+use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 use std::time::Duration;
-use std::collections::HashMap;
 
 static SUPPORTED_VERS: f32 = 0.001;
 
@@ -157,9 +157,14 @@ impl ScraperManager {
         let abs = unsafe { temp(&params) };
         return abs;
     }
-    pub fn parser_call(&self, id: usize, params: Vec<String>) -> HashMap<String, HashMap<String, Vec<String>>> {
-        let temp: libloading::Symbol<unsafe extern "C" fn(&Vec<String>) -> HashMap<String, HashMap<String, Vec<String>>>> =
-            unsafe { self._library[id].get(b"parser\0").unwrap() };
+    pub fn parser_call(
+        &self,
+        id: usize,
+        params: Vec<String>,
+    ) -> HashMap<String, HashMap<String, Vec<String>>> {
+        let temp: libloading::Symbol<
+            unsafe extern "C" fn(&Vec<String>) -> HashMap<String, HashMap<String, Vec<String>>>,
+        > = unsafe { self._library[id].get(b"parser\0").unwrap() };
         let abs = unsafe { temp(&params) };
         return abs;
     }
