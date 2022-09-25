@@ -24,7 +24,7 @@ impl InternalScraper {
             _version: 0.001,
             _name: "e6scraper".to_string(),
             _sites: vec_of_strings!("e6", "e621", "e621.net"),
-            _ratelimit: (2, Duration::new(1, 0)),
+            _ratelimit: (2, Duration::from_secs(1)),
         }
     }
     pub fn version_get(&self) -> f32 {
@@ -146,10 +146,10 @@ fn retvec(vecstr: &mut HashMap<String, Vec<String>>, jso: &json::JsonValue, sub:
 /// Parses return from download.
 ///
 #[no_mangle]
-pub fn parser(params: &Vec<String>) -> HashMap<String, HashMap<String, Vec<String>>> {
+pub fn parser(params: &String) -> Result<HashMap<String, HashMap<String, Vec<String>>>, &'static str> {
     let mut vecvecstr: HashMap<String, HashMap<String, Vec<String>>> = HashMap::new();
-    for each in params {
-        let js = json::parse(&each).unwrap();
+    //for each in params.keys() {
+        let js = json::parse(params).unwrap();
         //dbg!(&js["posts"]);
         //dbg!(&js["posts"].len());
         let mut file = File::create("main1.json").unwrap();
@@ -164,6 +164,8 @@ pub fn parser(params: &Vec<String>) -> HashMap<String, HashMap<String, Vec<Strin
         //    dbg!(&js["posts"][each]);
         //}
         //dbg!(&js[each]);
+        if js["posts"].len() == 0 {return Err("NothingHere")}
+
         for inc in 0..js["posts"].len() {
             let mut vecstr: HashMap<String, Vec<String>> = HashMap::new();
             //dbg!(&js["posts"][inc]["tags"]["general"].entries());
@@ -182,9 +184,11 @@ pub fn parser(params: &Vec<String>) -> HashMap<String, HashMap<String, Vec<Strin
 
             vecvecstr.insert(js["posts"][inc]["file"]["url"].to_string(), vecstr);
 
-        }
+       // }
     }
-    return vecvecstr;
+
+
+    return Ok(vecvecstr);
 }
 ///
 /// Should this scraper handle anything relating to downloading.

@@ -110,7 +110,7 @@ impl Jobs {
 
             let name_result = db.settings_get_name(&format!("manual_{}", name));
             let each_u128: u128 = each.try_into().unwrap();
-            let mut to_load = Vec::new();
+            let mut to_load = Vec::new();        dbg!("vec DB.");
             match name_result {
                 Ok(_) => {
                     println!("Dont have to add manual to db.");
@@ -146,10 +146,10 @@ impl Jobs {
             };
         }
 
+
         // setup for scraping jobs will probably outsource this to another file :D.
         for each in 0..self._jobstorun.len() {
             let each_u128: u128 = each.try_into().unwrap();
-
             println!(
                 "Running Job: {} {} {}",
                 self._jobstorun[each], self._sites[each], self._params[each]
@@ -168,29 +168,43 @@ impl Jobs {
             let mut url: Vec<String> = Vec::new();
             let mut bools: Vec<bool> = Vec::new();
 
-            url = self.library_url_get(self._jobstorun[each].into(), &loaded_params[&each_u128]);
-            //dbg!(url);
+            url = self.library_url_dump(self._jobstorun[each].into(), &loaded_params[&each_u128]);
 
             let boo = self.library_download_get(self._jobstorun[each].into());
             let mut ratelimiter = block_on(download::ratelimiter_create(ratelimit[&each_u128]));
-            if !boo {
-                let out = block_on(download::dltext(&mut ratelimiter, url));
+            if boo {
+                break;
+            }
+            let beans = block_on(download::dltext(
+                &mut ratelimiter,
+                url,
+                &mut self.scrapermanager,
+                self._jobstorun[each].into(),
+            ));
+            println!("Downloading Site: {}", &each);
+            // parses db input and adds tags to db.
+            let mut url_vec = db.parse_input(&beans);
+            let mut urls_to_remove: Vec<String> = Vec::new();
 
-                let beans = self.library_parser_call(self._jobstorun[each].into(), &out);
+            // Filters out already downloaded files.
+            let namespace_id = db.namespace_get_name(&"parsed_url".to_string()).0;
+            let mut cnt = 0;
+            let mut cmt = 0;
 
-                let url_vec = db.parse_input(&beans);
-                let location = db.settings_get_name(&"FilesLoc".to_string()).unwrap().1;
-                file::folder_make(&format!("./{}", &location));
-                let map: (HashMap<String, String>, Vec<String>) =
-                    download::file_download(&mut ratelimiter, &url_vec, &location).await;
-                let mut cnt = 0;
+            let location = db.settings_get_name(&"FilesLoc".to_string()).unwrap().1;
+            file::folder_make(&format!("./{}", &location));
 
+            dbg!(format!("Total Files pulled: {}", &url_vec.len()));
+            for urls in url_vec.keys() {
+                let map = download::file_download(&mut ratelimiter, &urls, &location).await;
+
+                dbg!(format!("Downloaded file: {}", map.1.to_string()));
                 // Populates the db with files.
                 for every in map.0.keys() {
                     db.file_add(
                         0,
                         map.0[every].to_string(),
-                        map.1[cnt].to_string(),
+                        map.1.to_string(),
                         location.to_string(),
                         true,
                     );
@@ -198,17 +212,17 @@ impl Jobs {
                 }
 
                 // Populates the db with relations.
-                for every in url_vec {
-                    let hash = db.file_get_hash(&map.0[&every].to_string()).0;
-
-                    for ea in &beans[&every] {
-                        for ev in ea.1 {
-                            let name_id = db.namespace_get_name(ea.0).0;
-                            let tagid = db.tag_get_name(ev, &name_id).0;
-                            db.relationship_add(hash, tagid, true)
-                        }
-                    }
+                let hash = db.file_get_hash(&map.0[&urls.to_string()]).0;
+                let url_namespace = db.namespace_get(&"parsed_url".to_string()).0;
+                db.tag_add(urls.to_string(), "".to_string(), url_namespace, true);
+                let urlid = db.tag_get_name(&urls, &url_namespace).0;
+                db.relationship_add(hash, urlid, true);
+                for tags in &url_vec[urls] {
+                    db.tag_add(tags.0.to_string(), "".to_string(), tags.1, true);
+                    let tagid = db.tag_get_name(&tags.0, &tags.1).0;
+                    db.relationship_add(hash, tagid, true);
                 }
+                cmt += 1;
             }
         }
     }
@@ -229,9 +243,9 @@ impl Jobs {
     pub fn library_parser_call(
         &mut self,
         memid: usize,
-        params: &Vec<String>,
-    ) -> HashMap<String, HashMap<String, Vec<String>>> {
-        return self.scrapermanager.parser_call(memid, params.to_vec());
+        params: &String,
+    ) -> Result<HashMap<String, HashMap<String, Vec<String>>>, &'static str> {
+        return self.scrapermanager.parser_call(memid, params);
     }
 
     ///

@@ -25,7 +25,7 @@ impl InternalScraper {
             _version: 0.001,
             _name: "test.to_string".to_string(),
             _sites: crate::vec_of_strings!("example", "example1"),
-            _ratelimit: (2, Duration::new(2, 0)),
+            _ratelimit: (2, Duration::from_secs(2)),
         }
     }
     pub fn version_get(&self) -> f32 {
@@ -160,12 +160,17 @@ impl ScraperManager {
     pub fn parser_call(
         &self,
         id: usize,
-        params: Vec<String>,
-    ) -> HashMap<String, HashMap<String, Vec<String>>> {
+        params: &String,
+    ) -> Result<HashMap<String, HashMap<String, Vec<String>>>, &'static str> {
         let temp: libloading::Symbol<
-            unsafe extern "C" fn(&Vec<String>) -> HashMap<String, HashMap<String, Vec<String>>>,
+            unsafe extern "C" fn(
+                &String,
+            ) -> Result<
+                HashMap<String, HashMap<String, Vec<String>>>,
+                &'static str,
+            >,
         > = unsafe { self._library[id].get(b"parser\0").unwrap() };
-        let abs = unsafe { temp(&params) };
+        let abs = unsafe { temp(params) };
         return abs;
     }
     pub fn cookie_needed(&self, id: usize, params: String) -> (String, String) {

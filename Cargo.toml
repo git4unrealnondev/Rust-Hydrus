@@ -8,12 +8,13 @@ edition = "2021"
 [dependencies]
 
 libloading = "0.7.3"
-reqwest = { version = "0.11.11" }
+reqwest = { version = "0.11.11", features = ["brotli"] }
 tokio = { version = "1", features = ["full"] }
 url = "2.3.1"
 http = "0.2.8"
 json = "0.12.4"
 ratelimit="0.4.4"
+cloudflare-bypasser = "0.1.2"
 async-std = { version = "1", features = ["attributes", "tokio1"] }
 tower ={ version = "0.4.13", features = ["full"]}
 tower-limit = "0.3.1"

@@ -57,6 +57,10 @@ fn makedb(dbloc: &str) -> scr::database::Main {
         info!("Database Exists: {} : Skipping creation.", dbexist);
     }
 
+    data.load_mem();
+
+    data.db_commit_man_set();
+
     return data;
 }
 
@@ -99,7 +103,6 @@ fn main() {
 
     //Inits Database.
     let mut data = makedb(dbloc);
-    data.load_mem();
 
     data.transaction_flush();
     data.check_version();

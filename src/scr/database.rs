@@ -25,6 +25,7 @@ pub struct Main {
     _vers: isize,
     // inmem db with ahash low lookup/insert time. Alernative to hashmap
     _inmemdb: Memdb,
+    _DBCOMMITNUM: u128,
 }
 
 /// Holds internal in memory hashmap stuff
@@ -206,7 +207,7 @@ impl Memdb {
             return Err("None");
         }
         let val = self._settings_name[name];
-        return Ok((val, self._settings_param[&val].to_string()));
+        return Ok((self._settings_num[&val], self._settings_param[&val].to_string()));
     }
 
     ///
@@ -421,6 +422,7 @@ impl Main {
             _conn: connection,
             _vers: vers,
             _inmemdb: Memdb::new(),
+            _DBCOMMITNUM: 0,
         }
     }
     ///
@@ -457,6 +459,8 @@ impl Main {
         let mut relationship_vec: Vec<(u128, u128)> = Vec::new();
         let mut tag_vec: Vec<(u128, String, String, u128)> = Vec::new();
         let mut setting_vec: Vec<(String, String, isize, String)> = Vec::new();
+
+        dbg!("Loading DB.");
 
         while let Some(file) = files.next().unwrap() {
             let a: String = file.get(0).unwrap();
@@ -515,8 +519,8 @@ impl Main {
         }
 
         while let Some(set) = sets.next().unwrap() {
-            let b1: isize = 0; //set.get(2).unwrap() FIXME
-            let b: isize = b1.try_into().unwrap();
+            let b1: String = set.get(2).unwrap(); // FIXME
+            let b: u128 = b1.parse::<u128>().unwrap();
             let re1: String = match set.get(1) {
                 Ok(re1) => re1,
                 Err(error) => "".to_string(),
@@ -526,7 +530,7 @@ impl Main {
                 Err(error) => "".to_string(),
             };
 
-            setting_vec.push((set.get(0).unwrap(), re1, b, re3));
+            setting_vec.push((set.get(0).unwrap(), re1, b.try_into().unwrap(), re3));
         }
 
         // Drops database connections.
@@ -546,7 +550,6 @@ impl Main {
         drop(relx);
         drop(taex);
         drop(setex);
-
         // This adds the data gathered into memdb.
         for each in file_vec {
             self.file_add(each.0, each.1, each.2, each.3, false);
@@ -835,6 +838,13 @@ impl Main {
             "./plugins".to_string(),
             true,
         );
+        self.setting_add(
+            "DBCOMMITNUM".to_string(),
+            "Number of transactional items before pushing to db.".to_string(),
+            3000,
+            "None".to_string(),
+            true,
+        );
         self.transaction_flush();
     }
 
@@ -896,10 +906,9 @@ impl Main {
         self.execute(stocat);
     }
 
-    ///u128
+    ///
     /// Checks if db version is consistent.
     ///
-
     pub fn check_version(&mut self) {
         let g1 = self
             .quer_int("SELECT num FROM Settings WHERE name='VERSION';".to_string())
@@ -945,6 +954,30 @@ impl Main {
     }
 
     ///
+    ///
+    ///
+    ///
+    fn db_commit_man(&mut self) {
+        self._DBCOMMITNUM += 1;
+        let general = self.settings_get_name(&"DBCOMMITNUM".to_string()).unwrap().0;
+        if self._DBCOMMITNUM >= general {
+            self.transaction_flush();
+            self._DBCOMMITNUM = 0;
+            dbg!(self._DBCOMMITNUM, general);
+        }
+    }
+
+    ///
+    /// db get namespace wrapper
+    ///
+    pub fn namespace_get(&mut self, inp: &String) -> (u128, bool) {self._inmemdb.namespace_get(inp)}
+
+    pub fn db_commit_man_set(&mut self) {
+        self._DBCOMMITNUM = self.settings_get_name(&"DBCOMMITNUM".to_string()).unwrap().0;
+        dbg!(self._DBCOMMITNUM, self.settings_get_name(&"DBCOMMITNUM".to_string()).unwrap().0);
+    }
+
+    ///
     /// Adds a file into the db.
     /// Do this first.
     ///
@@ -971,6 +1004,7 @@ impl Main {
                     &location.to_string()
                 ],
             );
+            self.db_commit_man();
         }
     }
 
@@ -988,6 +1022,7 @@ impl Main {
                     &description.to_string()
                 ],
             );
+            self.db_commit_man();
         }
     }
 
@@ -1016,6 +1051,7 @@ impl Main {
                     &namespace.to_string()
                 ],
             );
+            self.db_commit_man();
         }
     }
 
@@ -1029,6 +1065,7 @@ impl Main {
             let _out = self
                 ._conn
                 .execute(&inp, params![&file.to_string(), &tag.to_string()]);
+            self.db_commit_man();
         }
         self._inmemdb.relationship_add(file, tag);
     }
@@ -1052,6 +1089,7 @@ impl Main {
                     &param.to_string()
                 ],
             );
+            self.db_commit_man();
         }
         self._inmemdb.jobs_add(time, reptime, site, param);
     }
@@ -1063,40 +1101,47 @@ impl Main {
     ///
     pub fn parse_input(
         &mut self,
-        parsed_data: &HashMap<String, HashMap<String, Vec<String>>>,
-    ) -> Vec<String> {
+        parsed_data: &HashMap<String, HashMap<String, HashMap<String, Vec<String>>>>,
+    ) -> HashMap<String, Vec<(String, u128)>> {
         let mut url_vec: Vec<String> = Vec::new();
+        let mut tags_namespace_id: Vec<(String, u128)> = Vec::new();
+        let mut urltoid: HashMap<String, Vec<(String, u128)>> = HashMap::new();
 
         if parsed_data.is_empty() {
-            return url_vec;
+            return urltoid;
         }
-
-        for each in parsed_data.values().next().unwrap().keys() {
-            self.namespace_add(0, each.to_string(), "".to_string(), true);
-        }
-
-        // Adds support for storing the source URL of the file.
-        self.namespace_add(0, "parsed_url".to_string(), "".to_string(), true);
-        let url_id = self._inmemdb.namespace_get(&"parsed_url".to_string());
-
-        // Loops through the source urls and adds tags w/ namespace into db.
-        for each in parsed_data.keys() {
-            // Remove url from list to download if already in db. Does not search by namespace. ONLY TAG can probably fix this but lazy and it works
-            if self._inmemdb.tag_get_name(&each.to_string(), &url_id.0).1 {
-                continue;
+        for e in parsed_data.keys() {
+            for each in parsed_data[e].values().next().unwrap().keys() {
+                self.namespace_add(0, each.to_string(), "".to_string(), true);
             }
-            self.tag_add(each.to_string(), "".to_string(), url_id.0, true);
-            url_vec.push(each.to_string());
-            //dbg!(&parsed_data[each]);
-            for every in &parsed_data[each] {
-                //dbg!(every.0);
-                let namespace_id = self._inmemdb.namespace_get(&every.0);
-                for ene in every.1 {
-                    self.tag_add(ene.to_string(), "".to_string(), namespace_id.0, true);
+
+            // Adds support for storing the source URL of the file.
+            self.namespace_add(0, "parsed_url".to_string(), "".to_string(), true);
+            let url_id = self._inmemdb.namespace_get(&"parsed_url".to_string());
+
+            // Loops through the source urls and adds tags w/ namespace into db.
+            for each in parsed_data[e].keys() {
+                // Remove url from list to download if already in db. Does not search by namespace. ONLY TAG can probably fix this but lazy and it works
+                if self._inmemdb.tag_get_name(&each.to_string(), &url_id.0).1 {
+                    continue;
                 }
+                //self.tag_add(each.to_string(), "".to_string(), url_id.0, true);
+                url_vec.push(each.to_string());
+                //dbg!(&parsed_data[each]);
+                tags_namespace_id = Vec::new();
+                for every in &parsed_data[e][each] {
+                    //dbg!(every.0);
+                    let namespace_id = self._inmemdb.namespace_get(&every.0);
+
+                    for ene in every.1 {
+                        //self.tag_add(ene.to_string(), "".to_string(), namespace_id.0, true);
+                        tags_namespace_id.push((ene.to_string(), namespace_id.0));
+                    }
+                }
+                urltoid.insert(each.to_string(), tags_namespace_id);
             }
         }
-        return url_vec;
+        return urltoid;
     }
 
     ///
@@ -1152,7 +1197,7 @@ impl Main {
                         &name, &_ex
                     );
                 }
-                Ok(_ex) => (),
+                Ok(_ex) => self.db_commit_man(),
             }
         }
         // Adds setting into memdbb
@@ -1178,6 +1223,7 @@ impl Main {
     // Closes a transaction for bulk inserts.
     pub fn transaction_close(&mut self) {
         self.execute("COMMIT".to_string());
+        self._DBCOMMITNUM = 0;
     }
 
     /// Returns db location as String refernce.
