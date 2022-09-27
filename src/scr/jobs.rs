@@ -89,8 +89,8 @@ impl Jobs {
     ///
     /// Runs jobs as they are needed to.
     ///
-    #[tokio::main]
-    pub async fn jobs_run(&mut self, db: &mut database::Main) {
+
+    pub fn jobs_run(&mut self, db: &mut database::Main) {
         // Sets up and checks scrapers
 
         let mut loaded_params: AHashMap<u128, Vec<String>> = AHashMap::new();
@@ -110,7 +110,7 @@ impl Jobs {
 
             let name_result = db.settings_get_name(&format!("manual_{}", name));
             let each_u128: u128 = each.try_into().unwrap();
-            let mut to_load = Vec::new();        dbg!("vec DB.");
+            let mut to_load = Vec::new();
             match name_result {
                 Ok(_) => {
                     println!("Dont have to add manual to db.");
@@ -146,7 +146,6 @@ impl Jobs {
             };
         }
 
-
         // setup for scraping jobs will probably outsource this to another file :D.
         for each in 0..self._jobstorun.len() {
             let each_u128: u128 = each.try_into().unwrap();
@@ -171,19 +170,15 @@ impl Jobs {
             url = self.library_url_dump(self._jobstorun[each].into(), &loaded_params[&each_u128]);
 
             let boo = self.library_download_get(self._jobstorun[each].into());
-            let mut ratelimiter = block_on(download::ratelimiter_create(ratelimit[&each_u128]));
+            //let mut ratelimiter = block_on(download::ratelimiter_create(ratelimit[&each_u128]));
             if boo {
                 break;
             }
-            let beans = block_on(download::dltext(
-                &mut ratelimiter,
-                url,
-                &mut self.scrapermanager,
-                self._jobstorun[each].into(),
-            ));
+            let beans =
+                download::dltext(url, &mut self.scrapermanager, self._jobstorun[each].into());
             println!("Downloading Site: {}", &each);
             // parses db input and adds tags to db.
-            let mut url_vec = db.parse_input(&beans);
+            let (mut url_vec, mut urln_vec) = db.parse_input(&beans);
             let mut urls_to_remove: Vec<String> = Vec::new();
 
             // Filters out already downloaded files.
@@ -192,13 +187,30 @@ impl Jobs {
             let mut cmt = 0;
 
             let location = db.settings_get_name(&"FilesLoc".to_string()).unwrap().1;
-            file::folder_make(&format!("./{}", &location));
+            file::folder_make(&format!("{}", &location));
+
+            for urls in urln_vec.keys() {
+                let url_id = db.tag_get_name(&urls.to_string(), namespace_id).0;
+                let fileids = db.relationship_get_fileid(&url_id);
+                for fids in &fileids {
+                for tags in &urln_vec[urls] {
+                    //dbg!(tags);
+
+                    //db.tag_add(tags.0.to_string(), "".to_string(), tags.1, true);
+                    let tagid = db.tag_get_name(&tags.0, tags.1).0;
+                    //println!("{} {} {} ", &tags.0, &tags.1, tagid);
+                    //if &tags.1 == &3 {println!("{} {} {} {}", fids, &tags.0, &tags.1, tagid);}
+                   // db.relationship_add(*fids, tagid, true);
+                }
+
+                }
+            }
 
             dbg!(format!("Total Files pulled: {}", &url_vec.len()));
             for urls in url_vec.keys() {
-                let map = download::file_download(&mut ratelimiter, &urls, &location).await;
+                let map = download::file_download(&urls, &location);
+                println!("Downloading file# : {}", &cnt);
 
-                dbg!(format!("Downloaded file: {}", map.1.to_string()));
                 // Populates the db with files.
                 for every in map.0.keys() {
                     db.file_add(
@@ -215,11 +227,11 @@ impl Jobs {
                 let hash = db.file_get_hash(&map.0[&urls.to_string()]).0;
                 let url_namespace = db.namespace_get(&"parsed_url".to_string()).0;
                 db.tag_add(urls.to_string(), "".to_string(), url_namespace, true);
-                let urlid = db.tag_get_name(&urls, &url_namespace).0;
+                let urlid = db.tag_get_name(&urls, url_namespace).0;
                 db.relationship_add(hash, urlid, true);
                 for tags in &url_vec[urls] {
                     db.tag_add(tags.0.to_string(), "".to_string(), tags.1, true);
-                    let tagid = db.tag_get_name(&tags.0, &tags.1).0;
+                    let tagid = db.tag_get_name(&tags.0, tags.1).0;
                     db.relationship_add(hash, tagid, true);
                 }
                 cmt += 1;

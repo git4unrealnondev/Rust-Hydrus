@@ -52,14 +52,13 @@ fn makedb(dbloc: &str) -> scr::database::Main {
     if !dbexist {
         data.first_db();
         data.updatedb();
+        data.db_commit_man_set();
     } else {
         println!("Database Exists: {} : Skipping creation.", dbexist);
         info!("Database Exists: {} : Skipping creation.", dbexist);
     }
 
     data.load_mem();
-
-    data.db_commit_man_set();
 
     return data;
 }
@@ -124,6 +123,8 @@ fn main() {
     let (puts, name, trig, run) = scr::cli::main();
 
     let mut jobmanager = scr::jobs::Jobs::new(scraper_manager);
+
+    data.transaction_flush();
 
     if run {
         data.jobs_add_main(

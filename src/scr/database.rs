@@ -63,6 +63,7 @@ struct Memdb {
     _relationship_max_id: u128,
     _relationship_fileid: AHashMap<u128, u128>,
     _relationship_tagid: AHashMap<u128, u128>,
+    _relationship_relate: AHashMap<(u128, u128), u128>,
 
     _settings_max_id: u128,
     _settings_name: AHashMap<String, u128>,
@@ -74,6 +75,7 @@ struct Memdb {
     _tags_name: AHashMap<String, u128>,
     _tags_parents: AHashMap<u128, u128>,
     _tags_namespace: AHashMap<u128, u128>,
+    _tags_relate: AHashMap<(String, u128), u128>,
 }
 
 /// Functions for working with memorory db.
@@ -101,6 +103,7 @@ impl Memdb {
             _parents_namespace: AHashMap::new(),
             _relationship_fileid: AHashMap::new(),
             _relationship_tagid: AHashMap::new(),
+            _relationship_relate: AHashMap::new(),
             _settings_name: AHashMap::new(),
             _settings_pretty: AHashMap::new(),
             _settings_num: AHashMap::new(),
@@ -109,6 +112,7 @@ impl Memdb {
             _tags_name: AHashMap::new(),
             _tags_parents: AHashMap::new(),
             _tags_namespace: AHashMap::new(),
+            _tags_relate: AHashMap::new(),
             _file_max_id: 0,
             _jobs_max_id: 0,
             _namespace_max_id: 0,
@@ -207,7 +211,10 @@ impl Memdb {
             return Err("None");
         }
         let val = self._settings_name[name];
-        return Ok((self._settings_num[&val], self._settings_param[&val].to_string()));
+        return Ok((
+            self._settings_num[&val],
+            self._settings_param[&val].to_string(),
+        ));
     }
 
     ///
@@ -232,12 +239,37 @@ impl Memdb {
     /// Checks if relationship exists in db.
     ///
     fn relationship_get(&mut self, file: &u128, tag: &u128) -> bool {
-        if self._relationship_fileid.contains_key(file)
-            && self._relationship_tagid.contains_key(tag)
-        {
+        if self._relationship_relate.contains_key(&(*file, *tag)) {
             return true;
         }
+
         false
+    }
+
+    ///
+    /// Returns a list of fileid's associated with tagid
+    ///
+    fn relationship_get_fileid(&self, tag: &u128) -> Vec<u128> {
+        let mut comp: Vec<u128> = Vec::new();
+        for each in self._relationship_relate.keys() {
+            if &each.1 == tag {
+                comp.push(each.0);
+            }
+        }
+        comp
+    }
+
+    ///
+    /// Returns a list of tag's associated with fileid
+    ///
+    fn relationship_get_tagid(&self, file: &u128) -> Vec<u128> {
+        let mut comp: Vec<u128> = Vec::new();
+        for each in self._relationship_relate.keys() {
+            if &each.0 == file {
+                comp.push(each.1);
+            }
+        }
+        comp
     }
 
     ///
@@ -246,6 +278,8 @@ impl Memdb {
     fn relationship_add(&mut self, file: u128, tag: u128) {
         self._relationship_fileid.insert(file, file);
         self._relationship_tagid.insert(tag, tag);
+        self._relationship_relate
+            .insert((file, tag), self._relationship_max_id);
     }
 
     ///
@@ -326,17 +360,6 @@ impl Memdb {
     }
 
     ///
-    /// Gets a tag from memdb via name.
-    ///
-    pub fn tag_get_name(&mut self, name: &String, namespace: &u128) -> (u128, bool) {
-        if self._tags_name.contains_key(name) && self._tags_namespace.contains_key(namespace) {
-            return (self._tags_name[name], true);
-        } else {
-            return (0, false);
-        }
-    }
-
-    ///
     /// Does namespace exist? If so return number.
     ///
     pub fn namespace_put(&mut self, name: &String) -> u128 {
@@ -392,21 +415,26 @@ impl Memdb {
         self._tags_name.insert(tag.to_string(), ret_name);
         self._tags_namespace.insert(*namespace, 0);
 
-        let ret_tag: u128 = self._tags_max_id;
+        self._tags_relate.insert((tag.to_string(), *namespace), ret_name);
 
         self.max_tags_increment();
 
-        return ret_tag;
+        return ret_name;
     }
 
     ///
     /// Does tags contain key?
     ///
-    pub fn tags_get(&mut self, tags: &String) -> (u128, bool) {
-        if self._tags_name.contains_key(tags) {
-            return (self._tags_name[tags], true);
+    pub fn tags_get(&mut self, tags: &String, namespace: u128) -> (u128, bool) {
+        if self._tags_relate.contains_key(&(tags.to_string(), namespace)) {
+            //let tagid = self._tags_name[&(tags.to_string(), namespace)];
+
+            let urin : u128 = self._tags_relate[&(tags.to_string(), namespace)];
+
+            return (urin, true);
         } else {
-            return (0, false);
+            dbg!(&(tags.to_string(), namespace));
+            return (namespace, false);
         }
     }
 }
@@ -623,6 +651,10 @@ impl Main {
         }
     }
 
+    pub fn relationship_get_fileid(&self, tag: &u128) -> Vec<u128> {
+        self._inmemdb.relationship_get_fileid(tag)
+    }
+
     pub fn settings_get_name(&self, name: &String) -> Result<(u128, String), &str> {
         self._inmemdb.settings_get_name(&name)
     }
@@ -802,6 +834,9 @@ impl Main {
         self.transaction_flush();
     }
     pub fn updatedb(&mut self) {
+
+        self._inmemdb.settings_add("DBCOMMITNUM".to_string(), "Number of transactional items before pushing to db.".to_string(), 3000, "None".to_string());
+
         self.setting_add(
             "VERSION".to_string(),
             "Version that the database is currently on.".to_string(),
@@ -942,8 +977,8 @@ impl Main {
     ///
     /// Wrapper
     ///
-    pub fn tag_get_name(&mut self, tag: &String, namespace: &u128) -> (u128, bool) {
-        self._inmemdb.tag_get_name(tag, namespace)
+    pub fn tag_get_name(&mut self, tag: &String, namespace: u128) -> (u128, bool) {
+        self._inmemdb.tags_get(tag, namespace)
     }
 
     ///
@@ -959,7 +994,10 @@ impl Main {
     ///
     fn db_commit_man(&mut self) {
         self._DBCOMMITNUM += 1;
-        let general = self.settings_get_name(&"DBCOMMITNUM".to_string()).unwrap().0;
+        let general = self
+            .settings_get_name(&"DBCOMMITNUM".to_string())
+            .unwrap()
+            .0;
         if self._DBCOMMITNUM >= general {
             self.transaction_flush();
             self._DBCOMMITNUM = 0;
@@ -970,11 +1008,21 @@ impl Main {
     ///
     /// db get namespace wrapper
     ///
-    pub fn namespace_get(&mut self, inp: &String) -> (u128, bool) {self._inmemdb.namespace_get(inp)}
+    pub fn namespace_get(&mut self, inp: &String) -> (u128, bool) {
+        self._inmemdb.namespace_get(inp)
+    }
 
     pub fn db_commit_man_set(&mut self) {
-        self._DBCOMMITNUM = self.settings_get_name(&"DBCOMMITNUM".to_string()).unwrap().0;
-        dbg!(self._DBCOMMITNUM, self.settings_get_name(&"DBCOMMITNUM".to_string()).unwrap().0);
+        self._DBCOMMITNUM = self
+            .settings_get_name(&"DBCOMMITNUM".to_string())
+            .unwrap()
+            .0;
+        dbg!(
+            self._DBCOMMITNUM,
+            self.settings_get_name(&"DBCOMMITNUM".to_string())
+                .unwrap()
+                .0
+        );
     }
 
     ///
@@ -1037,9 +1085,10 @@ impl Main {
     }
 
     pub fn tag_add(&mut self, tags: String, parents: String, namespace: u128, addtodb: bool) {
-        let tags_grab: (u128, bool) = self._inmemdb.tags_get(&tags);
+        let tags_grab: (u128, bool) = self._inmemdb.tags_get(&tags, namespace);
         let tag_id = self._inmemdb.tags_put(&tags, &namespace);
         if addtodb && tags_grab.1 == false {
+            dbg!(&tags, &namespace);
             //let namespace_id = self._inmemdb.namespace_put(&namespace);
             let inp = "INSERT INTO Tags VALUES(?, ?, ?, ?)";
             let _out = self._conn.execute(
@@ -1060,13 +1109,17 @@ impl Main {
     /// Inherently trusts user user to not duplicate stuff.
     ///
     pub fn relationship_add(&mut self, file: u128, tag: u128, addtodb: bool) {
-        if addtodb {
+        let existcheck = self._inmemdb.relationship_get(&file, &tag);
+
+        if addtodb && existcheck == false {
+
             let inp = "INSERT INTO Relationship VALUES(?, ?)";
             let _out = self
                 ._conn
                 .execute(&inp, params![&file.to_string(), &tag.to_string()]);
             self.db_commit_man();
         }
+
         self._inmemdb.relationship_add(file, tag);
     }
 
@@ -1102,16 +1155,21 @@ impl Main {
     pub fn parse_input(
         &mut self,
         parsed_data: &HashMap<String, HashMap<String, HashMap<String, Vec<String>>>>,
-    ) -> HashMap<String, Vec<(String, u128)>> {
+    ) -> (
+        HashMap<String, Vec<(String, u128)>>,
+        HashMap<String, Vec<(String, u128)>>,
+    ) {
         let mut url_vec: Vec<String> = Vec::new();
         let mut tags_namespace_id: Vec<(String, u128)> = Vec::new();
         let mut urltoid: HashMap<String, Vec<(String, u128)>> = HashMap::new();
+        let mut urltonid: HashMap<String, Vec<(String, u128)>> = HashMap::new();
 
         if parsed_data.is_empty() {
-            return urltoid;
+            return (urltoid, urltonid);
         }
         for e in parsed_data.keys() {
             for each in parsed_data[e].values().next().unwrap().keys() {
+                dbg!(each.to_string());
                 self.namespace_add(0, each.to_string(), "".to_string(), true);
             }
 
@@ -1122,9 +1180,7 @@ impl Main {
             // Loops through the source urls and adds tags w/ namespace into db.
             for each in parsed_data[e].keys() {
                 // Remove url from list to download if already in db. Does not search by namespace. ONLY TAG can probably fix this but lazy and it works
-                if self._inmemdb.tag_get_name(&each.to_string(), &url_id.0).1 {
-                    continue;
-                }
+
                 //self.tag_add(each.to_string(), "".to_string(), url_id.0, true);
                 url_vec.push(each.to_string());
                 //dbg!(&parsed_data[each]);
@@ -1138,10 +1194,17 @@ impl Main {
                         tags_namespace_id.push((ene.to_string(), namespace_id.0));
                     }
                 }
-                urltoid.insert(each.to_string(), tags_namespace_id);
+                if self._inmemdb.tags_get(&each.to_string(), url_id.0).1 {
+                    if tags_namespace_id[1].1 == 0 {dbg!(each);}
+                    urltonid.insert(each.to_string(), tags_namespace_id);
+
+                } else {
+                    if tags_namespace_id[1].1 == 0 {dbg!(each);}
+                    urltoid.insert(each.to_string(), tags_namespace_id);
+                }
             }
         }
-        return urltoid;
+        return (urltoid, urltonid);
     }
 
     ///

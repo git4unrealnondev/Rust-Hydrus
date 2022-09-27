@@ -149,6 +149,8 @@ fn retvec(vecstr: &mut HashMap<String, Vec<String>>, jso: &json::JsonValue, sub:
 pub fn parser(params: &String) -> Result<HashMap<String, HashMap<String, Vec<String>>>, &'static str> {
     let mut vecvecstr: HashMap<String, HashMap<String, Vec<String>>> = HashMap::new();
     //for each in params.keys() {
+        //dbg!(params);
+        //dbg!(json::parse(params));
         let js = json::parse(params).unwrap();
         //dbg!(&js["posts"]);
         //dbg!(&js["posts"].len());
@@ -178,7 +180,14 @@ pub fn parser(params: &String) -> Result<HashMap<String, HashMap<String, Vec<Str
             retvec(&mut vecstr, &js["posts"][inc]["tags"], "meta");
             retvec(&mut vecstr, &js["posts"][inc], "sources");
             retvec(&mut vecstr, &js["posts"][inc], "pools");
+            //retvec(&mut vecstr, &js["posts"][inc]["relationships"], "parent_id");
+            retvec(&mut vecstr, &js["posts"][inc]["relationships"], "children");
 
+            // Filtering for parents
+            //if js["posts"][inc]["relationships"]["parent_id"].to_string() != "null".to_string() {
+            //vecstr.insert("parent_id".to_string(), [js["posts"][inc]["relationships"]["parent_id"].to_string()].to_vec());
+            //dbg!(js["posts"][inc]["relationships"]["parent_id"].to_string());
+            //}
             vecstr.insert("md5".to_string(), [js["posts"][inc]["file"]["md5"].to_string()].to_vec());
             vecstr.insert("id".to_string(), [js["posts"][inc]["id"].to_string()].to_vec());
 

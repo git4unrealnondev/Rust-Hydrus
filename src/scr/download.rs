@@ -46,8 +46,8 @@ pub async fn ratelimiter_create(time: (u64, Duration)) -> RateLimit<Client> {
 /// time.0 is the requests per time.1cargo run -- job --add e6 "test female male" now false
 /// time.1 is number of total seconds per time slot
 ///
+#[tokio::main]
 pub async fn dltext(
-    example1: &mut RateLimit<Client>,
     url_vec: Vec<String>,
     parser: &mut scraper::ScraperManager,
     uintref: usize,
@@ -57,10 +57,6 @@ pub async fn dltext(
     let mut test: HashMap<String, HashMap<String, HashMap<String, Vec<String>>>> = HashMap::new();
     let mut cnt = 0;
 
-    let mut client = reqwest::ClientBuilder::new()
-        .user_agent("My User Agent")
-        .build()
-        .unwrap();
     // The wrapper that implements ratelimiting
 
     //let mut example = tower::ServiceBuilder::new()
@@ -70,14 +66,22 @@ pub async fn dltext(
 
     println!("Starting scraping urls.");
     for each in url_vec {
+        let mut client = reqwest::ClientBuilder::new()
+            .user_agent("RustHydrus V0.1")
+            .build()
+            .unwrap();
         let url = Url::parse(&each).unwrap();
         //let url = Url::parse("http://www.google.com").unwrap();
         let requestit = Request::new(Method::GET, url);
 
+        dbg!("B");
+        dbg!(&each);
         //dbg!(&example);
         //let resp = example.ready().await.unwrap().call(requestit).await.unwrap();
+        dbg!("a");
         let resp = client.call(requestit).await.unwrap();
-        thread::sleep(Duration::from_millis(500));
+        //let resp = reqwest::blocking::Request(requestit).user_agent("RustHydrus V0.1");
+        thread::sleep(Duration::from_millis(750));
         println!("Downloaded total urls to parse: {}", &cnt);
         //dbg!(resp.text().await.unwrap());
         //let resp = example.ready().await.unwrap().call(requestit).await.unwrap();
@@ -96,6 +100,7 @@ pub async fn dltext(
 
         test.insert(cnt.to_string(), parser.parser_call(uintref, &st).unwrap());
         cnt += 1;
+        break;
     }
     return test;
 }
@@ -103,8 +108,8 @@ pub async fn dltext(
 ///
 /// Download file
 ///
+#[tokio::main]
 pub async fn file_download(
-    example: &mut RateLimit<Client>,
     url_vec: &String,
     location: &String,
 ) -> (HashMap<String, String>, String) {
@@ -125,7 +130,7 @@ pub async fn file_download(
 
     let url = Url::parse(&url_vec).unwrap();
     let requestit = Request::new(Method::GET, url);
-    let a = example
+    let a = exampleone
         .ready()
         .await
         .unwrap()
@@ -145,7 +150,7 @@ pub async fn file_download(
     let hash = format!("{:X}", hasher.finalize());
 
     let final_loc = format!(
-        "./{}/{}{}/{}{}/{}{}",
+        "{}/{}{}/{}{}/{}{}",
         &location,
         hash.chars().nth(0).unwrap(),
         hash.chars().nth(1).unwrap(),
