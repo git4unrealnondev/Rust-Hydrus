@@ -34,4 +34,4 @@ opt-level = "z"
 lto=true
 codegenunits=1
 strip = true
-
+panic = "abort"

@@ -1,5 +1,5 @@
 #![forbid(unsafe_code)]
-use ahash::AHashMap;
+use ahash::{AHasher, RandomState};
 use log::{error, info};
 //use rusqlite::ToSql;
 use crate::vec_of_strings;
@@ -25,7 +25,7 @@ pub struct Main {
     _vers: isize,
     // inmem db with ahash low lookup/insert time. Alernative to hashmap
     _inmemdb: Memdb,
-    _DBCOMMITNUM: u128,
+    _dbcommitnum: u128,
 }
 
 /// Holds internal in memory hashmap stuff
@@ -41,41 +41,41 @@ struct Memdb {
     ),
 
     _file_max_id: u128,
-    _file_hash: AHashMap<String, u128>,
-    _file_extension: AHashMap<String, u128>,
-    _file_location: AHashMap<String, u128>,
+    _file_hash: HashMap<String, u128>,
+    _file_extension: HashMap<String, u128>,
+    _file_location: HashMap<String, u128>,
 
     _jobs_max_id: u128,
-    _jobs_time: AHashMap<u128, u128>,
-    _jobs_rep: AHashMap<u128, u128>,
-    _jobs_site: AHashMap<u128, String>,
-    _jobs_param: AHashMap<u128, String>,
+    _jobs_time: HashMap<u128, u128>,
+    _jobs_rep: HashMap<u128, u128>,
+    _jobs_site: HashMap<u128, String>,
+    _jobs_param: HashMap<u128, String>,
 
     _namespace_max_id: u128,
-    _namespace_name: AHashMap<String, u128>,
-    _namespace_description: AHashMap<u128, String>,
+    _namespace_name: HashMap<String, u128>,
+    _namespace_description: HashMap<u128, String>,
 
     _parents_max_id: u128,
-    _parents_name: AHashMap<String, u128>,
-    _parents_children: AHashMap<u128, String>,
-    _parents_namespace: AHashMap<u128, u128>,
+    _parents_name: HashMap<String, u128>,
+    _parents_children: HashMap<u128, String>,
+    _parents_namespace: HashMap<u128, u128>,
 
     _relationship_max_id: u128,
-    _relationship_fileid: AHashMap<u128, u128>,
-    _relationship_tagid: AHashMap<u128, u128>,
-    _relationship_relate: AHashMap<(u128, u128), u128>,
+    _relationship_fileid: HashMap<u128, u128>,
+    _relationship_tagid: HashMap<u128, u128>,
+    _relationship_relate: HashMap<(u128, u128), u128>,
 
     _settings_max_id: u128,
-    _settings_name: AHashMap<String, u128>,
-    _settings_pretty: AHashMap<u128, String>,
-    _settings_num: AHashMap<u128, u128>,
-    _settings_param: AHashMap<u128, String>,
+    _settings_name: HashMap<String, u128>,
+    _settings_pretty: HashMap<u128, String>,
+    _settings_num: HashMap<u128, u128>,
+    _settings_param: HashMap<u128, String>,
 
     _tags_max_id: u128,
-    _tags_name: AHashMap<String, u128>,
-    _tags_parents: AHashMap<u128, u128>,
-    _tags_namespace: AHashMap<u128, u128>,
-    _tags_relate: AHashMap<(String, u128), u128>,
+    _tags_name: HashMap<String, u128>,
+    _tags_parents: HashMap<u128, u128>,
+    _tags_namespace: HashMap<u128, u128>,
+    _tags_relate: HashMap<(String, u128), u128>,
 }
 
 /// Functions for working with memorory db.
@@ -86,33 +86,33 @@ impl Memdb {
         Memdb {
             _table_names: ("File", "Jobs", "Namespace", "Parents", "Settings", "Tags"),
             //_table_names: ,
-            //_file_id: AHashMap::new(),
-            _file_hash: AHashMap::new(),
-            _file_extension: AHashMap::new(),
-            _file_location: AHashMap::new(),
-            _jobs_time: AHashMap::new(),
-            _jobs_rep: AHashMap::new(),
-            _jobs_site: AHashMap::new(),
-            _jobs_param: AHashMap::new(),
-            //_namespace_id: AHashMap::new(),
-            _namespace_name: AHashMap::new(),
-            _namespace_description: AHashMap::new(),
-            //_parents_id: AHashMap::new(),
-            _parents_name: AHashMap::new(),
-            _parents_children: AHashMap::new(),
-            _parents_namespace: AHashMap::new(),
-            _relationship_fileid: AHashMap::new(),
-            _relationship_tagid: AHashMap::new(),
-            _relationship_relate: AHashMap::new(),
-            _settings_name: AHashMap::new(),
-            _settings_pretty: AHashMap::new(),
-            _settings_num: AHashMap::new(),
-            _settings_param: AHashMap::new(),
-            //_tags_id: AHashMap::new(),
-            _tags_name: AHashMap::new(),
-            _tags_parents: AHashMap::new(),
-            _tags_namespace: AHashMap::new(),
-            _tags_relate: AHashMap::new(),
+            //_file_id: HashMap::new(),
+            _file_hash: HashMap::new(),
+            _file_extension: HashMap::new(),
+            _file_location: HashMap::new(),
+            _jobs_time: HashMap::new(),
+            _jobs_rep: HashMap::new(),
+            _jobs_site: HashMap::new(),
+            _jobs_param: HashMap::new(),
+            //_namespace_id: HashMap::new(),
+            _namespace_name: HashMap::new(),
+            _namespace_description: HashMap::new(),
+            //_parents_id: HashMap::new(),
+            _parents_name: HashMap::new(),
+            _parents_children: HashMap::new(),
+            _parents_namespace: HashMap::new(),
+            _relationship_fileid: HashMap::new(),
+            _relationship_tagid: HashMap::new(),
+            _relationship_relate: HashMap::new(),
+            _settings_name: HashMap::new(),
+            _settings_pretty: HashMap::new(),
+            _settings_num: HashMap::new(),
+            _settings_param: HashMap::new(),
+            //_tags_id: HashMap::new(),
+            _tags_name: HashMap::new(),
+            _tags_parents: HashMap::new(),
+            _tags_namespace: HashMap::new(),
+            _tags_relate: HashMap::new(),
             _file_max_id: 0,
             _jobs_max_id: 0,
             _namespace_max_id: 0,
@@ -377,6 +377,7 @@ impl Memdb {
     ///
     pub fn namespace_get(&mut self, name: &String) -> (u128, bool) {
         if self._namespace_name.contains_key(name) {
+
             return (self._namespace_name[name], true);
         } else {
             return (0, false);
@@ -384,9 +385,22 @@ impl Memdb {
     }
 
     ///
+    /// Namespace get name from id
+    ///
+    pub fn namespace_id_get(&self, uid: &u128) -> String {
+        for (key, val) in self._namespace_name.iter() {
+            if val == uid {
+                return key.to_string()
+            }
+
+        }
+        return "".to_string()
+    }
+
+    ///
     /// Adds a file to memdb.Tags
     ///
-    pub fn tags_name_put(&mut self, tag: String, namespace: &String) -> u128 {
+    pub fn tags_name_put_test(&mut self, tag: String, namespace: &String) -> u128 {
         if self._tags_name.contains_key(&tag) {
             return self._tags_name[&tag];
         }
@@ -397,6 +411,7 @@ impl Memdb {
         self.namespace_put(namespace);
 
         let ret_tag: u128 = self._tags_max_id;
+        //self._tags_relate.insert((tag.to_string(), *namespace), ret_name);
 
         self.max_tags_increment();
 
@@ -407,9 +422,16 @@ impl Memdb {
     /// Adds a file to memdb.Tags
     ///
     pub fn tags_put(&mut self, tag: &String, namespace: &u128) -> u128 {
-        if self._tags_name.contains_key(tag) {
-            return self._tags_name[tag];
-        }
+        //if self._tags_name.contains_key(tag) {
+        //    return self._tags_name[tag];
+        //}
+        if self._tags_relate.contains_key(&(tag.to_string(), *namespace)) {
+            //let tagid = self._tags_name[&(tags.to_string(), namespace)];
+
+            let urin : u128 = self._tags_relate[&(tag.to_string(), *namespace)];
+            return urin
+            }
+        //println!("{} {}", tag, namespace);
         let ret_name: u128 = self._tags_max_id;
 
         self._tags_name.insert(tag.to_string(), ret_name);
@@ -425,18 +447,40 @@ impl Memdb {
     ///
     /// Does tags contain key?
     ///
-    pub fn tags_get(&mut self, tags: &String, namespace: u128) -> (u128, bool) {
-        if self._tags_relate.contains_key(&(tags.to_string(), namespace)) {
+    pub fn tags_get(&mut self, tags: String, namespace: &u128) -> (u128, bool) {
+
+        if self._tags_relate.contains_key(&(tags.to_string(), *namespace)) {
             //let tagid = self._tags_name[&(tags.to_string(), namespace)];
 
-            let urin : u128 = self._tags_relate[&(tags.to_string(), namespace)];
+            let urin : u128 = self._tags_relate[&(tags.to_string(), *namespace)];
 
             return (urin, true);
         } else {
-            dbg!(&(tags.to_string(), namespace));
-            return (namespace, false);
+            return (*namespace, false);
         }
     }
+
+    pub fn dbg(&mut self) {
+        for each in &self._tags_relate {
+            println!("{:?}", each);
+        }
+
+    }
+
+    ///
+    /// Gets tag name by id
+    ///
+    pub fn tag_id_get(&mut self, uid: &u128) -> (String, String) {
+        for (key, val) in self._tags_relate.iter() {
+            if val == uid {
+                return (key.0.to_string(), self.namespace_id_get(&key.1).to_string())
+            }
+
+        }
+        return ("".to_string(), "".to_string())
+    }
+
+
 }
 
 /// Contains DB functions.
@@ -450,7 +494,7 @@ impl Main {
             _conn: connection,
             _vers: vers,
             _inmemdb: Memdb::new(),
-            _DBCOMMITNUM: 0,
+            _dbcommitnum: 0,
         }
     }
     ///
@@ -614,6 +658,8 @@ impl Main {
         jobs_param: String,
         does_loop: bool,
     ) {
+
+
         let time_offset: u128 = time::time_conv(jobs_rep.to_string());
 
         /*self._inmemdb.jobs_add(
@@ -651,8 +697,15 @@ impl Main {
         }
     }
 
+    pub fn tag_id_get(&mut self, uid: &u128) -> (String, String) {
+        self._inmemdb.tag_id_get(uid)
+    }
+
     pub fn relationship_get_fileid(&self, tag: &u128) -> Vec<u128> {
         self._inmemdb.relationship_get_fileid(tag)
+    }
+    pub fn relationship_get_tagid(&self, tag: &u128) -> Vec<u128> {
+        self._inmemdb.relationship_get_tagid(tag)
     }
 
     pub fn settings_get_name(&self, name: &String) -> Result<(u128, String), &str> {
@@ -977,15 +1030,8 @@ impl Main {
     ///
     /// Wrapper
     ///
-    pub fn tag_get_name(&mut self, tag: &String, namespace: u128) -> (u128, bool) {
+    pub fn tag_get_name(&mut self, tag: String, namespace: &u128) -> (u128, bool) {
         self._inmemdb.tags_get(tag, namespace)
-    }
-
-    ///
-    /// Wrapper
-    ///
-    pub fn namespace_get_name(&mut self, name: &String) -> (u128, bool) {
-        self._inmemdb.namespace_get(&name)
     }
 
     ///
@@ -993,15 +1039,15 @@ impl Main {
     ///
     ///
     fn db_commit_man(&mut self) {
-        self._DBCOMMITNUM += 1;
+        self._dbcommitnum += 1;
         let general = self
             .settings_get_name(&"DBCOMMITNUM".to_string())
             .unwrap()
             .0;
-        if self._DBCOMMITNUM >= general {
+        if self._dbcommitnum >= general {
             self.transaction_flush();
-            self._DBCOMMITNUM = 0;
-            dbg!(self._DBCOMMITNUM, general);
+            self._dbcommitnum = 0;
+            dbg!(self._dbcommitnum, general);
         }
     }
 
@@ -1013,12 +1059,12 @@ impl Main {
     }
 
     pub fn db_commit_man_set(&mut self) {
-        self._DBCOMMITNUM = self
+        self._dbcommitnum = self
             .settings_get_name(&"DBCOMMITNUM".to_string())
             .unwrap()
             .0;
         dbg!(
-            self._DBCOMMITNUM,
+            self._dbcommitnum,
             self.settings_get_name(&"DBCOMMITNUM".to_string())
                 .unwrap()
                 .0
@@ -1085,11 +1131,10 @@ impl Main {
     }
 
     pub fn tag_add(&mut self, tags: String, parents: String, namespace: u128, addtodb: bool) {
-        let tags_grab: (u128, bool) = self._inmemdb.tags_get(&tags, namespace);
+        let tags_grab: (u128, bool) = self._inmemdb.tags_get(tags.to_string(), &namespace);
         let tag_id = self._inmemdb.tags_put(&tags, &namespace);
+        //println!("{} {} {} {:?} {}", tags, namespace, addtodb, tags_grab, tag_id);
         if addtodb && tags_grab.1 == false {
-            dbg!(&tags, &namespace);
-            //let namespace_id = self._inmemdb.namespace_put(&namespace);
             let inp = "INSERT INTO Tags VALUES(?, ?, ?, ?)";
             let _out = self._conn.execute(
                 &inp,
@@ -1168,14 +1213,14 @@ impl Main {
             return (urltoid, urltonid);
         }
         for e in parsed_data.keys() {
-            for each in parsed_data[e].values().next().unwrap().keys() {
-                dbg!(each.to_string());
-                self.namespace_add(0, each.to_string(), "".to_string(), true);
-            }
 
             // Adds support for storing the source URL of the file.
             self.namespace_add(0, "parsed_url".to_string(), "".to_string(), true);
             let url_id = self._inmemdb.namespace_get(&"parsed_url".to_string());
+
+            for each in parsed_data[e].values().next().unwrap().keys() {
+                self.namespace_add(0, each.to_string(), "".to_string(), true);
+            }
 
             // Loops through the source urls and adds tags w/ namespace into db.
             for each in parsed_data[e].keys() {
@@ -1194,14 +1239,15 @@ impl Main {
                         tags_namespace_id.push((ene.to_string(), namespace_id.0));
                     }
                 }
-                if self._inmemdb.tags_get(&each.to_string(), url_id.0).1 {
+                /*if self._inmemdb.tags_get(&each.to_string(), url_id.0).1 {
                     if tags_namespace_id[1].1 == 0 {dbg!(each);}
                     urltonid.insert(each.to_string(), tags_namespace_id);
 
-                } else {
-                    if tags_namespace_id[1].1 == 0 {dbg!(each);}
-                    urltoid.insert(each.to_string(), tags_namespace_id);
-                }
+                } else {*/
+                    if !self._inmemdb.tags_get(each.to_string(), &url_id.0).1 {
+                    urltoid.insert(each.to_string(), tags_namespace_id);}
+                    else {urltonid.insert(each.to_string(), tags_namespace_id);}
+                //}
             }
         }
         return (urltoid, urltonid);
@@ -1270,6 +1316,7 @@ impl Main {
         } else {
             self._inmemdb.settings_add(name, pretty, 0, param);
         }
+        self.transaction_flush();
     }
 
     /// Starts a transaction for bulk inserts.
@@ -1286,7 +1333,7 @@ impl Main {
     // Closes a transaction for bulk inserts.
     pub fn transaction_close(&mut self) {
         self.execute("COMMIT".to_string());
-        self._DBCOMMITNUM = 0;
+        self._dbcommitnum = 0;
     }
 
     /// Returns db location as String refernce.
@@ -1341,7 +1388,7 @@ impl Main {
                 error!("BAD CALL {}", _out);
                 panic!("BAD CALL {}", _out);
             }
-            Ok(_out) => (_out),
+            Ok(_out) => _out,
         }
     }
 

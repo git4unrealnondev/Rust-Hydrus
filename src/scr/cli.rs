@@ -39,6 +39,12 @@ pub fn main() -> (Vec<String>, String, bool, bool) {
                 ),
         )
         .arg(
+            Arg::new("id")
+                //.required_unless_present_all(&["dbg", "infile"])
+                .takes_value(true)
+                .long("id"),
+        )
+        .arg(
             Arg::new("site")
                 .long("site")
                 .takes_value(true)
@@ -54,6 +60,15 @@ pub fn main() -> (Vec<String>, String, bool, bool) {
 
     //println!("{:?}", matches);
     let name = matches.value_of("site");
+
+    let id = matches.value_of("id");
+
+    if id != None {
+        let mut valvec: Vec<String> = Vec::new();
+        valvec.push(id.unwrap().to_string());
+
+        return (valvec, "id".to_string(), true, false)
+    }
 
     if name != None {
         println!("{}", name.unwrap());

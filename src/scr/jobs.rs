@@ -4,10 +4,8 @@ use crate::scr::file;
 use crate::scr::scraper;
 use crate::scr::time;
 use ahash::AHashMap;
-use futures::executor::block_on;
 use log::info;
 use std::collections::HashMap;
-use std::io::Cursor;
 use std::time::Duration;
 
 pub struct Jobs {
@@ -93,7 +91,7 @@ impl Jobs {
     pub fn jobs_run(&mut self, db: &mut database::Main) {
         // Sets up and checks scrapers
 
-        let mut loaded_params: AHashMap<u128, Vec<String>> = AHashMap::new();
+        let loaded_params: AHashMap<u128, Vec<String>> = AHashMap::new();
         let mut loaded_params: AHashMap<u128, Vec<String>> = AHashMap::new();
         let mut ratelimit: AHashMap<u128, (u64, Duration)> = AHashMap::new();
 
@@ -165,7 +163,7 @@ impl Jobs {
             // url is the output from the designated scraper that has the correct
 
             let mut url: Vec<String> = Vec::new();
-            let mut bools: Vec<bool> = Vec::new();
+            let bools: Vec<bool> = Vec::new();
 
             url = self.library_url_dump(self._jobstorun[each].into(), &loaded_params[&each_u128]);
 
@@ -178,29 +176,31 @@ impl Jobs {
                 download::dltext(url, &mut self.scrapermanager, self._jobstorun[each].into());
             println!("Downloading Site: {}", &each);
             // parses db input and adds tags to db.
-            let (mut url_vec, mut urln_vec) = db.parse_input(&beans);
-            let mut urls_to_remove: Vec<String> = Vec::new();
+            let (url_vec, urln_vec) = db.parse_input(&beans);
+            let  urls_to_remove: Vec<String> = Vec::new();
 
             // Filters out already downloaded files.
-            let namespace_id = db.namespace_get_name(&"parsed_url".to_string()).0;
+            let namespace_id = db.namespace_get(&"parsed_url".to_string()).0;
             let mut cnt = 0;
-            let mut cmt = 0;
 
             let location = db.settings_get_name(&"FilesLoc".to_string()).unwrap().1;
             file::folder_make(&format!("{}", &location));
 
             for urls in urln_vec.keys() {
-                let url_id = db.tag_get_name(&urls.to_string(), namespace_id).0;
+
+                //dbg!(urls, urln_vec[urls]);
+
+                let url_id = db.tag_get_name(urls.to_string(), &namespace_id).0;
                 let fileids = db.relationship_get_fileid(&url_id);
                 for fids in &fileids {
                 for tags in &urln_vec[urls] {
                     //dbg!(tags);
 
-                    //db.tag_add(tags.0.to_string(), "".to_string(), tags.1, true);
-                    let tagid = db.tag_get_name(&tags.0, tags.1).0;
+                    db.tag_add(tags.0.to_string(), "".to_string(), tags.1, true);
+                    let tagid = db.tag_get_name(tags.0.to_string(), &tags.1).0;
                     //println!("{} {} {} ", &tags.0, &tags.1, tagid);
                     //if &tags.1 == &3 {println!("{} {} {} {}", fids, &tags.0, &tags.1, tagid);}
-                   // db.relationship_add(*fids, tagid, true);
+                    db.relationship_add(*fids, tagid, true);
                 }
 
                 }
@@ -227,14 +227,13 @@ impl Jobs {
                 let hash = db.file_get_hash(&map.0[&urls.to_string()]).0;
                 let url_namespace = db.namespace_get(&"parsed_url".to_string()).0;
                 db.tag_add(urls.to_string(), "".to_string(), url_namespace, true);
-                let urlid = db.tag_get_name(&urls, url_namespace).0;
+                let urlid = db.tag_get_name(urls.to_string(), &url_namespace).0;
                 db.relationship_add(hash, urlid, true);
                 for tags in &url_vec[urls] {
                     db.tag_add(tags.0.to_string(), "".to_string(), tags.1, true);
-                    let tagid = db.tag_get_name(&tags.0, tags.1).0;
+                    let tagid = db.tag_get_name(tags.0.to_string(), &tags.1).0;
                     db.relationship_add(hash, tagid, true);
                 }
-                cmt += 1;
             }
         }
     }

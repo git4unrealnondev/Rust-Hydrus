@@ -180,20 +180,17 @@ pub fn parser(params: &String) -> Result<HashMap<String, HashMap<String, Vec<Str
             retvec(&mut vecstr, &js["posts"][inc]["tags"], "meta");
             retvec(&mut vecstr, &js["posts"][inc], "sources");
             retvec(&mut vecstr, &js["posts"][inc], "pools");
-            //retvec(&mut vecstr, &js["posts"][inc]["relationships"], "parent_id");
+            retvec(&mut vecstr, &js["posts"][inc]["relationships"], "parent_id");
             retvec(&mut vecstr, &js["posts"][inc]["relationships"], "children");
 
             // Filtering for parents
-            //if js["posts"][inc]["relationships"]["parent_id"].to_string() != "null".to_string() {
-            //vecstr.insert("parent_id".to_string(), [js["posts"][inc]["relationships"]["parent_id"].to_string()].to_vec());
-            //dbg!(js["posts"][inc]["relationships"]["parent_id"].to_string());
-            //}
+        if js["posts"][inc]["relationships"]["parent_id"].to_string() != "null".to_string() {
+            vecstr.insert("parent_id".to_string(), [js["posts"][inc]["relationships"]["parent_id"].to_string()].to_vec());
+            }
+            if !&js["posts"][inc]["description"].is_empty() {vecstr.insert("description".to_string(), [js["posts"][inc]["description"].to_string()].to_vec());}
             vecstr.insert("md5".to_string(), [js["posts"][inc]["file"]["md5"].to_string()].to_vec());
             vecstr.insert("id".to_string(), [js["posts"][inc]["id"].to_string()].to_vec());
-
             vecvecstr.insert(js["posts"][inc]["file"]["url"].to_string(), vecstr);
-
-       // }
     }
 
 

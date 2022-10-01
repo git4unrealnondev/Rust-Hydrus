@@ -77,7 +77,7 @@ fn db_file_sanity(dbloc: &str) {
                     error!("ERROR CANT DELETE FILE!!! CLOSING RAPIDLY.");
                     panic!("ERROR CANT DELETE FILE!!! CLOSING RAPIDLY.");
                 }
-                Ok(_fileret) => (_fileret),
+                Ok(_fileret) => _fileret,
             }
         }
         Err(_dbzero) => {}
@@ -121,6 +121,17 @@ fn main() {
 
     //TODO NEEDS MAIN INFO PULLER HERE. PULLS IN EVERYTHING INTO DB.
     let (puts, name, trig, run) = scr::cli::main();
+
+    if name == "id" {
+        dbg!(&puts);
+        let uid: u128 = puts[0].parse::<u128>().unwrap();
+        let a = data.relationship_get_tagid(&uid);
+
+        for each in &a {
+            println!("{:?}", data.tag_id_get(&each));
+        }
+
+    }
 
     let mut jobmanager = scr::jobs::Jobs::new(scraper_manager);
 

@@ -1,28 +1,21 @@
 //extern crate urlparse;
 use crate::scr::file;
 use crate::scr::scraper;
-use ahash::AHashMap;
-use bytes;
-use futures::future::join_all;
-use http::header::HeaderValue;
+use ahash::{AHasher, RandomState};
 use http::Method;
-use reqwest::{get, Client, Error, Request, Response};
+use reqwest::{Client, Request, Response};
 use sha2::Digest;
 use sha2::Sha512;
 use std::collections::HashMap;
 use std::fs;
-use std::fs::File;
 use std::io;
 use std::io::Cursor;
-use std::path::Path;
 use std::thread;
 use std::time::Duration;
-use tower::layer::util::{Identity, Stack};
 use tower::limit::RateLimit;
 use tower::ServiceExt;
 use tower::{BoxError, Service};
 use url::Url;
-use urlparse::urlparse;
 extern crate cloudflare_bypasser;
 extern crate reqwest;
 ///
@@ -36,7 +29,7 @@ pub async fn ratelimiter_create(time: (u64, Duration)) -> RateLimit<Client> {
         .build()
         .unwrap();
     // The wrapper that implements ratelimiting
-    let mut example = tower::ServiceBuilder::new()
+    let example = tower::ServiceBuilder::new()
         .rate_limit(time.0, time.1)
         .service(client);
     return example;
@@ -52,8 +45,8 @@ pub async fn dltext(
     parser: &mut scraper::ScraperManager,
     uintref: usize,
 ) -> HashMap<String, HashMap<String, HashMap<String, Vec<String>>>> {
-    let mut respvec: Vec<Response> = Vec::new();
-    let mut retvec: Vec<String> = Vec::new();
+    let respvec: Vec<Response> = Vec::new();
+    let retvec: Vec<String> = Vec::new();
     let mut test: HashMap<String, HashMap<String, HashMap<String, Vec<String>>>> = HashMap::new();
     let mut cnt = 0;
 
@@ -100,7 +93,6 @@ pub async fn dltext(
 
         test.insert(cnt.to_string(), parser.parser_call(uintref, &st).unwrap());
         cnt += 1;
-        break;
     }
     return test;
 }
@@ -126,7 +118,6 @@ pub async fn file_download(
     let mut exampleone = tower::ServiceBuilder::new()
         .rate_limit(2, Duration::from_secs(1))
         .service(client);
-    let mut cnt = 0;
 
     let url = Url::parse(&url_vec).unwrap();
     let requestit = Request::new(Method::GET, url);
@@ -170,12 +161,10 @@ pub async fn file_download(
 
     let metadata = fs::metadata(orig_path).unwrap();
 
-    let mut split = headers.split("/");
+    let split = headers.split("/");
     let header_split_vec: Vec<&str> = split.collect();
     let header_split_vec1: Vec<&str> = header_split_vec[1].split('"').collect();
     ext_vec = header_split_vec1[0].to_string();
-    //dbg!(hash_file(cnt.to_string()));
-    cnt += 1;
 
     return (fut, ext_vec);
 }
