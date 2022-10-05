@@ -64,9 +64,7 @@ pub fn main() -> (Vec<String>, String, bool, bool) {
     let id = matches.value_of("id");
 
     if id != None {
-        let mut valvec: Vec<String> = Vec::new();
-        valvec.push(id.unwrap().to_string());
-
+        let valvec: Vec<String> = vec![id.unwrap().to_string()];
         return (valvec, "id".to_string(), true, false)
     }
 

@@ -1,4 +1,3 @@
-use log;
 use log::{error, info, warn};
 use std::path::Path;
 extern crate ratelimit;
@@ -60,7 +59,7 @@ fn makedb(dbloc: &str) -> scr::database::Main {
 
     data.load_mem();
 
-    return data;
+    data
 }
 
 /// Gets file setup out of main.
@@ -87,7 +86,7 @@ fn db_file_sanity(dbloc: &str) {
 /// Makes logging happen
 fn makelog(logloc: &str) {
     //Inits logging::main at log.txt
-    scr::logging::main(&logloc)
+    scr::logging::main(logloc)
 }
 
 /// Main function.
@@ -128,7 +127,7 @@ fn main() {
         let a = data.relationship_get_tagid(&uid);
 
         for each in &a {
-            println!("{:?}", data.tag_id_get(&each));
+            println!("{:?}", data.tag_id_get(each));
         }
 
     }
@@ -140,7 +139,7 @@ fn main() {
     if run {
         data.jobs_add_main(
             0.to_string(),
-            puts[2].to_string(),
+            &puts[2].to_string(),
             puts[0].to_string(),
             puts[1].to_string(),
             trig,

@@ -14,8 +14,8 @@ pub fn time_secs() -> u128 {
 ///
 /// Converts hour & day & minute repeatability.
 ///
-pub fn time_conv(inp: String) -> u128 {
-    if inp == "now".to_string() {
+pub fn time_conv(inp: &String) -> u128 {
+    if inp == &"now".to_string() {
         return 0;
     }
 
@@ -40,18 +40,18 @@ pub fn time_conv(inp: String) -> u128 {
     let nums = vec![year, month, week, day, hour, minute, second];
 
     let mut combine: u128 = 0;
-    let mut st = inp;
+    let mut st = inp.to_string();
 
     for each in 0..strings.len() {
-        if st.contains(&strings[each]) == false {
+        if !st.contains(&strings[each]) {
             continue;
         }
         let tmp: Vec<&str> = st.split(&strings[each]).collect();
-        if tmp[0].to_string() == "" {
+        if tmp[0].is_empty() {
             break;
         }
         combine += nums[each] * tmp[0].parse::<u128>().unwrap();
         st = tmp[1].to_string();
     }
-    return combine;
+    combine
 }

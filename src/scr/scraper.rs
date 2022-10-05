@@ -29,7 +29,7 @@ impl InternalScraper {
         }
     }
     pub fn version_get(&self) -> f32 {
-        return self._version;
+        self._version
     }
     pub fn version_set(&mut self, inp: f32) {
         self._version = inp;
@@ -45,7 +45,7 @@ impl InternalScraper {
         for each in &self._sites {
             vecs.push(each.to_string());
         }
-        return vecs;
+        vecs
     }
 
     pub fn url_get(&self, params: Vec<String>) -> String {
@@ -98,7 +98,7 @@ impl ScraperManager {
 
         for entry in dirs {
             let root: String = entry.as_ref().unwrap().path().display().to_string();
-            let name = root.split("/");
+            let name = root.split('/');
             let vec: Vec<&str> = name.collect();
             let path = format!("{}{}lib{}.{}", &root, &libpath, vec[vec.len() - 1], &libext);
 
@@ -107,7 +107,7 @@ impl ScraperManager {
             if Path::new(&path).exists() {
                 self._string.push(path.to_string());
                 self._library
-                    .push(unsafe { libloading::Library::new(path.to_string()).unwrap() })
+                    .push(unsafe { libloading::Library::new(&path).unwrap() })
             } else {
                 let err = format!(
                     "Loading scraper couInternalScraper::neld not find {}",
@@ -148,14 +148,14 @@ impl ScraperManager {
     pub fn url_load(&mut self, id: usize, params: Vec<String>) -> Vec<String> {
         let temp: libloading::Symbol<unsafe extern "C" fn(&Vec<String>) -> Vec<String>> =
             unsafe { self._library[id].get(b"url_get\0").unwrap() };
-        let abs = unsafe { temp(&params) };
-        return abs;
+unsafe { temp(&params) }
+
     }
     pub fn url_dump(&self, id: usize, params: Vec<String>) -> Vec<String> {
         let temp: libloading::Symbol<unsafe extern "C" fn(&Vec<String>) -> Vec<String>> =
             unsafe { self._library[id].get(b"url_dump\0").unwrap() };
-        let abs = unsafe { temp(&params) };
-        return abs;
+unsafe { temp(&params) }
+
     }
     pub fn parser_call(
         &self,
@@ -170,14 +170,13 @@ impl ScraperManager {
                 &'static str,
             >,
         > = unsafe { self._library[id].get(b"parser\0").unwrap() };
-        let abs = unsafe { temp(params) };
-        return abs;
+unsafe { temp(params) }
+
     }
     pub fn cookie_needed(&self, id: usize, params: String) -> (String, String) {
         let temp: libloading::Symbol<unsafe extern "C" fn() -> (String, String)> =
             unsafe { self._library[id].get(b"cookie_needed\0").unwrap() };
-        let abs = unsafe { temp() };
-        return abs;
+unsafe { temp() }
     }
     ///
     /// Tells downloader to allow scraper to download.
@@ -185,8 +184,7 @@ impl ScraperManager {
     pub fn scraper_download_get(&self, id: usize) -> bool {
         let temp: libloading::Symbol<unsafe extern "C" fn() -> bool> =
             unsafe { self._library[id].get(b"scraper_download_get\0").unwrap() };
-        let abs = unsafe { temp() };
-        return abs;
+unsafe { temp() }
     }
     ///
     /// Should only be called when scraper needs to download something assuming scraper_download_get returns true.
@@ -195,7 +193,6 @@ impl ScraperManager {
     pub fn scraper_download(&self, id: usize, params: String) -> bool {
         let temp: libloading::Symbol<unsafe extern "C" fn() -> bool> =
             unsafe { self._library[id].get(b"scraper_download\0").unwrap() };
-        let abs = unsafe { temp() };
-        return abs;
+unsafe { temp() }
     }
 }

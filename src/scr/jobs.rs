@@ -96,7 +96,7 @@ impl Jobs {
         let mut ratelimit: AHashMap<u128, (u64, Duration)> = AHashMap::new();
 
         // Handles any thing if theirs nothing to load.
-        if self.scrapermanager.scraper_get().len() == 0 || self._params.len() == 0 {
+        if self.scrapermanager.scraper_get().is_empty() || self._params.is_empty() {
             println!("No jobs to run...");
             return;
         }
@@ -152,7 +152,7 @@ impl Jobs {
                 self._jobstorun[each], self._sites[each], self._params[each]
             );
 
-            let parzd: Vec<&str> = self._params[each].split(" ").collect::<Vec<&str>>();
+            let parzd: Vec<&str> = self._params[each].split(' ').collect::<Vec<&str>>();
             let mut parsed: Vec<String> = Vec::new();
             for a in parzd {
                 parsed.push(a.to_string());
@@ -162,10 +162,10 @@ impl Jobs {
 
             // url is the output from the designated scraper that has the correct
 
-            let mut url: Vec<String> = Vec::new();
+
             let bools: Vec<bool> = Vec::new();
 
-            url = self.library_url_dump(self._jobstorun[each].into(), &loaded_params[&each_u128]);
+            let url: Vec<String> = self.library_url_dump(self._jobstorun[each].into(), &loaded_params[&each_u128]);
 
             let boo = self.library_download_get(self._jobstorun[each].into());
             //let mut ratelimiter = block_on(download::ratelimiter_create(ratelimit[&each_u128]));
@@ -184,22 +184,16 @@ impl Jobs {
             let mut cnt = 0;
 
             let location = db.settings_get_name(&"FilesLoc".to_string()).unwrap().1;
-            file::folder_make(&format!("{}", &location));
+            file::folder_make(&(location).to_string());
 
             for urls in urln_vec.keys() {
-
-                //dbg!(urls, urln_vec[urls]);
 
                 let url_id = db.tag_get_name(urls.to_string(), &namespace_id).0;
                 let fileids = db.relationship_get_fileid(&url_id);
                 for fids in &fileids {
                 for tags in &urln_vec[urls] {
-                    //dbg!(tags);
-
                     db.tag_add(tags.0.to_string(), "".to_string(), tags.1, true);
                     let tagid = db.tag_get_name(tags.0.to_string(), &tags.1).0;
-                    //println!("{} {} {} ", &tags.0, &tags.1, tagid);
-                    //if &tags.1 == &3 {println!("{} {} {} {}", fids, &tags.0, &tags.1, tagid);}
                     db.relationship_add(*fids, tagid, true);
                 }
 
@@ -208,7 +202,7 @@ impl Jobs {
 
             dbg!(format!("Total Files pulled: {}", &url_vec.len()));
             for urls in url_vec.keys() {
-                let map = download::file_download(&urls, &location);
+                let map = download::file_download(urls, &location);
                 println!("Downloading file# : {}", &cnt);
 
                 // Populates the db with files.
@@ -244,8 +238,8 @@ impl Jobs {
     ///
     /// Returns a url to grab for.
     ///
-    pub fn library_url_get(&mut self, memid: usize, params: &Vec<String>) -> Vec<String> {
-        return self.scrapermanager.url_load(memid, params.to_vec());
+    pub fn library_url_get(&mut self, memid: usize, params: &[String]) -> Vec<String> {
+         self.scrapermanager.url_load(memid, params.to_vec())
     }
 
     ///
@@ -256,26 +250,26 @@ impl Jobs {
         memid: usize,
         params: &String,
     ) -> Result<HashMap<String, HashMap<String, Vec<String>>>, &'static str> {
-        return self.scrapermanager.parser_call(memid, params);
+         self.scrapermanager.parser_call(memid, params)
     }
 
     ///
     /// Returns a url to grab for.
     ///
-    pub fn library_url_dump(&mut self, memid: usize, params: &Vec<String>) -> Vec<String> {
-        return self.scrapermanager.url_dump(memid, params.to_vec());
+    pub fn library_url_dump(&mut self, memid: usize, params: &[String]) -> Vec<String> {
+         self.scrapermanager.url_dump(memid, params.to_vec())
     }
     ///
     /// pub fn cookie_needed(&mut self, id: usize, params: String) -> (bool, String)
     ///
     pub fn library_cookie_needed(&self, memid: usize, params: String) -> (String, String) {
-        return self.scrapermanager.cookie_needed(memid, params);
+         self.scrapermanager.cookie_needed(memid, params)
     }
 
     ///
     /// Tells system if scraper should handle downloads.
     ///
     pub fn library_download_get(&self, memid: usize) -> bool {
-        return self.scrapermanager.scraper_download_get(memid);
+        self.scrapermanager.scraper_download_get(memid)
     }
 }
