@@ -12,7 +12,7 @@ pub struct Jobs {
     _jobid: Vec<u128>,
     _secs: u128,
     _sites: Vec<String>,
-    _params: Vec<String>,
+    _params: Vec<Vec<String>>,
     //References jobid in _inmemdb hashmap :D
     _jobstorun: Vec<u16>,
     scrapermanager: scraper::ScraperManager,
@@ -41,7 +41,7 @@ impl Jobs {
         let ttl = db.jobs_get_max();
         if ttl > 0 {
             for each in 0..ttl {
-                let (a, b, c, d) = db.jobs_get(each);
+                let (a, b, c, d, e) = db.jobs_get(each);
                 let auint = a.parse::<u128>().unwrap();
                 let cuint = c.parse::<u128>().unwrap();
                 let mut add = false;
@@ -63,7 +63,8 @@ impl Jobs {
                 let test = auint + cuint;
                 if self._secs >= test && add {
                     self._jobstorun.push(cnt);
-                    self._params.push(d);
+                    let param = vec![d, e.to_string()];
+                    self._params.push(param);
                     self._sites.push(b);
                 } else {
                     let msg = format!("Ignoring job: {}. Due to no scraper. ", &b);
@@ -96,6 +97,7 @@ impl Jobs {
         let mut ratelimit: AHashMap<u128, (u64, Duration)> = AHashMap::new();
 
         // Handles any thing if theirs nothing to load.
+        dbg!(&self._params);
         if self.scrapermanager.scraper_get().is_empty() || self._params.is_empty() {
             println!("No jobs to run...");
             return;
@@ -114,7 +116,7 @@ impl Jobs {
                     println!("Dont have to add manual to db.");
 
                     let rlimit = self.scrapermanager.scraper_get()[each].ratelimit_get();
-                    to_load.push(self._params[each].to_string());
+                    to_load.push(self._params[each][0].to_string());
                     to_load.push(name_result.unwrap().1.to_string());
 
                     loaded_params.insert(each_u128, to_load);
@@ -124,7 +126,7 @@ impl Jobs {
                     let rlimit = self.scrapermanager.scraper_get()[each].ratelimit_get();
                     let (cookie, cookie_name) = self.library_cookie_needed(
                         self._jobstorun[each].into(),
-                        self._params[each].to_string(),
+                        self._params[each][0].to_string(),
                     );
                     db.setting_add(
                         format!(
@@ -136,7 +138,7 @@ impl Jobs {
                         cookie_name.to_string(),
                         true,
                     );
-                    to_load.push(self._params[each].to_string());
+                    to_load.push(self._params[each][0].to_string());
                     loaded_params.insert(each_u128, to_load);
                     ratelimit.insert(each_u128, rlimit);
                 }
@@ -148,11 +150,11 @@ impl Jobs {
         for each in 0..self._jobstorun.len() {
             let each_u128: u128 = each.try_into().unwrap();
             println!(
-                "Running Job: {} {} {}",
+                "Running Job: {} {} {:?}",
                 self._jobstorun[each], self._sites[each], self._params[each]
             );
 
-            let parzd: Vec<&str> = self._params[each].split(' ').collect::<Vec<&str>>();
+            let parzd: Vec<&str> = self._params[each][0].split(' ').collect::<Vec<&str>>();
             let mut parsed: Vec<String> = Vec::new();
             for a in parzd {
                 parsed.push(a.to_string());
@@ -162,10 +164,10 @@ impl Jobs {
 
             // url is the output from the designated scraper that has the correct
 
-
             let bools: Vec<bool> = Vec::new();
 
-            let url: Vec<String> = self.library_url_dump(self._jobstorun[each].into(), &loaded_params[&each_u128]);
+            let url: Vec<String> =
+                self.library_url_dump(self._jobstorun[each].into(), &loaded_params[&each_u128]);
 
             let boo = self.library_download_get(self._jobstorun[each].into());
             //let mut ratelimiter = block_on(download::ratelimiter_create(ratelimit[&each_u128]));
@@ -177,7 +179,7 @@ impl Jobs {
             println!("Downloading Site: {}", &each);
             // parses db input and adds tags to db.
             let (url_vec, urln_vec) = db.parse_input(&beans);
-            let  urls_to_remove: Vec<String> = Vec::new();
+            let urls_to_remove: Vec<String> = Vec::new();
 
             // Filters out already downloaded files.
             let namespace_id = db.namespace_get(&"parsed_url".to_string()).0;
@@ -186,24 +188,31 @@ impl Jobs {
             let location = db.settings_get_name(&"FilesLoc".to_string()).unwrap().1;
             file::folder_make(&(location).to_string());
 
-            for urls in urln_vec.keys() {
+            // Total files that are already downloaded.
+            // Re-adds tags & relationships into DB Only enable if their are changes to scrapers.
+            dbg!(&loaded_params[&each_u128]);
+            if self._params[each][1] == "true" {
+                for urls in urln_vec.keys() {
+                    dbg!(format!("Checking url for tags: {}", &urls));
 
-                let url_id = db.tag_get_name(urls.to_string(), &namespace_id).0;
-                let fileids = db.relationship_get_fileid(&url_id);
-                for fids in &fileids {
-                for tags in &urln_vec[urls] {
-                    db.tag_add(tags.0.to_string(), "".to_string(), tags.1, true);
-                    let tagid = db.tag_get_name(tags.0.to_string(), &tags.1).0;
-                    db.relationship_add(*fids, tagid, true);
-                }
-
+                    let url_id = db.tag_get_name(urls.to_string(), &namespace_id).0;
+                    let fileids = db.relationship_get_fileid(&url_id);
+                    for fids in &fileids {
+                        for tags in &urln_vec[urls] {
+                            db.tag_add(tags.0.to_string(), "".to_string(), tags.1, true);
+                            let tagid = db.tag_get_name(tags.0.to_string(), &tags.1).0;
+                            db.relationship_add(*fids, tagid, true);
+                        }
+                    }
                 }
             }
+
+            let utl_total = url_vec.len();
 
             dbg!(format!("Total Files pulled: {}", &url_vec.len()));
             for urls in url_vec.keys() {
                 let map = download::file_download(urls, &location);
-                println!("Downloading file# : {}", &cnt);
+                println!("Downloading file# : {} / {}", &cnt, &utl_total);
 
                 // Populates the db with files.
                 for every in map.0.keys() {
@@ -239,7 +248,7 @@ impl Jobs {
     /// Returns a url to grab for.
     ///
     pub fn library_url_get(&mut self, memid: usize, params: &[String]) -> Vec<String> {
-         self.scrapermanager.url_load(memid, params.to_vec())
+        self.scrapermanager.url_load(memid, params.to_vec())
     }
 
     ///
@@ -250,20 +259,20 @@ impl Jobs {
         memid: usize,
         params: &String,
     ) -> Result<HashMap<String, HashMap<String, Vec<String>>>, &'static str> {
-         self.scrapermanager.parser_call(memid, params)
+        self.scrapermanager.parser_call(memid, params)
     }
 
     ///
     /// Returns a url to grab for.
     ///
     pub fn library_url_dump(&mut self, memid: usize, params: &[String]) -> Vec<String> {
-         self.scrapermanager.url_dump(memid, params.to_vec())
+        self.scrapermanager.url_dump(memid, params.to_vec())
     }
     ///
     /// pub fn cookie_needed(&mut self, id: usize, params: String) -> (bool, String)
     ///
     pub fn library_cookie_needed(&self, memid: usize, params: String) -> (String, String) {
-         self.scrapermanager.cookie_needed(memid, params)
+        self.scrapermanager.cookie_needed(memid, params)
     }
 
     ///

@@ -148,14 +148,12 @@ impl ScraperManager {
     pub fn url_load(&mut self, id: usize, params: Vec<String>) -> Vec<String> {
         let temp: libloading::Symbol<unsafe extern "C" fn(&Vec<String>) -> Vec<String>> =
             unsafe { self._library[id].get(b"url_get\0").unwrap() };
-unsafe { temp(&params) }
-
+        unsafe { temp(&params) }
     }
     pub fn url_dump(&self, id: usize, params: Vec<String>) -> Vec<String> {
         let temp: libloading::Symbol<unsafe extern "C" fn(&Vec<String>) -> Vec<String>> =
             unsafe { self._library[id].get(b"url_dump\0").unwrap() };
-unsafe { temp(&params) }
-
+        unsafe { temp(&params) }
     }
     pub fn parser_call(
         &self,
@@ -170,13 +168,12 @@ unsafe { temp(&params) }
                 &'static str,
             >,
         > = unsafe { self._library[id].get(b"parser\0").unwrap() };
-unsafe { temp(params) }
-
+        unsafe { temp(params) }
     }
     pub fn cookie_needed(&self, id: usize, params: String) -> (String, String) {
         let temp: libloading::Symbol<unsafe extern "C" fn() -> (String, String)> =
             unsafe { self._library[id].get(b"cookie_needed\0").unwrap() };
-unsafe { temp() }
+        unsafe { temp() }
     }
     ///
     /// Tells downloader to allow scraper to download.
@@ -184,7 +181,7 @@ unsafe { temp() }
     pub fn scraper_download_get(&self, id: usize) -> bool {
         let temp: libloading::Symbol<unsafe extern "C" fn() -> bool> =
             unsafe { self._library[id].get(b"scraper_download_get\0").unwrap() };
-unsafe { temp() }
+        unsafe { temp() }
     }
     ///
     /// Should only be called when scraper needs to download something assuming scraper_download_get returns true.
@@ -193,6 +190,6 @@ unsafe { temp() }
     pub fn scraper_download(&self, id: usize, params: String) -> bool {
         let temp: libloading::Symbol<unsafe extern "C" fn() -> bool> =
             unsafe { self._library[id].get(b"scraper_download\0").unwrap() };
-unsafe { temp() }
+        unsafe { temp() }
     }
 }

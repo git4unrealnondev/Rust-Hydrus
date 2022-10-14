@@ -11,8 +11,8 @@ use std::io;
 use std::io::Cursor;
 use std::time::Duration;
 use tower::limit::RateLimit;
-use tower::ServiceExt;
 use tower::Service;
+use tower::ServiceExt;
 use url::Url;
 extern crate cloudflare_bypasser;
 extern crate reqwest;
@@ -48,7 +48,7 @@ pub async fn dltext(
 
     // The wrapper that implements ratelimiting
 
-        let client = reqwest::ClientBuilder::new()
+    let client = reqwest::ClientBuilder::new()
         .user_agent("RUST-HYDRUS V0.1")
         .build()
         .unwrap();
@@ -66,7 +66,13 @@ pub async fn dltext(
         dbg!("B");
         dbg!(&each);
         //dbg!(&example);
-        let resp = example.ready().await.unwrap().call(requestit).await.unwrap();
+        let resp = example
+            .ready()
+            .await
+            .unwrap()
+            .call(requestit)
+            .await
+            .unwrap();
         dbg!("a");
         //let resp = client.call(requestit).await.unwrap();
         //let resp = reqwest::blocking::Request(requestit).user_agent("RustHydrus V0.1");
@@ -89,7 +95,7 @@ pub async fn dltext(
 
         test.insert(cnt.to_string(), parser.parser_call(uintref, &st).unwrap());
     }
-     test
+    test
 }
 
 ///
@@ -161,7 +167,7 @@ pub async fn file_download(
     let header_split_vec1: Vec<&str> = header_split_vec[1].split('"').collect();
     ext_vec = header_split_vec1[0].to_string();
 
-     (fut, ext_vec)
+    (fut, ext_vec)
 }
 
 pub fn hash_file(filename: String) -> String {

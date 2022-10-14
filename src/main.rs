@@ -9,6 +9,7 @@ mod scr {
     pub mod file;
     pub mod jobs;
     pub mod logging;
+    pub mod plugins;
     pub mod scraper;
     pub mod time;
 }
@@ -105,6 +106,13 @@ fn main() {
     data.transaction_flush();
     data.check_version();
 
+    //Inits ScraperManager
+    let plugin_loc = data
+        .settings_get_name(&"pluginloadloc".to_string())
+        .unwrap()
+        .1;
+    let mut pluginmanager = scr::plugins::PluginManager::new(plugin_loc);
+
     let location = data.settings_get_name(&"FilesLoc".to_string()).unwrap().1;
     scr::file::folder_make(&format!("./{}", &location));
 
@@ -129,12 +137,13 @@ fn main() {
         for each in &a {
             println!("{:?}", data.tag_id_get(each));
         }
-
     }
 
     let mut jobmanager = scr::jobs::Jobs::new(scraper_manager);
 
     data.transaction_flush();
+
+    dbg!(&puts);
 
     if run {
         data.jobs_add_main(
@@ -143,6 +152,7 @@ fn main() {
             puts[0].to_string(),
             puts[1].to_string(),
             trig,
+            puts[4].to_string(),
         );
     }
     jobmanager.jobs_get(&data);

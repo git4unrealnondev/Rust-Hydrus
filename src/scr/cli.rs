@@ -24,8 +24,8 @@ pub fn main() -> (Vec<String>, String, bool, bool) {
                         .long("add")
                         .takes_value(true)
                         .help("Adds a job to the system")
-                        .number_of_values(4)
-                        .value_names(&["Site", "Query", "Time", "Loop"])
+                        .number_of_values(5)
+                        .value_names(&["Site", "Query", "Time", "Loop", "ReCommit"])
                         .multiple_values(true),
                 )
                 .arg(
@@ -65,7 +65,7 @@ pub fn main() -> (Vec<String>, String, bool, bool) {
 
     if id != None {
         let valvec: Vec<String> = vec![id.unwrap().to_string()];
-        return (valvec, "id".to_string(), true, false)
+        return (valvec, "id".to_string(), true, false);
     }
 
     if name != None {
@@ -76,15 +76,20 @@ pub fn main() -> (Vec<String>, String, bool, bool) {
         Some(("job", subcmd)) => {
             if subcmd.contains_id("add") {
                 let valvec: Vec<&String> = subcmd.get_many::<String>("add").unwrap().collect();
-                let valret: Vec<String> = [
+                let mut valret: Vec<String> = Vec::new();
+
+                dbg!(&valvec, &valvec.len());
+
+                valret = [
                     valvec[0].to_owned(),
                     valvec[1].to_owned(),
                     valvec[2].to_owned(),
                     valvec[3].to_owned(),
+                    valvec[4].to_owned(),
                 ]
                 .to_vec();
 
-                let lenjobs = 4;
+                let lenjobs = 5;
 
                 if valvec.len() != lenjobs {
                     println!("{:?}", valvec);

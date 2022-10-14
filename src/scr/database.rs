@@ -14,8 +14,7 @@ use std::path::Path;
 /// Returns an open connection to use.
 pub fn dbinit(dbpath: &String) -> Connection {
     //Engaging Transaction Handling
-Connection::open(&dbpath).unwrap()
-
+    Connection::open(&dbpath).unwrap()
 }
 
 /// Holder of database self variables
@@ -50,6 +49,7 @@ struct Memdb {
     _jobs_rep: HashMap<u128, u128>,
     _jobs_site: HashMap<u128, String>,
     _jobs_param: HashMap<u128, String>,
+    _jobs_commitunfinished: HashMap<u128, bool>,
 
     _namespace_max_id: u128,
     _namespace_name: HashMap<String, u128>,
@@ -94,6 +94,7 @@ impl Memdb {
             _jobs_rep: HashMap::new(),
             _jobs_site: HashMap::new(),
             _jobs_param: HashMap::new(),
+            _jobs_commitunfinished: HashMap::new(),
             //_namespace_id: HashMap::new(),
             _namespace_name: HashMap::new(),
             _namespace_description: HashMap::new(),
@@ -211,7 +212,7 @@ impl Memdb {
             return Err("None");
         }
         let val = self._settings_name[name];
-         Ok((
+        Ok((
             self._settings_num[&val],
             self._settings_param[&val].to_string(),
         ))
@@ -226,13 +227,16 @@ impl Memdb {
         jobs_rep: u128,
         jobs_site: String,
         jobs_param: String,
+        commit: bool,
     ) -> u128 {
         self._jobs_time.insert(self._jobs_max_id, jobs_time);
         self._jobs_site.insert(self._jobs_max_id, jobs_site);
         self._jobs_rep.insert(self._jobs_max_id, jobs_rep);
         self._jobs_param.insert(self._jobs_max_id, jobs_param);
+        self._jobs_commitunfinished
+            .insert(self._jobs_max_id, commit);
         self.max_jobs_increment();
-         self._jobs_max_id - 1
+        self._jobs_max_id - 1
     }
 
     ///
@@ -285,14 +289,15 @@ impl Memdb {
     ///
     /// Pulls jobs from memdb
     ///
-    fn jobs_get(&self, id: u128) -> (String, String, String, String) {
+    fn jobs_get(&self, id: u128) -> (String, String, String, String, bool) {
         if self._jobs_time.contains_key(&id) {
             let a = self._jobs_time[&id].to_string();
             let d = self._jobs_rep[&id].to_string();
             let b = self._jobs_site[&id].to_string();
             let c = self._jobs_param[&id].to_string();
+            let e = self._jobs_commitunfinished[&id];
 
-             (a, b, d, c)
+            (a, b, d, c, e)
         } else {
             let error = "job_get cannot find job id in hashmap!";
             println!("{}, {}", error, id);
@@ -319,7 +324,7 @@ impl Memdb {
     /// let (fid, nid, pid, rid, sid, tid, jid) = self.max_id_return();
     ///
     fn max_id_return(&mut self) -> (u128, u128, u128, u128, u128, u128, u128) {
-         (
+        (
             self._file_max_id,
             self._namespace_max_id,
             self._parents_max_id,
@@ -345,7 +350,7 @@ impl Memdb {
         self._file_location.insert(location.to_string(), fid);
         self.max_file_increment();
 
-         ret_name
+        ret_name
     }
 
     ///
@@ -353,9 +358,9 @@ impl Memdb {
     ///
     pub fn file_get_hash(&mut self, hash: &String) -> (u128, bool) {
         if self._file_hash.contains_key(hash) {
-             (self._file_hash[hash], true)
+            (self._file_hash[hash], true)
         } else {
-             (0, false)
+            (0, false)
         }
     }
 
@@ -364,12 +369,12 @@ impl Memdb {
     ///
     pub fn namespace_put(&mut self, name: &String) -> u128 {
         if self._namespace_name.contains_key(name) {
-             return self._namespace_name[name];
+            return self._namespace_name[name];
         }
         let ret_name: u128 = self._namespace_max_id;
         self._namespace_name.insert(name.to_string(), ret_name);
         self.max_namespace_increment();
-         ret_name
+        ret_name
     }
 
     ///
@@ -377,10 +382,9 @@ impl Memdb {
     ///
     pub fn namespace_get(&mut self, name: &String) -> (u128, bool) {
         if self._namespace_name.contains_key(name) {
-
-             (self._namespace_name[name], true)
+            (self._namespace_name[name], true)
         } else {
-             (0, false)
+            (0, false)
         }
     }
 
@@ -390,11 +394,10 @@ impl Memdb {
     pub fn namespace_id_get(&self, uid: &u128) -> String {
         for (key, val) in self._namespace_name.iter() {
             if val == uid {
-                return key.to_string()
+                return key.to_string();
             }
-
         }
-         "".to_string()
+        "".to_string()
     }
 
     ///
@@ -415,7 +418,7 @@ impl Memdb {
 
         self.max_tags_increment();
 
-         ret_tag
+        ret_tag
     }
 
     ///
@@ -425,38 +428,44 @@ impl Memdb {
         //if self._tags_name.contains_key(tag) {
         //    return self._tags_name[tag];
         //}
-        if self._tags_relate.contains_key(&(tag.to_string(), *namespace)) {
+        if self
+            ._tags_relate
+            .contains_key(&(tag.to_string(), *namespace))
+        {
             //let tagid = self._tags_name[&(tags.to_string(), namespace)];
 
-            let urin : u128 = self._tags_relate[&(tag.to_string(), *namespace)];
-            return urin
-            }
+            let urin: u128 = self._tags_relate[&(tag.to_string(), *namespace)];
+            return urin;
+        }
         //println!("{} {}", tag, namespace);
         let ret_name: u128 = self._tags_max_id;
 
         self._tags_name.insert(tag.to_string(), ret_name);
         self._tags_namespace.insert(*namespace, 0);
 
-        self._tags_relate.insert((tag.to_string(), *namespace), ret_name);
+        self._tags_relate
+            .insert((tag.to_string(), *namespace), ret_name);
 
         self.max_tags_increment();
 
-         ret_name
+        ret_name
     }
 
     ///
     /// Does tags contain key?
     ///
     pub fn tags_get(&mut self, tags: String, namespace: &u128) -> (u128, bool) {
-
-        if self._tags_relate.contains_key(&(tags.to_string(), *namespace)) {
+        if self
+            ._tags_relate
+            .contains_key(&(tags.to_string(), *namespace))
+        {
             //let tagid = self._tags_name[&(tags.to_string(), namespace)];
 
-            let urin : u128 = self._tags_relate[&(tags, *namespace)];
+            let urin: u128 = self._tags_relate[&(tags, *namespace)];
 
-             (urin, true)
+            (urin, true)
         } else {
-             (*namespace, false)
+            (*namespace, false)
         }
     }
 
@@ -464,7 +473,6 @@ impl Memdb {
         for each in &self._tags_relate {
             println!("{:?}", each);
         }
-
     }
 
     ///
@@ -473,14 +481,11 @@ impl Memdb {
     pub fn tag_id_get(&mut self, uid: &u128) -> (String, String) {
         for (key, val) in self._tags_relate.iter() {
             if val == uid {
-                return (key.0.to_string(), self.namespace_id_get(&key.1))
+                return (key.0.to_string(), self.namespace_id_get(&key.1));
             }
-
         }
-         ("".to_string(), "".to_string())
+        ("".to_string(), "".to_string())
     }
-
-
 }
 
 /// Contains DB functions.
@@ -630,7 +635,7 @@ impl Main {
             self.file_add(each.0, each.1, each.2, each.3, false);
         }
         for each in job_vec {
-            self.jobs_add(each.0, each.1, each.2, each.3, false);
+            self.jobs_add(each.0, each.1, each.2, each.3, false, false);
         }
         for each in parents_vec {
             self.parents_add(each.0, each.1, each.2, each.3, false);
@@ -660,9 +665,8 @@ impl Main {
         jobs_site: String,
         jobs_param: String,
         does_loop: bool,
+        jobs_commit: String,
     ) {
-
-
         let time_offset: u128 = time::time_conv(jobs_rep);
 
         /*self._inmemdb.jobs_add(
@@ -673,27 +677,28 @@ impl Main {
         );*/
         let a1: String = jobs_time.to_string();
         let a: u128 = a1.parse::<u128>().unwrap();
+        let com: bool = jobs_commit.parse::<bool>().unwrap();
         if &jobs_time != "now" && does_loop {
-
             let b: u128 = jobs_rep.parse::<u128>().unwrap();
-            self.jobs_add(a, b, jobs_site, jobs_param, true);
+            self.jobs_add(a, b, jobs_site, jobs_param, com, true);
         } else {
-            self.jobs_add(a, 0, jobs_site, jobs_param, false);
+            self.jobs_add(a, 0, jobs_site, jobs_param, com, false);
         }
     }
     ///
     /// Pull job by id
     /// TODO NEEDS TO ADD IN PROPER POLLING FROM DB.
     ///
-    pub fn jobs_get(&self, id: u128) -> (String, String, String, String) {
+    pub fn jobs_get(&self, id: u128) -> (String, String, String, String, bool) {
         if self._inmemdb.jobs_exist(id) {
-             self._inmemdb.jobs_get(id)
+            self._inmemdb.jobs_get(id)
         } else {
-             (
+            (
                 "".to_string(),
                 "".to_string(),
                 "".to_string(),
                 "".to_string(),
+                false,
             )
         }
     }
@@ -781,7 +786,7 @@ impl Main {
             outvec.push(g1);
         }
 
-         (outvec, t1, t2)
+        (outvec, t1, t2)
     }
 
     ///
@@ -806,7 +811,7 @@ impl Main {
         }
 
         //println!("{:?}", outvec);
-         outvec
+        outvec
     }
 
     pub fn pull_data<'a>(
@@ -827,7 +832,7 @@ impl Main {
             self.table_collumns(each);
         }
 
-         list
+        list
     }
 
     ///Sets up first database interaction.
@@ -886,8 +891,12 @@ impl Main {
         self.transaction_flush();
     }
     pub fn updatedb(&mut self) {
-
-        self._inmemdb.settings_add("DBCOMMITNUM".to_string(), "Number of transactional items before pushing to db.".to_string(), 3000, "None".to_string());
+        self._inmemdb.settings_add(
+            "DBCOMMITNUM".to_string(),
+            "Number of transactional items before pushing to db.".to_string(),
+            3000,
+            "None".to_string(),
+        );
 
         self.setting_add(
             "VERSION".to_string(),
@@ -1109,11 +1118,7 @@ impl Main {
             let inp = "INSERT INTO Namespace VALUES(?, ?, ?)";
             let _out = self._conn.execute(
                 inp,
-                params![
-                    &name_id.to_string(),
-                    &name.to_string(),
-                    &description
-                ],
+                params![&name_id.to_string(), &name.to_string(), &description],
             );
             self.db_commit_man();
         }
@@ -1156,7 +1161,6 @@ impl Main {
         let existcheck = self._inmemdb.relationship_get(&file, &tag);
 
         if addtodb && !existcheck {
-
             let inp = "INSERT INTO Relationship VALUES(?, ?)";
             let _out = self
                 ._conn
@@ -1173,22 +1177,19 @@ impl Main {
         reptime: u128,
         site: String,
         param: String,
+        filler: bool,
         addtodb: bool,
     ) {
         if addtodb {
             let inp = "INSERT INTO Jobs VALUES(?, ?, ?, ?)";
             let _out = self._conn.execute(
                 inp,
-                params![
-                    &time.to_string(),
-                    &reptime.to_string(),
-                    &site,
-                    &param
-                ],
+                params![&time.to_string(), &reptime.to_string(), &site, &param],
             );
             self.db_commit_man();
         }
-        self._inmemdb.jobs_add(time, reptime, site, param);
+        dbg!(&filler, &addtodb);
+        self._inmemdb.jobs_add(time, reptime, site, param, filler);
     }
 
     ///
@@ -1212,7 +1213,6 @@ impl Main {
             return (urltoid, urltonid);
         }
         for e in parsed_data.keys() {
-
             // Adds support for storing the source URL of the file.
             self.namespace_add(0, "parsed_url".to_string(), "".to_string(), true);
             let url_id = self._inmemdb.namespace_get(&"parsed_url".to_string());
@@ -1243,13 +1243,15 @@ impl Main {
                     urltonid.insert(each.to_string(), tags_namespace_id);
 
                 } else {*/
-                    if !self._inmemdb.tags_get(each.to_string(), &url_id.0).1 {
-                    urltoid.insert(each.to_string(), tags_namespace_id);}
-                    else {urltonid.insert(each.to_string(), tags_namespace_id);}
+                if !self._inmemdb.tags_get(each.to_string(), &url_id.0).1 {
+                    urltoid.insert(each.to_string(), tags_namespace_id);
+                } else {
+                    urltonid.insert(each.to_string(), tags_namespace_id);
+                }
                 //}
             }
         }
-         (urltoid, urltonid)
+        (urltoid, urltonid)
     }
 
     ///
@@ -1337,7 +1339,7 @@ impl Main {
 
     /// Returns db location as String refernce.
     pub fn get_db_loc(&self) -> String {
-         self._dbpath.to_string()
+        self._dbpath.to_string()
     }
 
     ///
@@ -1352,7 +1354,7 @@ impl Main {
         for each in rows {
             out.push(each.unwrap());
         }
-         Ok(out)
+        Ok(out)
     }
 
     ///
@@ -1370,7 +1372,7 @@ impl Main {
             let temp: String = each.unwrap();
             out.push(temp.parse::<isize>().unwrap());
         }
-         Ok(out)
+        Ok(out)
     }
 
     /// Raw Call to database. Try to only use internally to this file only.
