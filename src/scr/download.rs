@@ -6,6 +6,7 @@ use reqwest::{Client, Request, Response};
 use sha2::Digest;
 use sha2::Sha512;
 use std::collections::HashMap;
+use ahash::AHashMap;
 use std::fs;
 use std::io;
 use std::io::Cursor;
@@ -41,10 +42,10 @@ pub async fn dltext(
     url_vec: Vec<String>,
     parser: &mut scraper::ScraperManager,
     uintref: usize,
-) -> HashMap<String, HashMap<String, HashMap<String, Vec<String>>>> {
+) -> AHashMap<String, AHashMap<String, AHashMap<String, Vec<String>>>> {
     let respvec: Vec<Response> = Vec::new();
     let retvec: Vec<String> = Vec::new();
-    let mut test: HashMap<String, HashMap<String, HashMap<String, Vec<String>>>> = HashMap::new();
+    let mut test: AHashMap<String, AHashMap<String, AHashMap<String, Vec<String>>>> = AHashMap::new();
 
     // The wrapper that implements ratelimiting
 

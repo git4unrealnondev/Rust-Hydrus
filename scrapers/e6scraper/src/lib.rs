@@ -1,5 +1,6 @@
 use json;
 use std::collections::HashMap;
+use ahash::AHashMap;
 use std::fs::File;
 use std::io;
 use std::io::BufRead;
@@ -133,7 +134,7 @@ pub fn cookie_url() -> String {
 /// Gets all items from array in json and returns it into the hashmap.
 /// The key is the sub value.
 ///
-fn retvec(vecstr: &mut HashMap<String, Vec<String>>, jso: &json::JsonValue, sub: &str) {
+fn retvec(vecstr: &mut AHashMap<String, Vec<String>>, jso: &json::JsonValue, sub: &str) {
     let mut vec = Vec::new();
 
     for each in jso[sub].members() {
@@ -146,8 +147,8 @@ fn retvec(vecstr: &mut HashMap<String, Vec<String>>, jso: &json::JsonValue, sub:
 /// Parses return from download.
 ///
 #[no_mangle]
-pub fn parser(params: &String) -> Result<HashMap<String, HashMap<String, Vec<String>>>, &'static str> {
-    let mut vecvecstr: HashMap<String, HashMap<String, Vec<String>>> = HashMap::new();
+pub fn parser(params: &String) -> Result<AHashMap<String, AHashMap<String, Vec<String>>>, &'static str> {
+    let mut vecvecstr: AHashMap<String, AHashMap<String, Vec<String>>> = AHashMap::new();
     //for each in params.keys() {
         //dbg!(params);
         //dbg!(json::parse(params));
@@ -169,7 +170,7 @@ pub fn parser(params: &String) -> Result<HashMap<String, HashMap<String, Vec<Str
         if js["posts"].len() == 0 {return Err("NothingHere")}
 
         for inc in 0..js["posts"].len() {
-            let mut vecstr: HashMap<String, Vec<String>> = HashMap::new();
+            let mut vecstr: AHashMap<String, Vec<String>> = AHashMap::new();
             //dbg!(&js["posts"][inc]["tags"]["general"].entries());
             retvec(&mut vecstr, &js["posts"][inc]["tags"], "general");
             retvec(&mut vecstr, &js["posts"][inc]["tags"], "species");

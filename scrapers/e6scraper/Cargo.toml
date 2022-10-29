@@ -19,3 +19,4 @@ crate-type = ["dylib"]
 
 [dependencies]
 json = "0.12.4"
+ahash = "0.7.6"

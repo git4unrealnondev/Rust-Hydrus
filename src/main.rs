@@ -12,6 +12,7 @@ mod scr {
     pub mod plugins;
     pub mod scraper;
     pub mod time;
+    pub mod sharedtypes;
 }
 
 ///
@@ -97,6 +98,9 @@ fn main() {
     // Makes Logging work
     makelog("./log.txt");
 
+    //TODO NEEDS MAIN INFO PULLER HERE. PULLS IN EVERYTHING INTO DB.
+    let (puts, name, trig, run) = scr::cli::main();
+
     // Checks main.db log location.
     db_file_sanity(dbloc);
 
@@ -126,12 +130,9 @@ fn main() {
         "so".to_string(),
     );
 
-    //TODO NEEDS MAIN INFO PULLER HERE. PULLS IN EVERYTHING INTO DB.
-    let (puts, name, trig, run) = scr::cli::main();
-
     if name == "id" {
         dbg!(&puts);
-        let uid: u128 = puts[0].parse::<u128>().unwrap();
+        let uid = puts[0].parse::<usize>().unwrap();
         let a = data.relationship_get_tagid(&uid);
 
         for each in &a {

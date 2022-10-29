@@ -3,6 +3,9 @@ extern crate clap;
 use clap::{App, Arg, SubCommand};
 use log::{error, info};
 
+use crate::scr::sharedtypes;
+//mod sharedtypes;
+
 pub fn main() -> (Vec<String>, String, bool, bool) {
     let app = App::new("rust-hyrdrus")
         .version("1.0")
@@ -38,6 +41,26 @@ pub fn main() -> (Vec<String>, String, bool, bool) {
                         .multiple_values(true),
                 ),
         )
+        .subcommand(
+            SubCommand::with_name("search")
+                .about("Searches the DB.")
+                .arg(
+                    Arg::new("fid")
+                        .long("file_id")
+                        .takes_value(true)
+                        .help("Searches By File ID.")
+                        .min_values(1)
+                        .multiple_values(true),
+                )
+                .arg(
+                    Arg::new("tid")
+                        .long("tag_id")
+                        .takes_value(true)
+                        .help("Searches By Tag Id.")
+                        .min_values(1)
+                        .multiple_values(true),
+                ),
+        )
         .arg(
             Arg::new("id")
                 //.required_unless_present_all(&["dbg", "infile"])
@@ -52,6 +75,10 @@ pub fn main() -> (Vec<String>, String, bool, bool) {
                 .required(false),
         );
 
+    let mut job = sharedtypes::jobs::add;
+    dbg!(&job);
+    job = sharedtypes::jobs::remove;
+dbg!(&job);
     // now add in the argument we want to parse
     //let app = app.arg();
 
@@ -63,6 +90,8 @@ pub fn main() -> (Vec<String>, String, bool, bool) {
 
     let id = matches.value_of("id");
 
+    //let search = matches.value_of("search");
+
     if id != None {
         let valvec: Vec<String> = vec![id.unwrap().to_string()];
         return (valvec, "id".to_string(), true, false);
@@ -73,6 +102,19 @@ pub fn main() -> (Vec<String>, String, bool, bool) {
     }
 
     match matches.subcommand() {
+        Some(("search", subcmd)) => {
+            let valvec: Vec<&String> = subcmd.get_many::<String>("add").unwrap().collect();
+            let mut valret: Vec<String> = Vec::new();
+            if subcmd.contains_id("fid") {
+                dbg!("fid");
+            }
+
+            if subcmd.contains_id("tid") {
+                dbg!("tid");
+            }
+            let radd = "".to_string();
+            return (valret, radd, true, true);
+        }
         Some(("job", subcmd)) => {
             if subcmd.contains_id("add") {
                 let valvec: Vec<&String> = subcmd.get_many::<String>("add").unwrap().collect();

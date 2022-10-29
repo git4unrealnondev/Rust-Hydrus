@@ -7,9 +7,12 @@ pub use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutp
 //use rusqlite::OptionalExtension;
 use crate::scr::time;
 pub use rusqlite::{params, types::Null, Connection, Result, Transaction};
-use std::collections::HashMap;
+use std::{collections::HashMap, hash::BuildHasherDefault};
 use std::panic;
 use std::path::Path;
+use ahash::AHashMap;
+use nohash_hasher::NoHashHasher;
+
 
 /// Returns an open connection to use.
 pub fn dbinit(dbpath: &String) -> Connection {
@@ -24,7 +27,7 @@ pub struct Main {
     _vers: isize,
     // inmem db with ahash low lookup/insert time. Alernative to hashmap
     _inmemdb: Memdb,
-    _dbcommitnum: u128,
+    _dbcommitnum: usize,
 }
 
 /// Holds internal in memory hashmap stuff
@@ -39,43 +42,43 @@ struct Memdb {
         &'static str,
     ),
 
-    _file_max_id: u128,
-    _file_hash: HashMap<String, u128>,
-    _file_extension: HashMap<String, u128>,
-    _file_location: HashMap<String, u128>,
+    _file_max_id: usize,
+    _file_hash: AHashMap::<String, usize>,
+    _file_extension: AHashMap<String, usize>,
+    _file_location: AHashMap<String, usize>,
 
-    _jobs_max_id: u128,
-    _jobs_time: HashMap<u128, u128>,
-    _jobs_rep: HashMap<u128, u128>,
-    _jobs_site: HashMap<u128, String>,
-    _jobs_param: HashMap<u128, String>,
-    _jobs_commitunfinished: HashMap<u128, bool>,
+    _jobs_max_id: usize,
+    _jobs_time: AHashMap<usize, usize>,
+    _jobs_rep: AHashMap<usize, usize>,
+    _jobs_site: AHashMap<usize, String>,
+    _jobs_param: AHashMap<usize, String>,
+    _jobs_commitunfinished: AHashMap<usize, bool>,
 
-    _namespace_max_id: u128,
-    _namespace_name: HashMap<String, u128>,
-    _namespace_description: HashMap<u128, String>,
+    _namespace_max_id: usize,
+    _namespace_name: AHashMap<String, usize>,
+    _namespace_description: AHashMap<usize, String>,
 
-    _parents_max_id: u128,
-    _parents_name: HashMap<String, u128>,
-    _parents_children: HashMap<u128, String>,
-    _parents_namespace: HashMap<u128, u128>,
+    _parents_max_id: usize,
+    _parents_name: AHashMap<String, usize>,
+    _parents_children: AHashMap<usize, String>,
+    _parents_namespace: AHashMap<usize, usize>,
 
-    _relationship_max_id: u128,
-    _relationship_fileid: HashMap<u128, u128>,
-    _relationship_tagid: HashMap<u128, u128>,
-    _relationship_relate: HashMap<(u128, u128), u128>,
+    _relationship_max_id: usize,
+    _relationship_fileid: AHashMap<usize, usize>,
+    _relationship_tagid: AHashMap<usize, usize>,
+    _relationship_relate: AHashMap<(usize, usize), usize>,
 
-    _settings_max_id: u128,
-    _settings_name: HashMap<String, u128>,
-    _settings_pretty: HashMap<u128, String>,
-    _settings_num: HashMap<u128, u128>,
-    _settings_param: HashMap<u128, String>,
+    _settings_max_id: usize,
+    _settings_name: AHashMap<String, usize>,
+    _settings_pretty: AHashMap<usize, String>,
+    _settings_num: AHashMap<usize, usize>,
+    _settings_param: AHashMap<usize, String>,
 
-    _tags_max_id: u128,
-    _tags_name: HashMap<String, u128>,
-    _tags_parents: HashMap<u128, u128>,
-    _tags_namespace: HashMap<u128, u128>,
-    _tags_relate: HashMap<(String, u128), u128>,
+    _tags_max_id: usize,
+    _tags_name: AHashMap<String, usize>,
+    _tags_parents: AHashMap<usize, usize>,
+    _tags_namespace: AHashMap<usize, usize>,
+    _tags_relate: AHashMap<(String, usize), usize>,
 }
 
 /// Functions for working with memorory db.
@@ -86,34 +89,34 @@ impl Memdb {
         Memdb {
             _table_names: ("File", "Jobs", "Namespace", "Parents", "Settings", "Tags"),
             //_table_names: ,
-            //_file_id: HashMap::new(),
-            _file_hash: HashMap::new(),
-            _file_extension: HashMap::new(),
-            _file_location: HashMap::new(),
-            _jobs_time: HashMap::new(),
-            _jobs_rep: HashMap::new(),
-            _jobs_site: HashMap::new(),
-            _jobs_param: HashMap::new(),
-            _jobs_commitunfinished: HashMap::new(),
-            //_namespace_id: HashMap::new(),
-            _namespace_name: HashMap::new(),
-            _namespace_description: HashMap::new(),
-            //_parents_id: HashMap::new(),
-            _parents_name: HashMap::new(),
-            _parents_children: HashMap::new(),
-            _parents_namespace: HashMap::new(),
-            _relationship_fileid: HashMap::new(),
-            _relationship_tagid: HashMap::new(),
-            _relationship_relate: HashMap::new(),
-            _settings_name: HashMap::new(),
-            _settings_pretty: HashMap::new(),
-            _settings_num: HashMap::new(),
-            _settings_param: HashMap::new(),
-            //_tags_id: HashMap::new(),
-            _tags_name: HashMap::new(),
-            _tags_parents: HashMap::new(),
-            _tags_namespace: HashMap::new(),
-            _tags_relate: HashMap::new(),
+            //_file_id:AHashMap::new(),
+            _file_hash: AHashMap::new(),
+            _file_extension: AHashMap::new(),
+            _file_location: AHashMap::new(),
+            _jobs_time: AHashMap::new(),
+            _jobs_rep:AHashMap::new(),
+            _jobs_site:AHashMap::new(),
+            _jobs_param:AHashMap::new(),
+            _jobs_commitunfinished:AHashMap::new(),
+            //_namespace_id:AHashMap::new(),
+            _namespace_name:AHashMap::new(),
+            _namespace_description:AHashMap::new(),
+            //_parents_id:AHashMap::new(),
+            _parents_name:AHashMap::new(),
+            _parents_children:AHashMap::new(),
+            _parents_namespace:AHashMap::new(),
+            _relationship_fileid:AHashMap::new(),
+            _relationship_tagid:AHashMap::new(),
+            _relationship_relate:AHashMap::new(),
+            _settings_name:AHashMap::new(),
+            _settings_pretty:AHashMap::new(),
+            _settings_num:AHashMap::new(),
+            _settings_param:AHashMap::new(),
+            //_tags_id:AHashMap::new(),
+            _tags_name:AHashMap::new(),
+            _tags_parents:AHashMap::new(),
+            _tags_namespace:AHashMap::new(),
+            _tags_relate:AHashMap::new(),
             _file_max_id: 0,
             _jobs_max_id: 0,
             _namespace_max_id: 0,
@@ -196,7 +199,7 @@ impl Memdb {
     ///
     /// Adds Setting to memdb.
     ///
-    fn settings_add(&mut self, name: String, pretty: String, num: u128, param: String) {
+    fn settings_add(&mut self, name: String, pretty: String, num: usize, param: String) {
         self._settings_name.insert(name, self._settings_max_id);
         self._settings_pretty.insert(self._settings_max_id, pretty);
         self._settings_num.insert(self._settings_max_id, num);
@@ -207,7 +210,7 @@ impl Memdb {
     /// Gets Setting from memdb.
     /// Returns the num & param from memdb.
     ///
-    fn settings_get_name(&self, name: &String) -> Result<(u128, String), &str> {
+    fn settings_get_name(&self, name: &String) -> Result<(usize, String), &str> {
         if !self._settings_name.contains_key(name) {
             return Err("None");
         }
@@ -223,12 +226,12 @@ impl Memdb {
     ///
     fn jobs_add(
         &mut self,
-        jobs_time: u128,
-        jobs_rep: u128,
+        jobs_time: usize,
+        jobs_rep: usize,
         jobs_site: String,
         jobs_param: String,
         commit: bool,
-    ) -> u128 {
+    ) -> usize {
         self._jobs_time.insert(self._jobs_max_id, jobs_time);
         self._jobs_site.insert(self._jobs_max_id, jobs_site);
         self._jobs_rep.insert(self._jobs_max_id, jobs_rep);
@@ -242,7 +245,7 @@ impl Memdb {
     ///
     /// Checks if relationship exists in db.
     ///
-    fn relationship_get(&mut self, file: &u128, tag: &u128) -> bool {
+    fn relationship_get(&mut self, file: &usize, tag: &usize) -> bool {
         if self._relationship_relate.contains_key(&(*file, *tag)) {
             return true;
         }
@@ -253,8 +256,8 @@ impl Memdb {
     ///
     /// Returns a list of fileid's associated with tagid
     ///
-    fn relationship_get_fileid(&self, tag: &u128) -> Vec<u128> {
-        let mut comp: Vec<u128> = Vec::new();
+    fn relationship_get_fileid(&self, tag: &usize) -> Vec<usize> {
+        let mut comp: Vec<usize> = Vec::new();
         for each in self._relationship_relate.keys() {
             if &each.1 == tag {
                 comp.push(each.0);
@@ -266,8 +269,8 @@ impl Memdb {
     ///
     /// Returns a list of tag's associated with fileid
     ///
-    fn relationship_get_tagid(&self, file: &u128) -> Vec<u128> {
-        let mut comp: Vec<u128> = Vec::new();
+    fn relationship_get_tagid(&self, file: &usize) -> Vec<usize> {
+        let mut comp: Vec<usize> = Vec::new();
         for each in self._relationship_relate.keys() {
             if &each.0 == file {
                 comp.push(each.1);
@@ -279,7 +282,7 @@ impl Memdb {
     ///
     /// Adds relationship to db.
     ///
-    fn relationship_add(&mut self, file: u128, tag: u128) {
+    fn relationship_add(&mut self, file: usize, tag: usize) {
         self._relationship_fileid.insert(file, file);
         self._relationship_tagid.insert(tag, tag);
         self._relationship_relate
@@ -289,7 +292,7 @@ impl Memdb {
     ///
     /// Pulls jobs from memdb
     ///
-    fn jobs_get(&self, id: u128) -> (String, String, String, String, bool) {
+    fn jobs_get(&self, id: usize) -> (String, String, String, String, bool) {
         if self._jobs_time.contains_key(&id) {
             let a = self._jobs_time[&id].to_string();
             let d = self._jobs_rep[&id].to_string();
@@ -309,21 +312,21 @@ impl Memdb {
     ///
     /// Checks if job exists in current memdb.
     ///
-    pub fn jobs_exist(&self, id: u128) -> bool {
+    pub fn jobs_exist(&self, id: usize) -> bool {
         self._jobs_time.contains_key(&id)
     }
 
     ///
     /// Returns total jobs in db.
     ///
-    pub fn jobs_total(&self) -> u128 {
+    pub fn jobs_total(&self) -> usize {
         self._jobs_max_id
     }
 
     /// Gets max_id from every max_id field.
     /// let (fid, nid, pid, rid, sid, tid, jid) = self.max_id_return();
     ///
-    fn max_id_return(&mut self) -> (u128, u128, u128, u128, u128, u128, u128) {
+    fn max_id_return(&mut self) -> (usize, usize, usize, usize, usize, usize, usize) {
         (
             self._file_max_id,
             self._namespace_max_id,
@@ -338,11 +341,11 @@ impl Memdb {
     ///
     /// Adds a file to memdb.Jobs
     ///
-    pub fn file_put(&mut self, hash: &String, extension: &String, location: &String) -> u128 {
+    pub fn file_put(&mut self, hash: &String, extension: &String, location: &String) -> usize {
         if self._file_hash.contains_key(&hash.to_string()) {
             return self._file_hash[&hash.to_string()];
         }
-        let ret_name: u128 = self._file_max_id;
+        let ret_name: usize = self._file_max_id;
         let (fid, _nid, _pid, _rid, _sid, _tid, _jid) = self.max_id_return();
 
         self._file_hash.insert(hash.to_string(), fid);
@@ -356,7 +359,7 @@ impl Memdb {
     ///
     /// Gets a file from memdb via hash.
     ///
-    pub fn file_get_hash(&mut self, hash: &String) -> (u128, bool) {
+    pub fn file_get_hash(&mut self, hash: &String) -> (usize, bool) {
         if self._file_hash.contains_key(hash) {
             (self._file_hash[hash], true)
         } else {
@@ -367,11 +370,11 @@ impl Memdb {
     ///
     /// Does namespace exist? If so return number.
     ///
-    pub fn namespace_put(&mut self, name: &String) -> u128 {
+    pub fn namespace_put(&mut self, name: &String) -> usize {
         if self._namespace_name.contains_key(name) {
             return self._namespace_name[name];
         }
-        let ret_name: u128 = self._namespace_max_id;
+        let ret_name: usize = self._namespace_max_id;
         self._namespace_name.insert(name.to_string(), ret_name);
         self.max_namespace_increment();
         ret_name
@@ -380,7 +383,7 @@ impl Memdb {
     ///
     /// Does namespace contain key?
     ///
-    pub fn namespace_get(&mut self, name: &String) -> (u128, bool) {
+    pub fn namespace_get(&mut self, name: &String) -> (usize, bool) {
         if self._namespace_name.contains_key(name) {
             (self._namespace_name[name], true)
         } else {
@@ -391,7 +394,7 @@ impl Memdb {
     ///
     /// Namespace get name from id
     ///
-    pub fn namespace_id_get(&self, uid: &u128) -> String {
+    pub fn namespace_id_get(&self, uid: &usize) -> String {
         for (key, val) in self._namespace_name.iter() {
             if val == uid {
                 return key.to_string();
@@ -403,17 +406,17 @@ impl Memdb {
     ///
     /// Adds a file to memdb.Tags
     ///
-    pub fn tags_name_put_test(&mut self, tag: String, namespace: &String) -> u128 {
+    pub fn tags_name_put_test(&mut self, tag: String, namespace: &String) -> usize {
         if self._tags_name.contains_key(&tag) {
             return self._tags_name[&tag];
         }
-        let ret_name: u128 = self._tags_max_id;
+        let ret_name: usize = self._tags_max_id;
 
         self._tags_name.insert(tag, ret_name);
 
         self.namespace_put(namespace);
 
-        let ret_tag: u128 = self._tags_max_id;
+        let ret_tag: usize = self._tags_max_id;
         //self._tags_relate.insert((tag.to_string(), *namespace), ret_name);
 
         self.max_tags_increment();
@@ -424,7 +427,7 @@ impl Memdb {
     ///
     /// Adds a file to memdb.Tags
     ///
-    pub fn tags_put(&mut self, tag: &String, namespace: &u128) -> u128 {
+    pub fn tags_put(&mut self, tag: &String, namespace: &usize) -> usize {
         //if self._tags_name.contains_key(tag) {
         //    return self._tags_name[tag];
         //}
@@ -434,11 +437,11 @@ impl Memdb {
         {
             //let tagid = self._tags_name[&(tags.to_string(), namespace)];
 
-            let urin: u128 = self._tags_relate[&(tag.to_string(), *namespace)];
+            let urin: usize = self._tags_relate[&(tag.to_string(), *namespace)];
             return urin;
         }
         //println!("{} {}", tag, namespace);
-        let ret_name: u128 = self._tags_max_id;
+        let ret_name: usize = self._tags_max_id;
 
         self._tags_name.insert(tag.to_string(), ret_name);
         self._tags_namespace.insert(*namespace, 0);
@@ -454,14 +457,14 @@ impl Memdb {
     ///
     /// Does tags contain key?
     ///
-    pub fn tags_get(&mut self, tags: String, namespace: &u128) -> (u128, bool) {
+    pub fn tags_get(&mut self, tags: String, namespace: &usize) -> (usize, bool) {
         if self
             ._tags_relate
             .contains_key(&(tags.to_string(), *namespace))
         {
             //let tagid = self._tags_name[&(tags.to_string(), namespace)];
 
-            let urin: u128 = self._tags_relate[&(tags, *namespace)];
+            let urin: usize = self._tags_relate[&(tags, *namespace)];
 
             (urin, true)
         } else {
@@ -478,7 +481,7 @@ impl Memdb {
     ///
     /// Gets tag name by id
     ///
-    pub fn tag_id_get(&mut self, uid: &u128) -> (String, String) {
+    pub fn tag_id_get(&mut self, uid: &usize) -> (String, String) {
         for (key, val) in self._tags_relate.iter() {
             if val == uid {
                 return (key.0.to_string(), self.namespace_id_get(&key.1));
@@ -531,21 +534,21 @@ impl Main {
         let mut sets = setex.query(params![]).unwrap();
 
         //Preserves mutability of database while we have an active connection to database.
-        let mut file_vec: Vec<(u128, String, String, String)> = Vec::new();
-        let mut job_vec: Vec<(u128, u128, String, String)> = Vec::new();
-        let mut parents_vec: Vec<(u128, String, String, u128)> = Vec::new();
-        let mut namespace_vec: Vec<(u128, String, String)> = Vec::new();
-        let mut relationship_vec: Vec<(u128, u128)> = Vec::new();
-        let mut tag_vec: Vec<(u128, String, String, u128)> = Vec::new();
+        let mut file_vec: Vec<(usize, String, String, String)> = Vec::new();
+        let mut job_vec: Vec<(usize, usize, String, String)> = Vec::new();
+        let mut parents_vec: Vec<(usize, String, String, usize)> = Vec::new();
+        let mut namespace_vec: Vec<(usize, String, String)> = Vec::new();
+        let mut relationship_vec: Vec<(usize, usize)> = Vec::new();
+        let mut tag_vec: Vec<(usize, String, String, usize)> = Vec::new();
         let mut setting_vec: Vec<(String, String, isize, String)> = Vec::new();
 
         dbg!("Loading DB.");
 
         while let Some(file) = files.next().unwrap() {
             let a: String = file.get(0).unwrap();
-            let a1: u128 = a.parse::<u128>().unwrap();
+            let a1: usize = a.parse::<usize>().unwrap();
             let b: String = file.get(2).unwrap();
-            let b1: u128 = a.parse::<u128>().unwrap();
+            let b1: usize = a.parse::<usize>().unwrap();
             file_vec.push((
                 a1,
                 file.get(1).unwrap(),
@@ -557,8 +560,8 @@ impl Main {
         while let Some(job) = jobs.next().unwrap() {
             let a1: String = job.get(0).unwrap();
             let b1: String = job.get(1).unwrap();
-            let a: u128 = a1.parse::<u128>().unwrap();
-            let b: u128 = b1.parse::<u128>().unwrap();
+            let a: usize = a1.parse::<usize>().unwrap();
+            let b: usize = b1.parse::<usize>().unwrap();
             job_vec.push((a, b, job.get(2).unwrap(), job.get(3).unwrap()));
             //self.jobs_add(a, b, job.get(2).unwrap(), job.get(3).unwrap(),true);
             //self.jobs_add(a, b, job.get(2).unwrap(), job.get(3).unwrap(), false);
@@ -567,7 +570,7 @@ impl Main {
         while let Some(name) = names.next().unwrap() {
             let a1: String = name.get(0).unwrap();
             let b1: String = name.get(2).unwrap();
-            let a: u128 = a1.parse::<u128>().unwrap();
+            let a: usize = a1.parse::<usize>().unwrap();
             let b: String = b1.parse::<String>().unwrap();
             namespace_vec.push((a, name.get(1).unwrap(), b.to_string()));
         }
@@ -575,16 +578,16 @@ impl Main {
         while let Some(name) = paes.next().unwrap() {
             let a1: String = name.get(0).unwrap();
             let b1: String = name.get(3).unwrap();
-            let a: u128 = a1.parse::<u128>().unwrap();
-            let b: u128 = b1.parse::<u128>().unwrap();
+            let a: usize = a1.parse::<usize>().unwrap();
+            let b: usize = b1.parse::<usize>().unwrap();
             parents_vec.push((a, name.get(1).unwrap(), name.get(2).unwrap(), b));
         }
 
         while let Some(tag) = rels.next().unwrap() {
             let a1: String = tag.get(0).unwrap();
             let b1: String = tag.get(1).unwrap();
-            let a: u128 = a1.parse::<u128>().unwrap();
-            let b: u128 = b1.parse::<u128>().unwrap();
+            let a: usize = a1.parse::<usize>().unwrap();
+            let b: usize = b1.parse::<usize>().unwrap();
             relationship_vec.push((a, b));
         }
 
@@ -593,14 +596,14 @@ impl Main {
             let b1: String = tag.get(3).unwrap();
             let c1: String = tag.get(0).unwrap();
             let a: String = a1.parse::<String>().unwrap();
-            let b: u128 = b1.parse::<u128>().unwrap();
-            let c: u128 = c1.parse::<u128>().unwrap();
+            let b: usize = b1.parse::<usize>().unwrap();
+            let c: usize = c1.parse::<usize>().unwrap();
             tag_vec.push((c, tag.get(1).unwrap(), a, b));
         }
 
         while let Some(set) = sets.next().unwrap() {
             let b1: String = set.get(2).unwrap(); // FIXME
-            let b: u128 = b1.parse::<u128>().unwrap();
+            let b: usize = b1.parse::<usize>().unwrap();
             let re1: String = match set.get(1) {
                 Ok(re1) => re1,
                 Err(error) => "".to_string(),
@@ -667,19 +670,19 @@ impl Main {
         does_loop: bool,
         jobs_commit: String,
     ) {
-        let time_offset: u128 = time::time_conv(jobs_rep);
+        let time_offset: usize = time::time_conv(jobs_rep);
 
         /*self._inmemdb.jobs_add(
-            jobs_time.parse::<u128>().unwrap(),
+            jobs_time.parse::<usize>().unwrap(),
             time_offset,
             jobs_site.to_string(),
             jobs_param.to_string(),
         );*/
         let a1: String = jobs_time.to_string();
-        let a: u128 = a1.parse::<u128>().unwrap();
+        let a: usize = a1.parse::<usize>().unwrap();
         let com: bool = jobs_commit.parse::<bool>().unwrap();
         if &jobs_time != "now" && does_loop {
-            let b: u128 = jobs_rep.parse::<u128>().unwrap();
+            let b: usize = jobs_rep.parse::<usize>().unwrap();
             self.jobs_add(a, b, jobs_site, jobs_param, com, true);
         } else {
             self.jobs_add(a, 0, jobs_site, jobs_param, com, false);
@@ -689,7 +692,7 @@ impl Main {
     /// Pull job by id
     /// TODO NEEDS TO ADD IN PROPER POLLING FROM DB.
     ///
-    pub fn jobs_get(&self, id: u128) -> (String, String, String, String, bool) {
+    pub fn jobs_get(&self, id: usize) -> (String, String, String, String, bool) {
         if self._inmemdb.jobs_exist(id) {
             self._inmemdb.jobs_get(id)
         } else {
@@ -703,25 +706,25 @@ impl Main {
         }
     }
 
-    pub fn tag_id_get(&mut self, uid: &u128) -> (String, String) {
+    pub fn tag_id_get(&mut self, uid: &usize) -> (String, String) {
         self._inmemdb.tag_id_get(uid)
     }
 
-    pub fn relationship_get_fileid(&self, tag: &u128) -> Vec<u128> {
+    pub fn relationship_get_fileid(&self, tag: &usize) -> Vec<usize> {
         self._inmemdb.relationship_get_fileid(tag)
     }
-    pub fn relationship_get_tagid(&self, tag: &u128) -> Vec<u128> {
+    pub fn relationship_get_tagid(&self, tag: &usize) -> Vec<usize> {
         self._inmemdb.relationship_get_tagid(tag)
     }
 
-    pub fn settings_get_name(&self, name: &String) -> Result<(u128, String), &str> {
+    pub fn settings_get_name(&self, name: &String) -> Result<(usize, String), &str> {
         self._inmemdb.settings_get_name(name)
     }
 
     ///
     /// Returns total jobs from _inmemdb
     ///
-    pub fn jobs_get_max(&self) -> u128 {
+    pub fn jobs_get_max(&self) -> usize {
         self._inmemdb.jobs_total()
     }
 
@@ -1031,14 +1034,14 @@ impl Main {
     ///
     /// Wrapper
     ///
-    pub fn file_get_hash(&mut self, hash: &String) -> (u128, bool) {
+    pub fn file_get_hash(&mut self, hash: &String) -> (usize, bool) {
         self._inmemdb.file_get_hash(hash)
     }
 
     ///
     /// Wrapper
     ///
-    pub fn tag_get_name(&mut self, tag: String, namespace: &u128) -> (u128, bool) {
+    pub fn tag_get_name(&mut self, tag: String, namespace: &usize) -> (usize, bool) {
         self._inmemdb.tags_get(tag, namespace)
     }
 
@@ -1062,7 +1065,7 @@ impl Main {
     ///
     /// db get namespace wrapper
     ///
-    pub fn namespace_get(&mut self, inp: &String) -> (u128, bool) {
+    pub fn namespace_get(&mut self, inp: &String) -> (usize, bool) {
         self._inmemdb.namespace_get(inp)
     }
 
@@ -1085,13 +1088,13 @@ impl Main {
     ///
     pub fn file_add(
         &mut self,
-        id: u128,
+        id: usize,
         hash: String,
         extension: String,
         location: String,
         addtodb: bool,
     ) {
-        let file_grab: (u128, bool) = self._inmemdb.file_get_hash(&hash);
+        let file_grab: (usize, bool) = self._inmemdb.file_get_hash(&hash);
 
         let file_id = self._inmemdb.file_put(&hash, &extension, &location);
 
@@ -1110,8 +1113,8 @@ impl Main {
         }
     }
 
-    pub fn namespace_add(&mut self, id: u128, name: String, description: String, addtodb: bool) {
-        let namespace_grab: (u128, bool) = self._inmemdb.namespace_get(&name);
+    pub fn namespace_add(&mut self, id: usize, name: String, description: String, addtodb: bool) {
+        let namespace_grab: (usize, bool) = self._inmemdb.namespace_get(&name);
 
         let name_id = self._inmemdb.namespace_put(&name);
         if addtodb && !namespace_grab.1 {
@@ -1126,16 +1129,16 @@ impl Main {
 
     pub fn parents_add(
         &mut self,
-        id: u128,
+        id: usize,
         name: String,
         children: String,
-        namespace: u128,
+        namespace: usize,
         addtodb: bool,
     ) {
     }
 
-    pub fn tag_add(&mut self, tags: String, parents: String, namespace: u128, addtodb: bool) {
-        let tags_grab: (u128, bool) = self._inmemdb.tags_get(tags.to_string(), &namespace);
+    pub fn tag_add(&mut self, tags: String, parents: String, namespace: usize, addtodb: bool) {
+        let tags_grab: (usize, bool) = self._inmemdb.tags_get(tags.to_string(), &namespace);
         let tag_id = self._inmemdb.tags_put(&tags, &namespace);
         //println!("{} {} {} {:?} {}", tags, namespace, addtodb, tags_grab, tag_id);
         if addtodb && !tags_grab.1 {
@@ -1157,7 +1160,7 @@ impl Main {
     /// Adds relationship into DB.
     /// Inherently trusts user user to not duplicate stuff.
     ///
-    pub fn relationship_add(&mut self, file: u128, tag: u128, addtodb: bool) {
+    pub fn relationship_add(&mut self, file: usize, tag: usize, addtodb: bool) {
         let existcheck = self._inmemdb.relationship_get(&file, &tag);
 
         if addtodb && !existcheck {
@@ -1173,8 +1176,8 @@ impl Main {
 
     pub fn jobs_add(
         &mut self,
-        time: u128,
-        reptime: u128,
+        time: usize,
+        reptime: usize,
         site: String,
         param: String,
         filler: bool,
@@ -1199,15 +1202,15 @@ impl Main {
     ///
     pub fn parse_input(
         &mut self,
-        parsed_data: &HashMap<String, HashMap<String, HashMap<String, Vec<String>>>>,
+        parsed_data: &AHashMap<String,AHashMap<String,AHashMap<String, Vec<String>>>>,
     ) -> (
-        HashMap<String, Vec<(String, u128)>>,
-        HashMap<String, Vec<(String, u128)>>,
+       AHashMap<String, Vec<(String, usize)>>,
+       AHashMap<String, Vec<(String, usize)>>,
     ) {
         let mut url_vec: Vec<String> = Vec::new();
-        let mut tags_namespace_id: Vec<(String, u128)> = Vec::new();
-        let mut urltoid: HashMap<String, Vec<(String, u128)>> = HashMap::new();
-        let mut urltonid: HashMap<String, Vec<(String, u128)>> = HashMap::new();
+        let mut tags_namespace_id: Vec<(String, usize)> = Vec::new();
+        let mut urltoid:AHashMap<String, Vec<(String, usize)>> =AHashMap::new();
+        let mut urltonid:AHashMap<String, Vec<(String, usize)>> =AHashMap::new();
 
         if parsed_data.is_empty() {
             return (urltoid, urltonid);

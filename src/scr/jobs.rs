@@ -3,14 +3,14 @@ use crate::scr::download;
 use crate::scr::file;
 use crate::scr::scraper;
 use crate::scr::time;
-use ahash::AHashMap;
 use log::info;
+use ahash::AHashMap;
 use std::collections::HashMap;
 use std::time::Duration;
 
 pub struct Jobs {
     _jobid: Vec<u128>,
-    _secs: u128,
+    _secs: usize,
     _sites: Vec<String>,
     _params: Vec<Vec<String>>,
     //References jobid in _inmemdb hashmap :D
@@ -42,8 +42,8 @@ impl Jobs {
         if ttl > 0 {
             for each in 0..ttl {
                 let (a, b, c, d, e) = db.jobs_get(each);
-                let auint = a.parse::<u128>().unwrap();
-                let cuint = c.parse::<u128>().unwrap();
+                let auint = a.parse::<usize>().unwrap();
+                let cuint = c.parse::<usize>().unwrap();
                 let mut add = false;
 
                 //Working with uint. CANT BE NEGATIVE.
@@ -258,7 +258,7 @@ impl Jobs {
         &mut self,
         memid: usize,
         params: &String,
-    ) -> Result<HashMap<String, HashMap<String, Vec<String>>>, &'static str> {
+    ) -> Result<AHashMap<String, AHashMap<String, Vec<String>>>, &'static str> {
         self.scrapermanager.parser_call(memid, params)
     }
 

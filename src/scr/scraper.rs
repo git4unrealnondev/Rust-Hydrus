@@ -1,6 +1,7 @@
 use libloading;
 use log::{error, info, warn};
 use std::collections::HashMap;
+use ahash::AHashMap;
 use std::fs;
 use std::path::Path;
 use std::time::Duration;
@@ -159,12 +160,12 @@ impl ScraperManager {
         &self,
         id: usize,
         params: &String,
-    ) -> Result<HashMap<String, HashMap<String, Vec<String>>>, &'static str> {
+    ) -> Result<AHashMap<String, AHashMap<String, Vec<String>>>, &'static str> {
         let temp: libloading::Symbol<
             unsafe extern "C" fn(
                 &String,
             ) -> Result<
-                HashMap<String, HashMap<String, Vec<String>>>,
+                AHashMap<String, AHashMap<String, Vec<String>>>,
                 &'static str,
             >,
         > = unsafe { self._library[id].get(b"parser\0").unwrap() };

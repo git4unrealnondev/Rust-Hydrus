@@ -28,6 +28,8 @@ sha2 = "0.10.6"
 futures = "0.3.24"
 urlparse = "0.7.3"
 log = {version="0.4.0", features = ["max_level_debug", "release_max_level_info"]}
+csv = "1.1.6"
+nohash-hasher = "0.2.0"
 
 [profile.release]
 opt-level = "z"
