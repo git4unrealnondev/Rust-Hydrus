@@ -1,7 +1,6 @@
+use ahash::AHashMap;
 use libloading;
 use log::{error, info, warn};
-use std::collections::HashMap;
-use ahash::AHashMap;
 use std::fs;
 use std::path::Path;
 use std::time::Duration;

@@ -1,12 +1,12 @@
 //extern crate urlparse;
 use crate::scr::file;
 use crate::scr::scraper;
+use ahash::AHashMap;
 use http::Method;
 use reqwest::{Client, Request, Response};
 use sha2::Digest;
 use sha2::Sha512;
 use std::collections::HashMap;
-use ahash::AHashMap;
 use std::fs;
 use std::io;
 use std::io::Cursor;
@@ -45,7 +45,8 @@ pub async fn dltext(
 ) -> AHashMap<String, AHashMap<String, AHashMap<String, Vec<String>>>> {
     let respvec: Vec<Response> = Vec::new();
     let retvec: Vec<String> = Vec::new();
-    let mut test: AHashMap<String, AHashMap<String, AHashMap<String, Vec<String>>>> = AHashMap::new();
+    let mut test: AHashMap<String, AHashMap<String, AHashMap<String, Vec<String>>>> =
+        AHashMap::new();
 
     // The wrapper that implements ratelimiting
 
@@ -121,20 +122,26 @@ pub async fn file_download(
         .rate_limit(2, Duration::from_secs(1))
         .service(client);
 
-    let url = Url::parse(url_vec).unwrap();
-    let requestit = Request::new(Method::GET, url);
-    let a = exampleone
-        .ready()
-        .await
-        .unwrap()
-        .call(requestit)
-        .await
-        .unwrap(); //.unwrap().call(requestit).await
-    let headers = format!("{:?}", &a.headers().get("content-type").unwrap());
+    let mut url = Url::parse(url_vec).unwrap();
+    let mut requestit = Request::new(Method::GET, url);
+    let mut a = exampleone.ready().await.unwrap().call(requestit).await;
+    // Handles failed downloads or weidness from system.
+    match a {
+        Ok(_) => (),
+        Err(_) => {
+            url = Url::parse(url_vec).unwrap();
+            requestit = Request::new(Method::GET, url);
+            a = exampleone.ready().await.unwrap().call(requestit).await;
+        }
+    }
+    let headers = format!(
+        "{:?}",
+        &a.as_ref().unwrap().headers().get("content-type").unwrap()
+    );
     //dbg!(example.ready());
 
     let mut hasher = Sha512::new();
-    let bytes = a.bytes().await;
+    let bytes = a.unwrap().bytes().await;
     hasher.update(&bytes.as_ref().unwrap());
     //let bystring= &bytes.unwrap();
     //let mut temp: &mut [u8] = u8::new();

@@ -7,7 +7,9 @@ pub fn time_secs() -> usize {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
-        .as_secs().try_into().unwrap()
+        .as_secs()
+        .try_into()
+        .unwrap()
 }
 
 ///

@@ -11,13 +11,13 @@ pub struct PluginManager {
 ///
 impl PluginManager {
     pub fn new(pluginsloc: String) -> Self {
-        let mut reftoself = PluginManager {
+        let reftoself = PluginManager {
             _plugin: HashMap::new(),
         };
 
         reftoself.load_plugins(&pluginsloc);
 
-        return reftoself;
+        reftoself
     }
 
     ///

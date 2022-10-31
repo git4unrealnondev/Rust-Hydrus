@@ -1,19 +1,50 @@
- #[derive(Debug)]
-pub enum jobs {
-    add,
-    remove,
+use std::fmt;
+use strum_macros::EnumIter;
+
+#[derive(Debug, EnumIter, Clone)]
+pub enum CommitType {
+    StopOnNothing,
+    StopOnFile,
+    SkipOnFile,
+    AddToDB,
 }
 
-enum subcommand {
-    search,
-    job,
+impl fmt::Display for CommitType {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self)
+        // or, alternatively:
+        // fmt::Debug::fmt(self, f)
+    }
 }
 
-struct cli_to_db {
-
-    search_terms: Vec<String>,
-
-    job: jobs,
-    command: subcommand,
-
+#[derive(Debug)]
+pub struct jobs_add {
+    pub site: String,
+    pub query: String,
+    pub time: String,
+    pub committype: CommitType,
 }
+
+#[derive(Debug)] // Manages what the job can do.
+pub struct jobs_remove {
+    pub site: String,
+    pub query: String,
+    pub time: String,
+}
+
+#[derive(Debug)]
+// Manages what the search can do.
+pub struct search {
+    pub fid: String,
+    pub tid: String,
+}
+
+#[derive(Debug)]
+pub enum AllFields {
+    EJobsAdd(jobs_add),
+    EJobsRemove(jobs_remove),
+    ESearch(search),
+    ENothing,
+}
+
+// let temp = AllFields::JobsAdd(JobsAdd{Site: "yeet".to_owned(), Query: "yeet".to_owned(), Time: "Lo".to_owned(), Loop: "yes".to_owned(), ReCommit: "Test".to_owned(), CommitType: CommitType::StopOnNothing});

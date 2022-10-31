@@ -1,12 +1,22 @@
 extern crate clap;
-
+use crate::scr::sharedtypes::{self, jobs_add, jobs_remove};
 use clap::{App, Arg, SubCommand};
 use log::{error, info};
-
-use crate::scr::sharedtypes;
+//use super::sharedtypes::;
+use strum::IntoEnumIterator;
 //mod sharedtypes;
 
-pub fn main() -> (Vec<String>, String, bool, bool) {
+fn stringto_commit_type(into: &String) -> sharedtypes::CommitType {
+    for each in sharedtypes::CommitType::iter() {
+        if into == &each.to_string() {
+            return each;
+        }
+    }
+
+    panic!("Could Not format string as one of: StopOnNothing, StopOnFile, SkipOnFile, AddToDb");
+}
+
+pub fn main() -> sharedtypes::AllFields {
     let app = App::new("rust-hyrdrus")
         .version("1.0")
         .about("Das code sucks.")
@@ -27,8 +37,8 @@ pub fn main() -> (Vec<String>, String, bool, bool) {
                         .long("add")
                         .takes_value(true)
                         .help("Adds a job to the system")
-                        .number_of_values(5)
-                        .value_names(&["Site", "Query", "Time", "Loop", "ReCommit"])
+                        .number_of_values(4)
+                        .value_names(&["Site", "Query", "Time", "CommitType"])
                         .multiple_values(true),
                 )
                 .arg(
@@ -67,6 +77,18 @@ pub fn main() -> (Vec<String>, String, bool, bool) {
                 .takes_value(true)
                 .long("id"),
         )
+        .subcommand(
+            SubCommand::with_name("task")
+                .about("Runs Specified tasks against DB.")
+                .arg(
+                    Arg::new("csv")
+                        .long("csv_file")
+                        .takes_value(true)
+                        .help("Location of csv import file.")
+                        .min_values(1)
+                        .multiple_values(false),
+                ),
+        )
         .arg(
             Arg::new("site")
                 .long("site")
@@ -75,10 +97,6 @@ pub fn main() -> (Vec<String>, String, bool, bool) {
                 .required(false),
         );
 
-    let mut job = sharedtypes::jobs::add;
-    dbg!(&job);
-    job = sharedtypes::jobs::remove;
-dbg!(&job);
     // now add in the argument we want to parse
     //let app = app.arg();
 
@@ -94,7 +112,15 @@ dbg!(&job);
 
     if id != None {
         let valvec: Vec<String> = vec![id.unwrap().to_string()];
-        return (valvec, "id".to_string(), true, false);
+        //["Site", "Query", "Time", "Loop", "ReCommit"]
+        let committype = stringto_commit_type(&valvec[3]);
+        return sharedtypes::AllFields::EJobsAdd(jobs_add {
+            site: valvec[0].to_owned(),
+            query: valvec[1].to_owned(),
+            time: valvec[2].to_owned(),
+            committype: committype,
+        });
+        //return (valvec, "id".to_string(), true, false);
     }
 
     if name != None {
@@ -102,9 +128,17 @@ dbg!(&job);
     }
 
     match matches.subcommand() {
-        Some(("search", subcmd)) => {
-            let valvec: Vec<&String> = subcmd.get_many::<String>("add").unwrap().collect();
-            let mut valret: Vec<String> = Vec::new();
+        /*Some(("task", subcmd)) => {
+
+            let valvec: Vec<&String> = subcmd.get_many::<String>("csv").unwrap().collect();
+
+            dbg!(valvec);
+
+        }*/
+
+        /*Some(("search", subcmd)) => {
+            //let valvec: Vec<&String> = subcmd.get_many::<String>("add").unwrap().collect();
+            let valret: Vec<String> = Vec::new();
             if subcmd.contains_id("fid") {
                 dbg!("fid");
             }
@@ -114,24 +148,24 @@ dbg!(&job);
             }
             let radd = "".to_string();
             return (valret, radd, true, true);
-        }
+        }*/
         Some(("job", subcmd)) => {
             if subcmd.contains_id("add") {
                 let valvec: Vec<&String> = subcmd.get_many::<String>("add").unwrap().collect();
-                let mut valret: Vec<String> = Vec::new();
+                //valret: Vec<String> = Vec::new();
 
                 dbg!(&valvec, &valvec.len());
 
-                valret = [
+                let valret = [
                     valvec[0].to_owned(),
                     valvec[1].to_owned(),
                     valvec[2].to_owned(),
                     valvec[3].to_owned(),
-                    valvec[4].to_owned(),
+                    //valvec[4].to_owned(),
                 ]
                 .to_vec();
 
-                let lenjobs = 5;
+                let lenjobs = 4;
 
                 if valvec.len() != lenjobs {
                     println!("{:?}", valvec);
@@ -145,15 +179,22 @@ dbg!(&job);
                     error!("{}", msg);
                     panic!("{}", msg);
                 } else {
-                    let radd = "add".to_string();
-                    if valvec[3] == "true" {
-                        return (valret, radd, true, true);
-                    }
-                    if valvec[3] == "false" {
-                        return (valret, radd, false, true);
-                    }
+                    //let radd = "add".to_string();
+                    //if valvec[3] == "true" {
+                    let committype = stringto_commit_type(valvec[3]);
+                    return sharedtypes::AllFields::EJobsAdd(jobs_add {
+                        site: valvec[0].to_owned(),
+                        query: valvec[1].to_owned(),
+                        time: valvec[2].to_owned(),
+                        committype: committype,
+                    });
+                    //return (valret, radd, true, true);
+                    // }
+                    //if valvec[3] == "false" {
+                    //      return (valret, radd, false, true);
+                    // }
 
-                    return (valret, radd, false, false);
+                    //return (valret, radd, false, false);
                 }
             }
             // Remove Job Handling
@@ -181,14 +222,20 @@ dbg!(&job);
                     panic!("{}", msg);
                 } else {
                     let rrmv = "remove".to_string();
-                    if valvec[3] == "true" {
-                        return (valret, rrmv, true, true);
-                    }
-                    if valvec[3] == "false" {
-                        return (valret, rrmv, false, true);
-                    }
+                    let committype = stringto_commit_type(valvec[3]);
+                    return sharedtypes::AllFields::EJobsRemove(jobs_remove {
+                        site: valvec[0].to_owned(),
+                        query: valvec[1].to_owned(),
+                        time: valvec[2].to_owned(),
+                    });
+                    //if valvec[3] == "true" {
+                    //    return (valret, rrmv, true, true);
+                    //}
+                    //if valvec[3] == "false" {
+                    //    return (valret, rrmv, false, true);
+                    //}
 
-                    return (valret, rrmv, false, false);
+                    //return (valret, rrmv, false, false);
                 }
             }
             panic!("NO COMMANDS PASSED TO JOB.");
@@ -199,7 +246,8 @@ dbg!(&job);
             println!("{}", msg);
             info!("{}", msg);
 
-            (vec!["".to_string()], "".to_string(), false, false)
+            sharedtypes::AllFields::ENothing
+            //(vec!["".to_string()], "".to_string(), false, false)
         }
     }
 

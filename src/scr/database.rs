@@ -1,18 +1,12 @@
 #![forbid(unsafe_code)]
 
-use log::{error, info};
-//use rusqlite::ToSql;
 use crate::vec_of_strings;
+use ahash::AHashMap;
+use log::{error, info};
 pub use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, ValueRef};
-//use rusqlite::OptionalExtension;
-use crate::scr::time;
 pub use rusqlite::{params, types::Null, Connection, Result, Transaction};
-use std::{collections::HashMap, hash::BuildHasherDefault};
 use std::panic;
 use std::path::Path;
-use ahash::AHashMap;
-use nohash_hasher::NoHashHasher;
-
 
 /// Returns an open connection to use.
 pub fn dbinit(dbpath: &String) -> Connection {
@@ -43,7 +37,7 @@ struct Memdb {
     ),
 
     _file_max_id: usize,
-    _file_hash: AHashMap::<String, usize>,
+    _file_hash: AHashMap<String, usize>,
     _file_extension: AHashMap<String, usize>,
     _file_location: AHashMap<String, usize>,
 
@@ -94,29 +88,29 @@ impl Memdb {
             _file_extension: AHashMap::new(),
             _file_location: AHashMap::new(),
             _jobs_time: AHashMap::new(),
-            _jobs_rep:AHashMap::new(),
-            _jobs_site:AHashMap::new(),
-            _jobs_param:AHashMap::new(),
-            _jobs_commitunfinished:AHashMap::new(),
+            _jobs_rep: AHashMap::new(),
+            _jobs_site: AHashMap::new(),
+            _jobs_param: AHashMap::new(),
+            _jobs_commitunfinished: AHashMap::new(),
             //_namespace_id:AHashMap::new(),
-            _namespace_name:AHashMap::new(),
-            _namespace_description:AHashMap::new(),
+            _namespace_name: AHashMap::new(),
+            _namespace_description: AHashMap::new(),
             //_parents_id:AHashMap::new(),
-            _parents_name:AHashMap::new(),
-            _parents_children:AHashMap::new(),
-            _parents_namespace:AHashMap::new(),
-            _relationship_fileid:AHashMap::new(),
-            _relationship_tagid:AHashMap::new(),
-            _relationship_relate:AHashMap::new(),
-            _settings_name:AHashMap::new(),
-            _settings_pretty:AHashMap::new(),
-            _settings_num:AHashMap::new(),
-            _settings_param:AHashMap::new(),
+            _parents_name: AHashMap::new(),
+            _parents_children: AHashMap::new(),
+            _parents_namespace: AHashMap::new(),
+            _relationship_fileid: AHashMap::new(),
+            _relationship_tagid: AHashMap::new(),
+            _relationship_relate: AHashMap::new(),
+            _settings_name: AHashMap::new(),
+            _settings_pretty: AHashMap::new(),
+            _settings_num: AHashMap::new(),
+            _settings_param: AHashMap::new(),
             //_tags_id:AHashMap::new(),
-            _tags_name:AHashMap::new(),
-            _tags_parents:AHashMap::new(),
-            _tags_namespace:AHashMap::new(),
-            _tags_relate:AHashMap::new(),
+            _tags_name: AHashMap::new(),
+            _tags_parents: AHashMap::new(),
+            _tags_namespace: AHashMap::new(),
+            _tags_relate: AHashMap::new(),
             _file_max_id: 0,
             _jobs_max_id: 0,
             _namespace_max_id: 0,
@@ -547,8 +541,8 @@ impl Main {
         while let Some(file) = files.next().unwrap() {
             let a: String = file.get(0).unwrap();
             let a1: usize = a.parse::<usize>().unwrap();
-            let b: String = file.get(2).unwrap();
-            let b1: usize = a.parse::<usize>().unwrap();
+            //let b: String = file.get(2).unwrap();
+            //let b1: usize = a.parse::<usize>().unwrap();
             file_vec.push((
                 a1,
                 file.get(1).unwrap(),
@@ -664,13 +658,13 @@ impl Main {
     pub fn jobs_add_main(
         &mut self,
         jobs_time: String,
-        jobs_rep: &String,
+        jobs_rep: &str,
         jobs_site: String,
         jobs_param: String,
         does_loop: bool,
         jobs_commit: String,
     ) {
-        let time_offset: usize = time::time_conv(jobs_rep);
+        //let time_offset: usize = time::time_conv(jobs_rep);
 
         /*self._inmemdb.jobs_add(
             jobs_time.parse::<usize>().unwrap(),
@@ -1202,15 +1196,15 @@ impl Main {
     ///
     pub fn parse_input(
         &mut self,
-        parsed_data: &AHashMap<String,AHashMap<String,AHashMap<String, Vec<String>>>>,
+        parsed_data: &AHashMap<String, AHashMap<String, AHashMap<String, Vec<String>>>>,
     ) -> (
-       AHashMap<String, Vec<(String, usize)>>,
-       AHashMap<String, Vec<(String, usize)>>,
+        AHashMap<String, Vec<(String, usize)>>,
+        AHashMap<String, Vec<(String, usize)>>,
     ) {
         let mut url_vec: Vec<String> = Vec::new();
         let mut tags_namespace_id: Vec<(String, usize)> = Vec::new();
-        let mut urltoid:AHashMap<String, Vec<(String, usize)>> =AHashMap::new();
-        let mut urltonid:AHashMap<String, Vec<(String, usize)>> =AHashMap::new();
+        let mut urltoid: AHashMap<String, Vec<(String, usize)>> = AHashMap::new();
+        let mut urltonid: AHashMap<String, Vec<(String, usize)>> = AHashMap::new();
 
         if parsed_data.is_empty() {
             return (urltoid, urltonid);

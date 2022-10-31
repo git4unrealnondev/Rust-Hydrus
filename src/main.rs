@@ -1,3 +1,5 @@
+use crate::scr::sharedtypes::jobs_add;
+use crate::scr::sharedtypes::AllFields::EJobsAdd;
 use log::{error, info, warn};
 use std::path::Path;
 extern crate ratelimit;
@@ -11,8 +13,8 @@ mod scr {
     pub mod logging;
     pub mod plugins;
     pub mod scraper;
-    pub mod time;
     pub mod sharedtypes;
+    pub mod time;
 }
 
 ///
@@ -99,8 +101,11 @@ fn main() {
     makelog("./log.txt");
 
     //TODO NEEDS MAIN INFO PULLER HERE. PULLS IN EVERYTHING INTO DB.
-    let (puts, name, trig, run) = scr::cli::main();
-
+    let all_field = scr::cli::main();
+    if let scr::sharedtypes::AllFields::EJobsAdd(ref tempe) = all_field {
+        dbg!(tempe);
+        dbg!(&tempe.site);
+    }
     // Checks main.db log location.
     db_file_sanity(dbloc);
 
@@ -115,7 +120,7 @@ fn main() {
         .settings_get_name(&"pluginloadloc".to_string())
         .unwrap()
         .1;
-    let mut pluginmanager = scr::plugins::PluginManager::new(plugin_loc);
+    let pluginmanager = scr::plugins::PluginManager::new(plugin_loc);
 
     let location = data.settings_get_name(&"FilesLoc".to_string()).unwrap().1;
     scr::file::folder_make(&format!("./{}", &location));
@@ -130,7 +135,8 @@ fn main() {
         "so".to_string(),
     );
 
-    if name == "id" {
+    // Looks like some search functionality. From before when I had searching as an option.
+    /*if name == "id" {
         dbg!(&puts);
         let uid = puts[0].parse::<usize>().unwrap();
         let a = data.relationship_get_tagid(&uid);
@@ -138,15 +144,22 @@ fn main() {
         for each in &a {
             println!("{:?}", data.tag_id_get(each));
         }
-    }
+    }*/
 
     let mut jobmanager = scr::jobs::Jobs::new(scraper_manager);
 
     data.transaction_flush();
 
-    dbg!(&puts);
+    match all_field {
+        scr::sharedtypes::AllFields::EJobsAdd(ref jobs_add) => {
+            //let positive = AllField;
+        }
+        scr::sharedtypes::AllFields::EJobsRemove(jobs_remove) => {}
+        scr::sharedtypes::AllFields::ESearch(search) => {}
+        scr::sharedtypes::AllFields::ENothing => {}
+    }
 
-    if run {
+    /* if run {
         data.jobs_add_main(
             0.to_string(),
             &puts[2].to_string(),
@@ -155,7 +168,7 @@ fn main() {
             trig,
             puts[4].to_string(),
         );
-    }
+    }*/
     jobmanager.jobs_get(&data);
     jobmanager.jobs_run(&mut data);
 

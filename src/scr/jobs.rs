@@ -3,9 +3,8 @@ use crate::scr::download;
 use crate::scr::file;
 use crate::scr::scraper;
 use crate::scr::time;
-use log::info;
 use ahash::AHashMap;
-use std::collections::HashMap;
+use log::info;
 use std::time::Duration;
 
 pub struct Jobs {
