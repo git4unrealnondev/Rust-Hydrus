@@ -7,14 +7,27 @@ use ahash::AHashMap;
 use log::info;
 use std::time::Duration;
 
+use super::sharedtypes::CommitType;
+
 pub struct Jobs {
     _jobid: Vec<u128>,
     _secs: usize,
     _sites: Vec<String>,
     _params: Vec<Vec<String>>,
     //References jobid in _inmemdb hashmap :D
-    _jobstorun: Vec<u16>,
+    _jobstorun: Vec<usize>,
+    _jobref: AHashMap<usize, JobsRef>,
     scrapermanager: scraper::ScraperManager,
+}
+#[derive(Debug, Clone)]
+pub struct JobsRef {
+    pub _idindb: usize,       // What is my ID in the inmemdb
+    pub _sites: String,       // Site that the user is querying
+    pub _params: Vec<String>, // Anything that the user passes into the db.
+    pub _jobsref: usize,      // reference time to when to run the job
+    pub _jobstime: usize,     // reference time to when job is added
+    pub _committype: CommitType,
+    //pub _scraper: scraper::ScraperManager // Reference to the scraper that will be used
 }
 
 ///
@@ -28,6 +41,7 @@ impl Jobs {
             _params: Vec::new(),
             _secs: 0,
             _jobstorun: Vec::new(),
+            _jobref: AHashMap::new(),
             scrapermanager: newmanager,
         }
     }
@@ -38,50 +52,27 @@ impl Jobs {
     pub fn jobs_get(&mut self, db: &database::Main) {
         self._secs = time::time_secs();
         let ttl = db.jobs_get_max();
-        if ttl > 0 {
-            for each in 0..ttl {
-                let (a, b, c, d, e) = db.jobs_get(each);
-                let auint = a.parse::<usize>().unwrap();
-                let cuint = c.parse::<usize>().unwrap();
-                let mut add = false;
-
-                //Working with uint. CANT BE NEGATIVE.
-                //oopsie, time is in future skip this.
-                if cuint > auint {
-                    continue;
-                }
-                let beans = self.scrapermanager.sites_get();
-                let mut cnt = 0;
+        let hashjobs = db.jobs_get_all();
+        let beans = self.scrapermanager.sites_get();
+        dbg!(&beans);
+        for each in hashjobs {
+            if time::time_secs() >= each.1._jobsref + each.1._jobstime {
                 for eacha in beans {
-                    if eacha.contains(&b.to_string()) {
-                        add = true;
-                        continue;
+                    if eacha.contains(&each.1._sites) {
+                        self._jobref.insert(*each.0, each.1.clone());
                     }
-                    cnt += 1;
-                }
-                let test = auint + cuint;
-                if self._secs >= test && add {
-                    self._jobstorun.push(cnt);
-                    let param = vec![d, e.to_string()];
-                    self._params.push(param);
-                    self._sites.push(b);
-                } else {
-                    let msg = format!("Ignoring job: {}. Due to no scraper. ", &b);
-                    println!("{}", msg);
-                    info!("{}", msg);
-                    continue;
                 }
             }
         }
-
+        dbg!(&self._jobref);
         let msg = format!(
-            "Loaded {} jobs out of {} jobs due to time or no scraper available.",
-            self._jobstorun.len(),
-            db.jobs_get_max()
+            "Loaded {} jobs out of {} jobs. Didn't load {} Jobs due to lack of scrapers or timing.",
+            &self._jobref.len(),
+            db.jobs_get_max(),
+             db.jobs_get_max() - &self._jobref.len(),
         );
         info!("{}", msg);
         println!("{}", msg);
-        db.dbg_show_internals();
     }
 
     ///
@@ -194,12 +185,12 @@ impl Jobs {
                 for urls in urln_vec.keys() {
                     dbg!(format!("Checking url for tags: {}", &urls));
 
-                    let url_id = db.tag_get_name(urls.to_string(), &namespace_id).0;
+                    let url_id = db.tag_get_name(urls.to_string(), namespace_id).0;
                     let fileids = db.relationship_get_fileid(&url_id);
                     for fids in &fileids {
                         for tags in &urln_vec[urls] {
                             db.tag_add(tags.0.to_string(), "".to_string(), tags.1, true);
-                            let tagid = db.tag_get_name(tags.0.to_string(), &tags.1).0;
+                            let tagid = db.tag_get_name(tags.0.to_string(), tags.1).0;
                             db.relationship_add(*fids, tagid, true);
                         }
                     }
@@ -229,11 +220,11 @@ impl Jobs {
                 let hash = db.file_get_hash(&map.0[&urls.to_string()]).0;
                 let url_namespace = db.namespace_get(&"parsed_url".to_string()).0;
                 db.tag_add(urls.to_string(), "".to_string(), url_namespace, true);
-                let urlid = db.tag_get_name(urls.to_string(), &url_namespace).0;
+                let urlid = db.tag_get_name(urls.to_string(), url_namespace).0;
                 db.relationship_add(hash, urlid, true);
                 for tags in &url_vec[urls] {
                     db.tag_add(tags.0.to_string(), "".to_string(), tags.1, true);
-                    let tagid = db.tag_get_name(tags.0.to_string(), &tags.1).0;
+                    let tagid = db.tag_get_name(tags.0.to_string(), tags.1).0;
                     db.relationship_add(hash, tagid, true);
                 }
             }

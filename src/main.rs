@@ -152,6 +152,24 @@ fn main() {
 
     match all_field {
         scr::sharedtypes::AllFields::EJobsAdd(ref jobs_add) => {
+            dbg!(
+                0.to_string(),
+                //&puts[2].to_string(),
+                //puts[0].to_string(),
+                //puts[1].to_string(),
+                //trig,
+                //puts[4].to_string(),
+                &jobs_add.committype
+            );
+            data.jobs_add_new(
+                &jobs_add.site,
+                &jobs_add.query,
+                &jobs_add.time,
+                &jobs_add.committype,
+                true,
+            );
+            dbg!(jobs_add);
+
             //let positive = AllField;
         }
         scr::sharedtypes::AllFields::EJobsRemove(jobs_remove) => {}
@@ -159,18 +177,20 @@ fn main() {
         scr::sharedtypes::AllFields::ENothing => {}
     }
 
-    /* if run {
-        data.jobs_add_main(
-            0.to_string(),
-            &puts[2].to_string(),
-            puts[0].to_string(),
-            puts[1].to_string(),
-            trig,
-            puts[4].to_string(),
-        );
-    }*/
+    //let mut line = String::new();
+    //let b1 = std::io::stdin().read_line(&mut line).unwrap();
+
+    /*data.jobs_add_main(
+        0.to_string(),
+        &puts[2].to_string(),
+        puts[0].to_string(),
+        puts[1].to_string(),
+        trig,
+        puts[4].to_string(),
+    );*/
+
     jobmanager.jobs_get(&data);
-    jobmanager.jobs_run(&mut data);
+    //jobmanager.jobs_run(&mut data);
 
     //Finalizing wrapup.
     data.transaction_flush();

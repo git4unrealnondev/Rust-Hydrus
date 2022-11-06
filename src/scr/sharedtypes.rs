@@ -1,4 +1,5 @@
 use std::fmt;
+use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
 
 #[derive(Debug, EnumIter, Clone)]
@@ -45,6 +46,20 @@ pub enum AllFields {
     EJobsRemove(jobs_remove),
     ESearch(search),
     ENothing,
+}
+
+pub fn stringto_commit_type(into: &String) -> CommitType {
+    for each in CommitType::iter() {
+        if into == &each.to_string() {
+            return each;
+        }
+    }
+    let mut panic = "Could Not format CommitType as one of: ".to_string();
+    for each in CommitType::iter() {
+        panic += format!("{} ", each).as_str();
+    }
+
+    panic!("{}", panic);
 }
 
 // let temp = AllFields::JobsAdd(JobsAdd{Site: "yeet".to_owned(), Query: "yeet".to_owned(), Time: "Lo".to_owned(), Loop: "yes".to_owned(), ReCommit: "Test".to_owned(), CommitType: CommitType::StopOnNothing});

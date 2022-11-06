@@ -6,16 +6,6 @@ use log::{error, info};
 use strum::IntoEnumIterator;
 //mod sharedtypes;
 
-fn stringto_commit_type(into: &String) -> sharedtypes::CommitType {
-    for each in sharedtypes::CommitType::iter() {
-        if into == &each.to_string() {
-            return each;
-        }
-    }
-
-    panic!("Could Not format string as one of: StopOnNothing, StopOnFile, SkipOnFile, AddToDb");
-}
-
 pub fn main() -> sharedtypes::AllFields {
     let app = App::new("rust-hyrdrus")
         .version("1.0")
@@ -113,7 +103,7 @@ pub fn main() -> sharedtypes::AllFields {
     if id != None {
         let valvec: Vec<String> = vec![id.unwrap().to_string()];
         //["Site", "Query", "Time", "Loop", "ReCommit"]
-        let committype = stringto_commit_type(&valvec[3]);
+        let committype = sharedtypes::stringto_commit_type(&valvec[3]);
         return sharedtypes::AllFields::EJobsAdd(jobs_add {
             site: valvec[0].to_owned(),
             query: valvec[1].to_owned(),
@@ -181,7 +171,7 @@ pub fn main() -> sharedtypes::AllFields {
                 } else {
                     //let radd = "add".to_string();
                     //if valvec[3] == "true" {
-                    let committype = stringto_commit_type(valvec[3]);
+                    let committype = sharedtypes::stringto_commit_type(valvec[3]);
                     return sharedtypes::AllFields::EJobsAdd(jobs_add {
                         site: valvec[0].to_owned(),
                         query: valvec[1].to_owned(),
@@ -222,7 +212,7 @@ pub fn main() -> sharedtypes::AllFields {
                     panic!("{}", msg);
                 } else {
                     let rrmv = "remove".to_string();
-                    let committype = stringto_commit_type(valvec[3]);
+                    let committype = sharedtypes::stringto_commit_type(valvec[3]);
                     return sharedtypes::AllFields::EJobsRemove(jobs_remove {
                         site: valvec[0].to_owned(),
                         query: valvec[1].to_owned(),

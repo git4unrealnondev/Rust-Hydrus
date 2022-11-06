@@ -1,5 +1,8 @@
 #![forbid(unsafe_code)]
-
+use crate::scr::jobs;
+use crate::scr::scraper;
+use crate::scr::sharedtypes::CommitType;
+use crate::scr::time;
 use crate::vec_of_strings;
 use ahash::AHashMap;
 use log::{error, info};
@@ -7,6 +10,9 @@ pub use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutp
 pub use rusqlite::{params, types::Null, Connection, Result, Transaction};
 use std::panic;
 use std::path::Path;
+
+use super::jobs::JobsRef;
+use super::sharedtypes;
 
 /// Returns an open connection to use.
 pub fn dbinit(dbpath: &String) -> Connection {
@@ -42,6 +48,7 @@ struct Memdb {
     _file_location: AHashMap<String, usize>,
 
     _jobs_max_id: usize,
+    _jobs_ref: AHashMap<usize, JobsRef>,
     _jobs_time: AHashMap<usize, usize>,
     _jobs_rep: AHashMap<usize, usize>,
     _jobs_site: AHashMap<usize, String>,
@@ -89,6 +96,7 @@ impl Memdb {
             _file_location: AHashMap::new(),
             _jobs_time: AHashMap::new(),
             _jobs_rep: AHashMap::new(),
+            _jobs_ref: AHashMap::new(),
             _jobs_site: AHashMap::new(),
             _jobs_param: AHashMap::new(),
             _jobs_commitunfinished: AHashMap::new(),
@@ -215,6 +223,11 @@ impl Memdb {
         ))
     }
 
+    fn jobs_add_new(&mut self, job: jobs::JobsRef) {
+        self._jobs_ref.insert(job._idindb, job);
+        self.max_jobs_increment();
+    }
+
     ///
     /// Adds job to memdb.
     ///
@@ -237,10 +250,32 @@ impl Memdb {
     }
 
     ///
+    /// Made job ref and adds job into db.
+    ///
+    fn jobref_new(
+        &mut self,
+        sites: String,
+        params: Vec<String>,
+        jobstime: usize,
+        jobsref: usize,
+        committype: CommitType,
+    ) {
+        let job = JobsRef {
+            _idindb: self._jobs_max_id,
+            _sites: sites,
+            _params: params,
+            _jobsref: jobsref,
+            _jobstime: jobstime,
+            _committype: committype,
+        };
+        self.jobs_add_new(job);
+    }
+
+    ///
     /// Checks if relationship exists in db.
     ///
-    fn relationship_get(&mut self, file: &usize, tag: &usize) -> bool {
-        if self._relationship_relate.contains_key(&(*file, *tag)) {
+    fn relationship_get(&self, file: usize, tag: usize) -> bool {
+        if self._relationship_relate.contains_key(&(file, tag)) {
             return true;
         }
 
@@ -281,6 +316,20 @@ impl Memdb {
         self._relationship_tagid.insert(tag, tag);
         self._relationship_relate
             .insert((file, tag), self._relationship_max_id);
+    }
+
+    ///
+    /// returns a immutable reference to the database's job table
+    ///
+    fn jobs_get_all(&self) -> &AHashMap<usize, JobsRef> {
+        &self._jobs_ref
+    }
+
+    ///
+    /// Returns job by refid inmemdb
+    ///
+    fn jobs_get_new(&self, id: &usize) -> &JobsRef {
+        &self._jobs_ref[id]
     }
 
     ///
@@ -353,7 +402,7 @@ impl Memdb {
     ///
     /// Gets a file from memdb via hash.
     ///
-    pub fn file_get_hash(&mut self, hash: &String) -> (usize, bool) {
+    pub fn file_get_hash(&self, hash: &String) -> (usize, bool) {
         if self._file_hash.contains_key(hash) {
             (self._file_hash[hash], true)
         } else {
@@ -377,7 +426,7 @@ impl Memdb {
     ///
     /// Does namespace contain key?
     ///
-    pub fn namespace_get(&mut self, name: &String) -> (usize, bool) {
+    pub fn namespace_get(&self, name: &String) -> (usize, bool) {
         if self._namespace_name.contains_key(name) {
             (self._namespace_name[name], true)
         } else {
@@ -451,18 +500,18 @@ impl Memdb {
     ///
     /// Does tags contain key?
     ///
-    pub fn tags_get(&mut self, tags: String, namespace: &usize) -> (usize, bool) {
+    pub fn tags_get(&self, tags: String, namespace: usize) -> (usize, bool) {
         if self
             ._tags_relate
-            .contains_key(&(tags.to_string(), *namespace))
+            .contains_key(&(tags.to_string(), namespace))
         {
             //let tagid = self._tags_name[&(tags.to_string(), namespace)];
 
-            let urin: usize = self._tags_relate[&(tags, *namespace)];
+            let urin: usize = self._tags_relate[&(tags, namespace)];
 
             (urin, true)
         } else {
-            (*namespace, false)
+            (namespace, false)
         }
     }
 
@@ -529,7 +578,7 @@ impl Main {
 
         //Preserves mutability of database while we have an active connection to database.
         let mut file_vec: Vec<(usize, String, String, String)> = Vec::new();
-        let mut job_vec: Vec<(usize, usize, String, String)> = Vec::new();
+        let mut job_vec: Vec<(usize, usize, String, String, CommitType)> = Vec::new();
         let mut parents_vec: Vec<(usize, String, String, usize)> = Vec::new();
         let mut namespace_vec: Vec<(usize, String, String)> = Vec::new();
         let mut relationship_vec: Vec<(usize, usize)> = Vec::new();
@@ -554,11 +603,13 @@ impl Main {
         while let Some(job) = jobs.next().unwrap() {
             let a1: String = job.get(0).unwrap();
             let b1: String = job.get(1).unwrap();
+            let c1: String = job.get(4).unwrap();
             let a: usize = a1.parse::<usize>().unwrap();
             let b: usize = b1.parse::<usize>().unwrap();
-            job_vec.push((a, b, job.get(2).unwrap(), job.get(3).unwrap()));
-            //self.jobs_add(a, b, job.get(2).unwrap(), job.get(3).unwrap(),true);
-            //self.jobs_add(a, b, job.get(2).unwrap(), job.get(3).unwrap(), false);
+            dbg!(&c1);
+            let c: CommitType = sharedtypes::stringto_commit_type(&c1);
+            dbg!(&c);
+            job_vec.push((a, b, job.get(2).unwrap(), job.get(3).unwrap(), c));
         }
 
         while let Some(name) = names.next().unwrap() {
@@ -632,7 +683,8 @@ impl Main {
             self.file_add(each.0, each.1, each.2, each.3, false);
         }
         for each in job_vec {
-            self.jobs_add(each.0, each.1, each.2, each.3, false, false);
+            self.jobs_add_new_todb(&each.2, &each.3, each.1, each.0, &each.4);
+            //self.jobs_add_main(&each.0, &each.1, &each.2, &each.4, &each.4);
         }
         for each in parents_vec {
             self.parents_add(each.0, each.1, each.2, each.3, false);
@@ -651,11 +703,63 @@ impl Main {
         }
     }
 
+    pub fn jobs_add_new_todb(
+        &mut self,
+        site: &String,
+        query: &String,
+        time_offset: usize,
+        current_time: usize,
+        committype: &CommitType,
+    ) {
+        let querya = query.split(" ").map(|s| s.to_string()).collect();
+        self._inmemdb.jobref_new(
+            site.to_string(),
+            querya,
+            current_time,
+            time_offset,
+            committype.clone(),
+        );
+    }
+
+    ///
+    /// New jobs adding management.
+    /// Will not add job to db is time is now.
+    ///
+    pub fn jobs_add_new(
+        &mut self,
+        site: &String,
+        query: &String,
+        time: &String,
+        committype: &CommitType,
+        addtodb: bool,
+    ) {
+        //let a1: String = time.to_string();
+        dbg!(&time);
+        let current_time: usize = time::time_secs();
+        let time_offset: usize = time::time_conv(time);
+
+        self.jobs_add_new_todb(site, query, time_offset, current_time, committype);
+        if addtodb {
+            let inp = "INSERT INTO Jobs VALUES(?, ?, ?, ?, ?)";
+            let _out = self._conn.execute(
+                inp,
+                params![
+                    current_time.to_string(),
+                    time_offset.to_string(),
+                    site,
+                    query,
+                    committype.to_string()
+                ],
+            );
+            self.db_commit_man();
+        }
+    }
+
     ///
     /// Adds job to system.
     /// Will not add job to system if time is now.
     ///
-    pub fn jobs_add_main(
+    pub fn jobs_add_maian(
         &mut self,
         jobs_time: String,
         jobs_rep: &str,
@@ -663,6 +767,7 @@ impl Main {
         jobs_param: String,
         does_loop: bool,
         jobs_commit: String,
+        jobs_todo: sharedtypes::CommitType,
     ) {
         //let time_offset: usize = time::time_conv(jobs_rep);
 
@@ -677,11 +782,26 @@ impl Main {
         let com: bool = jobs_commit.parse::<bool>().unwrap();
         if &jobs_time != "now" && does_loop {
             let b: usize = jobs_rep.parse::<usize>().unwrap();
-            self.jobs_add(a, b, jobs_site, jobs_param, com, true);
+            self.jobs_add(a, b, &jobs_site, &jobs_param, com, true, &jobs_todo);
         } else {
-            self.jobs_add(a, 0, jobs_site, jobs_param, com, false);
+            self.jobs_add(a, 0, &jobs_site, &jobs_param, com, false, &jobs_todo);
         }
     }
+
+    ///
+    /// Wrapper
+    ///
+    pub fn jobs_get_all(&self) -> &AHashMap<usize, JobsRef> {
+        self._inmemdb.jobs_get_all()
+    }
+
+    ///
+    /// Wrapper
+    ///
+    pub fn jobs_get_new(&self, id: &usize) -> &JobsRef {
+        self._inmemdb.jobs_get_new(id)
+    }
+
     ///
     /// Pull job by id
     /// TODO NEEDS TO ADD IN PROPER POLLING FROM DB.
@@ -881,8 +1001,8 @@ impl Main {
 
         // Making Jobs Table
         name = "Jobs".to_string();
-        keys = vec_of_strings!["time", "reptime", "site", "param"];
-        vals = vec_of_strings!["TEXT", "TEXT", "TEXT", "TEXT"];
+        keys = vec_of_strings!["time", "reptime", "site", "param", "CommitType"];
+        vals = vec_of_strings!["TEXT", "TEXT", "TEXT", "TEXT", "TEXT"];
         self.table_create(&name, &keys, &vals);
 
         self.transaction_flush();
@@ -1028,14 +1148,14 @@ impl Main {
     ///
     /// Wrapper
     ///
-    pub fn file_get_hash(&mut self, hash: &String) -> (usize, bool) {
+    pub fn file_get_hash(&self, hash: &String) -> (usize, bool) {
         self._inmemdb.file_get_hash(hash)
     }
 
     ///
     /// Wrapper
     ///
-    pub fn tag_get_name(&mut self, tag: String, namespace: &usize) -> (usize, bool) {
+    pub fn tag_get_name(&self, tag: String, namespace: usize) -> (usize, bool) {
         self._inmemdb.tags_get(tag, namespace)
     }
 
@@ -1132,7 +1252,7 @@ impl Main {
     }
 
     pub fn tag_add(&mut self, tags: String, parents: String, namespace: usize, addtodb: bool) {
-        let tags_grab: (usize, bool) = self._inmemdb.tags_get(tags.to_string(), &namespace);
+        let tags_grab: (usize, bool) = self._inmemdb.tags_get(tags.to_string(), namespace);
         let tag_id = self._inmemdb.tags_put(&tags, &namespace);
         //println!("{} {} {} {:?} {}", tags, namespace, addtodb, tags_grab, tag_id);
         if addtodb && !tags_grab.1 {
@@ -1155,7 +1275,7 @@ impl Main {
     /// Inherently trusts user user to not duplicate stuff.
     ///
     pub fn relationship_add(&mut self, file: usize, tag: usize, addtodb: bool) {
-        let existcheck = self._inmemdb.relationship_get(&file, &tag);
+        let existcheck = self._inmemdb.relationship_get(file, tag);
 
         if addtodb && !existcheck {
             let inp = "INSERT INTO Relationship VALUES(?, ?)";
@@ -1172,21 +1292,29 @@ impl Main {
         &mut self,
         time: usize,
         reptime: usize,
-        site: String,
-        param: String,
+        site: &String,
+        param: &String,
         filler: bool,
         addtodb: bool,
+        committype: &sharedtypes::CommitType,
     ) {
         if addtodb {
-            let inp = "INSERT INTO Jobs VALUES(?, ?, ?, ?)";
+            let inp = "INSERT INTO Jobs VALUES(?, ?, ?, ?, ?)";
             let _out = self._conn.execute(
                 inp,
-                params![&time.to_string(), &reptime.to_string(), &site, &param],
+                params![
+                    time.to_string(),
+                    reptime.to_string(),
+                    site,
+                    param,
+                    committype.to_string()
+                ],
             );
             self.db_commit_man();
         }
         dbg!(&filler, &addtodb);
-        self._inmemdb.jobs_add(time, reptime, site, param, filler);
+        self._inmemdb
+            .jobs_add(time, reptime, site.to_string(), param.to_string(), filler);
     }
 
     ///
@@ -1240,7 +1368,7 @@ impl Main {
                     urltonid.insert(each.to_string(), tags_namespace_id);
 
                 } else {*/
-                if !self._inmemdb.tags_get(each.to_string(), &url_id.0).1 {
+                if !self._inmemdb.tags_get(each.to_string(), url_id.0).1 {
                     urltoid.insert(each.to_string(), tags_namespace_id);
                 } else {
                     urltonid.insert(each.to_string(), tags_namespace_id);
