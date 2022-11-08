@@ -83,7 +83,7 @@ impl Jobs {
     ///
     pub fn jobs_run_new(&mut self, db: &mut database::Main) {
         let mut name_ratelimited: AHashMap<String, (u64, Duration)> = AHashMap::new();
-        let mut job_plus_ratelimit: AHashMap<JobsRef, InternalScraper> = AHashMap::new();
+        let mut job_plus_ratelimit: AHashMap<InternalScraper, Vec<JobsRef>> = AHashMap::new();
         let mut job_plus_storeddata: AHashMap<String, String> = AHashMap::new();
 
         // Checks if their are no jobs to run.
@@ -96,13 +96,16 @@ impl Jobs {
 
         for scrape in self.scrapermanager.scraper_get() {
             let name_result = db.settings_get_name(&format!("{:?}_{}", scrape._type, scrape._name));
+            let mut info = String::new();
+            
+            // Handles loading of settings into DB.Either Manual or Automatic to describe the functionallity
             match name_result {
                 Ok(_) => {
-                    dbg!(name_result);
+                    //dbg!(name_result);
+                    info = name_result.unwrap().1;
                 }
                 Err(_) => {
                     let isolatedtitle = format!("{:?}_{}", scrape._type, scrape._name);
-                    dbg!();
 
                     let (cookie, cookie_name) = self.library_cookie_needed(scrape);
 
@@ -110,14 +113,13 @@ impl Jobs {
                         isolatedtitle,
                         "Automatic Scraper".to_owned(),
                         0,
-                        cookie_name,
+                        cookie_name.clone(),
                         true,
                     );
-
-                    //let (scrapertype, data) = self.scrapermanager.cookie_needed(eacha);
-                    //dbg!(scrapertype, data);
+                    info = cookie_name;
                 }
             }
+            dbg!(&info);
         }
 
         for each in 0..self._jobstorun.len() {}

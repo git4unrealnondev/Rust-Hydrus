@@ -5,16 +5,16 @@ use std::fs;
 use std::path::Path;
 use std::time::Duration;
 
-use super::sharedtypes::{ScraperType, self};
+use super::sharedtypes::ScraperType;
 
 static SUPPORTED_VERS: usize = 0;
-#[derive(Debug, Clone, PartialEq,Hash, Eq)]
+#[derive(Debug, Clone, PartialEq, Hash, Eq)]
 pub struct InternalScraper {
     pub _version: usize,
     pub _name: String,
     pub _sites: Vec<String>,
     pub _ratelimit: (u64, Duration),
-    pub _type: sharedtypes::ScraperType,
+    pub _type: ScraperType,
 }
 
 ///
@@ -29,7 +29,7 @@ impl InternalScraper {
             _name: "test.to_string".to_string(),
             _sites: crate::vec_of_strings!("example", "example1"),
             _ratelimit: (2, Duration::from_secs(2)),
-            _type: sharedtypes::ScraperType::Automatic,
+            _type: ScraperType::Automatic,
         }
     }
     pub fn version_get(&self) -> usize {
@@ -110,20 +110,19 @@ impl ScraperManager {
 
             if Path::new(&path).exists() {
                 self._string.push(path.to_string());
-                
-                let lib = unsafe { libloading::Library::new(&path).unwrap() };
-                
-                let funtwo: Result<
-                libloading::Symbol<unsafe extern "C" fn() -> InternalScraper>,
-                libloading::Error,
-            > = unsafe { lib.get(b"new") };
 
-            let pulled_successfully = unsafe {funtwo.unwrap()()};
-            // Loads version in memsafe way from scraper
-            //let scraper = unsafe { funtwo.as_ref().unwrap()() };
-                
-                self._library
-                    .insert(pulled_successfully, lib);
+                let lib = unsafe { libloading::Library::new(&path).unwrap() };
+
+                let funtwo: Result<
+                    libloading::Symbol<unsafe extern "C" fn() -> InternalScraper>,
+                    libloading::Error,
+                > = unsafe { lib.get(b"new") };
+
+                let pulled_successfully = unsafe { funtwo.unwrap()() };
+                // Loads version in memsafe way from scraper
+                //let scraper = unsafe { funtwo.as_ref().unwrap()() };
+
+                self._library.insert(pulled_successfully, lib);
             } else {
                 let err = format!(
                     "Loading scraper couInternalScraper::neld not find {}",
@@ -135,7 +134,7 @@ impl ScraperManager {
         for each in &mut self._library {
             //let mut internal: Vec<libloading::Symbol<unsafe extern  fn() -> InternalScraper>> = Vec::new();
             //let mut internal = Vec::new();
-            
+
             let version = each.0.version_get();
 
             if version < SUPPORTED_VERS {
@@ -150,15 +149,13 @@ impl ScraperManager {
 
             //let sites: Vec<String> = scraper.sites_get();
 
-        //    self._sites.push(sites);
+            //    self._sites.push(sites);
             self._scraper.push(each.0.clone());
-            //unsafe{println!("{:?}", internal[0]().version_get());}
-        }   }
+        }
     }
     pub fn url_load(&mut self, id: &InternalScraper, params: Vec<String>) -> Vec<String> {
-        let temp: libloading::Symbol<unsafe extern "C" fn(&Vec<String>) -> Vec<String
-            
-                unsafe { self._library[id].get(b"url_get\0").unwrap() };
+        let temp: libloading::Symbol<unsafe extern "C" fn(&Vec<String>) -> Vec<String>> =
+            unsafe { self._library[id].get(b"url_get\0").unwrap() };
         unsafe { temp(&params) }
     }
     pub fn url_dump(&self, id: &InternalScraper, params: Vec<String>) -> Vec<String> {
@@ -202,4 +199,5 @@ impl ScraperManager {
         let temp: libloading::Symbol<unsafe extern "C" fn() -> bool> =
             unsafe { self._library[id].get(b"scraper_download\0").unwrap() };
         unsafe { temp() }
-}}}   
+    }
+}

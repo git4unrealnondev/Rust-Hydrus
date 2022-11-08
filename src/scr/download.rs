@@ -92,12 +92,12 @@ pub async fn dltext(
         //respvec.push(resp);
         println!("Getting DATA FROM URL len: {}.", &respvec.len());
 
-        match parser.parser_call(uintref, &st) {
+        /*match parser.parser_call(uintref, &st) {
             Ok(_) => (),
             Err(_) => break,
         }
 
-        test.insert(cnt.to_string(), parser.parser_call(uintref, &st).unwrap());
+        test.insert(cnt.to_string(), parser.parser_call(uintref, &st).unwrap());*/
     }
     test
 }
