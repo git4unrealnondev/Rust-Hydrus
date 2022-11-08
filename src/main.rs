@@ -190,7 +190,7 @@ fn main() {
     );*/
 
     jobmanager.jobs_get(&data);
-    //jobmanager.jobs_run(&mut data);
+    jobmanager.jobs_run_new(&mut data);
 
     //Finalizing wrapup.
     data.transaction_flush();

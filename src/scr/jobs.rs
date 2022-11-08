@@ -1,13 +1,15 @@
+use super::sharedtypes::CommitType;
+use super::sharedtypes::ScraperType;
 use crate::scr::database;
 use crate::scr::download;
 use crate::scr::file;
 use crate::scr::scraper;
+use crate::scr::scraper::InternalScraper;
 use crate::scr::time;
 use ahash::AHashMap;
 use log::info;
 use std::time::Duration;
-
-use super::sharedtypes::CommitType;
+use strum::IntoEnumIterator;
 
 pub struct Jobs {
     _jobid: Vec<u128>,
@@ -16,7 +18,7 @@ pub struct Jobs {
     _params: Vec<Vec<String>>,
     //References jobid in _inmemdb hashmap :D
     _jobstorun: Vec<usize>,
-    _jobref: AHashMap<usize, JobsRef>,
+    _jobref: AHashMap<usize, (JobsRef, scraper::InternalScraper)>,
     scrapermanager: scraper::ScraperManager,
 }
 #[derive(Debug, Clone)]
@@ -53,33 +55,110 @@ impl Jobs {
         self._secs = time::time_secs();
         let ttl = db.jobs_get_max();
         let hashjobs = db.jobs_get_all();
-        let beans = self.scrapermanager.sites_get();
+        let beans = self.scrapermanager.scraper_get();
+        dbg!(&hashjobs);
         dbg!(&beans);
         for each in hashjobs {
             if time::time_secs() >= each.1._jobsref + each.1._jobstime {
                 for eacha in beans {
-                    if eacha.contains(&each.1._sites) {
-                        self._jobref.insert(*each.0, each.1.clone());
+                    if eacha._sites.contains(&each.1._sites) {
+                        self._jobref
+                            .insert(*each.0, (each.1.clone(), eacha.clone()));
                     }
                 }
             }
         }
-        dbg!(&self._jobref);
         let msg = format!(
             "Loaded {} jobs out of {} jobs. Didn't load {} Jobs due to lack of scrapers or timing.",
             &self._jobref.len(),
             db.jobs_get_max(),
-             db.jobs_get_max() - &self._jobref.len(),
+            db.jobs_get_max() - &self._jobref.len(),
         );
         info!("{}", msg);
         println!("{}", msg);
     }
 
     ///
+    /// Runs jobs in a much more sane matter
+    ///
+    pub fn jobs_run_new(&mut self, db: &mut database::Main) {
+        let mut name_ratelimited: AHashMap<String, (u64, Duration)> = AHashMap::new();
+        let mut job_plus_ratelimit: AHashMap<JobsRef, InternalScraper> = AHashMap::new();
+        let mut job_plus_storeddata: AHashMap<String, String> = AHashMap::new();
+
+        // Checks if their are no jobs to run.
+        if self.scrapermanager.scraper_get().is_empty() || self._jobref.is_empty() {
+            println!("No jobs to run...");
+            return;
+        }
+
+        // Appends ratelimited into hashmap for multithread scraper.
+
+        for scrape in self.scrapermanager.scraper_get() {
+            let name_result = db.settings_get_name(&format!("{:?}_{}", scrape._type, scrape._name));
+            match name_result {
+                Ok(_) => {
+                    dbg!(name_result);
+                }
+                Err(_) => {
+                    let isolatedtitle = format!("{:?}_{}", scrape._type, scrape._name);
+                    dbg!();
+
+                    let (cookie, cookie_name) = self.library_cookie_needed(scrape);
+
+                    db.setting_add(
+                        isolatedtitle,
+                        "Automatic Scraper".to_owned(),
+                        0,
+                        cookie_name,
+                        true,
+                    );
+
+                    //let (scrapertype, data) = self.scrapermanager.cookie_needed(eacha);
+                    //dbg!(scrapertype, data);
+                }
+            }
+        }
+
+        for each in 0..self._jobstorun.len() {}
+
+        /*for each in &self._jobref {
+            for eacha in self.scrapermanager.scraper_get() {
+                dbg!(&eacha);
+                if &each.1 .1 == eacha && !name_ratelimited.contains_key(&each.1 .1._name) {
+                    let scrap = ScraperType::iter();
+                    for eachb in scrap {
+                        name_ratelimited.insert(each.1 .1._name.to_string(), each.1 .1._ratelimit);
+                        //let type = each.1.1.url_get() ;
+                        let name_result = db.settings_get_name(&format!(
+                            "{:?}_{}",
+                            eachb,
+                            each.1 .1._name.to_string()
+                        ));
+                        match name_result {
+                            Ok(_) => {
+                                dbg!(name_result);
+                            }
+                            Err(_) => {
+                                dbg!(eachb, name_result);
+
+                                let (scrapertype, data) = self.scrapermanager.cookie_needed(eacha);
+                                dbg!(scrapertype, data);
+                            }
+                        }
+                    }
+                } else {
+                    continue;
+                }
+            }
+        }*/
+        dbg!(name_ratelimited);
+    }
+
+    ///
     /// Runs jobs as they are needed to.
     ///
-
-    pub fn jobs_run(&mut self, db: &mut database::Main) {
+    /*pub fn jobs_run(&mut self, db: &mut database::Main) {
         // Sets up and checks scrapers
 
         let loaded_params: AHashMap<u128, Vec<String>> = AHashMap::new();
@@ -229,7 +308,7 @@ impl Jobs {
                 }
             }
         }
-    }
+    }*/
 
     /// ALL of the lower functions are just wrappers for the scraper library.
     /// This is nice because their's no unsafe code anywhere else inside code base.
@@ -237,7 +316,7 @@ impl Jobs {
     ///
     /// Returns a url to grab for.
     ///
-    pub fn library_url_get(&mut self, memid: usize, params: &[String]) -> Vec<String> {
+    pub fn library_url_get(&mut self, memid: &InternalScraper, params: &[String]) -> Vec<String> {
         self.scrapermanager.url_load(memid, params.to_vec())
     }
 
@@ -246,7 +325,7 @@ impl Jobs {
     ///
     pub fn library_parser_call(
         &mut self,
-        memid: usize,
+        memid: &InternalScraper,
         params: &String,
     ) -> Result<AHashMap<String, AHashMap<String, Vec<String>>>, &'static str> {
         self.scrapermanager.parser_call(memid, params)
@@ -255,20 +334,20 @@ impl Jobs {
     ///
     /// Returns a url to grab for.
     ///
-    pub fn library_url_dump(&mut self, memid: usize, params: &[String]) -> Vec<String> {
+    pub fn library_url_dump(&mut self, memid: &InternalScraper, params: &[String]) -> Vec<String> {
         self.scrapermanager.url_dump(memid, params.to_vec())
     }
     ///
     /// pub fn cookie_needed(&mut self, id: usize, params: String) -> (bool, String)
     ///
-    pub fn library_cookie_needed(&self, memid: usize, params: String) -> (String, String) {
-        self.scrapermanager.cookie_needed(memid, params)
+    pub fn library_cookie_needed(&self, memid: &InternalScraper) -> (ScraperType, String) {
+        self.scrapermanager.cookie_needed(memid)
     }
 
     ///
     /// Tells system if scraper should handle downloads.
     ///
-    pub fn library_download_get(&self, memid: usize) -> bool {
+    pub fn library_download_get(&self, memid: &InternalScraper) -> bool {
         self.scrapermanager.scraper_download_get(memid)
     }
 }

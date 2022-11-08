@@ -7,28 +7,33 @@ use std::io::BufRead;
 use std::io::Write;
 use std::time::Duration;
 
+#[path = "../../../src/scr/sharedtypes.rs"]
+mod sharedtypes;
+
 #[macro_export]
 macro_rules! vec_of_strings {
     ($($x:expr),*) => (vec![$($x.to_string()),*]);
 }
 
 pub struct InternalScraper {
-    _version: f32,
+    _version: usize,
     _name: String,
     _sites: Vec<String>,
     _ratelimit: (u64, Duration),
+    _type: sharedtypes::ScraperType,
 }
 
 impl InternalScraper {
     pub fn new() -> Self {
         InternalScraper {
-            _version: 0.001,
+            _version: 0,
             _name: "e6scraper".to_string(),
             _sites: vec_of_strings!("e6", "e621", "e621.net"),
             _ratelimit: (2, Duration::from_secs(1)),
+            _type: sharedtypes::ScraperType::Automatic,
         }
     }
-    pub fn version_get(&self) -> f32 {
+    pub fn version_get(&self) -> usize {
         return self._version;
     }
     pub fn name_get(&self) -> &String {
@@ -110,14 +115,14 @@ pub fn url_dump(params: &Vec<String>) -> Vec<String> {
 /// Returns bool true or false if a cookie is needed. If so return the cookie name in storage
 ///
 #[no_mangle]
-pub fn cookie_needed() -> (String, String) {
+pub fn cookie_needed() -> (sharedtypes::ScraperType, String) {
     println!("Enter E6 Username");
     let user = io::stdin().lock().lines().next().unwrap().unwrap();
     println!("Enter E6 API Key");
     let api = io::stdin().lock().lines().next().unwrap().unwrap();
 
     return (
-        "manual".to_string(),
+        sharedtypes::ScraperType::Manual,
         format!("?login={}&api_key={}", user, api),
     );
 }

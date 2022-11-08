@@ -18,6 +18,12 @@ impl fmt::Display for CommitType {
     }
 }
 
+#[derive(Debug, EnumIter, Clone, PartialEq, Hash, Eq)]
+pub enum ScraperType {
+    Manual,
+    Automatic,
+}
+
 #[derive(Debug)]
 pub struct jobs_add {
     pub site: String,

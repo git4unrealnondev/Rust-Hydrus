@@ -17,6 +17,8 @@ use tower::ServiceExt;
 use url::Url;
 extern crate cloudflare_bypasser;
 extern crate reqwest;
+use crate::scr::scraper::InternalScraper;
+
 ///
 /// Makes ratelimiter and example
 ///
@@ -41,7 +43,7 @@ pub async fn ratelimiter_create(time: (u64, Duration)) -> RateLimit<Client> {
 pub async fn dltext(
     url_vec: Vec<String>,
     parser: &mut scraper::ScraperManager,
-    uintref: usize,
+    uintref: &InternalScraper,
 ) -> AHashMap<String, AHashMap<String, AHashMap<String, Vec<String>>>> {
     let respvec: Vec<Response> = Vec::new();
     let retvec: Vec<String> = Vec::new();
