@@ -34,7 +34,7 @@ strum = "0.24.1"
 strum_macros = "0.24.3"
 
 [profile.release]
-opt-level = "z"
+opt-level = 3
 lto=true
 codegenunits=1
 strip = true

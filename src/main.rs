@@ -2,6 +2,7 @@ use crate::scr::sharedtypes::jobs_add;
 use crate::scr::sharedtypes::AllFields::EJobsAdd;
 use log::{error, info, warn};
 use std::path::Path;
+use std::sync::{Arc, Mutex};
 extern crate ratelimit;
 
 mod scr {
@@ -14,6 +15,7 @@ mod scr {
     pub mod plugins;
     pub mod scraper;
     pub mod sharedtypes;
+    pub mod threading;
     pub mod time;
 }
 
@@ -190,11 +192,22 @@ fn main() {
     );*/
 
     jobmanager.jobs_get(&data);
-    jobmanager.jobs_run_new(&mut data);
+
+    // Converts db into Arc for multithreading
+    let mut arc = Arc::new(Mutex::new(data));
+
+    // Creates a threadhandler that manages callable threads.
+    let mut threadhandler = scr::threading::threads::new();
+    dbg!("a");
+    jobmanager.jobs_run_new(&mut arc.clone(), &mut threadhandler);
+    dbg!("b");
+    //let test =
 
     //Finalizing wrapup.
-    data.transaction_flush();
-    data.transaction_close();
+
+    //jobmanager.jobs_cleanup();
+    arc.lock().unwrap().transaction_flush();
+    arc.lock().unwrap().transaction_close();
     info!("UNLOADING");
     log::logger().flush();
 }

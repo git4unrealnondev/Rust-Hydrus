@@ -5,9 +5,13 @@ use crate::scr::download;
 use crate::scr::file;
 use crate::scr::scraper;
 use crate::scr::scraper::InternalScraper;
+use crate::scr::threading;
 use crate::scr::time;
 use ahash::AHashMap;
+use http::uri::Authority;
 use log::info;
+use std::collections::hash_map::Entry;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use strum::IntoEnumIterator;
 
@@ -81,10 +85,17 @@ impl Jobs {
     ///
     /// Runs jobs in a much more sane matter
     ///
-    pub fn jobs_run_new(&mut self, db: &mut database::Main) {
-        let mut name_ratelimited: AHashMap<String, (u64, Duration)> = AHashMap::new();
-        let mut job_plus_ratelimit: AHashMap<InternalScraper, Vec<JobsRef>> = AHashMap::new();
-        let mut job_plus_storeddata: AHashMap<String, String> = AHashMap::new();
+    pub fn jobs_run_new(
+        &mut self,
+        adb: &mut Arc<Mutex<database::Main>>,
+        thread: &mut threading::threads,
+    ) {
+        let mut dba = adb.clone();
+        let mut db = dba.lock().unwrap();
+
+        //let mut name_ratelimited: AHashMap<String, (u64, Duration)> = AHashMap::new();
+        let mut scraper_and_job: AHashMap<InternalScraper, Vec<JobsRef>> = AHashMap::new();
+        //let mut job_plus_storeddata: AHashMap<String, String> = AHashMap::new();
 
         // Checks if their are no jobs to run.
         if self.scrapermanager.scraper_get().is_empty() || self._jobref.is_empty() {
@@ -93,11 +104,10 @@ impl Jobs {
         }
 
         // Appends ratelimited into hashmap for multithread scraper.
-
         for scrape in self.scrapermanager.scraper_get() {
             let name_result = db.settings_get_name(&format!("{:?}_{}", scrape._type, scrape._name));
             let mut info = String::new();
-            
+
             // Handles loading of settings into DB.Either Manual or Automatic to describe the functionallity
             match name_result {
                 Ok(_) => {
@@ -119,10 +129,42 @@ impl Jobs {
                     info = cookie_name;
                 }
             }
-            dbg!(&info);
+            // Loops through all jobs in the ref. Adds ref into
+            for each in &self._jobref {
+                let job = each.1;
+
+                // Checks job type. If manual then scraper handles ALL calls from here on.
+                // If Automatic then jobs will handle it.
+                match job.1._type {
+                    ScraperType::Manual => {}
+                    ScraperType::Automatic => {
+                        // Checks if InternalScraper types are the same data.
+                        if &job.1 == scrape {
+                            match scraper_and_job.entry(job.1.clone()) {
+                                Entry::Vacant(e) => {
+                                    e.insert(vec![job.0.clone()]);
+                                }
+                                Entry::Occupied(mut e) => {
+                                    e.get_mut().push(job.0.clone());
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
 
-        for each in 0..self._jobstorun.len() {}
+        dbg!(&scraper_and_job.len(), &scraper_and_job);
+        //thread.lock().unwrap().creates_thread_pool(scraper_and_job.len());
+        dbg!("c");
+        // Loops through each InternalScraper and creates a thread for it.
+        for each in scraper_and_job {
+            let scraper = each.0;
+            let jobs = each.1;
+            dbg!("d");
+            thread.startwork(scraper, jobs, adb);
+            dbg!("e");
+        }
 
         /*for each in &self._jobref {
             for eacha in self.scrapermanager.scraper_get() {
@@ -154,7 +196,7 @@ impl Jobs {
                 }
             }
         }*/
-        dbg!(name_ratelimited);
+        //dbg!(name_ratelimited);
     }
 
     ///

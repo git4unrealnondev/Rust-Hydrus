@@ -1,6 +1,6 @@
 //extern crate urlparse;
+use super::scraper;
 use crate::scr::file;
-use crate::scr::scraper;
 use ahash::AHashMap;
 use http::Method;
 use reqwest::{Client, Request, Response};
@@ -17,21 +17,28 @@ use tower::ServiceExt;
 use url::Url;
 extern crate cloudflare_bypasser;
 extern crate reqwest;
+use super::database;
 use crate::scr::scraper::InternalScraper;
+use std::marker::Sync;
+use std::sync::Arc;
 
 ///
 /// Makes ratelimiter and example
 ///
+pub fn ratelimiter_create(time: u64, duration: Duration, db: &database::Main) -> RateLimit<Client> {
+    let useragent = db
+        .settings_get_name(&"DEFAULTUSERAGENT".to_owned())
+        .unwrap()
+        .1;
 
-pub async fn ratelimiter_create(time: (u64, Duration)) -> RateLimit<Client> {
     // The client that does the downloading
     let client = reqwest::ClientBuilder::new()
-        .user_agent("RUST-HYDRUS V0.1")
+        .user_agent(useragent)
         .build()
         .unwrap();
     // The wrapper that implements ratelimiting
     tower::ServiceBuilder::new()
-        .rate_limit(time.0, time.1)
+        .rate_limit(time, duration)
         .service(client)
 }
 
@@ -39,7 +46,7 @@ pub async fn ratelimiter_create(time: (u64, Duration)) -> RateLimit<Client> {
 /// time.0 is the requests per time.1cargo run -- job --add e6 "test female male" now false
 /// time.1 is number of total seconds per time slot
 ///
-#[tokio::main]
+
 pub async fn dltext(
     url_vec: Vec<String>,
     parser: &mut scraper::ScraperManager,

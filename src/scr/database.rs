@@ -85,6 +85,7 @@ struct Memdb {
 /// Functions for working with memorory db.
 /// Uses AHash for maximum speed.
 #[allow(dead_code)]
+
 impl Memdb {
     pub fn new() -> Self {
         Memdb {
@@ -1041,7 +1042,7 @@ impl Main {
             "DEFAULTUSERAGENT".to_string(),
             "None".to_string(),
             0,
-            "DIYHydrus/5.0 (Windows NT x.y; rv:10.0) Gecko/20100101 DIYHydrus/10.0".to_string(),
+            "DIYHydrus/1.0".to_string(),
             true,
         );
         self.setting_add(
