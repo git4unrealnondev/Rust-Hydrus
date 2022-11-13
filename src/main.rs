@@ -45,28 +45,22 @@ fn makedb(dbloc: &str) -> scr::database::Main {
 
     // dbcon is database connector
 
-    let dbcon = scr::database::dbinit(&path);
+    let mut dbcon = scr::database::dbinit(&path);
 
     let mut data = scr::database::Main::new(dbcon, path, vers.try_into().unwrap());
-    data.db_open();
 
-    data.vacuum();
-
-    data.transaction_start();
-
-    if !dbexist {
-        data.first_db();
-        data.updatedb();
-        data.db_commit_man_set();
-    } else {
-        println!("Database Exists: {} : Skipping creation.", dbexist);
-        info!("Database Exists: {} : Skipping creation.", dbexist);
-    }
-
-    data.load_mem();
+    //let dbcon =
+    //data.load_mem(&mut data._conn);
 
     data
 }
+/*
+opt-level = 3
+lto="fat"
+codegenunits=1
+strip = true
+panic = "abort"
+*/
 
 /// Gets file setup out of main.
 /// Checks if null data was written to data.

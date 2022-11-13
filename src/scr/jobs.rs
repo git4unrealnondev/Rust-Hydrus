@@ -76,7 +76,7 @@ impl Jobs {
             "Loaded {} jobs out of {} jobs. Didn't load {} Jobs due to lack of scrapers or timing.",
             &self._jobref.len(),
             db.jobs_get_max(),
-            db.jobs_get_max() - &self._jobref.len(),
+            db.jobs_get_max() - self._jobref.len(),
         );
         info!("{}", msg);
         println!("{}", msg);

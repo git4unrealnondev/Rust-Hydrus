@@ -6,7 +6,6 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-
 libloading = "0.7.3"
 reqwest = { version = "0.11.11", features = ["brotli", "blocking"] }
 tokio = { version = "1", features = ["full"] }
@@ -35,7 +34,7 @@ strum_macros = "0.24.3"
 
 [profile.release]
 opt-level = 3
-lto=true
 codegenunits=1
 strip = true
 panic = "abort"
+lto=true
