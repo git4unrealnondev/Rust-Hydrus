@@ -2,7 +2,7 @@ use std::fmt;
 use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
 
-#[derive(Debug, EnumIter, Clone)]
+#[derive(Debug, EnumIter, Clone, Eq, Hash, PartialEq)]
 pub enum CommitType {
     StopOnNothing,
     StopOnFile,

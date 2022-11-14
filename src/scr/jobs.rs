@@ -154,16 +154,16 @@ impl Jobs {
             }
         }
 
-        dbg!(&scraper_and_job.len(), &scraper_and_job);
-        //thread.lock().unwrap().creates_thread_pool(scraper_and_job.len());
-        dbg!("c");
         // Loops through each InternalScraper and creates a thread for it.
         for each in scraper_and_job {
             let scraper = each.0;
+
+            // Captures the libloading library from the _library.
+            // Removes item from hashmap so the thread can have ownership of libloaded scraper.
+            let scrap = self.scrapermanager._library.remove(&scraper).unwrap();
             let jobs = each.1;
-            dbg!("d");
-            thread.startwork(scraper, jobs, adb);
-            dbg!("e");
+
+            thread.startwork(scraper, jobs, adb, scrap);
         }
 
         /*for each in &self._jobref {
@@ -197,6 +197,10 @@ impl Jobs {
             }
         }*/
         //dbg!(name_ratelimited);
+    }
+
+    pub fn dumpurl(&self, scraperone: &InternalScraper, job: &JobsRef) -> Vec<String> {
+        self.library_url_dump(scraperone, &job._params)
     }
 
     ///
@@ -361,7 +365,9 @@ impl Jobs {
     /// Returns a url to grab for.
     ///
     pub fn library_url_get(&mut self, memid: &InternalScraper, params: &[String]) -> Vec<String> {
-        self.scrapermanager.url_load(memid, params.to_vec())
+        let libloading = self.scrapermanager.returnlibloading(memid);
+        scraper::url_load(libloading, params.to_vec())
+        //self.scrapermanager.url_load(memid, params.to_vec())
     }
 
     ///
@@ -372,26 +378,34 @@ impl Jobs {
         memid: &InternalScraper,
         params: &String,
     ) -> Result<AHashMap<String, AHashMap<String, Vec<String>>>, &'static str> {
-        self.scrapermanager.parser_call(memid, params)
+        let libloading = self.scrapermanager.returnlibloading(memid);
+        scraper::parser_call(libloading, params)
+        //self.scrapermanager.parser_call(memid, params)
     }
 
     ///
     /// Returns a url to grab for.
     ///
-    pub fn library_url_dump(&mut self, memid: &InternalScraper, params: &[String]) -> Vec<String> {
-        self.scrapermanager.url_dump(memid, params.to_vec())
+    pub fn library_url_dump(&self, memid: &InternalScraper, params: &[String]) -> Vec<String> {
+        let libloading = self.scrapermanager.returnlibloading(memid);
+        scraper::url_dump(libloading, params.to_vec())
+        //self.scrapermanager.url_dump(memid, params.to_vec())
     }
     ///
     /// pub fn cookie_needed(&mut self, id: usize, params: String) -> (bool, String)
     ///
     pub fn library_cookie_needed(&self, memid: &InternalScraper) -> (ScraperType, String) {
-        self.scrapermanager.cookie_needed(memid)
+        let libloading = self.scrapermanager.returnlibloading(memid);
+        scraper::cookie_need(libloading)
+        //self.scrapermanager.cookie_needed(memid)
     }
 
     ///
     /// Tells system if scraper should handle downloads.
     ///
     pub fn library_download_get(&self, memid: &InternalScraper) -> bool {
-        self.scrapermanager.scraper_download_get(memid)
+        let libloading = self.scrapermanager.returnlibloading(memid);
+        scraper::scraper_download_get(libloading)
+        //self.scrapermanager.scraper_download_get(memid)
     }
 }

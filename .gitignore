@@ -32,3 +32,8 @@ Cargo.lock
 /Cargo.lock
 scrapers/e6scraper/target
 Files
+notes.txt
+**.svg
+**.old
+**.data
+**.folded
