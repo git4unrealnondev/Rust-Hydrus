@@ -10,11 +10,11 @@ use super::sharedtypes::ScraperType;
 static SUPPORTED_VERS: usize = 0;
 #[derive(Debug, Clone, PartialEq, Hash, Eq)]
 pub struct InternalScraper {
-    pub _version: usize,
-    pub _name: String,
-    pub _sites: Vec<String>,
-    pub _ratelimit: (u64, Duration),
-    pub _type: ScraperType,
+    pub _version: usize, //Version of the scraper
+    pub _name: String, // Name of the scraper
+    pub _sites: Vec<String>, // Sites supported by scraper
+    pub _ratelimit: (u64, Duration), // Ratelimiter object that has yet to be created.
+    pub _type: ScraperType, // What type of scraper to use in matching.
 }
 
 ///

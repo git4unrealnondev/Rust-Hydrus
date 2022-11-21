@@ -9,6 +9,7 @@ use sha2::Sha512;
 use std::collections::HashMap;
 use std::fs;
 use std::io;
+use futures;
 use std::io::Cursor;
 use std::time::Duration;
 use tower::limit::RateLimit;
@@ -19,27 +20,94 @@ extern crate cloudflare_bypasser;
 extern crate reqwest;
 use super::database;
 use crate::scr::scraper::InternalScraper;
+use async_executor::Executor;
+use itertools::Itertools;
 use std::marker::Sync;
 use std::sync::Arc;
+use libloading::Library;
 
 ///
 /// Makes ratelimiter and example
 ///
-pub fn ratelimiter_create(time: u64, duration: Duration, db: &database::Main) -> RateLimit<Client> {
-    let useragent = db
-        .settings_get_name(&"DEFAULTUSERAGENT".to_owned())
-        .unwrap()
-        .1;
-
+pub fn ratelimiter_create(time: u64, duration: Duration) -> RateLimit<Client> {
+    let useragent = "RUSTHYDRUS V0.1".to_string();
     // The client that does the downloading
     let client = reqwest::ClientBuilder::new()
-        .user_agent(useragent)
+        //.user_agent(useragent)
         .build()
         .unwrap();
     // The wrapper that implements ratelimiting
     tower::ServiceBuilder::new()
         .rate_limit(time, duration)
         .service(client)
+}
+
+///
+/// Downloads text into db as responses. Filters responses by default limit if their's anything wrong with request.
+///
+
+pub async fn dltext_new(ratelimi: (u64, Duration), url_vec: Vec<String>, liba: &Library) -> Vec<AHashMap<String, AHashMap<String, Vec<String>>>> {
+    let mut ret = Vec::new();
+    let ex = Executor::new();
+    // Super Ganky Way of doing this. splits the vec into a vec of vec<String>. Minimizes the total number of requests at a time.
+    let chunks: Vec<Vec<String>> = url_vec
+        .into_iter()
+        .chunks(1)
+        .into_iter()
+        .map(|c| c.collect())
+        .collect();
+    let mut ratelimit = ratelimiter_create(ratelimi.0, ratelimi.1);
+    //dbg!(chunks);
+    //panic!();
+    let client = reqwest::ClientBuilder::new()
+        //.user_agent(useragent)
+        .build()
+        .unwrap();
+
+    for chunkvec in chunks {
+       // let mut fut = Vec::new();
+        for urlstring in chunkvec {
+            let url = Url::parse(&urlstring).unwrap();
+            //let url = Url::parse("http://www.google.com").unwrap();
+            
+            
+            dbg!(&url);
+            let requestit = Request::new(Method::GET, url);
+            //fut.push();
+            let test = ratelimit.ready().await.unwrap().call(requestit);
+            //let test = reqwest::get(url).await.unwrap().text();
+
+            let temp = test.await;
+            dbg!(temp);
+            dbg!("Spawned");
+            
+        }
+        dbg!("Done");
+        /*for each in fut {
+            let test = ex.run(each).await.unwrap();
+            dbg!("Waited");
+            if test.status() != 200 {panic!("ERROR CODE {} on {}", test.status(), test.url())}
+            
+            let st: String = test.text().await.unwrap().to_string();
+            dbg!("two");
+            // Calls the parser to parse the data.
+            let scrap = scraper::parser_call(liba, &st);
+            dbg!(&scrap);
+            match scrap {
+                Ok(_) => {ret.push(scrap.unwrap());},
+                Err(_) => {break}
+            }
+            
+            
+        }*/
+        //for each in fut {
+        //    dbg!(futures::(ex.run(each)));
+        //}
+        break
+        
+    }
+
+    ret
 }
 
 ///
@@ -112,7 +180,6 @@ pub async fn dltext(
 ///
 /// Download file
 ///
-#[tokio::main]
 pub async fn file_download(
     url_vec: &String,
     location: &String,

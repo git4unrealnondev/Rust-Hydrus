@@ -7,17 +7,18 @@ use crate::vec_of_strings;
 use ahash::AHashMap;
 use log::{error, info};
 //use nohash_hasher::NoHashHasher;
+use super::jobs::JobsRef;
+use super::sharedtypes;
 use nohash_hasher::BuildNoHashHasher;
 use nohash_hasher::IntMap;
 use nohash_hasher::NoHashHasher;
 pub use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, ValueRef};
 pub use rusqlite::{params, types::Null, Connection, Result, Transaction};
+use std::borrow::BorrowMut;
+use std::cell::RefCell;
 use std::panic;
 use std::path::Path;
 use std::{collections::HashMap, hash::BuildHasherDefault};
-
-use super::jobs::JobsRef;
-use super::sharedtypes;
 
 /// Returns an open connection to use.
 pub fn dbinit(dbpath: &String) -> Connection {
@@ -25,10 +26,226 @@ pub fn dbinit(dbpath: &String) -> Connection {
     Connection::open(&dbpath).unwrap()
 }
 
+///
+/// Pulls db into memdb.
+/// main: &mut Main, conn: &Connection
+///
+pub fn load_mem(tempmem: &mut Main, conn: &Connection) {
+    //let mut brr =  tempmem._conn.borrow();
+
+    //drop(brr);
+    //let conn = dbinit(&self._dbpath);
+    //let mutborrow = &*self._conn.borrow_mut();
+    // Loads data from db into memory. CAN BE SLOW SHOULD OPTIMIZE WITH HASHMAP MAYBE??
+    let mut fiex = conn.prepare("SELECT * FROM File").unwrap();
+    let mut files = fiex.query(params![]).unwrap();
+
+    //let mut files = self._conn.prepare("SELECT * FROM File").unwrap().query(params![]).unwrap();
+    let mut jobex = conn.prepare("SELECT * FROM Jobs").unwrap();
+    let mut jobs = jobex.query(params![]).unwrap();
+    let mut naex = conn.prepare("SELECT * FROM Namespace").unwrap();
+    let mut names = naex.query(params![]).unwrap();
+    let mut paex = conn.prepare("SELECT * FROM Parents").unwrap();
+    let mut paes = paex.query(params![]).unwrap();
+    let mut relx = conn.prepare("SELECT * FROM Relationship").unwrap();
+    let mut rels = relx.query(params![]).unwrap();
+    let mut taex = conn.prepare("SELECT * FROM Tags").unwrap();
+    let mut tags = taex.query(params![]).unwrap();
+    let mut setex = conn.prepare("SELECT * FROM Settings").unwrap();
+    let mut sets = setex.query(params![]).unwrap();
+
+    //drop(fiex);
+    //Preserves mutability of database while we have an active connection to database.
+    let mut file_vec: Vec<(usize, String, String, String)> = Vec::new();
+    let mut job_vec: Vec<(usize, usize, String, String, CommitType)> = Vec::new();
+    let mut parents_vec: Vec<(usize, String, String, usize)> = Vec::new();
+    let mut namespace_vec: Vec<(usize, String, String)> = Vec::new();
+    let mut relationship_vec: Vec<(usize, usize)> = Vec::new();
+    let mut tag_vec: Vec<(usize, String, String, usize)> = Vec::new();
+    let mut setting_vec: Vec<(String, String, isize, String)> = Vec::new();
+
+    dbg!("Loading DB.");
+    //drop(fiex);
+    while let Some(file) = files.next().unwrap() {
+        let a: String = file.get(0).unwrap();
+        let a1: usize = a.parse::<usize>().unwrap();
+        tempmem.file_add(
+            a1,
+            file.get(1).unwrap(),
+            file.get(2).unwrap(),
+            file.get(3).unwrap(),
+            false,
+        );
+    }
+    while let Some(job) = jobs.next().unwrap() {
+        let a1: String = job.get(0).unwrap();
+        let b1: String = job.get(1).unwrap();
+        let d1: String = job.get(2).unwrap();
+        let e1: String = job.get(3).unwrap();
+        let c1: String = job.get(4).unwrap();
+        let c: CommitType = sharedtypes::stringto_commit_type(&c1);
+        let a: usize = a1.parse::<usize>().unwrap();
+        let b: usize = b1.parse::<usize>().unwrap();
+        tempmem.jobs_add_new_todb(&d1, &e1, b, a, &c);
+    }
+
+    while let Some(name) = names.next().unwrap() {
+        let a1: String = name.get(0).unwrap();
+        let b1: String = name.get(2).unwrap();
+        let a: usize = a1.parse::<usize>().unwrap();
+        let b: String = b1.parse::<String>().unwrap();
+        //namespace_vec.push((a, name.get(1).unwrap(), b.to_string()));
+        tempmem.namespace_add(a, name.get(1).unwrap(), b.to_string(), false);
+    }
+
+    while let Some(tag) = rels.next().unwrap() {
+        let a1: String = tag.get(0).unwrap();
+        let b1: String = tag.get(1).unwrap();
+        let a: usize = a1.parse::<usize>().unwrap();
+        let b: usize = b1.parse::<usize>().unwrap();
+        //relationship_vec.push((a, b));
+        tempmem.relationship_add(a, b, false);
+    }
+
+    while let Some(tag) = tags.next().unwrap() {
+        let a1: String = tag.get(2).unwrap();
+        let b1: String = tag.get(3).unwrap();
+        let c1: String = tag.get(0).unwrap();
+        let a: String = a1.parse::<String>().unwrap();
+        let b: usize = b1.parse::<usize>().unwrap();
+        let c: usize = c1.parse::<usize>().unwrap();
+        //tag_vec.push((c, tag.get(1).unwrap(), a, b));
+        tempmem.tag_add(tag.get(1).unwrap(), a, b, false);
+        //self.tag_add(each.1, each.2, each.3, false);
+    }
+
+    /*while let Some(file) = files.next().unwrap() {
+
+        //let b: String = file.get(2).unwrap();
+        //let b1: usize = a.parse::<usize>().unwrap();
+        file_vec.push((
+            a1,
+            file.get(1).unwrap(),
+            file.get(2).unwrap(),
+            file.get(3).unwrap(),
+        ));
+
+    }*/
+
+    /*while let Some(job) = jobs.next().unwrap() {
+        let a1: String = job.get(0).unwrap();
+        let b1: String = job.get(1).unwrap();
+        let c1: String = job.get(4).unwrap();
+        let a: usize = a1.parse::<usize>().unwrap();
+        let b: usize = b1.parse::<usize>().unwrap();
+        dbg!(&c1);
+        let c: CommitType = sharedtypes::stringto_commit_type(&c1);
+        dbg!(&c);
+        job_vec.push((a, b, job.get(2).unwrap(), job.get(3).unwrap(), c));
+    }*/
+
+    /*while let Some(name) = names.next().unwrap() {
+        let a1: String = name.get(0).unwrap();
+        let b1: String = name.get(2).unwrap();
+        let a: usize = a1.parse::<usize>().unwrap();
+        let b: String = b1.parse::<String>().unwrap();
+        namespace_vec.push((a, name.get(1).unwrap(), b.to_string()));
+    }*/
+
+    while let Some(name) = paes.next().unwrap() {
+        let a1: String = name.get(0).unwrap();
+        let b1: String = name.get(3).unwrap();
+        let a: usize = a1.parse::<usize>().unwrap();
+        let b: usize = b1.parse::<usize>().unwrap();
+        parents_vec.push((a, name.get(1).unwrap(), name.get(2).unwrap(), b));
+    }
+
+    /*while let Some(tag) = rels.next().unwrap() {
+        let a1: String = tag.get(0).unwrap();
+        let b1: String = tag.get(1).unwrap();
+        let a: usize = a1.parse::<usize>().unwrap();
+        let b: usize = b1.parse::<usize>().unwrap();
+        relationship_vec.push((a, b));
+    }*/
+
+    /*while let Some(tag) = tags.next().unwrap() {
+        let a1: String = tag.get(2).unwrap();
+        let b1: String = tag.get(3).unwrap();
+        let c1: String = tag.get(0).unwrap();
+        let a: String = a1.parse::<String>().unwrap();
+        let b: usize = b1.parse::<usize>().unwrap();
+        let c: usize = c1.parse::<usize>().unwrap();
+        tag_vec.push((c, tag.get(1).unwrap(), a, b));
+    }*/
+
+    while let Some(set) = sets.next().unwrap() {
+        let b1: String = set.get(2).unwrap(); // FIXME
+        let b: usize = b1.parse::<usize>().unwrap();
+        let re1: String = match set.get(1) {
+            Ok(re1) => re1,
+            Err(error) => "".to_string(),
+        };
+        let re3: String = match set.get(3) {
+            Ok(re3) => re3,
+            Err(error) => "".to_string(),
+        };
+
+        setting_vec.push((set.get(0).unwrap(), re1, b.try_into().unwrap(), re3));
+    }
+
+    // Drops database connections.
+    // Theirs probably a betterway to do this.
+    // query makes things act weird...
+
+    /*drop(files);
+    drop(jobs);
+    drop(names);
+    drop(paes);
+    drop(rels);
+    drop(tags);
+    drop(sets);
+    drop(fiex);
+    drop(jobex);
+    drop(naex);
+    drop(paex);
+    drop(relx);
+    drop(taex);
+    drop(setex);*/
+    dbg!();
+    /* // This adds the data gathered into memdb.
+    for each in file_vec {
+        self.file_add(each.0, each.1, each.2, each.3, false);
+    }
+    for each in job_vec {
+        self.jobs_add_new_todb(&each.2, &each.3, each.1, each.0, &each.4);
+        //self.jobs_add_main(&each.0, &each.1, &each.2, &each.4, &each.4);
+    }
+    for each in parents_vec {
+        self.parents_add(each.0, each.1, each.2, each.3, false);
+    }
+    for each in namespace_vec {
+        self.namespace_add(each.0, each.1, each.2, false);
+    }
+    for each in relationship_vec {
+        self.relationship_add(each.0, each.1, false);
+    }
+    for each in tag_vec {
+        self.tag_add(each.1, each.2, each.3, false);
+    }
+    for each in setting_vec {
+        self.setting_add(each.0, each.1, each.2, each.3, false);
+    }*/
+    for each in setting_vec {
+        tempmem.setting_add(each.0, each.1, each.2, each.3, false);
+    }
+
+    //self._conn = conn;
+}
+
 /// Holder of database self variables
 pub struct Main {
     _dbpath: String,
-    pub _conn: Connection,
+    pub _conn: RefCell<Connection>,
     _vers: isize,
     // inmem db with ahash low lookup/insert time. Alernative to hashmap
     _inmemdb: Memdb,
@@ -540,254 +757,57 @@ impl Memdb {
     }
 }
 
-///
-/// Pulls db into memdb.
-///
-pub fn load_mem(main: &mut Main, conn: &Connection) {
-    //let conn = dbinit(&self._dbpath);
-
-    // Loads data from db into memory. CAN BE SLOW SHOULD OPTIMIZE WITH HASHMAP MAYBE??
-    let mut fiex = conn.prepare("SELECT * FROM File").unwrap();
-    let mut files = fiex.query(params![]).unwrap();
-
-    //let mut files = self._conn.prepare("SELECT * FROM File").unwrap().query(params![]).unwrap();
-    let mut jobex = conn.prepare("SELECT * FROM Jobs").unwrap();
-    let mut jobs = jobex.query(params![]).unwrap();
-    let mut naex = conn.prepare("SELECT * FROM Namespace").unwrap();
-    let mut names = naex.query(params![]).unwrap();
-    let mut paex = conn.prepare("SELECT * FROM Parents").unwrap();
-    let mut paes = paex.query(params![]).unwrap();
-    let mut relx = conn.prepare("SELECT * FROM Relationship").unwrap();
-    let mut rels = relx.query(params![]).unwrap();
-    let mut taex = conn.prepare("SELECT * FROM Tags").unwrap();
-    let mut tags = taex.query(params![]).unwrap();
-    let mut setex = conn.prepare("SELECT * FROM Settings").unwrap();
-    let mut sets = setex.query(params![]).unwrap();
-
-    //drop(fiex);
-    //Preserves mutability of database while we have an active connection to database.
-    let mut file_vec: Vec<(usize, String, String, String)> = Vec::new();
-    let mut job_vec: Vec<(usize, usize, String, String, CommitType)> = Vec::new();
-    let mut parents_vec: Vec<(usize, String, String, usize)> = Vec::new();
-    let mut namespace_vec: Vec<(usize, String, String)> = Vec::new();
-    let mut relationship_vec: Vec<(usize, usize)> = Vec::new();
-    let mut tag_vec: Vec<(usize, String, String, usize)> = Vec::new();
-    let mut setting_vec: Vec<(String, String, isize, String)> = Vec::new();
-
-    dbg!("Loading DB.");
-    //drop(fiex);
-    while let Some(file) = files.next().unwrap() {
-        let a: String = file.get(0).unwrap();
-        let a1: usize = a.parse::<usize>().unwrap();
-        main.file_add(
-            a1,
-            file.get(1).unwrap(),
-            file.get(2).unwrap(),
-            file.get(3).unwrap(),
-            false,
-        );
-    }
-    while let Some(job) = jobs.next().unwrap() {
-        let a1: String = job.get(0).unwrap();
-        let b1: String = job.get(1).unwrap();
-        let d1: String = job.get(2).unwrap();
-        let e1: String = job.get(3).unwrap();
-        let c1: String = job.get(4).unwrap();
-        let c: CommitType = sharedtypes::stringto_commit_type(&c1);
-        let a: usize = a1.parse::<usize>().unwrap();
-        let b: usize = b1.parse::<usize>().unwrap();
-        main.jobs_add_new_todb(&d1, &e1, b, a, &c);
-    }
-
-    while let Some(name) = names.next().unwrap() {
-        let a1: String = name.get(0).unwrap();
-        let b1: String = name.get(2).unwrap();
-        let a: usize = a1.parse::<usize>().unwrap();
-        let b: String = b1.parse::<String>().unwrap();
-        //namespace_vec.push((a, name.get(1).unwrap(), b.to_string()));
-        main.namespace_add(a, name.get(1).unwrap(), b.to_string(), false);
-    }
-
-    while let Some(tag) = rels.next().unwrap() {
-        let a1: String = tag.get(0).unwrap();
-        let b1: String = tag.get(1).unwrap();
-        let a: usize = a1.parse::<usize>().unwrap();
-        let b: usize = b1.parse::<usize>().unwrap();
-        //relationship_vec.push((a, b));
-        main.relationship_add(a, b, false);
-    }
-
-    while let Some(tag) = tags.next().unwrap() {
-        let a1: String = tag.get(2).unwrap();
-        let b1: String = tag.get(3).unwrap();
-        let c1: String = tag.get(0).unwrap();
-        let a: String = a1.parse::<String>().unwrap();
-        let b: usize = b1.parse::<usize>().unwrap();
-        let c: usize = c1.parse::<usize>().unwrap();
-        //tag_vec.push((c, tag.get(1).unwrap(), a, b));
-        main.tag_add(tag.get(1).unwrap(), a, b, false);
-        //self.tag_add(each.1, each.2, each.3, false);
-    }
-
-    /*while let Some(file) = files.next().unwrap() {
-
-        //let b: String = file.get(2).unwrap();
-        //let b1: usize = a.parse::<usize>().unwrap();
-        file_vec.push((
-            a1,
-            file.get(1).unwrap(),
-            file.get(2).unwrap(),
-            file.get(3).unwrap(),
-        ));
-
-    }*/
-
-    /*while let Some(job) = jobs.next().unwrap() {
-        let a1: String = job.get(0).unwrap();
-        let b1: String = job.get(1).unwrap();
-        let c1: String = job.get(4).unwrap();
-        let a: usize = a1.parse::<usize>().unwrap();
-        let b: usize = b1.parse::<usize>().unwrap();
-        dbg!(&c1);
-        let c: CommitType = sharedtypes::stringto_commit_type(&c1);
-        dbg!(&c);
-        job_vec.push((a, b, job.get(2).unwrap(), job.get(3).unwrap(), c));
-    }*/
-
-    /*while let Some(name) = names.next().unwrap() {
-        let a1: String = name.get(0).unwrap();
-        let b1: String = name.get(2).unwrap();
-        let a: usize = a1.parse::<usize>().unwrap();
-        let b: String = b1.parse::<String>().unwrap();
-        namespace_vec.push((a, name.get(1).unwrap(), b.to_string()));
-    }*/
-
-    while let Some(name) = paes.next().unwrap() {
-        let a1: String = name.get(0).unwrap();
-        let b1: String = name.get(3).unwrap();
-        let a: usize = a1.parse::<usize>().unwrap();
-        let b: usize = b1.parse::<usize>().unwrap();
-        parents_vec.push((a, name.get(1).unwrap(), name.get(2).unwrap(), b));
-    }
-
-    /*while let Some(tag) = rels.next().unwrap() {
-        let a1: String = tag.get(0).unwrap();
-        let b1: String = tag.get(1).unwrap();
-        let a: usize = a1.parse::<usize>().unwrap();
-        let b: usize = b1.parse::<usize>().unwrap();
-        relationship_vec.push((a, b));
-    }*/
-
-    /*while let Some(tag) = tags.next().unwrap() {
-        let a1: String = tag.get(2).unwrap();
-        let b1: String = tag.get(3).unwrap();
-        let c1: String = tag.get(0).unwrap();
-        let a: String = a1.parse::<String>().unwrap();
-        let b: usize = b1.parse::<usize>().unwrap();
-        let c: usize = c1.parse::<usize>().unwrap();
-        tag_vec.push((c, tag.get(1).unwrap(), a, b));
-    }*/
-
-    while let Some(set) = sets.next().unwrap() {
-        let b1: String = set.get(2).unwrap(); // FIXME
-        let b: usize = b1.parse::<usize>().unwrap();
-        let re1: String = match set.get(1) {
-            Ok(re1) => re1,
-            Err(error) => "".to_string(),
-        };
-        let re3: String = match set.get(3) {
-            Ok(re3) => re3,
-            Err(error) => "".to_string(),
-        };
-
-        setting_vec.push((set.get(0).unwrap(), re1, b.try_into().unwrap(), re3));
-    }
-
-    // Drops database connections.
-    // Theirs probably a betterway to do this.
-    // query makes things act weird...
-
-    /*drop(files);
-    drop(jobs);
-    drop(names);
-    drop(paes);
-    drop(rels);
-    drop(tags);
-    drop(sets);
-    drop(fiex);
-    drop(jobex);
-    drop(naex);
-    drop(paex);
-    drop(relx);
-    drop(taex);
-    drop(setex);*/
-    dbg!();
-    /* // This adds the data gathered into memdb.
-    for each in file_vec {
-        self.file_add(each.0, each.1, each.2, each.3, false);
-    }
-    for each in job_vec {
-        self.jobs_add_new_todb(&each.2, &each.3, each.1, each.0, &each.4);
-        //self.jobs_add_main(&each.0, &each.1, &each.2, &each.4, &each.4);
-    }
-    for each in parents_vec {
-        self.parents_add(each.0, each.1, each.2, each.3, false);
-    }
-    for each in namespace_vec {
-        self.namespace_add(each.0, each.1, each.2, false);
-    }
-    for each in relationship_vec {
-        self.relationship_add(each.0, each.1, false);
-    }
-    for each in tag_vec {
-        self.tag_add(each.1, each.2, each.3, false);
-    }
-    for each in setting_vec {
-        self.setting_add(each.0, each.1, each.2, each.3, false);
-    }*/
-    for each in setting_vec {
-        main.setting_add(each.0, each.1, each.2, each.3, false);
-    }
-
-    //self._conn = conn;
-}
-
 /// Contains DB functions.
 impl Main {
     /// Sets up new db instance.
-    pub fn new(connection: Connection, path: String, vers: isize) -> Self {
+    pub fn new(path: String, vers: isize) -> Self {
         let dbexist = Path::new(&path).exists();
-
+        let mut connection = dbinit(&path);
+        let mut connection2 = dbinit(&path);
         //let conn = connection;
-
+        let memdb = Memdb::new();
         //let path = String::from("./main.db");
 
-        let mut main = Main {
-            _dbpath: path,
-            _conn: Connection::open_in_memory().unwrap(),
+        let mut memdbmain = Main {
+            _dbpath: path.to_owned(),
+            _conn: RefCell::new(Connection::open_in_memory().unwrap()),
             _vers: vers,
-            _inmemdb: Memdb::new(),
+            _inmemdb: memdb,
             _dbcommitnum: 0,
         };
 
+        let mut main = Main {
+            _dbpath: path,
+            _conn: RefCell::new(Connection::open_in_memory().unwrap()),
+            _vers: vers,
+            _inmemdb: memdbmain._inmemdb,
+            _dbcommitnum: 0,
+        };
+        main._conn = RefCell::new(connection);
+
+        main.db_open();
+
+        dbg!(&dbexist);
         if !dbexist {
             main.first_db();
             main.updatedb();
             main.db_commit_man_set();
         } else {
+            main.transaction_start();
             println!("Database Exists: {} : Skipping creation.", dbexist);
             info!("Database Exists: {} : Skipping creation.", dbexist);
         }
+        load_mem(&mut main, &connection2);
 
-        main.transaction_start();
+        //let mainconn = &main._conn;
+        // Handles loading into memory.
 
-        load_mem(&mut main, &connection);
+        //main._conn = connection;
 
-        main._conn = connection;
+        //main._conn = connection;
 
-        main.db_open();
         //main.vacuum();
-        main.transaction_start();
+        //main.transaction_start();
 
         main
     }
@@ -842,7 +862,7 @@ impl Main {
         self.jobs_add_new_todb(site, query, time_offset, current_time, committype);
         if addtodb {
             let inp = "INSERT INTO Jobs VALUES(?, ?, ?, ?, ?)";
-            let _out = self._conn.execute(
+            let _out = self._conn.borrow_mut().execute(
                 inp,
                 params![
                     current_time.to_string(),
@@ -986,8 +1006,8 @@ impl Main {
             "SELECT sql FROM sqlite_master WHERE tbl_name='{}' AND type = 'table';",
             &table.as_str()
         );
-
-        let mut toexec = self._conn.prepare(&parsedstring).unwrap();
+        let conmut = self._conn.borrow_mut();
+        let mut toexec = conmut.prepare(&parsedstring).unwrap();
         let mut outvec = Vec::new();
 
         let mut outs = toexec.query(params![]).unwrap();
@@ -1014,8 +1034,8 @@ impl Main {
     /// Returns: Vec of strings
     ///
     pub fn table_names(&mut self, table: String) -> Vec<String> {
-        let mut toexec = self
-            ._conn
+        let conmut = self._conn.borrow_mut();
+        let mut toexec = conmut
             .prepare("SELECT name FROM sqlite_master WHERE type='table';")
             .unwrap();
 
@@ -1064,6 +1084,7 @@ impl Main {
         if !dbexists {
             panic!("No database write perms or file not created");
         }
+        self.transaction_start();
 
         // Making File Table
         let mut name = "File".to_string();
@@ -1316,7 +1337,7 @@ impl Main {
 
         if addtodb && !file_grab.1 {
             let inp = "INSERT INTO File VALUES(?, ?, ?, ?)";
-            let _out = self._conn.execute(
+            let _out = self._conn.borrow_mut().execute(
                 inp,
                 params![
                     &file_id.to_string(),
@@ -1335,7 +1356,7 @@ impl Main {
         let name_id = self._inmemdb.namespace_put(&name);
         if addtodb && !namespace_grab.1 {
             let inp = "INSERT INTO Namespace VALUES(?, ?, ?)";
-            let _out = self._conn.execute(
+            let _out = self._conn.borrow_mut().execute(
                 inp,
                 params![&name_id.to_string(), &name.to_string(), &description],
             );
@@ -1359,7 +1380,7 @@ impl Main {
         //println!("{} {} {} {:?} {}", tags, namespace, addtodb, tags_grab, tag_id);
         if addtodb && !tags_grab.1 {
             let inp = "INSERT INTO Tags VALUES(?, ?, ?, ?)";
-            let _out = self._conn.execute(
+            let _out = self._conn.borrow_mut().execute(
                 inp,
                 params![
                     &tag_id.to_string(),
@@ -1383,6 +1404,7 @@ impl Main {
             let inp = "INSERT INTO Relationship VALUES(?, ?)";
             let _out = self
                 ._conn
+                .borrow_mut()
                 .execute(inp, params![&file.to_string(), &tag.to_string()]);
             self.db_commit_man();
         }
@@ -1402,7 +1424,7 @@ impl Main {
     ) {
         if addtodb {
             let inp = "INSERT INTO Jobs VALUES(?, ?, ?, ?, ?)";
-            let _out = self._conn.execute(
+            let _out = self._conn.borrow_mut().execute(
                 inp,
                 params![
                     time.to_string(),
@@ -1499,7 +1521,7 @@ impl Main {
         let temp: isize = -9999;
 
         if addtodb {
-            let _ex = self._conn.execute(
+            let _ex = self._conn.borrow_mut().execute(
                 "INSERT INTO Settings(name, pretty, num, param) VALUES (?1, ?2, ?3, ?4)",
                 params![
                     &name,
@@ -1574,7 +1596,9 @@ impl Main {
     /// NOTE USE THIS ONY FOR RESULTS THAT RETURN STRINGS
     ///
     pub fn quer_str(&mut self, inp: String) -> Result<Vec<String>> {
-        let mut toexec = self._conn.prepare(&inp).unwrap();
+        let conmut = self._conn.borrow_mut();
+
+        let mut toexec = conmut.prepare(&inp).unwrap();
         let rows = toexec.query_map([], |row| row.get(0)).unwrap();
         let mut out = Vec::new();
 
@@ -1590,8 +1614,8 @@ impl Main {
     ///
     pub fn quer_int(&mut self, inp: String) -> Result<Vec<isize>> {
         dbg!(&inp);
-
-        let mut toexec = self._conn.prepare(&inp).unwrap();
+        let conmut = self._conn.borrow_mut();
+        let mut toexec = conmut.prepare(&inp).unwrap();
         let rows = toexec.query_map([], |row| row.get(0)).unwrap();
         let mut out: Vec<isize> = Vec::new();
 
@@ -1607,7 +1631,7 @@ impl Main {
     /// Will not write changes to DB. Have to call write().
     /// Panics to help issues.
     pub fn execute(&mut self, inp: String) -> usize {
-        let _out = self._conn.execute(&inp, params![]);
+        let _out = self._conn.borrow_mut().execute(&inp, params![]);
 
         match _out {
             Err(_out) => {

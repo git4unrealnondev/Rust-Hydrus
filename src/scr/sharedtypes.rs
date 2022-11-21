@@ -1,13 +1,14 @@
 use std::fmt;
 use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
+use strum_macros::Display;
 
 #[derive(Debug, EnumIter, Clone, Eq, Hash, PartialEq)]
 pub enum CommitType {
-    StopOnNothing,
-    StopOnFile,
-    SkipOnFile,
-    AddToDB,
+    StopOnNothing, // Processes all files and data doesn't stop processing.
+    StopOnFile,    // Stops processing if it sees a file it's already seen.
+                   //SkipOnFile,
+                   //AddToDB,
 }
 
 impl fmt::Display for CommitType {
@@ -18,7 +19,7 @@ impl fmt::Display for CommitType {
     }
 }
 
-#[derive(Debug, EnumIter, Clone, PartialEq, Hash, Eq)]
+#[derive(Debug, EnumIter, Clone, PartialEq, Hash, Eq, Display)]
 pub enum ScraperType {
     Manual,
     Automatic,

@@ -45,9 +45,9 @@ fn makedb(dbloc: &str) -> scr::database::Main {
 
     // dbcon is database connector
 
-    let mut dbcon = scr::database::dbinit(&path);
+    //let mut dbcon = scr::database::dbinit(&path);
 
-    let mut data = scr::database::Main::new(dbcon, path, vers.try_into().unwrap());
+    let mut data = scr::database::Main::new(path, vers.try_into().unwrap());
 
     //let dbcon =
     //data.load_mem(&mut data._conn);
@@ -111,6 +111,7 @@ fn main() {
     data.transaction_flush();
     data.check_version();
 
+    dbg!(data.settings_get_name(&"pluginloadloc".to_string()));
     //Inits ScraperManager
     let plugin_loc = data
         .settings_get_name(&"pluginloadloc".to_string())
