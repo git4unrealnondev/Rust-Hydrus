@@ -2,6 +2,8 @@
 use super::scraper;
 use crate::scr::file;
 use ahash::AHashMap;
+use futures;
+use http::request;
 use http::Method;
 use reqwest::{Client, Request, Response};
 use sha2::Digest;
@@ -9,8 +11,8 @@ use sha2::Sha512;
 use std::collections::HashMap;
 use std::fs;
 use std::io;
-use futures;
 use std::io::Cursor;
+use std::io::Error;
 use std::time::Duration;
 use tower::limit::RateLimit;
 use tower::Service;
@@ -19,36 +21,81 @@ use url::Url;
 extern crate cloudflare_bypasser;
 extern crate reqwest;
 use super::database;
+use ratelimit;
 use crate::scr::scraper::InternalScraper;
 use async_executor::Executor;
 use itertools::Itertools;
+use libloading::Library;
 use std::marker::Sync;
 use std::sync::Arc;
-use libloading::Library;
-
+use async_std::task;
 ///
 /// Makes ratelimiter and example
 ///
-pub fn ratelimiter_create(time: u64, duration: Duration) -> RateLimit<Client> {
-    let useragent = "RUSTHYDRUS V0.1".to_string();
+pub fn ratelimiter_create(number: u64, duration: Duration) -> ratelimit::Limiter {
+    dbg!("Making ratelimiter with: {} {}", &number, &duration);
+    
+    // The wrapper that implements ratelimiting
+    //tower::ServiceBuilder::new()
+    //    .rate_limit(number, duration)
+    //    .service(client);
+    ratelimit::Builder::new()
+    .capacity(4) //number of tokens the bucket will hold
+    .quantum(number.try_into().unwrap()) //add one token per interval
+    .interval(duration) //add quantum tokens every 1 second
+    .build()
+}
+
+/// 
+/// Creates Client that the downloader will use.
+/// 
+/// 
+pub fn client_create() -> Client {
+    let useragent = "RustHydrus V1".to_string();
     // The client that does the downloading
     let client = reqwest::ClientBuilder::new()
-        //.user_agent(useragent)
+        .user_agent(useragent)
         .build()
         .unwrap();
-    // The wrapper that implements ratelimiting
-    tower::ServiceBuilder::new()
-        .rate_limit(time, duration)
-        .service(client)
+    
+    client
 }
 
 ///
 /// Downloads text into db as responses. Filters responses by default limit if their's anything wrong with request.
 ///
+pub async fn dltext_new(
+    url_string: String,
+    ratelimit_object: &mut ratelimit::Limiter,
+    client: &mut Client,
+) -> Result<String, reqwest::Error> {
+    //let mut ret: Vec<AHashMap<String, AHashMap<String, Vec<String>>>> = Vec::new();
+    //let ex = Executor::new();
+    
 
-pub async fn dltext_new(ratelimi: (u64, Duration), url_vec: Vec<String>, liba: &Library) -> Vec<AHashMap<String, AHashMap<String, Vec<String>>>> {
-    let mut ret = Vec::new();
-    let ex = Executor::new();
+    let url = Url::parse(&url_string).unwrap();
+    //let url = Url::parse("http://www.google.com").unwrap();
+
+    //let requestit = Request::new(Method::GET, url);
+    //fut.push();
+    dbg!("Spawned web reach");
+    //let futureresult = futures::executor::block_on(ratelimit_object.ready())
+    //    .unwrap()
+    ratelimit_object.wait();
+    let futureresult =  client.get(url).send().await;
+    
+    //let test = reqwest::get(url).await.unwrap().text();
+
+    //let futurez = futures::executor::block_on(futureresult);
+    dbg!(&futureresult);
+    
+    match futureresult {
+        Ok(_) => {Ok(task::block_on(futureresult.unwrap().text()).unwrap())},
+        Err(_) => {Err(futureresult.err().unwrap())},
+    }
+    
+}
+/*
     // Super Ganky Way of doing this. splits the vec into a vec of vec<String>. Minimizes the total number of requests at a time.
     let chunks: Vec<Vec<String>> = url_vec
         .into_iter()
@@ -56,38 +103,41 @@ pub async fn dltext_new(ratelimi: (u64, Duration), url_vec: Vec<String>, liba: &
         .into_iter()
         .map(|c| c.collect())
         .collect();
-    let mut ratelimit = ratelimiter_create(ratelimi.0, ratelimi.1);
-    //dbg!(chunks);
-    //panic!();
+
+    // Makes the ratelimiter object
+
+
     let client = reqwest::ClientBuilder::new()
         //.user_agent(useragent)
         .build()
         .unwrap();
 
     for chunkvec in chunks {
-       // let mut fut = Vec::new();
+        // let mut fut = Vec::new();
         for urlstring in chunkvec {
+            dbg!(&urlstring);
+
             let url = Url::parse(&urlstring).unwrap();
             //let url = Url::parse("http://www.google.com").unwrap();
-            
-            
+
             dbg!(&url);
             let requestit = Request::new(Method::GET, url);
             //fut.push();
-            let test = ratelimit.ready().await.unwrap().call(requestit);
+            dbg!("Spawned web reach");
+            let test = ratelimit_object.ready().await.unwrap().call(requestit);
             //let test = reqwest::get(url).await.unwrap().text();
 
-            let temp = test.await;
-            dbg!(temp);
-            dbg!("Spawned");
-            
+            test.await
+            //dbg!(&temp);
+            //dbg!(temp.unwrap().text().await.unwrap());
+
         }
         dbg!("Done");
         /*for each in fut {
             let test = ex.run(each).await.unwrap();
             dbg!("Waited");
             if test.status() != 200 {panic!("ERROR CODE {} on {}", test.status(), test.url())}
-            
+
             let st: String = test.text().await.unwrap().to_string();
             dbg!("two");
             // Calls the parser to parse the data.
@@ -97,19 +147,18 @@ pub async fn dltext_new(ratelimi: (u64, Duration), url_vec: Vec<String>, liba: &
                 Ok(_) => {ret.push(scrap.unwrap());},
                 Err(_) => {break}
             }
-            
-            
+
+
         }*/
         //for each in fut {
         //    dbg!(futures::(ex.run(each)));
         //}
-        break
-        
+        break;
     }
 
     ret
 }
-
+*/
 ///
 /// time.0 is the requests per time.1cargo run -- job --add e6 "test female male" now false
 /// time.1 is number of total seconds per time slot

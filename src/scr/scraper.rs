@@ -4,17 +4,16 @@ use log::{error, info, warn};
 use std::fs;
 use std::path::Path;
 use std::time::Duration;
-
-use super::sharedtypes::ScraperType;
+use crate::scr::sharedtypes;
 
 static SUPPORTED_VERS: usize = 0;
 #[derive(Debug, Clone, PartialEq, Hash, Eq)]
 pub struct InternalScraper {
-    pub _version: usize, //Version of the scraper
-    pub _name: String, // Name of the scraper
-    pub _sites: Vec<String>, // Sites supported by scraper
+    pub _version: usize,             //Version of the scraper
+    pub _name: String,               // Name of the scraper
+    pub _sites: Vec<String>,         // Sites supported by scraper
     pub _ratelimit: (u64, Duration), // Ratelimiter object that has yet to be created.
-    pub _type: ScraperType, // What type of scraper to use in matching.
+    pub _type: sharedtypes::ScraperType,          // What type of scraper to use in matching.
 }
 
 ///
@@ -29,7 +28,7 @@ impl InternalScraper {
             _name: "test.to_string".to_string(),
             _sites: crate::vec_of_strings!("example", "example1"),
             _ratelimit: (2, Duration::from_secs(2)),
-            _type: ScraperType::Automatic,
+            _type: sharedtypes::ScraperType::Automatic,
         }
     }
     pub fn version_get(&self) -> usize {
@@ -159,8 +158,8 @@ impl ScraperManager {
     }
 }
 
-pub fn cookie_need(libloading: &libloading::Library) -> (ScraperType, String) {
-    let temp: libloading::Symbol<unsafe extern "C" fn() -> (ScraperType, String)> =
+pub fn cookie_need(libloading: &libloading::Library) -> (sharedtypes::ScraperType, String) {
+    let temp: libloading::Symbol<unsafe extern "C" fn() -> (sharedtypes::ScraperType, String)> =
         unsafe { libloading.get(b"cookie_needed\0").unwrap() };
     unsafe { temp() }
 }
@@ -192,20 +191,23 @@ pub fn url_dump(libloading: &libloading::Library, params: Vec<String>) -> Vec<St
         unsafe { libloading.get(b"url_dump\0").unwrap() };
     unsafe { temp(&params) }
 }
+///
+/// Calls a parser. Gives the HTML to the parser to parse.
+///
 pub fn parser_call(
     libloading: &libloading::Library,
     params: &String,
-) -> Result<AHashMap<String, AHashMap<String, Vec<String>>>, &'static str> {
+) -> Result<sharedtypes::ScraperObject, &'static str> {
     let temp: libloading::Symbol<
         unsafe extern "C" fn(
             &String,
         ) -> Result<
-            AHashMap<String, AHashMap<String, Vec<String>>>,
+            sharedtypes::ScraperObject,
             &'static str,
         >,
     > = unsafe { libloading.get(b"parser\0").unwrap() };
     unsafe { temp(params) }
-}
+}//ScraperObject
 
 pub fn url_load_test(libloading: &libloading::Library, params: Vec<String>) -> Vec<String> {
     let temp: libloading::Symbol<unsafe extern "C" fn(&Vec<String>) -> Vec<String>> =

@@ -1,11 +1,12 @@
-use json;
-use std::collections::HashMap;
 use ahash::AHashMap;
+use json;
+use nohash_hasher::NoHashHasher;
 use std::fs::File;
 use std::io;
 use std::io::BufRead;
 use std::io::Write;
 use std::time::Duration;
+use std::{collections::HashMap, hash::BuildHasherDefault};
 
 #[path = "../../../src/scr/sharedtypes.rs"]
 mod sharedtypes;
@@ -143,64 +144,248 @@ fn retvec(vecstr: &mut AHashMap<String, Vec<String>>, jso: &json::JsonValue, sub
     let mut vec = Vec::new();
 
     for each in jso[sub].members() {
-                vec.push(each.to_string());
-            }
+        vec.push(each.to_string());
+    }
     vecstr.insert(sub.to_string(), vec);
+}
+
+///
+/// New function that inserts a tag object into the tags_list. Increments the tag_count variable.
+/// relates is an option that goes : (namespace: tag) OR None
+/// relates searches by the second string in the members assuming it's set.
+///
+fn json_sub_tag(
+    tag_count: &mut u64,
+    tags_list: &mut HashMap<u64, sharedtypes::TagObject, BuildHasherDefault<NoHashHasher<u64>>>,
+    jso: &json::JsonValue,
+    sub: &str,
+    relates: Option<(String, String)>,
+) {
+    match relates {
+        None => {
+            for each in jso[sub].members() {
+                tags_list.insert(
+                    *tag_count,
+                    sharedtypes::TagObject {
+                        namespace: sub.to_string(),
+                        relates_to: None,
+                        tag: each.to_string(),
+                    },
+                );
+                //dbg!(&tag_count, sharedtypes::TagObject{namespace: sub.to_string(), relates_to: None, tag:each.to_string()});
+                *tag_count += 1;
+            }
+        }
+        Some(_) => {
+            //let temp = relates.unwrap().1;
+            for each in jso[sub].members() {
+                let temp = relates.as_ref().unwrap();
+                tags_list.insert(
+                    *tag_count,
+                    sharedtypes::TagObject {
+                        namespace: sub.to_string(),
+                        relates_to: Some(temp.clone()),
+                        tag: each.to_string(),
+                    },
+                );
+                dbg!(&tag_count, &tags_list[&tag_count]);
+                *tag_count += 1;
+            }
+        }
+    }
 }
 
 ///
 /// Parses return from download.
 ///
 #[no_mangle]
-pub fn parser(params: &String) -> Result<AHashMap<String, AHashMap<String, Vec<String>>>, &'static str> {
+pub fn parser(params: &String) -> Result<sharedtypes::ScraperObject, &'static str> {
     let mut vecvecstr: AHashMap<String, AHashMap<String, Vec<String>>> = AHashMap::new();
-    //for each in params.keys() {
-        //dbg!(params);
-        //dbg!(json::parse(params));
-        let js = json::parse(params).unwrap();
-        //dbg!(&js["posts"]);
-        //dbg!(&js["posts"].len());
-        let mut file = File::create("main1.json").unwrap();
 
-        // Write a &str in the file (ignoring the result).
-        writeln!(&mut file, "{}", js.to_string()).unwrap();
+    let mut files: HashMap<u64, sharedtypes::FileObject, BuildHasherDefault<NoHashHasher<u64>>> =
+        HashMap::with_hasher(BuildHasherDefault::default());
 
-        //let vecstr: HashMap<String> = Vec::new();
-        //let vecvecstr: Vec<Vec<String>> = Vec::new();
+    let js = json::parse(params).unwrap();
 
-        //for each in 0..js["posts"].len() {
-        //    dbg!(&js["posts"][each]);
-        //}
-        //dbg!(&js[each]);
-        if js["posts"].len() == 0 {return Err("NothingHere")}
+    let mut file = File::create("main1.json").unwrap();
 
-        for inc in 0..js["posts"].len() {
-            let mut vecstr: AHashMap<String, Vec<String>> = AHashMap::new();
-            //dbg!(&js["posts"][inc]["tags"]["general"].entries());
-            retvec(&mut vecstr, &js["posts"][inc]["tags"], "general");
-            retvec(&mut vecstr, &js["posts"][inc]["tags"], "species");
-            retvec(&mut vecstr, &js["posts"][inc]["tags"], "character");
-            retvec(&mut vecstr, &js["posts"][inc]["tags"], "copyright");
-            retvec(&mut vecstr, &js["posts"][inc]["tags"], "artist");
-            retvec(&mut vecstr, &js["posts"][inc]["tags"], "lore");
-            retvec(&mut vecstr, &js["posts"][inc]["tags"], "meta");
-            retvec(&mut vecstr, &js["posts"][inc], "sources");
-            retvec(&mut vecstr, &js["posts"][inc], "pools");
-            retvec(&mut vecstr, &js["posts"][inc]["relationships"], "parent_id");
-            retvec(&mut vecstr, &js["posts"][inc]["relationships"], "children");
+    // Write a &str in the file (ignoring the result).
+    writeln!(&mut file, "{}", js.to_string()).unwrap();
 
-            // Filtering for parents
-        if js["posts"][inc]["relationships"]["parent_id"].to_string() != "null".to_string() {
-            vecstr.insert("parent_id".to_string(), [js["posts"][inc]["relationships"]["parent_id"].to_string()].to_vec());
-            }
-            if !&js["posts"][inc]["description"].is_empty() {vecstr.insert("description".to_string(), [js["posts"][inc]["description"].to_string()].to_vec());}
-            vecstr.insert("md5".to_string(), [js["posts"][inc]["file"]["md5"].to_string()].to_vec());
-            vecstr.insert("id".to_string(), [js["posts"][inc]["id"].to_string()].to_vec());
-            vecvecstr.insert(js["posts"][inc]["file"]["url"].to_string(), vecstr);
+    if js["posts"].len() == 0 {
+        return Err("NothingHere");
     }
 
+    for inc in 0..js["posts"].len() {
+        let mut tag_count: u64 = 0;
 
-    return Ok(vecvecstr);
+        let mut tags_list: HashMap<
+            u64,
+            sharedtypes::TagObject,
+            BuildHasherDefault<NoHashHasher<u64>>,
+        > = HashMap::with_hasher(BuildHasherDefault::default());
+        //dbg!(&tag_count);
+        json_sub_tag(
+            &mut tag_count,
+            &mut tags_list,
+            &js["posts"][inc]["tags"],
+            "general",
+            None,
+        );
+        json_sub_tag(
+            &mut tag_count,
+            &mut tags_list,
+            &js["posts"][inc]["tags"],
+            "species",
+            None,
+        );
+        json_sub_tag(
+            &mut tag_count,
+            &mut tags_list,
+            &js["posts"][inc]["tags"],
+            "character",
+            None,
+        );
+        json_sub_tag(
+            &mut tag_count,
+            &mut tags_list,
+            &js["posts"][inc]["tags"],
+            "copyright",
+            None,
+        );
+        json_sub_tag(
+            &mut tag_count,
+            &mut tags_list,
+            &js["posts"][inc]["tags"],
+            "artist",
+            None,
+        );
+        json_sub_tag(
+            &mut tag_count,
+            &mut tags_list,
+            &js["posts"][inc]["tags"],
+            "lore",
+            None,
+        );
+        json_sub_tag(
+            &mut tag_count,
+            &mut tags_list,
+            &js["posts"][inc]["tags"],
+            "meta",
+            None,
+        );
+        json_sub_tag(
+            &mut tag_count,
+            &mut tags_list,
+            &js["posts"][inc],
+            "sources",
+            None,
+        );
+        json_sub_tag(
+            &mut tag_count,
+            &mut tags_list,
+            &js["posts"][inc],
+            "pools",
+            Some(("id".to_string(), js["posts"][inc]["id"].to_string())),
+        );
+
+        json_sub_tag(
+            &mut tag_count,
+            &mut tags_list,
+            &js["posts"][inc]["relationships"],
+            "children",
+            Some(("id".to_string(), js["posts"][inc]["id"].to_string())),
+        );
+
+        tags_list.insert(
+            tag_count,
+            sharedtypes::TagObject {
+                namespace: "description".to_string(),
+                relates_to: None,
+                tag: js["posts"][inc]["description"].to_string(),
+            },
+        );
+        tag_count += 1;
+
+        tags_list.insert(
+            tag_count,
+            sharedtypes::TagObject {
+                namespace: "md5".to_string(),
+                relates_to: None,
+                tag: js["posts"][inc]["file"]["md5"].to_string(),
+            },
+        );
+        tag_count += 1;
+        tags_list.insert(
+            tag_count,
+            sharedtypes::TagObject {
+                namespace: "id".to_string(),
+                relates_to: None,
+                tag: js["posts"][inc]["id"].to_string(),
+            },
+        );
+        tag_count += 1;
+tags_list.insert(
+            tag_count,
+            sharedtypes::TagObject {
+                namespace: "parent_id".to_string(),
+                relates_to: Some(("id".to_string(), js["posts"][inc]["id"].to_string())),
+                tag: js["posts"][inc]["relationships"]["parent_id"].to_string(),
+            },
+        );
+
+        println!("{:?}", &tags_list);
+        dbg!();
+        //dbg!(&tag_count);
+        let mut vecstr: AHashMap<String, Vec<String>> = AHashMap::new();
+        retvec(&mut vecstr, &js["posts"][inc]["tags"], "general");
+        retvec(&mut vecstr, &js["posts"][inc]["tags"], "species");
+        retvec(&mut vecstr, &js["posts"][inc]["tags"], "character");
+        retvec(&mut vecstr, &js["posts"][inc]["tags"], "copyright");
+        retvec(&mut vecstr, &js["posts"][inc]["tags"], "artist");
+        retvec(&mut vecstr, &js["posts"][inc]["tags"], "lore");
+        retvec(&mut vecstr, &js["posts"][inc]["tags"], "meta");
+        retvec(&mut vecstr, &js["posts"][inc], "sources");
+        retvec(&mut vecstr, &js["posts"][inc], "pools");
+        retvec(&mut vecstr, &js["posts"][inc]["relationships"], "parent_id");
+        retvec(&mut vecstr, &js["posts"][inc]["relationships"], "children");
+
+        // Filtering for parents
+        if js["posts"][inc]["relationships"]["parent_id"].to_string() != "null".to_string() {
+            vecstr.insert(
+                "parent_id".to_string(),
+                [js["posts"][inc]["relationships"]["parent_id"].to_string()].to_vec(),
+            );
+        }
+        if !&js["posts"][inc]["description"].is_empty() {
+            vecstr.insert(
+                "description".to_string(),
+                [js["posts"][inc]["description"].to_string()].to_vec(),
+            );
+        }
+        vecstr.insert(
+            "md5".to_string(),
+            [js["posts"][inc]["file"]["md5"].to_string()].to_vec(),
+        );
+        vecstr.insert(
+            "id".to_string(),
+            [js["posts"][inc]["id"].to_string()].to_vec(),
+        );
+        vecvecstr.insert(js["posts"][inc]["file"]["url"].to_string(), vecstr);
+
+        let mut tags: sharedtypes::TagObject = sharedtypes::TagObject {
+            namespace: "".to_string(),
+            relates_to: None,
+            tag: "".to_string(),
+        };
+        let mut file: sharedtypes::FileObject = sharedtypes::FileObject {
+            source_url: "".to_string(),
+            tag_list: tags_list,
+        };
+    }
+    panic!();
+    Ok(sharedtypes::ScraperObject { file: files })
+    //return Ok(vecvecstr);
 }
 ///
 /// Should this scraper handle anything relating to downloading.

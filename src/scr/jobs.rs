@@ -1,3 +1,4 @@
+use super::sharedtypes;
 use super::sharedtypes::CommitType;
 use super::sharedtypes::ScraperType;
 use crate::scr::database;
@@ -14,6 +15,7 @@ use std::collections::hash_map::Entry;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use strum::IntoEnumIterator;
+use reqwest::{Client, Request, Response};
 
 pub struct Jobs {
     _jobid: Vec<u128>,
@@ -202,6 +204,14 @@ impl Jobs {
     pub fn dumpurl(&self, scraperone: &InternalScraper, job: &JobsRef) -> Vec<String> {
         self.library_url_dump(scraperone, &job._params)
     }
+    /// 
+    /// Automatic job running.
+    /// 
+    ///
+    pub fn automatic_job_run(source_url: &String, ratelimiter_object: &mut ratelimit::Limiter, client: &mut Client, commit_type: sharedtypes::CommitType) {
+        
+        
+    }
 
     ///
     /// Runs jobs as they are needed to.
@@ -377,7 +387,7 @@ impl Jobs {
         &mut self,
         memid: &InternalScraper,
         params: &String,
-    ) -> Result<AHashMap<String, AHashMap<String, Vec<String>>>, &'static str> {
+    ) -> Result<sharedtypes::ScraperObject, &'static str> {
         let libloading = self.scrapermanager.returnlibloading(memid);
         scraper::parser_call(libloading, params)
         //self.scrapermanager.parser_call(memid, params)

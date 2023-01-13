@@ -1,7 +1,9 @@
+use nohash_hasher::NoHashHasher;
 use std::fmt;
+use std::{collections::HashMap, hash::BuildHasherDefault};
 use strum::IntoEnumIterator;
-use strum_macros::EnumIter;
 use strum_macros::Display;
+use strum_macros::EnumIter;
 
 #[derive(Debug, EnumIter, Clone, Eq, Hash, PartialEq)]
 pub enum CommitType {
@@ -23,6 +25,32 @@ impl fmt::Display for CommitType {
 pub enum ScraperType {
     Manual,
     Automatic,
+}
+
+///
+/// What the scraper passes between loaded 3rd party scrapers and the internal scrpaer.
+///
+pub struct ScraperObject {
+    pub file: HashMap<u64, FileObject, BuildHasherDefault<NoHashHasher<u64>>>,
+}
+
+///
+/// Represents one file
+///
+pub struct FileObject {
+    pub source_url: String,
+    pub tag_list: HashMap<u64, TagObject, BuildHasherDefault<NoHashHasher<u64>>>,
+}
+
+///
+/// Holder of Tag info.
+/// Keeps relationalship info into account.
+///
+#[derive(Debug)]
+pub struct TagObject {
+    pub namespace: String,
+    pub tag: String,
+    pub relates_to: Option<(String, String)>,
 }
 
 #[derive(Debug)]
