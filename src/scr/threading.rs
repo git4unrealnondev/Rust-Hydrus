@@ -171,7 +171,8 @@ impl Worker {
                     ))
                     .unwrap()
                     .1;
-                let scrap_data = datafromdb;
+                    
+                scrap_data = datafromdb;
                 // drops mutex for other threads to use.
             }
 
@@ -215,7 +216,7 @@ impl Worker {
                 );
             }
 
-            dbg!(&toparse);
+            //dbg!(&toparse);
             //let onesearch = allurls[0].to_string();
 
             // Ratelimit object gets created here.

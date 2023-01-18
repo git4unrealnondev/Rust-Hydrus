@@ -115,7 +115,7 @@ pub async fn dlfile_new(
             unwrappydb.namespace_add(0, "source_url".to_string(), "Source URL for a file.".to_string(), true);
         }
         let url_tag = unwrappydb.tag_get_name(tags.source_url.to_string(), namespace_id.0);
-        let does_url_exist = url_tag.1;
+        does_url_exist = url_tag.1;
         
     }
     dbg!(does_url_exist);

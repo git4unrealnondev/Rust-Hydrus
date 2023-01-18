@@ -201,9 +201,6 @@ impl Jobs {
         //dbg!(name_ratelimited);
     }
 
-    pub fn dumpurl(&self, scraperone: &InternalScraper, job: &JobsRef) -> Vec<String> {
-        self.library_url_dump(scraperone, &job._params)
-    }
     ///
     /// Automatic job running.
     ///

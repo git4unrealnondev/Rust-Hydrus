@@ -56,6 +56,9 @@ impl InternalScraper {
 /// Builds the URL for scraping activities.
 ///
 fn build_url(params: &Vec<String>, pagenum: u64) -> String {
+    
+    dbg!(&params);
+    
     let url = "https://e621.net/posts.json";
     let tag_store = "&tags=";
     let page = "&page=";
