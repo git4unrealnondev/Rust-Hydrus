@@ -170,6 +170,7 @@ fn json_sub_tag(
                         namespace: sub.to_string(),
                         relates_to: None,
                         tag: each.to_string(),
+                        tag_type: sharedtypes::TagType::Normal,
                     },
                 );
                 //dbg!(&tag_count, sharedtypes::TagObject{namespace: sub.to_string(), relates_to: None, tag:each.to_string()});
@@ -186,9 +187,10 @@ fn json_sub_tag(
                         namespace: sub.to_string(),
                         relates_to: Some(temp.clone()),
                         tag: each.to_string(),
+                        tag_type: sharedtypes::TagType::Normal,
                     },
                 );
-                dbg!(&tag_count, &tags_list[&tag_count]);
+                //dbg!(&tag_count, &tags_list[&tag_count]);
                 *tag_count += 1;
             }
         }
@@ -204,13 +206,13 @@ pub fn parser(params: &String) -> Result<sharedtypes::ScraperObject, &'static st
 
     let mut files: HashMap<u64, sharedtypes::FileObject, BuildHasherDefault<NoHashHasher<u64>>> =
         HashMap::with_hasher(BuildHasherDefault::default());
-
+    dbg!(&params);
     let js = json::parse(params).unwrap();
 
-    let mut file = File::create("main1.json").unwrap();
+    //let mut file = File::create("main1.json").unwrap();
 
     // Write a &str in the file (ignoring the result).
-    writeln!(&mut file, "{}", js.to_string()).unwrap();
+    //writeln!(&mut file, "{}", js.to_string()).unwrap();
 
     if js["posts"].len() == 0 {
         return Err("NothingHere");
@@ -296,16 +298,18 @@ pub fn parser(params: &String) -> Result<sharedtypes::ScraperObject, &'static st
             "children",
             Some(("id".to_string(), js["posts"][inc]["id"].to_string())),
         );
-
-        tags_list.insert(
+        if js["posts"][inc]["description"].to_string() != "" {tags_list.insert(
             tag_count,
             sharedtypes::TagObject {
                 namespace: "description".to_string(),
                 relates_to: None,
                 tag: js["posts"][inc]["description"].to_string(),
+                tag_type: sharedtypes::TagType::Normal,
             },
         );
-        tag_count += 1;
+        //dbg!(js["posts"][inc]["description"].to_string());
+        tag_count += 1;}
+
 
         tags_list.insert(
             tag_count,
@@ -313,6 +317,7 @@ pub fn parser(params: &String) -> Result<sharedtypes::ScraperObject, &'static st
                 namespace: "md5".to_string(),
                 relates_to: None,
                 tag: js["posts"][inc]["file"]["md5"].to_string(),
+                tag_type: sharedtypes::TagType::Hash(sharedtypes::HashesSupported::md5),
             },
         );
         tag_count += 1;
@@ -322,20 +327,33 @@ pub fn parser(params: &String) -> Result<sharedtypes::ScraperObject, &'static st
                 namespace: "id".to_string(),
                 relates_to: None,
                 tag: js["posts"][inc]["id"].to_string(),
+                tag_type: sharedtypes::TagType::Normal,
             },
         );
         tag_count += 1;
-tags_list.insert(
-            tag_count,
-            sharedtypes::TagObject {
-                namespace: "parent_id".to_string(),
-                relates_to: Some(("id".to_string(), js["posts"][inc]["id"].to_string())),
-                tag: js["posts"][inc]["relationships"]["parent_id"].to_string(),
-            },
-        );
+        if !js["posts"][inc]["relationships"]["parent_id"].is_null() {
+            //dbg!(&js["posts"][inc]["relationships"]["parent_id"]);
+            //dbg!(&js["posts"][inc]["relationships"]["parent_id"].to_string());
+            tags_list.insert(
+                tag_count,
+                sharedtypes::TagObject {
+                    namespace: "parent_id".to_string(),
+                    relates_to: Some(("id".to_string(), js["posts"][inc]["id"].to_string())),
+                    tag: js["posts"][inc]["relationships"]["parent_id"].to_string(),
+                    tag_type: sharedtypes::TagType::Normal,
+                },
+            );
+        }
 
-        println!("{:?}", &tags_list);
-        dbg!();
+        let mut file: sharedtypes::FileObject = sharedtypes::FileObject {
+            source_url: js["posts"][inc]["file"]["url"].to_string(),
+            tag_list: tags_list,
+        };
+
+        files.insert(inc.try_into().unwrap(), file);
+
+        /*//println!("{:?}", &tags_list);
+        //dbg!();
         //dbg!(&tag_count);
         let mut vecstr: AHashMap<String, Vec<String>> = AHashMap::new();
         retvec(&mut vecstr, &js["posts"][inc]["tags"], "general");
@@ -371,19 +389,9 @@ tags_list.insert(
             "id".to_string(),
             [js["posts"][inc]["id"].to_string()].to_vec(),
         );
-        vecvecstr.insert(js["posts"][inc]["file"]["url"].to_string(), vecstr);
-
-        let mut tags: sharedtypes::TagObject = sharedtypes::TagObject {
-            namespace: "".to_string(),
-            relates_to: None,
-            tag: "".to_string(),
-        };
-        let mut file: sharedtypes::FileObject = sharedtypes::FileObject {
-            source_url: "".to_string(),
-            tag_list: tags_list,
-        };
+        vecvecstr.insert(js["posts"][inc]["file"]["url"].to_string(), vecstr);*/
     }
-    panic!();
+    //panic!();
     Ok(sharedtypes::ScraperObject { file: files })
     //return Ok(vecvecstr);
 }

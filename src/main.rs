@@ -41,13 +41,13 @@ fn makedb(dbloc: &str) -> scr::database::Main {
     let path = dbloc.to_string();
     let vers: u64 = 1;
 
-    let dbexist = Path::new(&path).exists();
+    //let dbexist = Path::new(&path).exists();
 
     // dbcon is database connector
 
     //let mut dbcon = scr::database::dbinit(&path);
 
-    let mut data = scr::database::Main::new(path, vers.try_into().unwrap());
+    let data = scr::database::Main::new(path, vers.try_into().unwrap());
 
     //let dbcon =
     //data.load_mem(&mut data._conn);

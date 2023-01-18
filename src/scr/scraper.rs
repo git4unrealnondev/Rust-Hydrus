@@ -1,19 +1,19 @@
+use crate::scr::sharedtypes;
 use ahash::AHashMap;
 use libloading;
 use log::{error, info, warn};
 use std::fs;
 use std::path::Path;
 use std::time::Duration;
-use crate::scr::sharedtypes;
 
 static SUPPORTED_VERS: usize = 0;
 #[derive(Debug, Clone, PartialEq, Hash, Eq)]
 pub struct InternalScraper {
-    pub _version: usize,             //Version of the scraper
-    pub _name: String,               // Name of the scraper
-    pub _sites: Vec<String>,         // Sites supported by scraper
-    pub _ratelimit: (u64, Duration), // Ratelimiter object that has yet to be created.
-    pub _type: sharedtypes::ScraperType,          // What type of scraper to use in matching.
+    pub _version: usize,                 //Version of the scraper
+    pub _name: String,                   // Name of the scraper
+    pub _sites: Vec<String>,             // Sites supported by scraper
+    pub _ratelimit: (u64, Duration),     // Ratelimiter object that has yet to be created.
+    pub _type: sharedtypes::ScraperType, // What type of scraper to use in matching.
 }
 
 ///
@@ -199,15 +199,10 @@ pub fn parser_call(
     params: &String,
 ) -> Result<sharedtypes::ScraperObject, &'static str> {
     let temp: libloading::Symbol<
-        unsafe extern "C" fn(
-            &String,
-        ) -> Result<
-            sharedtypes::ScraperObject,
-            &'static str,
-        >,
+        unsafe extern "C" fn(&String) -> Result<sharedtypes::ScraperObject, &'static str>,
     > = unsafe { libloading.get(b"parser\0").unwrap() };
     unsafe { temp(params) }
-}//ScraperObject
+} //ScraperObject
 
 pub fn url_load_test(libloading: &libloading::Library, params: Vec<String>) -> Vec<String> {
     let temp: libloading::Symbol<unsafe extern "C" fn(&Vec<String>) -> Vec<String>> =

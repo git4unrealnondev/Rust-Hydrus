@@ -11,11 +11,11 @@ use crate::scr::time;
 use ahash::AHashMap;
 use http::uri::Authority;
 use log::info;
+use reqwest::{Client, Request, Response};
 use std::collections::hash_map::Entry;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use strum::IntoEnumIterator;
-use reqwest::{Client, Request, Response};
 
 pub struct Jobs {
     _jobid: Vec<u128>,
@@ -204,13 +204,16 @@ impl Jobs {
     pub fn dumpurl(&self, scraperone: &InternalScraper, job: &JobsRef) -> Vec<String> {
         self.library_url_dump(scraperone, &job._params)
     }
-    /// 
-    /// Automatic job running.
-    /// 
     ///
-    pub fn automatic_job_run(source_url: &String, ratelimiter_object: &mut ratelimit::Limiter, client: &mut Client, commit_type: sharedtypes::CommitType) {
-        
-        
+    /// Automatic job running.
+    ///
+    ///
+    pub fn automatic_job_run(
+        source_url: &String,
+        ratelimiter_object: &mut ratelimit::Limiter,
+        client: &mut Client,
+        commit_type: sharedtypes::CommitType,
+    ) {
     }
 
     ///

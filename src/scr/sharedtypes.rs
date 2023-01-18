@@ -37,6 +37,7 @@ pub struct ScraperObject {
 ///
 /// Represents one file
 ///
+#[derive(Debug)]
 pub struct FileObject {
     pub source_url: String,
     pub tag_list: HashMap<u64, TagObject, BuildHasherDefault<NoHashHasher<u64>>>,
@@ -50,7 +51,28 @@ pub struct FileObject {
 pub struct TagObject {
     pub namespace: String,
     pub tag: String,
+    pub tag_type: TagType,
     pub relates_to: Option<(String, String)>,
+}
+
+///
+/// Tag Type object. Represents metadata for parser.
+///
+#[derive(Debug)]
+pub enum TagType {
+    Normal,                // Normal tag.
+    Hash(HashesSupported), // Hash of file
+    Special, // Probably will add support for something like file descriptors or plugin specific things.
+}
+
+///
+/// Supported types of hashes in Rust Hydrus
+///
+#[derive(Debug)]
+pub enum HashesSupported {
+    md5,
+    sha1,
+    sha256,
 }
 
 #[derive(Debug)]

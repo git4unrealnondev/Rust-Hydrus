@@ -1,5 +1,6 @@
 //extern crate urlparse;
 use super::scraper;
+use super::sharedtypes;
 use crate::scr::file;
 use ahash::AHashMap;
 use futures;
@@ -13,6 +14,7 @@ use std::fs;
 use std::io;
 use std::io::Cursor;
 use std::io::Error;
+use std::sync::Mutex;
 use std::time::Duration;
 use tower::limit::RateLimit;
 use tower::Service;
@@ -21,35 +23,35 @@ use url::Url;
 extern crate cloudflare_bypasser;
 extern crate reqwest;
 use super::database;
-use ratelimit;
 use crate::scr::scraper::InternalScraper;
 use async_executor::Executor;
+use async_std::task;
 use itertools::Itertools;
 use libloading::Library;
+use ratelimit;
 use std::marker::Sync;
 use std::sync::Arc;
-use async_std::task;
 ///
 /// Makes ratelimiter and example
 ///
 pub fn ratelimiter_create(number: u64, duration: Duration) -> ratelimit::Limiter {
     dbg!("Making ratelimiter with: {} {}", &number, &duration);
-    
+
     // The wrapper that implements ratelimiting
     //tower::ServiceBuilder::new()
     //    .rate_limit(number, duration)
     //    .service(client);
     ratelimit::Builder::new()
-    .capacity(4) //number of tokens the bucket will hold
-    .quantum(number.try_into().unwrap()) //add one token per interval
-    .interval(duration) //add quantum tokens every 1 second
-    .build()
+        .capacity(4) //number of tokens the bucket will hold
+        .quantum(number.try_into().unwrap()) //add one token per interval
+        .interval(duration) //add quantum tokens every 1 second
+        .build()
 }
 
-/// 
+///
 /// Creates Client that the downloader will use.
-/// 
-/// 
+///
+///
 pub fn client_create() -> Client {
     let useragent = "RustHydrus V1".to_string();
     // The client that does the downloading
@@ -57,7 +59,7 @@ pub fn client_create() -> Client {
         .user_agent(useragent)
         .build()
         .unwrap();
-    
+
     client
 }
 
@@ -71,7 +73,6 @@ pub async fn dltext_new(
 ) -> Result<String, reqwest::Error> {
     //let mut ret: Vec<AHashMap<String, AHashMap<String, Vec<String>>>> = Vec::new();
     //let ex = Executor::new();
-    
 
     let url = Url::parse(&url_string).unwrap();
     //let url = Url::parse("http://www.google.com").unwrap();
@@ -82,18 +83,47 @@ pub async fn dltext_new(
     //let futureresult = futures::executor::block_on(ratelimit_object.ready())
     //    .unwrap()
     ratelimit_object.wait();
-    let futureresult =  client.get(url).send().await;
-    
+    let futureresult = client.get(url).send().await;
+
     //let test = reqwest::get(url).await.unwrap().text();
 
     //let futurez = futures::executor::block_on(futureresult);
     dbg!(&futureresult);
-    
+
     match futureresult {
-        Ok(_) => {Ok(task::block_on(futureresult.unwrap().text()).unwrap())},
-        Err(_) => {Err(futureresult.err().unwrap())},
+        Ok(_) => Ok(task::block_on(futureresult.unwrap().text()).unwrap()),
+        Err(_) => Err(futureresult.err().unwrap()),
     }
+}
+
+///
+/// Downloads file to position
+///
+pub async fn dlfile_new(
+    ratelimit_object: &mut ratelimit::Limiter,
+    client: &mut Client,
+    tags: &sharedtypes::FileObject,
+    db: &mut Arc<Mutex<database::Main>>,
+) {
     
+    // Determine if we need to download file.
+    let does_url_exist = false;
+    {
+        let unwrappydb = &mut db.lock().unwrap();
+        let namespace_id = unwrappydb.namespace_get(&"source_url".to_string()); // defaults to 0 due to unknown.
+        if !namespace_id.1 { // Namespace doesn't exist. Will create
+            unwrappydb.namespace_add(0, "source_url".to_string(), "Source URL for a file.".to_string(), true);
+        }
+        let url_tag = unwrappydb.tag_get_name(tags.source_url.to_string(), namespace_id.0);
+        let does_url_exist = url_tag.1;
+        
+    }
+    dbg!(does_url_exist);
+    
+    
+    ratelimit_object.wait();
+    //dbg!(tags);
+    //dbg!("waited {}", &url);
 }
 /*
     // Super Ganky Way of doing this. splits the vec into a vec of vec<String>. Minimizes the total number of requests at a time.

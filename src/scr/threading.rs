@@ -7,7 +7,9 @@ use crate::scr::scraper;
 use crate::scr::sharedtypes;
 use crate::scr::sharedtypes::CommitType;
 use ahash::AHashMap;
+use async_std::task;
 use futures;
+use futures::future::join_all;
 use log::{error, info};
 use std::borrow::Borrow;
 use std::sync::mpsc;
@@ -20,7 +22,6 @@ use strum_macros::EnumIter;
 use tokio::runtime::Handle;
 use tokio::runtime::Runtime;
 use url::Url;
-use async_std::task;
 
 pub struct threads {
     _workers: Vec<Worker>,
@@ -129,7 +130,7 @@ impl Worker {
             &scraper._name,
             &jobs.len()
         );
-        let db = dba.clone();
+        let mut db = dba.clone();
         let jblist = jobs.clone();
         let scrap = scraper.clone();
         //
@@ -157,17 +158,22 @@ impl Worker {
                 &db.lock().unwrap(),
             );*/
 
-            let unwrappydb = &mut db.lock().unwrap();
-            //let t = scrap._type;
-            //println!("{}",t);
-            let datafromdb = unwrappydb
-                .settings_get_name(&format!(
-                    "{}_{}",
-                    scrap._type.to_string(),
-                    scrap._name.to_owned()
-                ))
-                .unwrap()
-                .1;
+            let mut scrap_data = String::new();
+            {
+                let mut unwrappydb = &mut db.lock().unwrap();
+                //let t = scrap._type;
+                //println!("{}",t);
+                let datafromdb = unwrappydb
+                    .settings_get_name(&format!(
+                        "{}_{}",
+                        scrap._type.to_string(),
+                        scrap._name.to_owned()
+                    ))
+                    .unwrap()
+                    .1;
+                let scrap_data = datafromdb;
+                // drops mutex for other threads to use.
+            }
 
             // Dedupes URL's to search for.
             // Groups all URLS into one vec to search through later.
@@ -175,7 +181,7 @@ impl Worker {
                 //dbg!(&each);
 
                 let mut parpms = each._params;
-                parpms.push(datafromdb.clone());
+                parpms.push(scrap_data.clone());
 
                 let urlload = scraper::url_dump(&liba, parpms);
                 let commit = each._committype;
@@ -212,39 +218,68 @@ impl Worker {
             dbg!(&toparse);
             //let onesearch = allurls[0].to_string();
 
-            // Ratelimit object gets created here. 
+            // Ratelimit object gets created here.
             // Used accross multiple jobs that share host
             let mut ratelimit =
                 download::ratelimiter_create(scrap._ratelimit.0, scrap._ratelimit.1);
-                
-            let mut client = download::client_create();
-                
 
+            let mut client = download::client_create();
 
             for each in toparse {
                 //handle.enter();
                 //let resp = insidert.spawn(async move {
                 //    download::dltext_new(each.1, &mut ratelimit).await
                 //});
+
                 for urlstring in each.1 {
-                    
-                    
-                    
-                    let resp = task::block_on(download::dltext_new(urlstring, &mut ratelimit, &mut client));
+                    let resp = task::block_on(download::dltext_new(
+                        urlstring,
+                        &mut ratelimit,
+                        &mut client,
+                    ));
                     //dbg!(&resp);
-                    
+
                     //resps.poll();
                     //let beans = resp.unwrap();
                     match resp {
-                        Ok(_) => {let st = scraper::parser_call(&liba, &resp.unwrap());
-                            
-                            for each in &st.unwrap().file[&1].tag_list {
-                                println!("{:?}", each);
+                        Ok(_) => {
+                            let st = scraper::parser_call(&liba, &resp.unwrap());
+
+                            for each in &st.unwrap().file {
+                                //ratelimit.wait();
+                                dbg!();
+                                dbg!(&each.1.source_url);
+
+                                //task::block_on(download::dlfile_new(
+                                 //   &mut ratelimit,
+                                 //   &mut client,
+                                //    &each.1,
+                                //    &mut db,
+                                //));
+                                for every in &each.1.tag_list {
+                                    // Matches tag type. Changes depending on what type of tag (metadata)
+                                    match &every.1.tag_type {
+                                        sharedtypes::TagType::Normal => match every.1.relates_to {
+                                            None => {
+                                                // Normal tag no relationships. IE Tag to file
+                                                // dbg!("Tag", &every.1);
+                                            }
+                                            Some(_) => {
+                                                // Tag with relationship info. IE Tag to pool
+                                                //dbg!("Relationship", &every.1);
+                                            }
+                                        },
+                                        sharedtypes::TagType::Hash(_) => {
+                                            // dbg!("Hash", &every.1);
+                                        }
+                                        sharedtypes::TagType::Special => {}
+                                    }
+
+                                    //println!("{:?}", every);
+                                }
+                                println!("");
                             }
-                            
-                            
-                            
-                            },
+                        }
                         Err(_) => {}
                     }
                     //let st = scraper::parser_call(&liba, &beans);

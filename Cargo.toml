@@ -38,5 +38,5 @@ itertools = "0.10.5"
 opt-level = 3
 codegenunits=1
 strip = true
-panic = "abort"
+#panic = "abort"
 lto=true

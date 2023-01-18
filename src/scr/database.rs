@@ -119,6 +119,14 @@ pub fn load_mem(tempmem: &mut Main, conn: &Connection) {
         //self.tag_add(each.1, each.2, each.3, false);
     }
 
+    while let Some(tag) = paes.next().unwrap() {
+        let a1: usize = tag.get(0).unwrap();
+        let a2: usize = tag.get(1).unwrap();
+        let a3: usize = tag.get(2).unwrap();
+        let a4: usize = tag.get(3).unwrap();
+        tempmem.parents_add(a1, a2, a3, a4, false);
+    }
+
     /*while let Some(file) = files.next().unwrap() {
 
         //let b: String = file.get(2).unwrap();
@@ -761,9 +769,11 @@ impl Memdb {
 impl Main {
     /// Sets up new db instance.
     pub fn new(path: String, vers: isize) -> Self {
+        // Initiates two connections to the DB.
+        // Cheap workaround to avoid loading errors.
         let dbexist = Path::new(&path).exists();
-        let mut connection = dbinit(&path);
-        let mut connection2 = dbinit(&path);
+        let connection = dbinit(&path);
+        let connection2 = dbinit(&path);
         //let conn = connection;
         let memdb = Memdb::new();
         //let path = String::from("./main.db");
@@ -785,29 +795,20 @@ impl Main {
         };
         main._conn = RefCell::new(connection);
 
-        main.db_open();
+        main.db_open(); // Sets default settings for db settings.
 
-        dbg!(&dbexist);
         if !dbexist {
+            // Database Doesn't exist
             main.first_db();
             main.updatedb();
             main.db_commit_man_set();
         } else {
+            // Database does exist.
             main.transaction_start();
             println!("Database Exists: {} : Skipping creation.", dbexist);
             info!("Database Exists: {} : Skipping creation.", dbexist);
         }
-        load_mem(&mut main, &connection2);
-
-        //let mainconn = &main._conn;
-        // Handles loading into memory.
-
-        //main._conn = connection;
-
-        //main._conn = connection;
-
-        //main.vacuum();
-        //main.transaction_start();
+        load_mem(&mut main, &connection2); // loads db into memory from alternate db connection.
 
         main
     }
@@ -1104,9 +1105,14 @@ impl Main {
         vals = vec_of_strings!["TEXT", "TEXT", "TEXT", "TEXT"];
         self.table_create(&name, &keys, &vals);
 
-        // Making Parents Table
+        // Making Parents Table. Relates tags to tag parents.
         name = "Parents".to_string();
-        keys = vec_of_strings!["id", "name", "children", "namespace"];
+        keys = vec_of_strings![
+            "tag_namespace_id",
+            "tag_id",
+            "relate_namespace_id",
+            "relate_tag_id"
+        ];
         vals = vec_of_strings!["TEXT", "TEXT", "TEXT", "TEXT"];
         self.table_create(&name, &keys, &vals);
 
@@ -1301,6 +1307,7 @@ impl Main {
 
     ///
     /// db get namespace wrapper
+    /// Returns 0, false if namespace doesn't exist.
     ///
     pub fn namespace_get(&mut self, inp: &String) -> (usize, bool) {
         self._inmemdb.namespace_get(inp)
@@ -1366,14 +1373,17 @@ impl Main {
 
     pub fn parents_add(
         &mut self,
-        id: usize,
-        name: String,
-        children: String,
-        namespace: usize,
+        tag_namespace_id: usize,
+        tag_id: usize,
+        relate_namespace_id: usize,
+        relate_tag_id: usize,
         addtodb: bool,
     ) {
     }
 
+    ///
+    /// Adds tag into DB if it doesn't exist in the memdb.
+    ///
     pub fn tag_add(&mut self, tags: String, parents: String, namespace: usize, addtodb: bool) {
         let tags_grab: (usize, bool) = self._inmemdb.tags_get(tags.to_string(), namespace);
         let tag_id = self._inmemdb.tags_put(&tags, &namespace);
