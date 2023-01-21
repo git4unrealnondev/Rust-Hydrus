@@ -70,7 +70,6 @@ pub fn load_mem(tempmem: &mut Main, conn: &Connection) {
         let a: String = file.get(0).unwrap();
         let a1: usize = a.parse::<usize>().unwrap();
         tempmem.file_add(
-            a1,
             file.get(1).unwrap(),
             file.get(2).unwrap(),
             file.get(3).unwrap(),
@@ -95,7 +94,7 @@ pub fn load_mem(tempmem: &mut Main, conn: &Connection) {
         let a: usize = a1.parse::<usize>().unwrap();
         let b: String = b1.parse::<String>().unwrap();
         //namespace_vec.push((a, name.get(1).unwrap(), b.to_string()));
-        tempmem.namespace_add(a, name.get(1).unwrap(), b.to_string(), false);
+        tempmem.namespace_add(& name.get(1).unwrap(), &b.to_string(), false);
     }
 
     while let Some(tag) = rels.next().unwrap() {
@@ -293,6 +292,7 @@ struct Memdb {
     _parents_name: AHashMap<String, usize>,
     _parents_children: AHashMap<usize, String>,
     _parents_namespace: AHashMap<usize, usize>,
+    _parents_relate: IntMap<(usize, usize, usize, usize), usize>,
 
     _relationship_max_id: usize,
     _relationship_fileid: IntMap<usize, usize>,
@@ -338,6 +338,8 @@ impl Memdb {
             _parents_name: AHashMap::new(),
             _parents_children: AHashMap::new(),
             _parents_namespace: AHashMap::new(),
+            _parents_relate: HashMap::with_hasher(BuildNoHashHasher::default()),
+            
             _relationship_fileid: HashMap::with_hasher(BuildNoHashHasher::default()),
             _relationship_tagid: HashMap::with_hasher(BuildNoHashHasher::default()),
             _relationship_relate: AHashMap::new(),
@@ -502,6 +504,13 @@ impl Memdb {
         self.jobs_add_new(job);
     }
 
+    /// 
+    /// Checks if a parent exists. 
+    ///
+    fn parents_get(&self, tag_namespace_id: usize, tag_id: usize, relate_namespace_id: usize, relate_tag_id: usize) {
+        //self._parents_relate.contains_key(&(tag_namespace_id, tag_id, relate_namespace_id, relate_tag_id));
+    }
+    
     ///
     /// Checks if relationship exists in db.
     ///
@@ -1299,6 +1308,7 @@ impl Main {
             .unwrap()
             .0;
         if self._dbcommitnum >= general {
+            dbg!(self._dbcommitnum, general);
             self.transaction_flush();
             self._dbcommitnum = 0;
             dbg!(self._dbcommitnum, general);
@@ -1332,12 +1342,11 @@ impl Main {
     ///
     pub fn file_add(
         &mut self,
-        id: usize,
         hash: String,
         extension: String,
         location: String,
         addtodb: bool,
-    ) {
+    ) -> usize{
         let file_grab: (usize, bool) = self._inmemdb.file_get_hash(&hash);
 
         let file_id = self._inmemdb.file_put(&hash, &extension, &location);
@@ -1355,9 +1364,10 @@ impl Main {
             );
             self.db_commit_man();
         }
+        file_id
     }
 
-    pub fn namespace_add(&mut self, id: usize, name: String, description: String, addtodb: bool) {
+    pub fn namespace_add(&mut self, name: &String, description: &String, addtodb: bool) -> usize {
         let namespace_grab: (usize, bool) = self._inmemdb.namespace_get(&name);
 
         let name_id = self._inmemdb.namespace_put(&name);
@@ -1369,6 +1379,7 @@ impl Main {
             );
             self.db_commit_man();
         }
+        name_id
     }
 
     pub fn parents_add(
@@ -1384,7 +1395,7 @@ impl Main {
     ///
     /// Adds tag into DB if it doesn't exist in the memdb.
     ///
-    pub fn tag_add(&mut self, tags: String, parents: String, namespace: usize, addtodb: bool) {
+    pub fn tag_add(&mut self, tags: String, parents: String, namespace: usize, addtodb: bool) -> usize{
         let tags_grab: (usize, bool) = self._inmemdb.tags_get(tags.to_string(), namespace);
         let tag_id = self._inmemdb.tags_put(&tags, &namespace);
         //println!("{} {} {} {:?} {}", tags, namespace, addtodb, tags_grab, tag_id);
@@ -1401,6 +1412,7 @@ impl Main {
             );
             self.db_commit_man();
         }
+        tag_id
     }
 
     ///
@@ -1473,11 +1485,11 @@ impl Main {
         }
         for e in parsed_data.keys() {
             // Adds support for storing the source URL of the file.
-            self.namespace_add(0, "parsed_url".to_string(), "".to_string(), true);
+            self.namespace_add(&"parsed_url".to_string(), &"".to_string(), true);
             let url_id = self._inmemdb.namespace_get(&"parsed_url".to_string());
 
             for each in parsed_data[e].values().next().unwrap().keys() {
-                self.namespace_add(0, each.to_string(), "".to_string(), true);
+                self.namespace_add(&each.to_string(), &"".to_string(), true);
             }
 
             // Loops through the source urls and adds tags w/ namespace into db.

@@ -195,14 +195,20 @@ fn main() {
     let mut threadhandler = scr::threading::threads::new();
     dbg!("a");
     jobmanager.jobs_run_new(&mut arc.clone(), &mut threadhandler);
-    dbg!("b");
+    // Anything below here will run automagically. 
+    // Jobs run in OS threads
+    
+    
     //let test =
 
     //Finalizing wrapup.
 
     //jobmanager.jobs_cleanup();
-    arc.lock().unwrap().transaction_flush();
-    arc.lock().unwrap().transaction_close();
-    info!("UNLOADING");
+    
+    // Not needed due to sqlite closing db on close. 
+    
+    //arc.lock().unwrap().transaction_flush();
+    //arc.lock().unwrap().transaction_close();
+    //info!("UNLOADING");
     log::logger().flush();
 }

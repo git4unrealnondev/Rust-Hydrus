@@ -1,5 +1,6 @@
 use ahash::AHashMap;
 use json;
+use urlencoding::encode;
 use nohash_hasher::NoHashHasher;
 use std::fs::File;
 use std::io;
@@ -56,9 +57,6 @@ impl InternalScraper {
 /// Builds the URL for scraping activities.
 ///
 fn build_url(params: &Vec<String>, pagenum: u64) -> String {
-    
-    dbg!(&params);
-    
     let url = "https://e621.net/posts.json";
     let tag_store = "&tags=";
     let page = "&page=";
@@ -67,6 +65,21 @@ fn build_url(params: &Vec<String>, pagenum: u64) -> String {
 
     if params.len() == 0 {
         return "".to_string();
+    }
+    else {
+        let endint = params.len() -1;
+        let endtwo = params.len() -2;
+        let end = &params[endint];
+        let mut format_string = "".to_string();
+        for each in 0..endint {
+            
+            format_string += &params[each].replace(" ", "+");
+            if each != endtwo {
+                format_string += "+";
+            }
+
+        }
+        return format!("{}{}{}{}{}{}", url, params[endint], tag_store, format_string, page, pagenum)
     }
 
     if params.len() == 1 {
@@ -107,6 +120,7 @@ pub fn url_get(params: &Vec<String>) -> Vec<String> {
 ///
 #[no_mangle]
 pub fn url_dump(params: &Vec<String>) -> Vec<String> {
+    dbg!(&params);
     let mut ret = Vec::new();
     let hardlimit = 751;
     for i in 1..hardlimit {
@@ -209,7 +223,6 @@ pub fn parser(params: &String) -> Result<sharedtypes::ScraperObject, &'static st
 
     let mut files: HashMap<u64, sharedtypes::FileObject, BuildHasherDefault<NoHashHasher<u64>>> =
         HashMap::with_hasher(BuildHasherDefault::default());
-    dbg!(&params);
     let js = json::parse(params).unwrap();
 
     //let mut file = File::create("main1.json").unwrap();

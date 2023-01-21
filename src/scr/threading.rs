@@ -21,6 +21,7 @@ use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
 use tokio::runtime::Handle;
 use tokio::runtime::Runtime;
+use file_format::{FileFormat, Kind};
 use url::Url;
 
 pub struct threads {
@@ -171,7 +172,7 @@ impl Worker {
                     ))
                     .unwrap()
                     .1;
-                    
+
                 scrap_data = datafromdb;
                 // drops mutex for other threads to use.
             }
@@ -233,6 +234,7 @@ impl Worker {
                 //});
 
                 for urlstring in each.1 {
+                    ratelimit.wait();
                     let resp = task::block_on(download::dltext_new(
                         urlstring,
                         &mut ratelimit,
@@ -245,19 +247,88 @@ impl Worker {
                     match resp {
                         Ok(_) => {
                             let st = scraper::parser_call(&liba, &resp.unwrap());
-
-                            for each in &st.unwrap().file {
+                            //let mut temp = Vec::new();
+                            for each in st.unwrap().file {
                                 //ratelimit.wait();
-                                dbg!();
-                                dbg!(&each.1.source_url);
+                                // Determine if we need to download file.
+                                let mut does_url_exist = false;
+                                {
+                                    let unwrappydb = &mut db.lock().unwrap();
+                                    let source_url_id =
+                                        unwrappydb.namespace_get(&"source_url".to_string()); // defaults to 0 due to unknown.
+                                    if !source_url_id.1 {
+                                        // Namespace doesn't exist. Will create
+                                        unwrappydb.namespace_add(
+                                            &"source_url".to_string(),
+                                            &"Source URL for a file.".to_string(),
+                                            true,
+                                        );
+                                        log::info!("Adding namespace {} with an id {} due to not existing.", "source_url", "0");
+                                    }
+                                    let url_tag = unwrappydb.tag_get_name(
+                                        each.1.source_url.to_string(),
+                                        source_url_id.0,
+                                    );
+                                    does_url_exist = url_tag.1;
+                                }
+                                if !does_url_exist {
+                                    let mut location = String::new();
+                                    {
+                                        let unwrappydb = &mut db.lock().unwrap();
+                                        location = unwrappydb.settings_get_name(&"FilesLoc".to_string()).unwrap().1;
+                                    }
+                                    ratelimit.wait();
+                                    //let file = each.1;
+                                    //temp.push(task::block_on(download::test(url)));
+                                    let (hash, file_ext) = task::block_on(download::dlfile_new(&client, &each.1, &location));
+                                    {
+                                    let unwrappydb = &mut db.lock().unwrap();
+                                    
+                                    let source_namespace_url_id =
+                                        unwrappydb.namespace_get(&"source_url".to_string()).0;
+                                        
+                                    // Adds file's source URL into DB
+                                    let file_id = unwrappydb.file_add(hash.to_string(), file_ext.to_string(), location.to_string(), true);
+                                    let source_url_id = unwrappydb.tag_add(each.1.source_url.to_string(), "".to_string(), source_namespace_url_id, true);
+                                      unwrappydb.relationship_add(file_id, source_url_id, true);
+                                    
+                                    // Loops through all tags
+                                    for every in &each.1.tag_list {
+                                    // Matches tag type. Changes depending on what type of tag (metadata)
+                                    match &every.1.tag_type {
+                                        sharedtypes::TagType::Normal => match every.1.relates_to {
+                                            None => {
+                                                // Normal tag no relationships. IE Tag to file
+                                                let tag_namespace_id = unwrappydb.namespace_add(&every.1.namespace, &"".to_string(), true);
+                                                let tag_id = unwrappydb.tag_add(every.1.tag.to_string(), "".to_string(), tag_namespace_id, true);
+                                                unwrappydb.relationship_add(file_id, tag_id, true);
+                                            }
+                                            Some(_) => {
+                                                // Tag with relationship info. IE Tag to pool
+                                                //dbg!("Relationship", &every.1);
+                                                
+                                                let tag_namespace_id = unwrappydb.namespace_add(&every.1.namespace, &"".to_string(), true);
+                                                let tag_id = unwrappydb.tag_add(every.1.tag.to_string(), "".to_string(), tag_namespace_id, true);
+                                                
+                                                
+                                            }
+                                        },
+                                        sharedtypes::TagType::Hash(_) => {
+                                            // dbg!("Hash", &every.1);
+                                        }
+                                        sharedtypes::TagType::Special => {}
+                                    }
+                                        
+                                    }
+                                    
 
-                                //task::block_on(download::dlfile_new(
-                                 //   &mut ratelimit,
-                                 //   &mut client,
-                                //    &each.1,
-                                //    &mut db,
-                                //));
-                                for every in &each.1.tag_list {
+                                    //println!("{:?}", every);
+                                }
+                                    
+                                    
+                                }
+                                
+                                /*for every in &each.1.tag_list {
                                     // Matches tag type. Changes depending on what type of tag (metadata)
                                     match &every.1.tag_type {
                                         sharedtypes::TagType::Normal => match every.1.relates_to {
@@ -277,19 +348,25 @@ impl Worker {
                                     }
 
                                     //println!("{:?}", every);
-                                }
-                                println!("");
+                                }*/
+                                //println!("");
                             }
+                            
                         }
                         Err(_) => {}
                     }
                     //let st = scraper::parser_call(&liba, &beans);
                     //dbg!(&st);
                     //dbg!(rt.block_on(resps));
-                    break;
+                    //break;
                 }
                 //dbg!(resps)
             }
+            
+            
+            let unwrappydb = &mut db.lock().unwrap();
+            unwrappydb.transaction_flush();
+            
             //let dur = Duration::from_millis(1);
             //thread::sleep(dur);
             //for each in resps {

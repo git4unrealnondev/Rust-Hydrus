@@ -6,10 +6,10 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [profile.release]
-#opt-level = 3
-#lto=true
-#codegenunits=1
-#strip = true
+opt-level = 3
+lto=true
+codegenunits=1
+strip = true
 
 [lib]
 doc=true
@@ -23,3 +23,4 @@ ahash = "0.7.6"
 strum = "0.24.1"
 strum_macros = "0.24.3"
 nohash-hasher = "0.2.0"
+urlencoding = "2.1.2"

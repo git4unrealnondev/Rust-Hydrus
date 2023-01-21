@@ -7,6 +7,7 @@ use futures;
 use http::request;
 use http::Method;
 use reqwest::{Client, Request, Response};
+use file_format::{FileFormat, Kind};
 use sha2::Digest;
 use sha2::Sha512;
 use std::collections::HashMap;
@@ -42,7 +43,7 @@ pub fn ratelimiter_create(number: u64, duration: Duration) -> ratelimit::Limiter
     //    .rate_limit(number, duration)
     //    .service(client);
     ratelimit::Builder::new()
-        .capacity(4) //number of tokens the bucket will hold
+        .capacity(2) //number of tokens the bucket will hold
         .quantum(number.try_into().unwrap()) //add one token per interval
         .interval(duration) //add quantum tokens every 1 second
         .build()
@@ -73,7 +74,7 @@ pub async fn dltext_new(
 ) -> Result<String, reqwest::Error> {
     //let mut ret: Vec<AHashMap<String, AHashMap<String, Vec<String>>>> = Vec::new();
     //let ex = Executor::new();
-
+    dbg!(&url_string);
     let url = Url::parse(&url_string).unwrap();
     //let url = Url::parse("http://www.google.com").unwrap();
 
@@ -88,7 +89,7 @@ pub async fn dltext_new(
     //let test = reqwest::get(url).await.unwrap().text();
 
     //let futurez = futures::executor::block_on(futureresult);
-    dbg!(&futureresult);
+    //dbg!(&futureresult);
 
     match futureresult {
         Ok(_) => Ok(task::block_on(futureresult.unwrap().text()).unwrap()),
@@ -96,32 +97,61 @@ pub async fn dltext_new(
     }
 }
 
+
+pub async fn test(url: String) -> String {
+
+    dbg!(url);
+    "hi".to_string()
+}
+
 ///
 /// Downloads file to position
 ///
 pub async fn dlfile_new(
-    ratelimit_object: &mut ratelimit::Limiter,
-    client: &mut Client,
-    tags: &sharedtypes::FileObject,
-    db: &mut Arc<Mutex<database::Main>>,
-) {
+    client: &Client,
+    file: &sharedtypes::FileObject,
+    location: &String,
+) -> (String, String){
+    dbg!("b");
+    let mut hasher = Sha512::new();
     
-    // Determine if we need to download file.
-    let does_url_exist = false;
-    {
-        let unwrappydb = &mut db.lock().unwrap();
-        let namespace_id = unwrappydb.namespace_get(&"source_url".to_string()); // defaults to 0 due to unknown.
-        if !namespace_id.1 { // Namespace doesn't exist. Will create
-            unwrappydb.namespace_add(0, "source_url".to_string(), "Source URL for a file.".to_string(), true);
-        }
-        let url_tag = unwrappydb.tag_get_name(tags.source_url.to_string(), namespace_id.0);
-        does_url_exist = url_tag.1;
-        
-    }
-    dbg!(does_url_exist);
+    let url = Url::parse(&file.source_url).unwrap();
+    let futureresult = client.get(url).send().await.unwrap();
     
+    // Downloads file into byte memory buffer
+    let bytes = futureresult.bytes().await.unwrap();
+    hasher.update(&bytes.as_ref());
     
-    ratelimit_object.wait();
+    // Final Hash
+    let hash = format!("{:X}", hasher.finalize());
+
+    // Gets and makes folderpath.
+    let final_loc = format!(
+        "{}/{}{}/{}{}/{}{}",
+        &location,
+        hash.chars().next().unwrap(),
+        hash.chars().nth(1).unwrap(),
+        hash.chars().nth(2).unwrap(),
+        hash.chars().nth(3).unwrap(),
+        hash.chars().nth(4).unwrap(),
+        hash.chars().nth(5).unwrap()
+    );
+    file::folder_make(&final_loc);
+    
+    // Gives file extension
+    let file_ext = FileFormat::from_bytes(&bytes).extension().to_string();
+    
+    let mut content = Cursor::new(bytes);
+
+    // Gets final path of file.
+    let orig_path = format!("{}/{}", &final_loc, &hash);
+    let mut file_path = std::fs::File::create(&orig_path).unwrap();
+    
+    // Copies file from memory to disk
+    std::io::copy(&mut content, &mut file_path).unwrap();
+    dbg!(&hash);
+    (hash, file_ext)
+    //ratelimit_object.wait();
     //dbg!(tags);
     //dbg!("waited {}", &url);
 }

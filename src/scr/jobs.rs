@@ -10,7 +10,7 @@ use crate::scr::threading;
 use crate::scr::time;
 use ahash::AHashMap;
 use http::uri::Authority;
-use log::info;
+use log::{error, info};
 use reqwest::{Client, Request, Response};
 use std::collections::hash_map::Entry;
 use std::sync::{Arc, Mutex};
