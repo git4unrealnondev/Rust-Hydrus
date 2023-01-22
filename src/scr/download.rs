@@ -3,11 +3,11 @@ use super::scraper;
 use super::sharedtypes;
 use crate::scr::file;
 use ahash::AHashMap;
+use file_format::{FileFormat, Kind};
 use futures;
 use http::request;
 use http::Method;
 use reqwest::{Client, Request, Response};
-use file_format::{FileFormat, Kind};
 use sha2::Digest;
 use sha2::Sha512;
 use std::collections::HashMap;
@@ -56,12 +56,10 @@ pub fn ratelimiter_create(number: u64, duration: Duration) -> ratelimit::Limiter
 pub fn client_create() -> Client {
     let useragent = "RustHydrus V1".to_string();
     // The client that does the downloading
-    let client = reqwest::ClientBuilder::new()
+    reqwest::ClientBuilder::new()
         .user_agent(useragent)
         .build()
-        .unwrap();
-
-    client
+        .unwrap()
 }
 
 ///
@@ -97,9 +95,7 @@ pub async fn dltext_new(
     }
 }
 
-
 pub async fn test(url: String) -> String {
-
     dbg!(url);
     "hi".to_string()
 }
@@ -111,17 +107,17 @@ pub async fn dlfile_new(
     client: &Client,
     file: &sharedtypes::FileObject,
     location: &String,
-) -> (String, String){
+) -> (String, String) {
     dbg!("b");
     let mut hasher = Sha512::new();
-    
+
     let url = Url::parse(&file.source_url).unwrap();
     let futureresult = client.get(url).send().await.unwrap();
-    
+
     // Downloads file into byte memory buffer
     let bytes = futureresult.bytes().await.unwrap();
     hasher.update(&bytes.as_ref());
-    
+
     // Final Hash
     let hash = format!("{:X}", hasher.finalize());
 
@@ -137,16 +133,16 @@ pub async fn dlfile_new(
         hash.chars().nth(5).unwrap()
     );
     file::folder_make(&final_loc);
-    
+
     // Gives file extension
     let file_ext = FileFormat::from_bytes(&bytes).extension().to_string();
-    
+
     let mut content = Cursor::new(bytes);
 
     // Gets final path of file.
     let orig_path = format!("{}/{}", &final_loc, &hash);
     let mut file_path = std::fs::File::create(&orig_path).unwrap();
-    
+
     // Copies file from memory to disk
     std::io::copy(&mut content, &mut file_path).unwrap();
     dbg!(&hash);

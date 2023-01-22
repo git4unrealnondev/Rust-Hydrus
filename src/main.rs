@@ -47,12 +47,10 @@ fn makedb(dbloc: &str) -> scr::database::Main {
 
     //let mut dbcon = scr::database::dbinit(&path);
 
-    let data = scr::database::Main::new(path, vers.try_into().unwrap());
+    scr::database::Main::new(path, vers.try_into().unwrap())
 
     //let dbcon =
     //data.load_mem(&mut data._conn);
-
-    data
 }
 /*
 opt-level = 3
@@ -194,19 +192,18 @@ fn main() {
     // Creates a threadhandler that manages callable threads.
     let mut threadhandler = scr::threading::threads::new();
     dbg!("a");
-    jobmanager.jobs_run_new(&mut arc.clone(), &mut threadhandler);
-    // Anything below here will run automagically. 
+    jobmanager.jobs_run_new(&mut arc, &mut threadhandler);
+    // Anything below here will run automagically.
     // Jobs run in OS threads
-    
-    
+
     //let test =
 
     //Finalizing wrapup.
 
     //jobmanager.jobs_cleanup();
-    
-    // Not needed due to sqlite closing db on close. 
-    
+
+    // Not needed due to sqlite closing db on close.
+
     //arc.lock().unwrap().transaction_flush();
     //arc.lock().unwrap().transaction_close();
     //info!("UNLOADING");

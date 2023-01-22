@@ -20,6 +20,15 @@ use std::panic;
 use std::path::Path;
 use std::{collections::HashMap, hash::BuildHasherDefault};
 
+pub enum tag_relate_conjoin {
+    Tag,
+    Error,
+    Relate,
+    Conjoin,
+    Tag_and_Relate,
+    None,
+}
+
 /// Returns an open connection to use.
 pub fn dbinit(dbpath: &String) -> Connection {
     //Engaging Transaction Handling
@@ -94,7 +103,7 @@ pub fn load_mem(tempmem: &mut Main, conn: &Connection) {
         let a: usize = a1.parse::<usize>().unwrap();
         let b: String = b1.parse::<String>().unwrap();
         //namespace_vec.push((a, name.get(1).unwrap(), b.to_string()));
-        tempmem.namespace_add(& name.get(1).unwrap(), &b.to_string(), false);
+        tempmem.namespace_add(&name.get(1).unwrap(), &b.to_string(), false);
     }
 
     while let Some(tag) = rels.next().unwrap() {
@@ -288,11 +297,13 @@ struct Memdb {
     _namespace_name: AHashMap<String, usize>,
     _namespace_description: AHashMap<usize, String>,
 
+    //_parents_relate: IntMap<(usize, usize, usize, usize), usize>,
+    _parents_tag: AHashMap<(usize, usize), usize>,
+    _parents_tag_max_id: usize,
+    _parents_relate: AHashMap<(usize, usize), usize>,
+    _parents_relate_max_id: usize,
+    _parents_conjoin: AHashMap<(usize, usize), usize>,
     _parents_max_id: usize,
-    _parents_name: AHashMap<String, usize>,
-    _parents_children: AHashMap<usize, String>,
-    _parents_namespace: AHashMap<usize, usize>,
-    _parents_relate: IntMap<(usize, usize, usize, usize), usize>,
 
     _relationship_max_id: usize,
     _relationship_fileid: IntMap<usize, usize>,
@@ -335,11 +346,10 @@ impl Memdb {
             _namespace_name: AHashMap::new(),
             _namespace_description: AHashMap::new(),
             //_parents_id:AHashMap::new(),
-            _parents_name: AHashMap::new(),
-            _parents_children: AHashMap::new(),
-            _parents_namespace: AHashMap::new(),
-            _parents_relate: HashMap::with_hasher(BuildNoHashHasher::default()),
-            
+            _parents_relate: AHashMap::new(),
+            _parents_tag: AHashMap::new(),
+            _parents_conjoin: AHashMap::new(),
+
             _relationship_fileid: HashMap::with_hasher(BuildNoHashHasher::default()),
             _relationship_tagid: HashMap::with_hasher(BuildNoHashHasher::default()),
             _relationship_relate: AHashMap::new(),
@@ -356,6 +366,8 @@ impl Memdb {
             _jobs_max_id: 0,
             _namespace_max_id: 0,
             _parents_max_id: 0,
+            _parents_tag_max_id: 0,
+            _parents_relate_max_id: 0,
             _relationship_max_id: 0,
             _settings_max_id: 0,
             _tags_max_id: 0,
@@ -504,13 +516,157 @@ impl Memdb {
         self.jobs_add_new(job);
     }
 
-    /// 
-    /// Checks if a parent exists. 
     ///
-    fn parents_get(&self, tag_namespace_id: usize, tag_id: usize, relate_namespace_id: usize, relate_tag_id: usize) {
+    /// Checks if a parent exists.
+    ///
+    fn parents_get(
+        &self,
+        tag_namespace_id: usize,
+        tag_id: usize,
+        relate_namespace_id: usize,
+        relate_tag_id: usize,
+    ) -> (tag_relate_conjoin, &usize) {
+        // Checks if keys exists in each hashmap.
+        // Twohashmaps and one relational hashmap. Should be decently good.
+        let tag_usize = self._parents_tag.get(&(tag_namespace_id, tag_id));
+        let relate_usize = self
+            ._parents_relate
+            .get(&(relate_namespace_id, relate_tag_id));
+        let tag_conjoin = self
+            ._parents_conjoin
+            .get(&(*tag_usize.unwrap(), *relate_usize.unwrap()));
+
+        match tag_usize {
+            None => match relate_usize {
+                None =>  (tag_relate_conjoin::Tag_and_Relate, &0),
+                Some(_) => match tag_conjoin {
+                    None =>  (tag_relate_conjoin::Tag, relate_usize.unwrap()),
+                    Some(_) =>  (tag_relate_conjoin::Error, tag_conjoin.unwrap()),
+                },
+            },
+            Some(_) => match relate_usize {
+                None =>  (tag_relate_conjoin::Relate, tag_usize.unwrap()),
+                Some(_) => match tag_conjoin {
+                    None =>  (tag_relate_conjoin::Conjoin, &0),
+                    Some(_) =>  (tag_relate_conjoin::None, tag_conjoin.unwrap()),
+                },
+            },
+        }
         //self._parents_relate.contains_key(&(tag_namespace_id, tag_id, relate_namespace_id, relate_tag_id));
     }
-    
+
+    ///
+    /// Increase parents tag increase
+    ///
+    fn parents_tag_increment(&mut self) {
+        self._parents_tag_max_id += 1;
+    }
+
+    ///
+    /// Increases relates tag increase
+    ///
+    fn parents_relate_increment(&mut self) {
+        self._parents_relate_max_id += 1;
+    }
+
+    ///
+    /// parents conjoin relates tag increase
+    ///
+    fn parents_conjoin_increment(&mut self) {
+        self._parents_max_id += 1;
+    }
+
+    ///
+    /// Creates a parent inside memdb.
+    ///
+    fn parents_put(
+        &mut self,
+        tag_namespace_id: usize,
+        tag_id: usize,
+        relate_namespace_id: usize,
+        relate_tag_id: usize,
+    ) -> tag_relate_conjoin {
+        let (tag_enum, fin_uint) =
+            self.parents_get(tag_namespace_id, tag_id, relate_namespace_id, relate_tag_id);
+
+        match tag_enum {
+            tag_relate_conjoin::Error => {
+                // Error happened. :D
+                error!("WARNING: PARENTS_GET GOT ERROR FOR UNKNOWN POSSIBLE DB CORRUPTION: {} {} : {} {} :", tag_namespace_id, tag_id, relate_namespace_id, relate_tag_id);
+                error!("PANICING DUE TO PARENTS_GET FAIL");
+                panic!("Check Log for details");
+            }
+            tag_relate_conjoin::Tag => {
+                // Missing tag and namespace
+                let namespace = tag_namespace_id;
+                let fint = *fin_uint;
+                self._parents_tag
+                    .insert((namespace, tag_id), self._parents_tag_max_id);
+                self._parents_conjoin
+                    .insert((self._parents_tag_max_id, fint), self._parents_max_id);
+                self.parents_tag_increment();
+                self.parents_conjoin_increment();
+                tag_relate_conjoin::Tag
+            }
+            tag_relate_conjoin::Relate => {
+                // Missing tag_relate and namespace_relate
+                let fint = *fin_uint;
+                self._parents_relate.insert(
+                    (relate_namespace_id, relate_tag_id),
+                    self._parents_relate_max_id,
+                );
+                self._parents_conjoin
+                    .insert((fint, self._parents_relate_max_id), self._parents_max_id);
+                self.parents_relate_increment();
+                self.parents_conjoin_increment();
+                tag_relate_conjoin::Relate
+            }
+            tag_relate_conjoin::Conjoin => {
+                // Missing Conjoin linkage between two hashmaps
+                let tid = self._parents_tag.get(&(tag_namespace_id, tag_id)).unwrap();
+                let rid = self
+                    ._parents_relate
+                    .get(&(relate_namespace_id, relate_tag_id))
+                    .unwrap();
+                self._parents_conjoin
+                    .insert((*tid, *rid), self._parents_max_id);
+                self.parents_conjoin_increment();
+                tag_relate_conjoin::Conjoin
+            }
+            tag_relate_conjoin::Tag_and_Relate => {
+                // Missing tag&namespace and relate&namespace
+                self._parents_tag
+                    .insert((tag_namespace_id, tag_id), self._parents_tag_max_id);
+                self._parents_relate.insert(
+                    (relate_namespace_id, relate_tag_id),
+                    self._parents_relate_max_id,
+                );
+                self._parents_conjoin.insert(
+                    (self._parents_tag_max_id, self._parents_relate_max_id),
+                    self._parents_max_id,
+                );
+                self.parents_tag_increment();
+                self.parents_relate_increment();
+                self.parents_conjoin_increment();
+                tag_relate_conjoin::Tag_and_Relate
+            }
+            tag_relate_conjoin::None => {
+                // Missing Nothing
+                tag_relate_conjoin::None
+            }
+        }
+    }
+
+    /*pub enum tag_relate_conjoin {
+        Tag,
+        Error,
+        Relate,
+        Conjoin,
+        Tag_and_Relate,
+        Tag_and_Relatead_Conjoin,
+        None,
+    }*/
+
     ///
     /// Checks if relationship exists in db.
     ///
@@ -647,6 +803,33 @@ impl Memdb {
             (self._file_hash[hash], true)
         } else {
             (0, false)
+        }
+    }
+
+    ///
+    /// Returns a files info based on id
+    ///
+    pub fn file_get_id(&self, id: &usize) -> Option<(String, String, String)> {
+        let hash = self
+            ._file_hash
+            .iter()
+            .find_map(|(key, &val)| if &val == id { Some(key) } else { None });
+        let ext = self
+            ._file_extension
+            .iter()
+            .find_map(|(key, &val)| if &val == id { Some(key) } else { None });
+        let loc = self
+            ._file_location
+            .iter()
+            .find_map(|(key, &val)| if &val == id { Some(key) } else { None });
+        if hash.is_some() && ext.is_some() && loc.is_some() {
+            Some((
+                hash.unwrap().to_string(),
+                ext.unwrap().to_string(),
+                loc.unwrap().to_string(),
+            ))
+        } else {
+            None
         }
     }
 
@@ -837,7 +1020,7 @@ impl Main {
     pub fn jobs_add_new_todb(
         &mut self,
         site: &String,
-        query: &String,
+        query: &str,
         time_offset: usize,
         current_time: usize,
         committype: &CommitType,
@@ -1346,7 +1529,7 @@ impl Main {
         extension: String,
         location: String,
         addtodb: bool,
-    ) -> usize{
+    ) -> usize {
         let file_grab: (usize, bool) = self._inmemdb.file_get_hash(&hash);
 
         let file_id = self._inmemdb.file_put(&hash, &extension, &location);
@@ -1367,10 +1550,23 @@ impl Main {
         file_id
     }
 
-    pub fn namespace_add(&mut self, name: &String, description: &String, addtodb: bool) -> usize {
-        let namespace_grab: (usize, bool) = self._inmemdb.namespace_get(&name);
+    ///
+    /// Wrapper for inmemdb function: file_get_id
+    /// Returns info for file in Option
+    // DO NOT USE UNLESS NECISSARY. LOG(n2) * 3
+    ///
+    pub fn file_get_id(&self, fileid: &usize) -> Option<(String, String, String)> {
+        self._inmemdb.file_get_id(fileid)
+    }
 
-        let name_id = self._inmemdb.namespace_put(&name);
+    ///
+    /// Adds namespace into DB.
+    /// Returns the ID of the namespace.
+    ///
+    pub fn namespace_add(&mut self, name: &String, description: &String, addtodb: bool) -> usize {
+        let namespace_grab: (usize, bool) = self._inmemdb.namespace_get(name);
+
+        let name_id = self._inmemdb.namespace_put(name);
         if addtodb && !namespace_grab.1 {
             let inp = "INSERT INTO Namespace VALUES(?, ?, ?)";
             let _out = self._conn.borrow_mut().execute(
@@ -1382,6 +1578,32 @@ impl Main {
         name_id
     }
 
+    ///
+    /// Wrapper that handles inserting parents info into DB.
+    ///
+    fn parents_add_db(
+        &mut self,
+        tag_namespace_id: &usize,
+        tag_id: &usize,
+        relate_namespace_id: &usize,
+        relate_tag_id: &usize,
+    ) {
+        let inp = "INSERT INTO Parents VALUES(?, ?, ?, ?)";
+        let _out = self._conn.borrow_mut().execute(
+            inp,
+            params![
+                tag_namespace_id.to_string(),
+                tag_id.to_string(),
+                relate_namespace_id.to_string(),
+                relate_tag_id.to_string()
+            ],
+        );
+        self.db_commit_man();
+    }
+
+    ///
+    /// Wrapper for inmemdb and parents_add_db
+    ///
     pub fn parents_add(
         &mut self,
         tag_namespace_id: usize,
@@ -1390,12 +1612,66 @@ impl Main {
         relate_tag_id: usize,
         addtodb: bool,
     ) {
+        let todo =
+            self._inmemdb
+                .parents_put(tag_namespace_id, tag_id, relate_namespace_id, relate_tag_id);
+
+        match todo {
+            tag_relate_conjoin::Tag => {
+                if addtodb {
+                    self.parents_add_db(
+                        &tag_namespace_id,
+                        &tag_id,
+                        &relate_namespace_id,
+                        &relate_tag_id,
+                    );
+                }
+            }
+            tag_relate_conjoin::Error => {}
+            tag_relate_conjoin::Relate => {
+                if addtodb {
+                    self.parents_add_db(
+                        &tag_namespace_id,
+                        &tag_id,
+                        &relate_namespace_id,
+                        &relate_tag_id,
+                    );
+                }
+            }
+            tag_relate_conjoin::Conjoin => {
+                if addtodb {
+                    self.parents_add_db(
+                        &tag_namespace_id,
+                        &tag_id,
+                        &relate_namespace_id,
+                        &relate_tag_id,
+                    );
+                }
+            }
+            tag_relate_conjoin::Tag_and_Relate => {
+                if addtodb {
+                    self.parents_add_db(
+                        &tag_namespace_id,
+                        &tag_id,
+                        &relate_namespace_id,
+                        &relate_tag_id,
+                    );
+                }
+            }
+            tag_relate_conjoin::None => {}
+        }
     }
 
     ///
     /// Adds tag into DB if it doesn't exist in the memdb.
     ///
-    pub fn tag_add(&mut self, tags: String, parents: String, namespace: usize, addtodb: bool) -> usize{
+    pub fn tag_add(
+        &mut self,
+        tags: String,
+        parents: String,
+        namespace: usize,
+        addtodb: bool,
+    ) -> usize {
         let tags_grab: (usize, bool) = self._inmemdb.tags_get(tags.to_string(), namespace);
         let tag_id = self._inmemdb.tags_put(&tags, &namespace);
         //println!("{} {} {} {:?} {}", tags, namespace, addtodb, tags_grab, tag_id);
@@ -1461,68 +1737,6 @@ impl Main {
         dbg!(&filler, &addtodb);
         self._inmemdb
             .jobs_add(time, reptime, site.to_string(), param.to_string(), filler);
-    }
-
-    ///
-    /// Adds namespace & relationship & tags data
-    /// into db.
-    /// TODO: Needs to add in support for url namespace and url tag adding.
-    ///
-    pub fn parse_input(
-        &mut self,
-        parsed_data: &AHashMap<String, AHashMap<String, AHashMap<String, Vec<String>>>>,
-    ) -> (
-        AHashMap<String, Vec<(String, usize)>>,
-        AHashMap<String, Vec<(String, usize)>>,
-    ) {
-        let mut url_vec: Vec<String> = Vec::new();
-        let mut tags_namespace_id: Vec<(String, usize)> = Vec::new();
-        let mut urltoid: AHashMap<String, Vec<(String, usize)>> = AHashMap::new();
-        let mut urltonid: AHashMap<String, Vec<(String, usize)>> = AHashMap::new();
-
-        if parsed_data.is_empty() {
-            return (urltoid, urltonid);
-        }
-        for e in parsed_data.keys() {
-            // Adds support for storing the source URL of the file.
-            self.namespace_add(&"parsed_url".to_string(), &"".to_string(), true);
-            let url_id = self._inmemdb.namespace_get(&"parsed_url".to_string());
-
-            for each in parsed_data[e].values().next().unwrap().keys() {
-                self.namespace_add(&each.to_string(), &"".to_string(), true);
-            }
-
-            // Loops through the source urls and adds tags w/ namespace into db.
-            for each in parsed_data[e].keys() {
-                // Remove url from list to download if already in db. Does not search by namespace. ONLY TAG can probably fix this but lazy and it works
-
-                //self.tag_add(each.to_string(), "".to_string(), url_id.0, true);
-                url_vec.push(each.to_string());
-                //dbg!(&parsed_data[each]);
-                tags_namespace_id = Vec::new();
-                for every in &parsed_data[e][each] {
-                    //dbg!(every.0);
-                    let namespace_id = self._inmemdb.namespace_get(every.0);
-
-                    for ene in every.1 {
-                        //self.tag_add(ene.to_string(), "".to_string(), namespace_id.0, true);
-                        tags_namespace_id.push((ene.to_string(), namespace_id.0));
-                    }
-                }
-                /*if self._inmemdb.tags_get(&each.to_string(), url_id.0).1 {
-                    if tags_namespace_id[1].1 == 0 {dbg!(each);}
-                    urltonid.insert(each.to_string(), tags_namespace_id);
-
-                } else {*/
-                if !self._inmemdb.tags_get(each.to_string(), url_id.0).1 {
-                    urltoid.insert(each.to_string(), tags_namespace_id);
-                } else {
-                    urltonid.insert(each.to_string(), tags_namespace_id);
-                }
-                //}
-            }
-        }
-        (urltoid, urltonid)
     }
 
     ///
