@@ -128,11 +128,16 @@ pub fn load_mem(tempmem: &mut Main, conn: &Connection) {
     }
 
     while let Some(tag) = paes.next().unwrap() {
-        let a1: usize = tag.get(0).unwrap();
-        let a2: usize = tag.get(1).unwrap();
-        let a3: usize = tag.get(2).unwrap();
-        let a4: usize = tag.get(3).unwrap();
-        tempmem.parents_add(a1, a2, a3, a4, false);
+        let a1: String = tag.get(0).unwrap();
+        let a2: String = tag.get(1).unwrap();
+        let a3: String = tag.get(2).unwrap();
+        let a4: String = tag.get(3).unwrap();
+
+        let b1 = a1.parse::<usize>().unwrap();
+        let b2 = a2.parse::<usize>().unwrap();
+        let b3 = a3.parse::<usize>().unwrap();
+        let b4 = a4.parse::<usize>().unwrap();
+        tempmem.parents_add(b1, b2, b3, b4, false);
     }
 
     /*while let Some(file) = files.next().unwrap() {
@@ -282,8 +287,7 @@ struct Memdb {
 
     _file_max_id: usize,
     _file_hash: AHashMap<String, usize>,
-    _file_extension: AHashMap<String, usize>,
-    _file_location: AHashMap<String, usize>,
+    _file: AHashMap<(String, String, String), usize>,
 
     _jobs_max_id: usize,
     _jobs_ref: IntMap<usize, JobsRef>,
@@ -334,8 +338,7 @@ impl Memdb {
             //_table_names: ,
             //_file_id:AHashMap::new(),
             _file_hash: AHashMap::new(),
-            _file_extension: AHashMap::new(),
-            _file_location: AHashMap::new(),
+            _file: AHashMap::new(),
             _jobs_time: HashMap::with_hasher(BuildNoHashHasher::default()),
             _jobs_rep: HashMap::with_hasher(BuildNoHashHasher::default()),
             _jobs_ref: HashMap::with_hasher(BuildNoHashHasher::default()),
@@ -532,24 +535,24 @@ impl Memdb {
         let relate_usize = self
             ._parents_relate
             .get(&(relate_namespace_id, relate_tag_id));
-        let tag_conjoin = self
-            ._parents_conjoin
-            .get(&(*tag_usize.unwrap(), *relate_usize.unwrap()));
 
         match tag_usize {
             None => match relate_usize {
-                None =>  (tag_relate_conjoin::Tag_and_Relate, &0),
-                Some(_) => match tag_conjoin {
-                    None =>  (tag_relate_conjoin::Tag, relate_usize.unwrap()),
-                    Some(_) =>  (tag_relate_conjoin::Error, tag_conjoin.unwrap()),
-                },
+                None => (tag_relate_conjoin::Tag_and_Relate, &0),
+                Some(_) => (tag_relate_conjoin::Tag, &0),
             },
             Some(_) => match relate_usize {
-                None =>  (tag_relate_conjoin::Relate, tag_usize.unwrap()),
-                Some(_) => match tag_conjoin {
-                    None =>  (tag_relate_conjoin::Conjoin, &0),
-                    Some(_) =>  (tag_relate_conjoin::None, tag_conjoin.unwrap()),
-                },
+                None => (tag_relate_conjoin::Relate, tag_usize.unwrap()),
+                Some(_) => {
+                    let tag_conjoin = self
+                        ._parents_conjoin
+                        .get(&(*tag_usize.unwrap(), *relate_usize.unwrap()));
+
+                    match tag_conjoin {
+                        None => (tag_relate_conjoin::Conjoin, &0),
+                        Some(_) => (tag_relate_conjoin::None, tag_conjoin.unwrap()),
+                    }
+                }
             },
         }
         //self._parents_relate.contains_key(&(tag_namespace_id, tag_id, relate_namespace_id, relate_tag_id));
@@ -787,9 +790,16 @@ impl Memdb {
         let ret_name: usize = self._file_max_id;
         let (fid, _nid, _pid, _rid, _sid, _tid, _jid) = self.max_id_return();
 
+        self._file.insert(
+            (
+                hash.to_string(),
+                extension.to_string(),
+                location.to_string(),
+            ),
+            fid,
+        );
+
         self._file_hash.insert(hash.to_string(), fid);
-        self._file_extension.insert(extension.to_string(), fid);
-        self._file_location.insert(location.to_string(), fid);
         self.max_file_increment();
 
         ret_name
@@ -814,19 +824,17 @@ impl Memdb {
             ._file_hash
             .iter()
             .find_map(|(key, &val)| if &val == id { Some(key) } else { None });
-        let ext = self
-            ._file_extension
+
+        let structsearch = self
+            ._file
             .iter()
             .find_map(|(key, &val)| if &val == id { Some(key) } else { None });
-        let loc = self
-            ._file_location
-            .iter()
-            .find_map(|(key, &val)| if &val == id { Some(key) } else { None });
-        if hash.is_some() && ext.is_some() && loc.is_some() {
+
+        if hash.is_some() && structsearch.is_some() {
             Some((
                 hash.unwrap().to_string(),
-                ext.unwrap().to_string(),
-                loc.unwrap().to_string(),
+                structsearch.unwrap().1.to_string(),
+                structsearch.unwrap().2.to_string(),
             ))
         } else {
             None
@@ -1878,6 +1886,16 @@ impl Main {
             }
             Ok(_out) => _out,
         }
+    }
+    
+    ///
+    /// Deletes an item from jobs table.
+    /// critera is the searchterm and collumn is the collumn to target.
+    /// Doesn't remove from inmemory database
+    ///
+    pub fn del_from_jobs_table(&mut self, collumn: &String, critera: &String) {
+        let delcommand = format!("DELETE FROM Jobs WHERE {} LIKE '{}'", collumn, critera);
+        self.execute(delcommand);
     }
 
     /// Handles transactional pushes.

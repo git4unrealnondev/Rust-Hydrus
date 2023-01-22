@@ -147,6 +147,7 @@ impl Jobs {
                                     e.insert(vec![job.0.clone()]);
                                 }
                                 Entry::Occupied(mut e) => {
+                                    dbg!(job.0.clone());
                                     e.get_mut().push(job.0.clone());
                                 }
                             }
@@ -164,6 +165,7 @@ impl Jobs {
             // Removes item from hashmap so the thread can have ownership of libloaded scraper.
             let scrap = self.scrapermanager._library.remove(&scraper).unwrap();
             let jobs = each.1;
+            dbg!(&jobs);
 
             thread.startwork(scraper, jobs, adb, scrap);
         }
