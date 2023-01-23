@@ -322,9 +322,20 @@ impl Worker {
                                         );
 
                                         //NOTE: Not the best way to do it. Only allows for one source for multiple examples.
+                                        //let fileid =
+                                        //    unwrappydb.relationship_get_fileid(&url_tag.0)[0];
                                         let fileid =
-                                            unwrappydb.relationship_get_fileid(&url_tag.0)[0];
-                                        let fileinfo = unwrappydb.file_get_id(&fileid);
+                                            unwrappydb.relationship_get_one_fileid(&url_tag.0);
+                                        match fileid {
+                                            Some(_) => {}
+                                            None => {
+                                                panic!(
+                                                    "url has info but no file data. {}",
+                                                    &url_tag.0
+                                                );
+                                            }
+                                        }
+                                        let fileinfo = unwrappydb.file_get_id(&fileid.unwrap());
                                         match fileinfo {
                                             None => {
                                                 error!("ERROR: File: {} has url but no file info in db table Files. PANICING", &url_tag.0);
@@ -427,33 +438,8 @@ impl Worker {
                                                 }
                                                 sharedtypes::TagType::Special => {}
                                             }
-
-                                            //println!("{:?}", every);
                                         }
                                     }
-
-                                    /*for every in &each.1.tag_list {
-                                        // Matches tag type. Changes depending on what type of tag (metadata)
-                                        match &every.1.tag_type {
-                                            sharedtypes::TagType::Normal => match every.1.relates_to {
-                                                None => {
-                                                    // Normal tag no relationships. IE Tag to file
-                                                    // dbg!("Tag", &every.1);
-                                                }
-                                                Some(_) => {
-                                                    // Tag with relationship info. IE Tag to pool
-                                                    //dbg!("Relationship", &every.1);
-                                                }
-                                            },
-                                            sharedtypes::TagType::Hash(_) => {
-                                                // dbg!("Hash", &every.1);
-                                            }
-                                            sharedtypes::TagType::Special => {}
-                                        }
-
-                                        //println!("{:?}", every);
-                                    }*/
-                                    //println!("");
                                 }
                             }
                             Err(_) => {}
@@ -470,7 +456,7 @@ impl Worker {
                     for item in each.1.iter() {
                         if item == last2 {
                             stringofvec += item;
-                            break
+                            break;
                         }
                         stringofvec += item;
                         stringofvec += " ";

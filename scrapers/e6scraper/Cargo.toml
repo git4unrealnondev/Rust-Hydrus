@@ -9,7 +9,8 @@ edition = "2021"
 opt-level = 3
 lto=true
 codegenunits=1
-strip = true
+debug=true
+#strip = true
 
 [lib]
 doc=true

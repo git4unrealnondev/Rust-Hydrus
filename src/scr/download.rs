@@ -17,9 +17,11 @@ use std::io::Cursor;
 use std::io::Error;
 use std::sync::Mutex;
 use std::time::Duration;
-use tower::limit::RateLimit;
+
+/*use tower::limit::RateLimit;
 use tower::Service;
-use tower::ServiceExt;
+use tower::ServiceExt; */
+
 use url::Url;
 extern crate cloudflare_bypasser;
 extern crate reqwest;
@@ -220,7 +222,7 @@ pub async fn dlfile_new(
 /// time.1 is number of total seconds per time slot
 ///
 
-pub async fn dltext(
+/*pub async fn dltext(
     url_vec: Vec<String>,
     parser: &mut scraper::ScraperManager,
     uintref: &InternalScraper,
@@ -280,12 +282,12 @@ pub async fn dltext(
         test.insert(cnt.to_string(), parser.parser_call(uintref, &st).unwrap());*/
     }
     test
-}
+}*/
 
 ///
 /// Download file
 ///
-pub async fn file_download(
+/*pub async fn file_download(
     url_vec: &String,
     location: &String,
 ) -> (HashMap<String, String>, String) {
@@ -357,7 +359,7 @@ pub async fn file_download(
     ext_vec = header_split_vec1[0].to_string();
 
     (fut, ext_vec)
-}
+}*/
 
 pub fn hash_file(filename: String) -> String {
     let mut hasher = Sha512::new();

@@ -695,6 +695,18 @@ impl Memdb {
     }
 
     ///
+    /// relationship gets only one fileid
+    ///
+    fn relationship_get_one_fileid(&self, tag: &usize) -> Option<usize> {
+        for each in self._relationship_relate.keys() {
+            if &each.1 == tag {
+                return Some(each.0);
+            }
+        }
+        None
+    }
+
+    ///
     /// Returns a list of tag's associated with fileid
     ///
     fn relationship_get_tagid(&self, file: &usize) -> Vec<usize> {
@@ -1148,9 +1160,14 @@ impl Main {
         self._inmemdb.tag_id_get(uid)
     }
 
-    pub fn relationship_get_fileid(&self, tag: &usize) -> Vec<usize> {
+    /*pub fn relationship_get_fileid(&self, tag: &usize) -> Vec<usize> {
         self._inmemdb.relationship_get_fileid(tag)
+    }*/
+
+    pub fn relationship_get_one_fileid(&self, tag: &usize) -> Option<usize> {
+        self._inmemdb.relationship_get_one_fileid(tag)
     }
+
     pub fn relationship_get_tagid(&self, tag: &usize) -> Vec<usize> {
         self._inmemdb.relationship_get_tagid(tag)
     }
@@ -1887,7 +1904,7 @@ impl Main {
             Ok(_out) => _out,
         }
     }
-    
+
     ///
     /// Deletes an item from jobs table.
     /// critera is the searchterm and collumn is the collumn to target.
