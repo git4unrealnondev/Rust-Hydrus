@@ -9,8 +9,8 @@ edition = "2021"
 opt-level = 3
 lto=true
 codegenunits=1
-debug=true
-#strip = true
+#debug=true
+strip = true
 
 [lib]
 doc=true
@@ -25,3 +25,4 @@ strum = "0.24.1"
 strum_macros = "0.24.3"
 nohash-hasher = "0.2.0"
 urlencoding = "2.1.2"
+rayon = "1.6.1"

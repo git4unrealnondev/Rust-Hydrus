@@ -1,39 +1,23 @@
 //extern crate urlparse;
-use super::scraper;
 use super::sharedtypes;
 use crate::scr::file;
-use ahash::AHashMap;
-use file_format::{FileFormat, Kind};
-use futures;
-use http::request;
-use http::Method;
-use reqwest::{Client, Request, Response};
-use sha2::Digest;
+use bytes::Bytes;
+use file_format::FileFormat;
+use md5;
+use reqwest::Client;
+use sha1;
+use log::{error, info};
+use sha2::Digest as sha2Digest;
 use sha2::Sha512;
-use std::collections::HashMap;
 use std::fs;
 use std::io;
 use std::io::Cursor;
-use std::io::Error;
-use std::sync::Mutex;
 use std::time::Duration;
-
-/*use tower::limit::RateLimit;
-use tower::Service;
-use tower::ServiceExt; */
-
 use url::Url;
 extern crate cloudflare_bypasser;
 extern crate reqwest;
-use super::database;
-use crate::scr::scraper::InternalScraper;
-use async_executor::Executor;
 use async_std::task;
-use itertools::Itertools;
-use libloading::Library;
 use ratelimit;
-use std::marker::Sync;
-use std::sync::Arc;
 ///
 /// Makes ratelimiter and example
 ///
@@ -102,6 +86,31 @@ pub async fn test(url: String) -> String {
     "hi".to_string()
 }
 
+pub fn hash_bytes(bytes: &Bytes, hash: sharedtypes::HashesSupported) -> (String, bool) {
+    match hash {
+        sharedtypes::HashesSupported::Md5(hash) => {
+            let digest = md5::compute(bytes);
+            //let sharedtypes::HashesSupported(hashe, _) => hash;
+            (format!("{:x}", digest), format!("{:x}", digest) == hash)
+        }
+        sharedtypes::HashesSupported::Sha1(hash) => {
+            let mut hasher = sha1::Sha1::new();
+            hasher.update(bytes);
+            let hastring = format!("{:X}", hasher.finalize());
+            let dune = &hastring == &hash;
+            (hastring, dune)
+        }
+        sharedtypes::HashesSupported::Sha256(hash) => {
+            let mut hasher = Sha512::new();
+            hasher.update(bytes);
+            let hastring = format!("{:X}", hasher.finalize());
+            let dune = &hastring == &hash;
+            (hastring, dune)
+        }
+        sharedtypes::HashesSupported::None => ("".to_string(), false),
+    }
+}
+
 ///
 /// Downloads file to position
 ///
@@ -110,18 +119,34 @@ pub async fn dlfile_new(
     file: &sharedtypes::FileObject,
     location: &String,
 ) -> (String, String) {
-    dbg!("b");
-    let mut hasher = Sha512::new();
+    let mut boolloop = true;
+    let mut hash = String::new();
+    let mut bytes: bytes::Bytes = Bytes::from(&b""[..]);
+    while boolloop {
+        let mut hasher = Sha512::new();
 
-    let url = Url::parse(&file.source_url).unwrap();
-    let futureresult = client.get(url).send().await.unwrap();
+        let url = Url::parse(&file.source_url).unwrap();
+        let futureresult = client.get(url).send().await.unwrap();
 
-    // Downloads file into byte memory buffer
-    let bytes = futureresult.bytes().await.unwrap();
-    hasher.update(&bytes.as_ref());
+        // Downloads file into byte memory buffer
+        bytes = futureresult.bytes().await.unwrap();
+        hasher.update(&bytes.as_ref());
 
-    // Final Hash
-    let hash = format!("{:X}", hasher.finalize());
+        // Final Hash
+        hash = format!("{:X}", hasher.finalize());
+
+        // Check and compare  to what the scraper wants
+        let status = hash_bytes(&bytes, file.hash.clone());
+        
+        if !status.1 {
+            error!("Parser file: {} FAILED HASHCHECK: {} {}", file.hash ,status.0, status.1)
+        }
+        else {
+            info!("Parser returned: {} Got: {}", &file.hash, status.0);
+            dbg!("Parser returned: {} Got: {}", &file.hash, status.0);
+        }
+        boolloop = !status.1;
+    }
 
     // Gets and makes folderpath.
     let final_loc = format!(
@@ -149,217 +174,7 @@ pub async fn dlfile_new(
     std::io::copy(&mut content, &mut file_path).unwrap();
     dbg!(&hash);
     (hash, file_ext)
-    //ratelimit_object.wait();
-    //dbg!(tags);
-    //dbg!("waited {}", &url);
 }
-/*
-    // Super Ganky Way of doing this. splits the vec into a vec of vec<String>. Minimizes the total number of requests at a time.
-    let chunks: Vec<Vec<String>> = url_vec
-        .into_iter()
-        .chunks(1)
-        .into_iter()
-        .map(|c| c.collect())
-        .collect();
-
-    // Makes the ratelimiter object
-
-
-    let client = reqwest::ClientBuilder::new()
-        //.user_agent(useragent)
-        .build()
-        .unwrap();
-
-    for chunkvec in chunks {
-        // let mut fut = Vec::new();
-        for urlstring in chunkvec {
-            dbg!(&urlstring);
-
-            let url = Url::parse(&urlstring).unwrap();
-            //let url = Url::parse("http://www.google.com").unwrap();
-
-            dbg!(&url);
-            let requestit = Request::new(Method::GET, url);
-            //fut.push();
-            dbg!("Spawned web reach");
-            let test = ratelimit_object.ready().await.unwrap().call(requestit);
-            //let test = reqwest::get(url).await.unwrap().text();
-
-            test.await
-            //dbg!(&temp);
-            //dbg!(temp.unwrap().text().await.unwrap());
-
-        }
-        dbg!("Done");
-        /*for each in fut {
-            let test = ex.run(each).await.unwrap();
-            dbg!("Waited");
-            if test.status() != 200 {panic!("ERROR CODE {} on {}", test.status(), test.url())}
-
-            let st: String = test.text().await.unwrap().to_string();
-            dbg!("two");
-            // Calls the parser to parse the data.
-            let scrap = scraper::parser_call(liba, &st);
-            dbg!(&scrap);
-            match scrap {
-                Ok(_) => {ret.push(scrap.unwrap());},
-                Err(_) => {break}
-            }
-
-
-        }*/
-        //for each in fut {
-        //    dbg!(futures::(ex.run(each)));
-        //}
-        break;
-    }
-
-    ret
-}
-*/
-///
-/// time.0 is the requests per time.1cargo run -- job --add e6 "test female male" now false
-/// time.1 is number of total seconds per time slot
-///
-
-/*pub async fn dltext(
-    url_vec: Vec<String>,
-    parser: &mut scraper::ScraperManager,
-    uintref: &InternalScraper,
-) -> AHashMap<String, AHashMap<String, AHashMap<String, Vec<String>>>> {
-    let respvec: Vec<Response> = Vec::new();
-    let retvec: Vec<String> = Vec::new();
-    let mut test: AHashMap<String, AHashMap<String, AHashMap<String, Vec<String>>>> =
-        AHashMap::new();
-
-    // The wrapper that implements ratelimiting
-
-    let client = reqwest::ClientBuilder::new()
-        .user_agent("RUST-HYDRUS V0.1")
-        .build()
-        .unwrap();
-    let mut example = tower::ServiceBuilder::new()
-        .rate_limit(1, Duration::from_secs(2))
-        .concurrency_limit(1)
-        .service(client);
-
-    println!("Starting scraping urls.");
-    for (cnt, each) in url_vec.into_iter().enumerate() {
-        let url = Url::parse(&each).unwrap();
-        //let url = Url::parse("http://www.google.com").unwrap();
-        let requestit = Request::new(Method::GET, url);
-
-        dbg!("B");
-        dbg!(&each);
-        //dbg!(&example);
-        let resp = example
-            .ready()
-            .await
-            .unwrap()
-            .call(requestit)
-            .await
-            .unwrap();
-        dbg!("a");
-        //let resp = client.call(requestit).await.unwrap();
-        //let resp = reqwest::blocking::Request(requestit).user_agent("RustHydrus V0.1");
-        //thread::sleep(Duration::from_millis(750));
-        println!("Downloaded total urls to parse: {}", &cnt);
-        //dbg!(resp.text().await.unwrap());
-        //let resp = example.ready().await.unwrap().call(requestit).await.unwrap();
-
-        let st: String = resp.text().await.unwrap().to_string();
-        //let st: String = "[posts]".to_string();
-        //test.insert(st, "".to_string());
-        //retvec.push(st);
-        //respvec.push(resp);
-        println!("Getting DATA FROM URL len: {}.", &respvec.len());
-
-        /*match parser.parser_call(uintref, &st) {
-            Ok(_) => (),
-            Err(_) => break,
-        }
-
-        test.insert(cnt.to_string(), parser.parser_call(uintref, &st).unwrap());*/
-    }
-    test
-}*/
-
-///
-/// Download file
-///
-/*pub async fn file_download(
-    url_vec: &String,
-    location: &String,
-) -> (HashMap<String, String>, String) {
-    let mut fut: HashMap<String, String> = HashMap::new();
-    let mut ext_vec: String = String::new();
-    if url_vec.is_empty() {
-        return (fut, ext_vec);
-    }
-    let client = reqwest::ClientBuilder::new()
-        .user_agent("RUST-HYDRUS V0.1")
-        .build()
-        .unwrap();
-    // The wrapper that implements ratelimiting
-    let mut exampleone = tower::ServiceBuilder::new()
-        .rate_limit(2, Duration::from_secs(1))
-        .service(client);
-
-    let mut url = Url::parse(url_vec).unwrap();
-    let mut requestit = Request::new(Method::GET, url);
-    let mut a = exampleone.ready().await.unwrap().call(requestit).await;
-    // Handles failed downloads or weidness from system.
-    match a {
-        Ok(_) => (),
-        Err(_) => {
-            url = Url::parse(url_vec).unwrap();
-            requestit = Request::new(Method::GET, url);
-            a = exampleone.ready().await.unwrap().call(requestit).await;
-        }
-    }
-    let headers = format!(
-        "{:?}",
-        &a.as_ref().unwrap().headers().get("content-type").unwrap()
-    );
-    //dbg!(example.ready());
-
-    let mut hasher = Sha512::new();
-    let bytes = a.unwrap().bytes().await;
-    hasher.update(&bytes.as_ref().unwrap());
-    //let bystring= &bytes.unwrap();
-    //let mut temp: &mut [u8] = u8::new();
-    //bystring.clone_into(temp);
-    //std::io::copy(&mut temp, &mut hasher);
-    let hash = format!("{:X}", hasher.finalize());
-
-    let final_loc = format!(
-        "{}/{}{}/{}{}/{}{}",
-        &location,
-        hash.chars().next().unwrap(),
-        hash.chars().nth(1).unwrap(),
-        hash.chars().nth(2).unwrap(),
-        hash.chars().nth(3).unwrap(),
-        hash.chars().nth(4).unwrap(),
-        hash.chars().nth(5).unwrap()
-    );
-
-    file::folder_make(&final_loc);
-    let mut content = Cursor::new(bytes.unwrap());
-
-    let orig_path = format!("{}/{}", &final_loc, &hash);
-    let mut file_path = std::fs::File::create(&orig_path).unwrap();
-    fut.insert(url_vec.to_string(), hash);
-    std::io::copy(&mut content, &mut file_path).unwrap();
-
-    let metadata = fs::metadata(orig_path).unwrap();
-
-    let split = headers.split('/');
-    let header_split_vec: Vec<&str> = split.collect();
-    let header_split_vec1: Vec<&str> = header_split_vec[1].split('"').collect();
-    ext_vec = header_split_vec1[0].to_string();
-
-    (fut, ext_vec)
-}*/
 
 pub fn hash_file(filename: String) -> String {
     let mut hasher = Sha512::new();

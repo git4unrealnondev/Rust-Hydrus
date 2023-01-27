@@ -167,11 +167,12 @@ fn main() {
 
             //let positive = AllField;
         }
+
         scr::sharedtypes::AllFields::EJobsRemove(jobs_remove) => {}
         scr::sharedtypes::AllFields::ESearch(search) => {}
         scr::sharedtypes::AllFields::ENothing => {}
     }
-
+    data.transaction_flush();
     //let mut line = String::new();
     //let b1 = std::io::stdin().read_line(&mut line).unwrap();
 

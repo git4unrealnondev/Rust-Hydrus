@@ -233,216 +233,218 @@ impl Worker {
                 //});
                 for eachy in each.0 {
                     for urlstring in eachy.1 {
-                        ratelimit.wait();
-                        let resp = task::block_on(download::dltext_new(
-                            urlstring,
-                            &mut ratelimit,
-                            &mut client,
-                        ));
+                        let mut loopbool = true;
+                        let mut respstring = String::new();
+                        while loopbool {
+                            ratelimit.wait();
+                            let resp = task::block_on(download::dltext_new(
+                                urlstring.to_string(),
+                                &mut ratelimit,
+                                &mut client,
+                            ));
+                            match resp {
+                                Ok(_) => {
+                                    respstring = resp.unwrap();
+                                    loopbool = false;
+                                }
+                                Err(_) => {
+                                    error!(
+                                        "Scraper: {} GAVE ERROR: {}",
+                                        scrap._name,
+                                        &resp.err().unwrap()
+                                    );
+                                }
+                            }
+                        }
+
                         //dbg!(&resp);
 
-                        //resps.poll();
-                        //let beans = resp.unwrap();
-                        match resp {
-                            Ok(_) => {
-                                let st = scraper::parser_call(&liba, &resp.unwrap());
+                        //Matches response from web request into db.
 
-                                match st {
-                                    Err(_) => {
-                                        info!("Hit something with our scraper. May not be okay. or it finished lol. {:?}", &st.err());
-                                        let unwrappydb = &mut db.lock().unwrap();
-                                        unwrappydb.transaction_flush();
-                                        break;
-                                    }
-                                    Ok(_) => {}
-                                }
+                        let st = scraper::parser_call(&liba, &respstring);
 
-                                //let mut temp = Vec::new();
-                                for each in st.unwrap().file {
-                                    //ratelimit.wait();
-                                    // Determine if we need to download file.
-                                    let mut does_url_exist = false;
-                                    {
-                                        let unwrappydb = &mut db.lock().unwrap();
-                                        let source_url_id =
-                                            unwrappydb.namespace_get(&"source_url".to_string()); // defaults to 0 due to unknown.
-                                        if !source_url_id.1 {
-                                            // Namespace doesn't exist. Will create
-                                            unwrappydb.namespace_add(
-                                                &"source_url".to_string(),
-                                                &"Source URL for a file.".to_string(),
-                                                true,
-                                            );
-                                            log::info!("Adding namespace {} with an id {} due to not existing.", "source_url", "0");
-                                        }
-                                        let url_tag = unwrappydb.tag_get_name(
-                                            each.1.source_url.to_string(),
-                                            source_url_id.0,
-                                        );
-                                        does_url_exist = url_tag.1;
-                                    }
+                        match st {
+                            Err(_) => {
+                                info!("Hit something with our scraper. May not be okay. or it finished lol. {:?}", &st.err());
+                                let unwrappydb = &mut db.lock().unwrap();
+                                unwrappydb.transaction_flush();
+                                break;
+                            }
+                            Ok(_) => {}
+                        }
 
-                                    let mut location = String::new();
-                                    {
-                                        let unwrappydb = &mut db.lock().unwrap();
-                                        location = unwrappydb
-                                            .settings_get_name(&"FilesLoc".to_string())
-                                            .unwrap()
-                                            .1;
-                                    }
-                                    ratelimit.wait();
-
-                                    let unwrappydb = &mut db.lock().unwrap();
-
-                                    //let file = each.1;
-                                    //temp.push(task::block_on(download::test(url)));
-                                    let mut hash: String = String::new();
-                                    let mut file_ext: String = String::new();
-                                    if !does_url_exist {
-                                        // URL doesn't exist in DB Will download
-                                        info!(
-                                            "Downloading: {} to: {}",
-                                            &each.1.source_url, &location
-                                        );
-                                        (hash, file_ext) = task::block_on(download::dlfile_new(
-                                            &client, &each.1, &location,
-                                        ));
-                                    } else {
-                                        // File already has been downlaoded. Skipping download.
-                                        info!(
-                                        "Skipping file: {} Due to already existing in Tags Table.",
-                                        &each.1.source_url
+                        //let mut temp = Vec::new();
+                        for each in st.unwrap().file {
+                            //ratelimit.wait();
+                            // Determine if we need to download file.
+                            let mut does_url_exist = false;
+                            {
+                                let unwrappydb = &mut db.lock().unwrap();
+                                let source_url_id =
+                                    unwrappydb.namespace_get(&"source_url".to_string()); // defaults to 0 due to unknown.
+                                if !source_url_id.1 {
+                                    // Namespace doesn't exist. Will create
+                                    unwrappydb.namespace_add(
+                                        &"source_url".to_string(),
+                                        &"Source URL for a file.".to_string(),
+                                        true,
                                     );
-                                        let source_url_id =
-                                            unwrappydb.namespace_get(&"source_url".to_string()); // defaults to 0 due to unknown.
+                                    log::info!(
+                                        "Adding namespace {} with an id {} due to not existing.",
+                                        "source_url",
+                                        "0"
+                                    );
+                                }
+                                let url_tag = unwrappydb
+                                    .tag_get_name(each.1.source_url.to_string(), source_url_id.0);
+                                does_url_exist = url_tag.1;
+                            }
 
-                                        let url_tag = unwrappydb.tag_get_name(
-                                            each.1.source_url.to_string(),
-                                            source_url_id.0,
-                                        );
+                            let mut location = String::new();
+                            {
+                                let unwrappydb = &mut db.lock().unwrap();
+                                location = unwrappydb
+                                    .settings_get_name(&"FilesLoc".to_string())
+                                    .unwrap()
+                                    .1;
+                            }
 
-                                        //NOTE: Not the best way to do it. Only allows for one source for multiple examples.
-                                        //let fileid =
-                                        //    unwrappydb.relationship_get_fileid(&url_tag.0)[0];
-                                        let fileid =
-                                            unwrappydb.relationship_get_one_fileid(&url_tag.0);
-                                        match fileid {
-                                            Some(_) => {}
-                                            None => {
-                                                panic!(
-                                                    "url has info but no file data. {}",
-                                                    &url_tag.0
-                                                );
-                                            }
-                                        }
-                                        let fileinfo = unwrappydb.file_get_id(&fileid.unwrap());
-                                        match fileinfo {
-                                            None => {
-                                                error!("ERROR: File: {} has url but no file info in db table Files. PANICING", &url_tag.0);
-                                                panic!("ERROR: File: {} has url but no file info in db table Files. PANICING", &url_tag.0);
-                                            }
-                                            Some(_) => {
-                                                hash = fileinfo.as_ref().unwrap().0.to_string();
-                                                file_ext = fileinfo.as_ref().unwrap().1.to_string();
-                                            }
-                                        }
+                            let unwrappydb = &mut db.lock().unwrap();
+
+                            //let file = each.1;
+                            //temp.push(task::block_on(download::test(url)));
+                            let mut hash: String = String::new();
+                            let mut file_ext: String = String::new();
+                            if !does_url_exist {
+                                ratelimit.wait();
+                                // URL doesn't exist in DB Will download
+                                info!("Downloading: {} to: {}", &each.1.source_url, &location);
+                                (hash, file_ext) = task::block_on(download::dlfile_new(
+                                    &client, &each.1, &location,
+                                ));
+                            } else {
+                                // File already has been downlaoded. Skipping download.
+                                info!(
+                                    "Skipping file: {} Due to already existing in Tags Table.",
+                                    &each.1.source_url
+                                );
+                                let source_url_id =
+                                    unwrappydb.namespace_get(&"source_url".to_string()); // defaults to 0 due to unknown.
+
+                                let url_tag = unwrappydb
+                                    .tag_get_name(each.1.source_url.to_string(), source_url_id.0);
+
+                                //NOTE: Not the best way to do it. Only allows for one source for multiple examples.
+                                //let fileid =
+                                //    unwrappydb.relationship_get_fileid(&url_tag.0)[0];
+                                let fileid = unwrappydb.relationship_get_one_fileid(&url_tag.0);
+                                match fileid {
+                                    Some(_) => {}
+                                    None => {
+                                        panic!("url has info but no file data. {}", &url_tag.0);
                                     }
-                                    {
-                                        let source_namespace_url_id =
-                                            unwrappydb.namespace_get(&"source_url".to_string()).0;
-
-                                        // Adds file's source URL into DB
-                                        let file_id = unwrappydb.file_add(
-                                            hash.to_string(),
-                                            file_ext.to_string(),
-                                            location.to_string(),
-                                            true,
-                                        );
-                                        let source_url_id = unwrappydb.tag_add(
-                                            each.1.source_url.to_string(),
-                                            "".to_string(),
-                                            source_namespace_url_id,
-                                            true,
-                                        );
-                                        unwrappydb.relationship_add(file_id, source_url_id, true);
-
-                                        // Loops through all tags
-                                        for every in &each.1.tag_list {
-                                            // Matches tag type. Changes depending on what type of tag (metadata)
-                                            match &every.1.tag_type {
-                                                sharedtypes::TagType::Normal => {
-                                                    match every.1.relates_to {
-                                                        None => {
-                                                            // Normal tag no relationships. IE Tag to file
-                                                            let tag_namespace_id = unwrappydb
-                                                                .namespace_add(
-                                                                    &every.1.namespace,
-                                                                    &"".to_string(),
-                                                                    true,
-                                                                );
-                                                            let tag_id = unwrappydb.tag_add(
-                                                                every.1.tag.to_string(),
-                                                                "".to_string(),
-                                                                tag_namespace_id,
-                                                                true,
-                                                            );
-                                                            unwrappydb.relationship_add(
-                                                                file_id, tag_id, true,
-                                                            );
-                                                        }
-                                                        Some(_) => {
-                                                            // Tag with relationship info. IE Tag to pool
-                                                            // Adds tag and namespace if not exist.
-
-                                                            let relate_info =
-                                                                every.1.relates_to.clone().unwrap();
-
-                                                            let tag_namespace_id = unwrappydb
-                                                                .namespace_add(
-                                                                    &every.1.namespace,
-                                                                    &"".to_string(),
-                                                                    true,
-                                                                );
-                                                            let tag_id = unwrappydb.tag_add(
-                                                                every.1.tag.to_string(),
-                                                                "".to_string(),
-                                                                tag_namespace_id,
-                                                                true,
-                                                            );
-
-                                                            let relate_namespace_id = unwrappydb
-                                                                .namespace_add(
-                                                                    &relate_info.0,
-                                                                    &"".to_string(),
-                                                                    true,
-                                                                );
-                                                            let relate_tag_id = unwrappydb.tag_add(
-                                                                every.1.tag.to_string(),
-                                                                "".to_string(),
-                                                                relate_namespace_id,
-                                                                true,
-                                                            );
-
-                                                            unwrappydb.parents_add(
-                                                                tag_namespace_id,
-                                                                tag_id,
-                                                                relate_namespace_id,
-                                                                relate_tag_id,
-                                                                true,
-                                                            );
-                                                        }
-                                                    }
-                                                }
-                                                sharedtypes::TagType::Hash(_) => {
-                                                    // dbg!("Hash", &every.1);
-                                                }
-                                                sharedtypes::TagType::Special => {}
-                                            }
-                                        }
+                                }
+                                let fileinfo = unwrappydb.file_get_id(&fileid.unwrap());
+                                match fileinfo {
+                                    None => {
+                                        error!("ERROR: File: {} has url but no file info in db table Files. PANICING", &url_tag.0);
+                                        panic!("ERROR: File: {} has url but no file info in db table Files. PANICING", &url_tag.0);
+                                    }
+                                    Some(_) => {
+                                        hash = fileinfo.as_ref().unwrap().0.to_string();
+                                        file_ext = fileinfo.as_ref().unwrap().1.to_string();
                                     }
                                 }
                             }
-                            Err(_) => {}
+                            {
+                                let source_namespace_url_id =
+                                    unwrappydb.namespace_get(&"source_url".to_string()).0;
+
+                                // Adds file's source URL into DB
+                                let file_id = unwrappydb.file_add(
+                                    hash.to_string(),
+                                    file_ext.to_string(),
+                                    location.to_string(),
+                                    true,
+                                );
+                                let source_url_id = unwrappydb.tag_add(
+                                    each.1.source_url.to_string(),
+                                    "".to_string(),
+                                    source_namespace_url_id,
+                                    true,
+                                );
+                                unwrappydb.relationship_add(file_id, source_url_id, true);
+
+                                // Loops through all tags
+                                for every in &each.1.tag_list {
+                                    // Matches tag type. Changes depending on what type of tag (metadata)
+                                    match &every.1.tag_type {
+                                        sharedtypes::TagType::Normal => {
+                                            match every.1.relates_to {
+                                                None => {
+                                                    // Normal tag no relationships. IE Tag to file
+                                                    let tag_namespace_id = unwrappydb
+                                                        .namespace_add(
+                                                            &every.1.namespace,
+                                                            &"".to_string(),
+                                                            true,
+                                                        );
+                                                    let tag_id = unwrappydb.tag_add(
+                                                        every.1.tag.to_string(),
+                                                        "".to_string(),
+                                                        tag_namespace_id,
+                                                        true,
+                                                    );
+                                                    unwrappydb
+                                                        .relationship_add(file_id, tag_id, true);
+                                                }
+                                                Some(_) => {
+                                                    // Tag with relationship info. IE Tag to pool
+                                                    // Adds tag and namespace if not exist.
+
+                                                    let relate_info =
+                                                        every.1.relates_to.clone().unwrap();
+
+                                                    let tag_namespace_id = unwrappydb
+                                                        .namespace_add(
+                                                            &every.1.namespace,
+                                                            &"".to_string(),
+                                                            true,
+                                                        );
+                                                    let tag_id = unwrappydb.tag_add(
+                                                        every.1.tag.to_string(),
+                                                        "".to_string(),
+                                                        tag_namespace_id,
+                                                        true,
+                                                    );
+
+                                                    let relate_namespace_id = unwrappydb
+                                                        .namespace_add(
+                                                            &relate_info.0,
+                                                            &"".to_string(),
+                                                            true,
+                                                        );
+                                                    let relate_tag_id = unwrappydb.tag_add(
+                                                        every.1.tag.to_string(),
+                                                        "".to_string(),
+                                                        relate_namespace_id,
+                                                        true,
+                                                    );
+
+                                                    unwrappydb.parents_add(
+                                                        tag_namespace_id,
+                                                        tag_id,
+                                                        relate_namespace_id,
+                                                        relate_tag_id,
+                                                        true,
+                                                    );
+                                                }
+                                            }
+                                        }
+                                        sharedtypes::TagType::Special => {}
+                                    }
+                                }
+                            }
                         }
                         //let st = scraper::parser_call(&liba, &beans);
                         //dbg!(&st);
@@ -492,6 +494,7 @@ impl Worker {
         }
     }
 }
+
 /* let thread = rt.spawn( async {
 
         let mut toparse: AHashMap<CommitType, Vec<String>> = AHashMap::new();

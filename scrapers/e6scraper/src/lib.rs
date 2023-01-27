@@ -1,11 +1,9 @@
 use ahash::AHashMap;
 use json;
-use urlencoding::encode;
 use nohash_hasher::NoHashHasher;
-use std::fs::File;
+use rayon::prelude::*;
 use std::io;
 use std::io::BufRead;
-use std::io::Write;
 use std::time::Duration;
 use std::{collections::HashMap, hash::BuildHasherDefault};
 
@@ -31,12 +29,12 @@ impl InternalScraper {
             _version: 0,
             _name: "e6scraper".to_string(),
             _sites: vec_of_strings!("e6", "e621", "e621.net"),
-            _ratelimit: (2, Duration::from_secs(1)),
+            _ratelimit: (1, Duration::from_secs(1)),
             _type: sharedtypes::ScraperType::Automatic,
         }
     }
     pub fn version_get(&self) -> usize {
-        return self._version;
+        self._version
     }
     pub fn name_get(&self) -> &String {
         &self._name
@@ -50,7 +48,7 @@ impl InternalScraper {
         for each in &self._sites {
             vecs.push(each.to_string());
         }
-        return vecs;
+        vecs
     }
 }
 ///
@@ -60,30 +58,30 @@ fn build_url(params: &Vec<String>, pagenum: u64) -> String {
     let url = "https://e621.net/posts.json";
     let tag_store = "&tags=";
     let page = "&page=";
-    let startpage = 1;
-    let mut formatted: String = "".to_string();
+    let formatted: String = "".to_string();
 
-    if params.len() == 0 {
+    if params.is_empty() {
         return "".to_string();
-    }
-    else {
-        let endint = params.len() -1;
-        let endtwo = params.len() -2;
+    } else {
+        let endint = params.len() - 1;
+        let endtwo = params.len() - 2;
         let end = &params[endint];
         let mut format_string = "".to_string();
-        for each in 0..endint {
-            
-            format_string += &params[each].replace(" ", "+");
+        //for each in 0..endint {
+        for (each, temp) in params.iter().enumerate().take(endint) {
+            format_string += &params[each].replace(' ', "+");
             if each != endtwo {
                 format_string += "+";
             }
-
         }
-        return format!("{}{}{}{}{}{}", url, params[endint], tag_store, format_string, page, pagenum)
+        return format!(
+            "{}{}{}{}{}{}",
+            url, params[endint], tag_store, format_string, page, pagenum
+        );
     }
 
     if params.len() == 1 {
-        formatted = format!("{}{}{}", &url, &tag_store, &params[0].replace(" ", "+"));
+        formatted = format!("{}{}{}", &url, &tag_store, &params[0].replace(' ', "+"));
         return format!("{}{}{}", formatted, page, pagenum);
     }
 
@@ -93,10 +91,10 @@ fn build_url(params: &Vec<String>, pagenum: u64) -> String {
             &url,
             &params[1],
             &tag_store,
-            &params[0].replace(" ", "+")
+            &params[0].replace(' ', "+")
         );
     }
-    return format!("{}{}{}", formatted, page, pagenum);
+    format!("{}{}{}", formatted, page, pagenum)
 }
 ///
 /// Reutrns an internal scraper object.
@@ -104,16 +102,14 @@ fn build_url(params: &Vec<String>, pagenum: u64) -> String {
 ///
 #[no_mangle]
 pub fn new() -> InternalScraper {
-    return InternalScraper::new();
+    InternalScraper::new()
 }
 ///
 /// Returns one url from the parameters.
 ///
 #[no_mangle]
 pub fn url_get(params: &Vec<String>) -> Vec<String> {
-    let mut ret = Vec::new();
-    ret.push(build_url(params, 1));
-    return ret;
+    vec![build_url(params, 1)]
 }
 ///
 /// Dumps a list of urls to scrape
@@ -127,7 +123,7 @@ pub fn url_dump(params: &Vec<String>) -> Vec<String> {
         let a = build_url(params, i);
         ret.push(a);
     }
-    return ret;
+    ret
 }
 ///
 /// Returns bool true or false if a cookie is needed. If so return the cookie name in storage
@@ -150,20 +146,7 @@ pub fn cookie_needed() -> (sharedtypes::ScraperType, String) {
 ///
 #[no_mangle]
 pub fn cookie_url() -> String {
-    return "e6scraper_cookie".to_string();
-}
-
-///
-/// Gets all items from array in json and returns it into the hashmap.
-/// The key is the sub value.
-///
-fn retvec(vecstr: &mut AHashMap<String, Vec<String>>, jso: &json::JsonValue, sub: &str) {
-    let mut vec = Vec::new();
-
-    for each in jso[sub].members() {
-        vec.push(each.to_string());
-    }
-    vecstr.insert(sub.to_string(), vec);
+    "e6scraper_cookie".to_string()
 }
 
 ///
@@ -219,10 +202,14 @@ fn json_sub_tag(
 ///
 #[no_mangle]
 pub fn parser(params: &String) -> Result<sharedtypes::ScraperObject, &'static str> {
-    let mut vecvecstr: AHashMap<String, AHashMap<String, Vec<String>>> = AHashMap::new();
+    //let vecvecstr: AHashMap<String, AHashMap<String, Vec<String>>> = AHashMap::new();
 
     let mut files: HashMap<u64, sharedtypes::FileObject, BuildHasherDefault<NoHashHasher<u64>>> =
         HashMap::with_hasher(BuildHasherDefault::default());
+    if let Err(_) = json::parse(params) {
+        dbg!(params);
+        return Err("Failed to Parse");
+    }
     let js = json::parse(params).unwrap();
 
     //let mut file = File::create("main1.json").unwrap();
@@ -230,7 +217,7 @@ pub fn parser(params: &String) -> Result<sharedtypes::ScraperObject, &'static st
     // Write a &str in the file (ignoring the result).
     //writeln!(&mut file, "{}", js.to_string()).unwrap();
 
-    if js["posts"].len() == 0 {
+    if js["posts"].is_empty() {
         return Err("NothingHere");
     }
 
@@ -314,20 +301,21 @@ pub fn parser(params: &String) -> Result<sharedtypes::ScraperObject, &'static st
             "children",
             Some(("id".to_string(), js["posts"][inc]["id"].to_string())),
         );
-        if js["posts"][inc]["description"].to_string() != "" {tags_list.insert(
-            tag_count,
-            sharedtypes::TagObject {
-                namespace: "description".to_string(),
-                relates_to: None,
-                tag: js["posts"][inc]["description"].to_string(),
-                tag_type: sharedtypes::TagType::Normal,
-            },
-        );
-        //dbg!(js["posts"][inc]["description"].to_string());
-        tag_count += 1;}
+        if js["posts"][inc]["description"].is_empty() {
+            tags_list.insert(
+                tag_count,
+                sharedtypes::TagObject {
+                    namespace: "description".to_string(),
+                    relates_to: None,
+                    tag: js["posts"][inc]["description"].to_string(),
+                    tag_type: sharedtypes::TagType::Normal,
+                },
+            );
+            //dbg!(js["posts"][inc]["description"].to_string());
+            tag_count += 1;
+        }
 
-
-        tags_list.insert(
+        /*tags_list.insert(
             tag_count,
             sharedtypes::TagObject {
                 namespace: "md5".to_string(),
@@ -335,7 +323,7 @@ pub fn parser(params: &String) -> Result<sharedtypes::ScraperObject, &'static st
                 tag: js["posts"][inc]["file"]["md5"].to_string(),
                 tag_type: sharedtypes::TagType::Hash(sharedtypes::HashesSupported::md5),
             },
-        );
+        );*/
         tag_count += 1;
         tags_list.insert(
             tag_count,
@@ -361,8 +349,9 @@ pub fn parser(params: &String) -> Result<sharedtypes::ScraperObject, &'static st
             );
         }
 
-        let mut file: sharedtypes::FileObject = sharedtypes::FileObject {
+        let file: sharedtypes::FileObject = sharedtypes::FileObject {
             source_url: js["posts"][inc]["file"]["url"].to_string(),
+            hash: sharedtypes::HashesSupported::Md5(js["posts"][inc]["file"]["md5"].to_string()),
             tag_list: tags_list,
         };
 

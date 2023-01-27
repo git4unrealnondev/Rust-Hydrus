@@ -140,39 +140,6 @@ pub fn load_mem(tempmem: &mut Main, conn: &Connection) {
         tempmem.parents_add(b1, b2, b3, b4, false);
     }
 
-    /*while let Some(file) = files.next().unwrap() {
-
-        //let b: String = file.get(2).unwrap();
-        //let b1: usize = a.parse::<usize>().unwrap();
-        file_vec.push((
-            a1,
-            file.get(1).unwrap(),
-            file.get(2).unwrap(),
-            file.get(3).unwrap(),
-        ));
-
-    }*/
-
-    /*while let Some(job) = jobs.next().unwrap() {
-        let a1: String = job.get(0).unwrap();
-        let b1: String = job.get(1).unwrap();
-        let c1: String = job.get(4).unwrap();
-        let a: usize = a1.parse::<usize>().unwrap();
-        let b: usize = b1.parse::<usize>().unwrap();
-        dbg!(&c1);
-        let c: CommitType = sharedtypes::stringto_commit_type(&c1);
-        dbg!(&c);
-        job_vec.push((a, b, job.get(2).unwrap(), job.get(3).unwrap(), c));
-    }*/
-
-    /*while let Some(name) = names.next().unwrap() {
-        let a1: String = name.get(0).unwrap();
-        let b1: String = name.get(2).unwrap();
-        let a: usize = a1.parse::<usize>().unwrap();
-        let b: String = b1.parse::<String>().unwrap();
-        namespace_vec.push((a, name.get(1).unwrap(), b.to_string()));
-    }*/
-
     while let Some(name) = paes.next().unwrap() {
         let a1: String = name.get(0).unwrap();
         let b1: String = name.get(3).unwrap();
@@ -180,24 +147,6 @@ pub fn load_mem(tempmem: &mut Main, conn: &Connection) {
         let b: usize = b1.parse::<usize>().unwrap();
         parents_vec.push((a, name.get(1).unwrap(), name.get(2).unwrap(), b));
     }
-
-    /*while let Some(tag) = rels.next().unwrap() {
-        let a1: String = tag.get(0).unwrap();
-        let b1: String = tag.get(1).unwrap();
-        let a: usize = a1.parse::<usize>().unwrap();
-        let b: usize = b1.parse::<usize>().unwrap();
-        relationship_vec.push((a, b));
-    }*/
-
-    /*while let Some(tag) = tags.next().unwrap() {
-        let a1: String = tag.get(2).unwrap();
-        let b1: String = tag.get(3).unwrap();
-        let c1: String = tag.get(0).unwrap();
-        let a: String = a1.parse::<String>().unwrap();
-        let b: usize = b1.parse::<usize>().unwrap();
-        let c: usize = c1.parse::<usize>().unwrap();
-        tag_vec.push((c, tag.get(1).unwrap(), a, b));
-    }*/
 
     while let Some(set) = sets.next().unwrap() {
         let b1: String = set.get(2).unwrap(); // FIXME
@@ -214,48 +163,6 @@ pub fn load_mem(tempmem: &mut Main, conn: &Connection) {
         setting_vec.push((set.get(0).unwrap(), re1, b.try_into().unwrap(), re3));
     }
 
-    // Drops database connections.
-    // Theirs probably a betterway to do this.
-    // query makes things act weird...
-
-    /*drop(files);
-    drop(jobs);
-    drop(names);
-    drop(paes);
-    drop(rels);
-    drop(tags);
-    drop(sets);
-    drop(fiex);
-    drop(jobex);
-    drop(naex);
-    drop(paex);
-    drop(relx);
-    drop(taex);
-    drop(setex);*/
-    dbg!();
-    /* // This adds the data gathered into memdb.
-    for each in file_vec {
-        self.file_add(each.0, each.1, each.2, each.3, false);
-    }
-    for each in job_vec {
-        self.jobs_add_new_todb(&each.2, &each.3, each.1, each.0, &each.4);
-        //self.jobs_add_main(&each.0, &each.1, &each.2, &each.4, &each.4);
-    }
-    for each in parents_vec {
-        self.parents_add(each.0, each.1, each.2, each.3, false);
-    }
-    for each in namespace_vec {
-        self.namespace_add(each.0, each.1, each.2, false);
-    }
-    for each in relationship_vec {
-        self.relationship_add(each.0, each.1, false);
-    }
-    for each in tag_vec {
-        self.tag_add(each.1, each.2, each.3, false);
-    }
-    for each in setting_vec {
-        self.setting_add(each.0, each.1, each.2, each.3, false);
-    }*/
     for each in setting_vec {
         tempmem.setting_add(each.0, each.1, each.2, each.3, false);
     }
@@ -288,6 +195,7 @@ struct Memdb {
     _file_max_id: usize,
     _file_hash: AHashMap<String, usize>,
     _file: AHashMap<(String, String, String), usize>,
+    _file_url_to_id: AHashMap<String, usize>,
 
     _jobs_max_id: usize,
     _jobs_ref: IntMap<usize, JobsRef>,
@@ -339,6 +247,7 @@ impl Memdb {
             //_file_id:AHashMap::new(),
             _file_hash: AHashMap::new(),
             _file: AHashMap::new(),
+            _file_url_to_id: AHashMap::new(),
             _jobs_time: HashMap::with_hasher(BuildNoHashHasher::default()),
             _jobs_rep: HashMap::with_hasher(BuildNoHashHasher::default()),
             _jobs_ref: HashMap::with_hasher(BuildNoHashHasher::default()),
