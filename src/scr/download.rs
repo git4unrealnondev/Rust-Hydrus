@@ -86,6 +86,9 @@ pub async fn test(url: String) -> String {
     "hi".to_string()
 }
 
+///
+/// Hashes the bytes and compares it to what the scraper should of recieved.
+///
 pub fn hash_bytes(bytes: &Bytes, hash: sharedtypes::HashesSupported) -> (String, bool) {
     match hash {
         sharedtypes::HashesSupported::Md5(hash) => {
@@ -138,12 +141,13 @@ pub async fn dlfile_new(
         // Check and compare  to what the scraper wants
         let status = hash_bytes(&bytes, file.hash.clone());
         
+        // Logging
         if !status.1 {
             error!("Parser file: {} FAILED HASHCHECK: {} {}", file.hash ,status.0, status.1)
         }
         else {
             info!("Parser returned: {} Got: {}", &file.hash, status.0);
-            dbg!("Parser returned: {} Got: {}", &file.hash, status.0);
+            //dbg!("Parser returned: {} Got: {}", &file.hash, status.0);
         }
         boolloop = !status.1;
     }

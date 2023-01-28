@@ -47,6 +47,7 @@ pub fn main() -> sharedtypes::AllFields {
                 .arg(
                     Arg::new("fid")
                         .long("file_id")
+                        .exclusive(true)
                         .takes_value(true)
                         .help("Searches By File ID.")
                         .min_values(1)
@@ -55,11 +56,21 @@ pub fn main() -> sharedtypes::AllFields {
                 .arg(
                     Arg::new("tid")
                         .long("tag_id")
+                        .exclusive(true)
                         .takes_value(true)
                         .help("Searches By Tag Id.")
                         .min_values(1)
                         .multiple_values(true),
+                ).arg(
+                    Arg::new("tag")
+                        .long("tag")
+                        .exclusive(true)
+                        .takes_value(true)
+                        .help("Searches By Tag name needs namespace.")
+                        .min_values(2)
+                        .multiple_values(true),
                 ),
+                
         )
         .arg(
             Arg::new("id")
@@ -92,14 +103,23 @@ pub fn main() -> sharedtypes::AllFields {
 
     // extract the matches
     let matches = app.get_matches();
+    dbg!(&matches);
 
     //println!("{:?}", matches);
     let name = matches.value_of("site");
 
     let id = matches.value_of("id");
 
-    //let search = matches.value_of("search");
+    let search = matches.subcommand_matches(&"search");
 
+    if search != None {
+        dbg!(search.unwrap().contains_id("fid"));
+        dbg!(search.unwrap().contains_id("tid"));
+        dbg!(search.unwrap().contains_id("tag"));
+        panic!();
+    }
+    
+    
     if id != None {
         let valvec: Vec<String> = vec![id.unwrap().to_string()];
         //["Site", "Query", "Time", "Loop", "ReCommit"]
