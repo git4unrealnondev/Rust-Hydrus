@@ -29,7 +29,7 @@ pub fn ratelimiter_create(number: u64, duration: Duration) -> ratelimit::Limiter
     //    .rate_limit(number, duration)
     //    .service(client);
     ratelimit::Builder::new()
-        .capacity(2) //number of tokens the bucket will hold
+        .capacity(1) //number of tokens the bucket will hold
         .quantum(number.try_into().unwrap()) //add one token per interval
         .interval(duration) //add quantum tokens every 1 second
         .build()

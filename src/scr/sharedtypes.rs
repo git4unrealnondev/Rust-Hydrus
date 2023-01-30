@@ -27,6 +27,12 @@ pub enum ScraperType {
     Automatic,
 }
 
+pub enum ScraperReturn {
+    EMCStop(String), // STOP IMMEDIENTLY: ISSUE WITH SITE : PANICS no save
+    Nothing, // Hit nothing to search. Move to next job.
+    Stop(String), // Stop current job, Record issue Move to next.
+}
+
 ///
 /// What the scraper passes between loaded 3rd party scrapers and the internal scrpaer.
 ///
@@ -84,7 +90,7 @@ pub struct jobs_add {
     pub committype: CommitType,
 }
 
-#[derive(Debug)] // Manages what the job can do.
+#[derive(Debug)] // Manages what the jobs are.
 pub struct jobs_remove {
     pub site: String,
     pub query: String,
