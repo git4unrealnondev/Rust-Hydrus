@@ -109,7 +109,7 @@ fn main() {
     data.transaction_flush();
     data.check_version();
 
-    dbg!(data.settings_get_name(&"pluginloadloc".to_string()));
+    //dbg!(data.settings_get_name(&"pluginloadloc".to_string()));
     //Inits ScraperManager
     let plugin_loc = data
         .settings_get_name(&"pluginloadloc".to_string())
@@ -169,7 +169,10 @@ fn main() {
         }
 
         scr::sharedtypes::AllFields::EJobsRemove(jobs_remove) => {}
-        scr::sharedtypes::AllFields::ESearch(search) => {}
+        scr::sharedtypes::AllFields::ESearch(search) => {
+            dbg!(search);
+            panic!();
+        }
         scr::sharedtypes::AllFields::ENothing => {}
     }
     data.transaction_flush();

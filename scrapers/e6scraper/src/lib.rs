@@ -201,14 +201,17 @@ fn json_sub_tag(
 /// Parses return from download.
 ///
 #[no_mangle]
-pub fn parser(params: &String) -> Result<sharedtypes::ScraperObject, &'static str> {
+pub fn parser(params: &String) -> Result<sharedtypes::ScraperObject, sharedtypes::ScraperReturn> {
     //let vecvecstr: AHashMap<String, AHashMap<String, Vec<String>>> = AHashMap::new();
 
     let mut files: HashMap<u64, sharedtypes::FileObject, BuildHasherDefault<NoHashHasher<u64>>> =
         HashMap::with_hasher(BuildHasherDefault::default());
     if let Err(_) = json::parse(params) {
+        if params.contains("Please confirm you are not a robot.") {
+            return Err(sharedtypes::ScraperReturn::Timeout(5))
+        }
         dbg!(params);
-        return Err("Failed to Parse");
+        return Err(sharedtypes::ScraperReturn::EMCStop("Unknown Error".to_string()))
     }
     let js = json::parse(params).unwrap();
 
@@ -218,7 +221,7 @@ pub fn parser(params: &String) -> Result<sharedtypes::ScraperObject, &'static st
     //writeln!(&mut file, "{}", js.to_string()).unwrap();
 
     if js["posts"].is_empty() {
-        return Err("NothingHere");
+        return Err(sharedtypes::ScraperReturn::Nothing)
     }
 
     for inc in 0..js["posts"].len() {

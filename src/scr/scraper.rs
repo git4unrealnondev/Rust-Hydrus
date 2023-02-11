@@ -197,9 +197,12 @@ pub fn url_dump(libloading: &libloading::Library, params: Vec<String>) -> Vec<St
 pub fn parser_call(
     libloading: &libloading::Library,
     params: &String,
-) -> Result<sharedtypes::ScraperObject, &'static str> {
+) -> Result<sharedtypes::ScraperObject, sharedtypes::ScraperReturn> {
     let temp: libloading::Symbol<
-        unsafe extern "C" fn(&String) -> Result<sharedtypes::ScraperObject, &'static str>,
+        unsafe extern "C" fn(
+            &String,
+        )
+            -> Result<sharedtypes::ScraperObject, sharedtypes::ScraperReturn>,
     > = unsafe { libloading.get(b"parser\0").unwrap() };
     unsafe { temp(params) }
 } //ScraperObject

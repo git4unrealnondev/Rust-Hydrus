@@ -27,10 +27,12 @@ pub enum ScraperType {
     Automatic,
 }
 
+#[derive(Debug, Clone)]
 pub enum ScraperReturn {
     EMCStop(String), // STOP IMMEDIENTLY: ISSUE WITH SITE : PANICS no save
-    Nothing, // Hit nothing to search. Move to next job.
-    Stop(String), // Stop current job, Record issue Move to next.
+    Nothing,         // Hit nothing to search. Move to next job.
+    Stop(String),    // Stop current job, Record issue Move to next.
+    Timeout(u64),    // Wait X seconds before retrying.
 }
 
 ///
@@ -97,18 +99,20 @@ pub struct jobs_remove {
     pub time: String,
 }
 
-#[derive(Debug)]
+#[derive(Debug, EnumIter, Display)]
 // Manages what the search can do.
-pub struct search {
-    pub fid: String,
-    pub tid: String,
+pub enum Search {
+    fid(Vec<String>),
+    tid(Vec<String>),
+    tag(Vec<String>),
+    hash(Vec<String>),
 }
 
 #[derive(Debug)]
 pub enum AllFields {
     EJobsAdd(jobs_add),
     EJobsRemove(jobs_remove),
-    ESearch(search),
+    ESearch(Search),
     ENothing,
 }
 
@@ -126,4 +130,17 @@ pub fn stringto_commit_type(into: &String) -> CommitType {
     panic!("{}", panic);
 }
 
+pub fn stringto_Search_type(into: &String) -> Search {
+    for each in Search::iter() {
+        if into == &each.to_string() {
+            return each;
+        }
+    }
+    let mut panic = "Could Not format CommitType as one of: ".to_string();
+    for each in Search::iter() {
+        panic += format!("{} ", each).as_str();
+    }
+
+    panic!("{}", panic);
+}
 // let temp = AllFields::JobsAdd(JobsAdd{Site: "yeet".to_owned(), Query: "yeet".to_owned(), Time: "Lo".to_owned(), Loop: "yes".to_owned(), ReCommit: "Test".to_owned(), CommitType: CommitType::StopOnNothing});

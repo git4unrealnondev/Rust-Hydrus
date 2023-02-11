@@ -1,8 +1,11 @@
 extern crate clap;
+//use std::str::pattern::Searcher;
+
 use crate::scr::sharedtypes::{self, jobs_add, jobs_remove};
 use clap::{App, Arg, SubCommand};
 use log::{error, info};
 //use super::sharedtypes::;
+use clap::parser::ValuesRef;
 use strum::IntoEnumIterator;
 //mod sharedtypes;
 
@@ -61,7 +64,8 @@ pub fn main() -> sharedtypes::AllFields {
                         .help("Searches By Tag Id.")
                         .min_values(1)
                         .multiple_values(true),
-                ).arg(
+                )
+                .arg(
                     Arg::new("tag")
                         .long("tag")
                         .exclusive(true)
@@ -69,8 +73,16 @@ pub fn main() -> sharedtypes::AllFields {
                         .help("Searches By Tag name needs namespace.")
                         .min_values(2)
                         .multiple_values(true),
+                )
+                .arg(
+                    Arg::new("hash")
+                        .long("hash")
+                        .exclusive(true)
+                        .takes_value(true)
+                        .help("Searches By hash.")
+                        .min_values(1)
+                        .multiple_values(true),
                 ),
-                
         )
         .arg(
             Arg::new("id")
@@ -103,7 +115,7 @@ pub fn main() -> sharedtypes::AllFields {
 
     // extract the matches
     let matches = app.get_matches();
-    dbg!(&matches);
+    //dbg!(&matches);
 
     //println!("{:?}", matches);
     let name = matches.value_of("site");
@@ -113,13 +125,36 @@ pub fn main() -> sharedtypes::AllFields {
     let search = matches.subcommand_matches(&"search");
 
     if search != None {
-        dbg!(search.unwrap().contains_id("fid"));
-        dbg!(search.unwrap().contains_id("tid"));
-        dbg!(search.unwrap().contains_id("tag"));
-        panic!();
+        for searchprog in sharedtypes::Search::iter() {
+            let searchenumtype = searchprog.to_string();
+            if search.unwrap().contains_id(&searchenumtype) {
+                let retstring: Vec<String> = search
+                    .unwrap()
+                    .get_many::<String>(&searchenumtype)
+                    .unwrap()
+                    .map(|s| s.to_string())
+                    .collect();
+
+                match searchprog {
+                    sharedtypes::Search::fid(_) => {
+                        return sharedtypes::AllFields::ESearch(sharedtypes::Search::fid(retstring))
+                    }
+                    sharedtypes::Search::tid(_) => {
+                        return sharedtypes::AllFields::ESearch(sharedtypes::Search::tid(retstring))
+                    }
+                    sharedtypes::Search::tag(_) => {
+                        return sharedtypes::AllFields::ESearch(sharedtypes::Search::tag(retstring))
+                    }
+                    sharedtypes::Search::hash(_) => {
+                        return sharedtypes::AllFields::ESearch(sharedtypes::Search::hash(
+                            retstring,
+                        ))
+                    }
+                }
+            }
+        }
     }
-    
-    
+
     if id != None {
         let valvec: Vec<String> = vec![id.unwrap().to_string()];
         //["Site", "Query", "Time", "Loop", "ReCommit"]

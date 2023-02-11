@@ -3,9 +3,12 @@ use super::jobs::Jobs;
 use super::jobs::JobsRef;
 use super::scraper::ScraperManager;
 use crate::scr::download;
+use crate::scr::logging::error_log;
 use crate::scr::scraper;
 use crate::scr::sharedtypes;
 use crate::scr::sharedtypes::CommitType;
+use crate::scr::sharedtypes::ScraperObject;
+use crate::scr::sharedtypes::ScraperReturn;
 use ahash::AHashMap;
 use async_std::task;
 use file_format::{FileFormat, Kind};
@@ -18,10 +21,12 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use std::thread;
 use std::time::Duration;
+use std::{collections::HashMap, hash::BuildHasherDefault};
 use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
 use tokio::runtime::Handle;
 use tokio::runtime::Runtime;
+use tokio::time::Timeout;
 use url::Url;
 
 pub struct threads {
@@ -149,7 +154,8 @@ impl Worker {
 
             let mut toparse: AHashMap<CommitType, Vec<String>> = AHashMap::new();
             let mut jobvec = Vec::new();
-            let mut allurls: Vec<String> = Vec::new();
+            //let mut allurls: Vec<String> = Vec::new();
+            let mut allurls: AHashMap<String, u8> = AHashMap::new();
 
             let u64andduration = &scraper._ratelimit;
 
@@ -184,27 +190,28 @@ impl Worker {
                 parpms.push(scrap_data.clone());
 
                 let urlload = scraper::url_dump(&liba, parpms);
-                let commit = each._committype;
+                let commit = &each._committype;
                 let mut hashtemp: AHashMap<CommitType, Vec<String>> = AHashMap::new();
                 for eachs in urlload {
                     // Checks if the hashmap contains the committype & its vec contains the data.
                     match hashtemp.get_mut(&commit) {
                         Some(ve) => {
-                            if !allurls.contains(&eachs) {
+                            if !allurls.contains_key(&eachs) {
                                 ve.push(eachs.clone());
-                                allurls.push(eachs);
+                                allurls.insert(eachs, 0);
                             }
                         }
                         None => {
-                            if !allurls.contains(&eachs) {
+                            if !allurls.contains_key(&eachs) {
                                 dbg!(&eachs);
                                 hashtemp.insert(commit.clone(), vec![eachs.clone()]);
-                                allurls.push(eachs);
+                                allurls.insert(eachs, 0);
                             }
                         }
                     }
                 }
-                jobvec.push((hashtemp, each._params))
+                dbg!(&allurls.len());
+                jobvec.push((hashtemp, each._params.clone()))
             }
 
             // This is literlly just for debugging. Keep me here.
@@ -217,8 +224,6 @@ impl Worker {
                 );
             }
 
-            //dbg!(&toparse);
-            //let onesearch = allurls[0].to_string();
             dbg!(&jobvec[0].1);
             // Ratelimit object gets created here.
             // Used accross multiple jobs that share host
@@ -261,19 +266,44 @@ impl Worker {
 
                         //Matches response from web request into db.
 
-                        let st = scraper::parser_call(&liba, &respstring);
+                        let mut st: Result<ScraperObject, ScraperReturn> =
+                            Result::Err(ScraperReturn::Nothing);
 
-                        match st {
-                            Err(_) => {
-                                info!("Hit something with our scraper. May not be okay. or it finished lol. {:?}", &st.err());
-                                let unwrappydb = &mut db.lock().unwrap();
-                                unwrappydb.transaction_flush();
-                                break;
+                        let mut parserloopbool = true;
+
+                        while parserloopbool {
+                            st = scraper::parser_call(&liba, &respstring);
+
+                            match st {
+                                Err(ref sterror) => match sterror {
+                                    sharedtypes::ScraperReturn::EMCStop(error) => {
+                                        error_log(error);
+                                    }
+                                    sharedtypes::ScraperReturn::Nothing => break,
+                                    sharedtypes::ScraperReturn::Stop(error) => {
+                                        error!("{}", error);
+                                        break;
+                                    }
+                                    sharedtypes::ScraperReturn::Timeout(time) => {
+                                        let time_dur = Duration::from_secs(*time);
+                                        info!("Sleeping: {} Secs due to ratelimit.", time);
+                                        dbg!("Sleeping: {} Secs due to ratelimit.", time);
+                                        thread::sleep(time_dur);
+                                    }
+                                },
+                                Ok(_) => break,
                             }
-                            Ok(_) => {}
                         }
 
-                        //let mut temp = Vec::new();
+                        // Only way I could find to do this somewhat cleanly :C
+                        if let Err(sharedtypes::ScraperReturn::Nothing) = st.as_ref() {
+                            {
+                                let unwrappydb = &mut db.lock().unwrap();
+                                unwrappydb.transaction_flush();
+                            }
+                            break;
+                        }
+
                         for each in st.unwrap().file {
                             //ratelimit.wait();
                             // Determine if we need to download file.
@@ -451,8 +481,7 @@ impl Worker {
                         //dbg!(rt.block_on(resps));
                         //break;
                     }
-                    info!("Looped");
-                    dbg!("Looped");
+
                     let mut stringofvec = String::new();
                     let last2 = &each.1[each.1.len() - 1];
                     for item in each.1.iter() {
@@ -463,6 +492,8 @@ impl Worker {
                         stringofvec += item;
                         stringofvec += " ";
                     }
+                    info!("Looped: {}", &stringofvec);
+                    dbg!("Looped: {}", &stringofvec);
                     dbg!(&stringofvec);
                     let unwrappydb = &mut db.lock().unwrap();
                     unwrappydb.del_from_jobs_table(&"param".to_string(), &stringofvec);

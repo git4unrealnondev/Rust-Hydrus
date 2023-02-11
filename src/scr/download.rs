@@ -3,10 +3,10 @@ use super::sharedtypes;
 use crate::scr::file;
 use bytes::Bytes;
 use file_format::FileFormat;
+use log::{error, info};
 use md5;
 use reqwest::Client;
 use sha1;
-use log::{error, info};
 use sha2::Digest as sha2Digest;
 use sha2::Sha512;
 use std::fs;
@@ -18,6 +18,7 @@ extern crate cloudflare_bypasser;
 extern crate reqwest;
 use async_std::task;
 use ratelimit;
+use std::thread;
 ///
 /// Makes ratelimiter and example
 ///
@@ -40,10 +41,14 @@ pub fn ratelimiter_create(number: u64, duration: Duration) -> ratelimit::Limiter
 ///
 ///
 pub fn client_create() -> Client {
-    let useragent = "RustHydrus V1".to_string();
+    let useragent = "RustHydrusV1".to_string();
     // The client that does the downloading
     reqwest::ClientBuilder::new()
         .user_agent(useragent)
+        .cookie_store(true)
+        //.brotli(true)
+        //.deflate(true)
+        .gzip(true)
         .build()
         .unwrap()
 }
@@ -128,11 +133,31 @@ pub async fn dlfile_new(
     while boolloop {
         let mut hasher = Sha512::new();
 
-        let url = Url::parse(&file.source_url).unwrap();
-        let futureresult = client.get(url).send().await.unwrap();
+        let errloop = true;
 
-        // Downloads file into byte memory buffer
-        bytes = futureresult.bytes().await.unwrap();
+        while errloop {
+            let url = Url::parse(&file.source_url).unwrap();
+            let futureresult = client.get(url.as_ref()).send().await.unwrap();
+
+            // Downloads file into byte memory buffer
+            let byte = futureresult.bytes().await;
+            
+            // Error handling for dling a file.
+            // Waits 10 secs to retry 
+            match byte {
+                Ok(_) => {
+                    bytes = byte.unwrap();
+                    break;
+                }
+                Err(_) => {
+                    error!("Repeating: {} , Due to: {:?}", &url, &byte.as_ref().err());
+                    dbg!("Repeating: {} , Due to: {:?}", &url, &byte.as_ref().err());
+                    let time_dur = Duration::from_secs(10);
+                    thread::sleep(time_dur);
+                }
+            }
+        }
+
         hasher.update(&bytes.as_ref());
 
         // Final Hash
@@ -140,12 +165,14 @@ pub async fn dlfile_new(
 
         // Check and compare  to what the scraper wants
         let status = hash_bytes(&bytes, file.hash.clone());
-        
+
         // Logging
         if !status.1 {
-            error!("Parser file: {} FAILED HASHCHECK: {} {}", file.hash ,status.0, status.1)
-        }
-        else {
+            error!(
+                "Parser file: {} FAILED HASHCHECK: {} {}",
+                file.hash, status.0, status.1
+            )
+        } else {
             info!("Parser returned: {} Got: {}", &file.hash, status.0);
             //dbg!("Parser returned: {} Got: {}", &file.hash, status.0);
         }

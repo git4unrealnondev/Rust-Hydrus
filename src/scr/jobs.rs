@@ -389,7 +389,7 @@ impl Jobs {
         &mut self,
         memid: &InternalScraper,
         params: &String,
-    ) -> Result<sharedtypes::ScraperObject, &'static str> {
+    ) -> Result<sharedtypes::ScraperObject, sharedtypes::ScraperReturn> {
         let libloading = self.scrapermanager.returnlibloading(memid);
         scraper::parser_call(libloading, params)
         //self.scrapermanager.parser_call(memid, params)
