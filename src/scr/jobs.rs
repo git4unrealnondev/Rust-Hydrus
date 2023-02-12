@@ -11,6 +11,7 @@ use crate::scr::time;
 use ahash::AHashMap;
 use http::uri::Authority;
 use log::{error, info};
+use ratelimit::*;
 use reqwest::{Client, Request, Response};
 use std::collections::hash_map::Entry;
 use std::sync::{Arc, Mutex};
@@ -209,7 +210,7 @@ impl Jobs {
     ///
     pub fn automatic_job_run(
         source_url: &String,
-        ratelimiter_object: &mut ratelimit::Limiter,
+        ratelimiter_object: &mut Ratelimiter,
         client: &mut Client,
         commit_type: sharedtypes::CommitType,
     ) {

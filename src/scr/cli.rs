@@ -93,13 +93,38 @@ pub fn main() -> sharedtypes::AllFields {
         .subcommand(
             SubCommand::with_name("task")
                 .about("Runs Specified tasks against DB.")
-                .arg(
-                    Arg::new("csv")
-                        .long("csv_file")
-                        .takes_value(true)
-                        .help("Location of csv import file.")
-                        .min_values(1)
-                        .multiple_values(false),
+                .subcommand(
+                    SubCommand::with_name("csv")
+                        .about("Imports a CSV File")
+                        .arg(
+                            Arg::new("csv")
+                                .long("csv_file")
+                                .takes_value(true)
+                                .help("Location of csv import file.")
+                                .min_values(1)
+                                .multiple_values(false),
+                        )
+                        .arg(
+                            Arg::new("Move")
+                                .long("Move")
+                                .takes_value(false)
+                                .help("Moves files into db.")
+                                .requires("csv"),
+                        )
+                        .arg(
+                            Arg::new("Copy")
+                                .long("Copy")
+                                .takes_value(false)
+                                .help("Copies files into db.")
+                                .requires("csv"),
+                        )
+                        .arg(
+                            Arg::new("Hardlink")
+                                .long("Hardlink")
+                                .takes_value(false)
+                                .help("Hardlnks files into db.")
+                                .requires("csv"),
+                        ),
                 ),
         )
         .arg(
@@ -123,6 +148,60 @@ pub fn main() -> sharedtypes::AllFields {
     let id = matches.value_of("id");
 
     let search = matches.subcommand_matches(&"search");
+
+    let task = matches.subcommand_matches(&"task");
+
+    if task != None {
+        for taskenum in sharedtypes::Tasks::iter() {
+            let tasktype = taskenum.to_string();
+            let taskmatch = task.unwrap().subcommand_matches(&tasktype);
+            if let Some(_) = taskmatch {
+                match taskenum {
+                    sharedtypes::Tasks::csv(Test, csvdata) => {
+                        dbg!(taskmatch);
+                        let location: &String = taskmatch.unwrap().get_one(&tasktype).unwrap();
+
+                        for csvdata in sharedtypes::CsvCopyMvHard::iter() {
+                            if taskmatch.unwrap().contains_id(&csvdata.to_string()) {
+                                dbg!(&csvdata);
+                                match csvdata {
+                                    sharedtypes::CsvCopyMvHard::Copy => {
+                                        return sharedtypes::AllFields::ETasks(
+                                            sharedtypes::Tasks::csv(location.to_string(), csvdata),
+                                        )
+                                    }
+                                    sharedtypes::CsvCopyMvHard::Move => {
+                                        return sharedtypes::AllFields::ETasks(
+                                            sharedtypes::Tasks::csv(location.to_string(), csvdata),
+                                        )
+                                    }
+                                    sharedtypes::CsvCopyMvHard::Hardlink => {
+                                        return sharedtypes::AllFields::ETasks(
+                                            sharedtypes::Tasks::csv(location.to_string(), csvdata),
+                                        )
+                                    }
+                                }
+                                //return sharedtypes::AllFields::ETasks(csvdata())
+                            }
+                        }
+
+                        dbg!(Test, csvdata);
+
+                        let mv = taskmatch.unwrap().contains_id(&"move");
+                        let cp = taskmatch.unwrap().contains_id(&"copy");
+                        let hard = taskmatch.unwrap().contains_id(&"hardlink");
+
+                        if mv {
+                        } else if cp {
+                        } else if hard {
+                        }
+                        dbg!(location, mv, cp);
+                    }
+                }
+            }
+        }
+        panic!();
+    }
 
     if search != None {
         for searchprog in sharedtypes::Search::iter() {

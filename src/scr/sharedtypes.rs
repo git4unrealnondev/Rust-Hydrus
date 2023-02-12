@@ -114,6 +114,23 @@ pub enum AllFields {
     EJobsRemove(jobs_remove),
     ESearch(Search),
     ENothing,
+    ETasks(Tasks),
+}
+
+#[derive(Debug, EnumIter, Display)]
+pub enum Tasks {
+    csv(String, CsvCopyMvHard), // CSV importation. cp mv hardlink
+}
+
+///
+/// Information about CSV what we should do with the files.
+///
+#[derive(Debug, EnumIter, Display, Default)]
+pub enum CsvCopyMvHard {
+    #[default]
+    Copy,
+    Move,
+    Hardlink,
 }
 
 pub fn stringto_commit_type(into: &String) -> CommitType {

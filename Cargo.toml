@@ -12,12 +12,11 @@ tokio = { version = "1", features = ["full"] }
 url = "2.3.1"
 http = "0.2.8"
 json = "0.12.4"
-ratelimit="0.4.4"
-cloudflare-bypasser = "0.1.2"
+ratelimit="0.5.1"
 async-std = { version = "1.12.0", features = ["attributes", "tokio1", "unstable"] }
 rusqlite = {version = "0.28.0", features = ["bundled"] }
 fast_log = "1.5.25"
-ahash = "0.7.6"
+ahash = "0.8.3"
 chrono = "0.4"
 clap = "3.2.8"
 bytes = "1.2.1"
@@ -31,10 +30,11 @@ strum = "0.24.1"
 strum_macros = "0.24.3"
 async-executor = "1.5.0"
 itertools = "0.10.5"
-file-format = "0.12.0"
+file-format = "0.14.0"
 sha-1 = "0.10.1"
 md5 = "0.7.0"
 rayon = "1.6.1"
+smallest-uint = "0.1.5"
 
 
 [profile.release]

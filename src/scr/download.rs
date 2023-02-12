@@ -14,26 +14,25 @@ use std::io;
 use std::io::Cursor;
 use std::time::Duration;
 use url::Url;
-extern crate cloudflare_bypasser;
 extern crate reqwest;
 use async_std::task;
-use ratelimit;
+use ratelimit::*;
 use std::thread;
 ///
 /// Makes ratelimiter and example
 ///
-pub fn ratelimiter_create(number: u64, duration: Duration) -> ratelimit::Limiter {
+pub fn ratelimiter_create(number: u64, duration: Duration) -> Ratelimiter {
     dbg!("Making ratelimiter with: {} {}", &number, &duration);
 
     // The wrapper that implements ratelimiting
     //tower::ServiceBuilder::new()
     //    .rate_limit(number, duration)
     //    .service(client);
-    ratelimit::Builder::new()
-        .capacity(1) //number of tokens the bucket will hold
-        .quantum(number.try_into().unwrap()) //add one token per interval
-        .interval(duration) //add quantum tokens every 1 second
-        .build()
+    Ratelimiter::new(1, number, 1)
+    //.capacity(1) //number of tokens the bucket will hold
+    //.quantum(number.try_into().unwrap()) //add one token per interval
+    //.interval(duration) //add quantum tokens every 1 second
+    //.build()
 }
 
 ///
@@ -58,7 +57,7 @@ pub fn client_create() -> Client {
 ///
 pub async fn dltext_new(
     url_string: String,
-    ratelimit_object: &mut ratelimit::Limiter,
+    ratelimit_object: &mut Ratelimiter,
     client: &mut Client,
 ) -> Result<String, reqwest::Error> {
     //let mut ret: Vec<AHashMap<String, AHashMap<String, Vec<String>>>> = Vec::new();
@@ -141,9 +140,9 @@ pub async fn dlfile_new(
 
             // Downloads file into byte memory buffer
             let byte = futureresult.bytes().await;
-            
+
             // Error handling for dling a file.
-            // Waits 10 secs to retry 
+            // Waits 10 secs to retry
             match byte {
                 Ok(_) => {
                     bytes = byte.unwrap();

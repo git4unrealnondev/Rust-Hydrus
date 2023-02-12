@@ -1,8 +1,10 @@
 use crate::scr::sharedtypes::jobs_add;
 use crate::scr::sharedtypes::AllFields::EJobsAdd;
+use crate::scr::tasks;
 use log::{error, info, warn};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
+use tokio::task;
 extern crate ratelimit;
 
 mod scr {
@@ -15,6 +17,7 @@ mod scr {
     pub mod plugins;
     pub mod scraper;
     pub mod sharedtypes;
+    pub mod tasks;
     pub mod threading;
     pub mod time;
 }
@@ -173,8 +176,16 @@ fn main() {
             dbg!(search);
             panic!();
         }
+
+        scr::sharedtypes::AllFields::ETasks(task) => match task {
+            scr::sharedtypes::Tasks::csv(location, csvdata) => {
+                tasks::import_files(&location, csvdata);
+            }
+        },
+
         scr::sharedtypes::AllFields::ENothing => {}
     }
+    panic!();
     data.transaction_flush();
     //let mut line = String::new();
     //let b1 = std::io::stdin().read_line(&mut line).unwrap();
