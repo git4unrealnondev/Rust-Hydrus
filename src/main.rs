@@ -179,7 +179,7 @@ fn main() {
 
         scr::sharedtypes::AllFields::ETasks(task) => match task {
             scr::sharedtypes::Tasks::csv(location, csvdata) => {
-                tasks::import_files(&location, csvdata);
+                tasks::import_files(&location, csvdata, &mut data);
             }
         },
 

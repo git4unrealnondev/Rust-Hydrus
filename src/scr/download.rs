@@ -178,18 +178,7 @@ pub async fn dlfile_new(
         boolloop = !status.1;
     }
 
-    // Gets and makes folderpath.
-    let final_loc = format!(
-        "{}/{}{}/{}{}/{}{}",
-        &location,
-        hash.chars().next().unwrap(),
-        hash.chars().nth(1).unwrap(),
-        hash.chars().nth(2).unwrap(),
-        hash.chars().nth(3).unwrap(),
-        hash.chars().nth(4).unwrap(),
-        hash.chars().nth(5).unwrap()
-    );
-    file::folder_make(&final_loc);
+    let final_loc = getfinpath(&location, &hash);
 
     // Gives file extension
     let file_ext = FileFormat::from_bytes(&bytes).extension().to_string();
@@ -206,7 +195,7 @@ pub async fn dlfile_new(
     (hash, file_ext)
 }
 
-pub fn hash_file(filename: String) -> String {
+pub fn hash_file(filename: &String) -> String {
     let mut hasher = Sha512::new();
     let mut file = fs::File::open(filename).unwrap();
 
@@ -214,4 +203,20 @@ pub fn hash_file(filename: String) -> String {
     let hash_bytes = hasher.finalize();
 
     format!("{:X}", hash_bytes)
+}
+
+pub fn getfinpath(location: &String, hash: &String) -> String {
+    // Gets and makes folderpath.
+    let final_loc = format!(
+        "{}/{}{}/{}{}/{}{}",
+        location,
+        hash.chars().next().unwrap(),
+        hash.chars().nth(1).unwrap(),
+        hash.chars().nth(2).unwrap(),
+        hash.chars().nth(3).unwrap(),
+        hash.chars().nth(4).unwrap(),
+        hash.chars().nth(5).unwrap()
+    );
+    file::folder_make(&final_loc);
+    return final_loc;
 }

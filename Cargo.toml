@@ -30,11 +30,12 @@ strum = "0.24.1"
 strum_macros = "0.24.3"
 async-executor = "1.5.0"
 itertools = "0.10.5"
-file-format = "0.14.0"
+file-format = {version="0.14.0", features=["reader"]}
 sha-1 = "0.10.1"
 md5 = "0.7.0"
 rayon = "1.6.1"
 smallest-uint = "0.1.5"
+serde = "1.0.152"
 
 
 [profile.release]

@@ -1,13 +1,32 @@
+use super::database;
+use super::download;
 use super::sharedtypes;
 use csv;
 use log::{error, info};
-use std::fs;
+use serde::Deserialize;
+use std::{fs, io};
 use std::path::Path;
+use file_format::FileFormat;
+use ahash::AHashMap;
+
+#[derive(Deserialize)]
+struct Row {
+    path: String,
+    tag: String,
+    namespace: String,
+    parent: Option<String>,
+}
 
 ///
 /// Just a holder for tasks. Can be called from here or any place really. :D
+/// Currently supports only one file to tag assiciation. 
+/// Need to add support for multiple tags. But this currently works for me.
 ///
-pub fn import_files(location: &String, csvdata: sharedtypes::CsvCopyMvHard) {
+pub fn import_files(
+    location: &String,
+    csvdata: sharedtypes::CsvCopyMvHard,
+    db: &mut database::Main,
+) {
     if !Path::new(&location).exists() {
         error!("Path: {} Doesn't exist. Exiting. Check logs", &location);
         panic!("Path: {} Doesn't exist. Exiting. Check logs", &location);
@@ -15,13 +34,81 @@ pub fn import_files(location: &String, csvdata: sharedtypes::CsvCopyMvHard) {
 
     let mut rdr = csv::ReaderBuilder::new().from_path(&location).unwrap();
 
-    let headers = rdr.headers().unwrap();
-    dbg!(headers);
-    
-
-    let mut record = csv::ByteRecord::new();
-    for line in rdr.records() {
-        dbg!(line.unwrap().to_owned());
-        panic!();
+    let mut headers: Vec<String> = Vec::new();
+    let headerrecord = rdr.headers().unwrap().clone();
+    for head in headerrecord.iter() {
+        headers.push(head.to_string());
     }
+
+    // Checks if path is missing
+    if !headers.contains(&"path".to_string()) {
+        error!("CSV ERROR, issue with csv file. No path header.");
+        panic!("CSV ERROR, issue with csv file. No path header.");
+    }
+
+    let location = db.settings_get_name(&"FilesLoc".to_string()).unwrap().1;
+    
+    println!("Importing Files to: {}", &location);
+
+    let mut delfiles:AHashMap<String, String> = AHashMap::new();
+    
+    for line in rdr.records() {
+        let row: Row = line
+            .as_ref()
+            .unwrap()
+            .deserialize(Some(&headerrecord))
+            .unwrap();
+
+
+        if !Path::new(&row.path).exists() {
+            error!("Path: {} Doesn't exist. Exiting. Check logs", &row.path);
+            panic!("Path: {} Doesn't exist. Exiting. Check logs", &row.path);
+        }
+        let hash = download::hash_file(&row.path);
+
+        let hash_exists = db.file_get_hash(&hash);
+        
+        if hash_exists.1 {
+            println!("File: {} already in DB. Skipping import.", &row.path); 
+            info!("File: {} already in DB. Skipping import.", &row.path);
+            continue}
+
+        let path = download::getfinpath(&location, &hash);
+        
+        let final_path = format!("{}/{}", path, &hash);
+        
+        let file_ext = FileFormat::from_file(&row.path).unwrap().extension().to_string();
+        
+        // Completes file actions.
+        match csvdata {
+            sharedtypes::CsvCopyMvHard::Copy => {
+                fs::copy(&row.path, &final_path).unwrap();
+            },
+            sharedtypes::CsvCopyMvHard::Move => {
+                fs::copy(&row.path, &final_path).unwrap();
+                delfiles.insert(row.path.to_string(), "".to_owned());
+            },
+            sharedtypes::CsvCopyMvHard::Hardlink => {
+                fs::hard_link(&row.path, &final_path).unwrap();
+            },
+        }
+        
+        // Adds into DB
+        let file_id = db.file_add(hash, file_ext, location.to_string(), true);
+        let namespace_id = db.namespace_add(&row.namespace.to_string(), &"".to_string(), true);
+        let tag_id = db.tag_add(row.tag.to_string(), "".to_string(), namespace_id, true);
+        
+        db.relationship_add(file_id, tag_id, true);
+        
+    }
+    db.transaction_flush();
+    println!("Clearing any files from any move ops.");
+    info!("Clearing any files from any move ops.");
+    for each in delfiles.keys(){
+        fs::remove_file(each).unwrap();
+    }
+    dbg!("Done!");
+    info!("Done!");
+        
+    panic!();
 }
