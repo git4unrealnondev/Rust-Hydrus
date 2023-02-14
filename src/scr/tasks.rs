@@ -92,6 +92,7 @@ pub fn import_files(
                 fs::hard_link(&row.path, &final_path).unwrap();
             },
         }
+        println!("Copied to path: {}", &final_path);
         
         // Adds into DB
         let file_id = db.file_add(hash, file_ext, location.to_string(), true);
@@ -99,9 +100,10 @@ pub fn import_files(
         let tag_id = db.tag_add(row.tag.to_string(), "".to_string(), namespace_id, true);
         
         db.relationship_add(file_id, tag_id, true);
+        db.transaction_flush();
         
     }
-    db.transaction_flush();
+    
     println!("Clearing any files from any move ops.");
     info!("Clearing any files from any move ops.");
     for each in delfiles.keys(){
