@@ -38,6 +38,7 @@ pub enum ScraperReturn {
 ///
 /// What the scraper passes between loaded 3rd party scrapers and the internal scrpaer.
 ///
+#[derive(Debug)]
 pub struct ScraperObject {
     pub file: HashMap<u64, FileObject, BuildHasherDefault<NoHashHasher<u64>>>,
 }

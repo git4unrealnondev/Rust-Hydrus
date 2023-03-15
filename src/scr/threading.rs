@@ -229,6 +229,8 @@ impl Worker {
             // Used accross multiple jobs that share host
             let mut ratelimit =
                 download::ratelimiter_create(scrap._ratelimit.0, scrap._ratelimit.1);
+            let mut ratelimit_counter = 0;
+            let mut ratelimit_total = 10;
 
             let mut client = download::client_create();
             for each in jobvec {
@@ -287,8 +289,27 @@ impl Worker {
                                     sharedtypes::ScraperReturn::Timeout(time) => {
                                         let time_dur = Duration::from_secs(*time);
                                         info!("Sleeping: {} Secs due to ratelimit.", time);
+                                        info!("ST: {:?} RESP: {}", &st, &respstring);
                                         dbg!("Sleeping: {} Secs due to ratelimit.", time);
+
                                         thread::sleep(time_dur);
+                                        ratelimit_counter += 1;
+                                        if ratelimit_counter >= ratelimit_total {
+                                            {
+                                                let unwrappydb = &mut db.lock().unwrap();
+                                                unwrappydb.transaction_flush();
+                                            }
+
+                                            ratelimit = download::ratelimiter_create(
+                                                scrap._ratelimit.0,
+                                                scrap._ratelimit.1,
+                                            );
+                                            ratelimit_counter = 0;
+                                            
+                                            client = download::client_create();
+                                            
+                                            thread::sleep(time_dur * 12);
+                                        }
                                     }
                                 },
                                 Ok(_) => break,

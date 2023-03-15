@@ -29,7 +29,7 @@ impl InternalScraper {
             _version: 0,
             _name: "e6scraper".to_string(),
             _sites: vec_of_strings!("e6", "e621", "e621.net"),
-            _ratelimit: (1, Duration::from_secs(1)),
+            _ratelimit: (1, Duration::from_secs(2)),
             _type: sharedtypes::ScraperType::Automatic,
         }
     }
@@ -208,10 +208,18 @@ pub fn parser(params: &String) -> Result<sharedtypes::ScraperObject, sharedtypes
         HashMap::with_hasher(BuildHasherDefault::default());
     if let Err(_) = json::parse(params) {
         if params.contains("Please confirm you are not a robot.") {
-            return Err(sharedtypes::ScraperReturn::Timeout(5))
+            return Err(sharedtypes::ScraperReturn::Timeout(20));
+        } else if params.contains("502: Bad gateway") {
+            return Err(sharedtypes::ScraperReturn::Timeout(10));
+        } else if params.contains("SSL handshake failed") {
+            return Err(sharedtypes::ScraperReturn::Timeout(10));
+        } else if params.contains("e621 Maintenance") {
+            return Err(sharedtypes::ScraperReturn::Timeout(240));
         }
         dbg!(params);
-        return Err(sharedtypes::ScraperReturn::EMCStop("Unknown Error".to_string()))
+        return Err(sharedtypes::ScraperReturn::EMCStop(
+            "Unknown Error".to_string(),
+        ));
     }
     let js = json::parse(params).unwrap();
 
@@ -221,7 +229,7 @@ pub fn parser(params: &String) -> Result<sharedtypes::ScraperObject, sharedtypes
     //writeln!(&mut file, "{}", js.to_string()).unwrap();
 
     if js["posts"].is_empty() {
-        return Err(sharedtypes::ScraperReturn::Nothing)
+        return Err(sharedtypes::ScraperReturn::Nothing);
     }
 
     for inc in 0..js["posts"].len() {
@@ -317,7 +325,16 @@ pub fn parser(params: &String) -> Result<sharedtypes::ScraperObject, sharedtypes
             //dbg!(js["posts"][inc]["description"].to_string());
             tag_count += 1;
         }
-
+        tag_count += 1;
+        tags_list.insert(
+            tag_count,
+            sharedtypes::TagObject {
+                namespace: "rating".to_string(),
+                relates_to: None,
+                tag: js["posts"][inc]["rating"].to_string(),
+                tag_type: sharedtypes::TagType::Normal,
+            },
+        );
         /*tags_list.insert(
             tag_count,
             sharedtypes::TagObject {

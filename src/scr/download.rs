@@ -136,10 +136,25 @@ pub async fn dlfile_new(
 
         while errloop {
             let url = Url::parse(&file.source_url).unwrap();
-            let futureresult = client.get(url.as_ref()).send().await.unwrap();
+
+            let mut futureresult = client.get(url.as_ref()).send().await;
+            loop {
+                match futureresult {
+                    Ok(_) => {
+                        break;
+                    }
+                    Err(_) => {
+                        error!("Repeating: {}", &url);
+                        dbg!("Repeating: {}", &url);
+                        let time_dur = Duration::from_secs(10);
+                        thread::sleep(time_dur);
+                        futureresult = client.get(url.as_ref()).send().await;
+                    }
+                }
+            }
 
             // Downloads file into byte memory buffer
-            let byte = futureresult.bytes().await;
+            let byte = futureresult.unwrap().bytes().await;
 
             // Error handling for dling a file.
             // Waits 10 secs to retry

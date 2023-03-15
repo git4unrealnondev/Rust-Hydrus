@@ -1,13 +1,13 @@
 use super::database;
 use super::download;
 use super::sharedtypes;
+use ahash::AHashMap;
 use csv;
+use file_format::FileFormat;
 use log::{error, info};
 use serde::Deserialize;
-use std::{fs, io};
 use std::path::Path;
-use file_format::FileFormat;
-use ahash::AHashMap;
+use std::{fs, io};
 
 #[derive(Deserialize)]
 struct Row {
@@ -19,7 +19,7 @@ struct Row {
 
 ///
 /// Just a holder for tasks. Can be called from here or any place really. :D
-/// Currently supports only one file to tag assiciation. 
+/// Currently supports only one file to tag assiciation.
 /// Need to add support for multiple tags. But this currently works for me.
 ///
 pub fn import_files(
@@ -47,11 +47,11 @@ pub fn import_files(
     }
 
     let location = db.settings_get_name(&"FilesLoc".to_string()).unwrap().1;
-    
+
     println!("Importing Files to: {}", &location);
 
-    let mut delfiles:AHashMap<String, String> = AHashMap::new();
-    
+    let mut delfiles: AHashMap<String, String> = AHashMap::new();
+
     for line in rdr.records() {
         let row: Row = line
             .as_ref()
@@ -59,58 +59,60 @@ pub fn import_files(
             .deserialize(Some(&headerrecord))
             .unwrap();
 
-
         if !Path::new(&row.path).exists() {
             error!("Path: {} Doesn't exist. Exiting. Check logs", &row.path);
-            panic!("Path: {} Doesn't exist. Exiting. Check logs", &row.path);
+            println!("Path: {} Doesn't exist. Exiting. Check logs", &row.path);
+            continue;
         }
         let hash = download::hash_file(&row.path);
 
         let hash_exists = db.file_get_hash(&hash);
-        
+
         if hash_exists.1 {
-            println!("File: {} already in DB. Skipping import.", &row.path); 
+            //delfiles.insert(row.path.to_string(), "".to_owned());
+            fs::remove_file(&row.path).unwrap(); // Removes file that's already in DB.
+            println!("File: {} already in DB. Skipping import.", &row.path);
             info!("File: {} already in DB. Skipping import.", &row.path);
-            continue}
+            continue;
+        }
 
         let path = download::getfinpath(&location, &hash);
-        
+
         let final_path = format!("{}/{}", path, &hash);
-        
-        let file_ext = FileFormat::from_file(&row.path).unwrap().extension().to_string();
-        
+
+        let file_ext = FileFormat::from_file(&row.path)
+            .unwrap()
+            .extension()
+            .to_string();
+
         // Completes file actions.
         match csvdata {
             sharedtypes::CsvCopyMvHard::Copy => {
                 fs::copy(&row.path, &final_path).unwrap();
-            },
+            }
             sharedtypes::CsvCopyMvHard::Move => {
                 fs::copy(&row.path, &final_path).unwrap();
                 delfiles.insert(row.path.to_string(), "".to_owned());
-            },
+            }
             sharedtypes::CsvCopyMvHard::Hardlink => {
                 fs::hard_link(&row.path, &final_path).unwrap();
-            },
+            }
         }
         println!("Copied to path: {}", &final_path);
-        
+
         // Adds into DB
         let file_id = db.file_add(hash, file_ext, location.to_string(), true);
         let namespace_id = db.namespace_add(&row.namespace.to_string(), &"".to_string(), true);
         let tag_id = db.tag_add(row.tag.to_string(), "".to_string(), namespace_id, true);
-        
+
         db.relationship_add(file_id, tag_id, true);
-        db.transaction_flush();
-        
     }
-    
+    db.transaction_flush();
     println!("Clearing any files from any move ops.");
     info!("Clearing any files from any move ops.");
-    for each in delfiles.keys(){
+    for each in delfiles.keys() {
         fs::remove_file(each).unwrap();
     }
     dbg!("Done!");
     info!("Done!");
-        
-    panic!();
 }
