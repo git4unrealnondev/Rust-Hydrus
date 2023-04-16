@@ -1,19 +1,17 @@
-use crate::scr::sharedtypes;
-use ahash::AHashMap;
 use libloading;
 use log::{error, info, warn};
+use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 use std::time::Duration;
 
-static SUPPORTED_VERS: usize = 0;
-#[derive(Debug, Clone, PartialEq, Hash, Eq)]
+static SUPPORTED_VERS: f32 = 0.001;
+
 pub struct InternalScraper {
-    pub _version: usize,                 //Version of the scraper
-    pub _name: String,                   // Name of the scraper
-    pub _sites: Vec<String>,             // Sites supported by scraper
-    pub _ratelimit: (u64, Duration),     // Ratelimiter object that has yet to be created.
-    pub _type: sharedtypes::ScraperType, // What type of scraper to use in matching.
+    _version: f32,
+    _name: String,
+    _sites: Vec<String>,
+    _ratelimit: (u64, Duration),
 }
 
 ///
@@ -24,17 +22,16 @@ pub struct InternalScraper {
 impl InternalScraper {
     pub fn new() -> Self {
         InternalScraper {
-            _version: 0,
+            _version: 0.001,
             _name: "test.to_string".to_string(),
             _sites: crate::vec_of_strings!("example", "example1"),
             _ratelimit: (2, Duration::from_secs(2)),
-            _type: sharedtypes::ScraperType::Automatic,
         }
     }
-    pub fn version_get(&self) -> usize {
+    pub fn version_get(&self) -> f32 {
         self._version
     }
-    pub fn version_set(&mut self, inp: usize) {
+    pub fn version_set(&mut self, inp: f32) {
         self._version = inp;
     }
     pub fn name_get(&self) -> &String {
@@ -64,7 +61,7 @@ pub struct ScraperManager {
     _string: Vec<String>,
     _sites: Vec<Vec<String>>,
     _loaded: Vec<bool>,
-    pub _library: AHashMap<InternalScraper, libloading::Library>,
+    _library: Vec<libloading::Library>,
     _scraper: Vec<InternalScraper>,
 }
 impl ScraperManager {
@@ -73,7 +70,7 @@ impl ScraperManager {
             _string: Vec::new(),
             _sites: Vec::new(),
             _loaded: Vec::new(),
-            _library: AHashMap::new(),
+            _library: Vec::new(),
             _scraper: Vec::new(),
         }
     }
@@ -86,7 +83,7 @@ impl ScraperManager {
         &self._scraper
     }
 
-    pub fn library_get(&self) -> &AHashMap<InternalScraper, libloading::Library> {
+    pub fn library_get(&self) -> &Vec<libloading::Library> {
         &self._library
     }
 
@@ -109,19 +106,8 @@ impl ScraperManager {
 
             if Path::new(&path).exists() {
                 self._string.push(path.to_string());
-
-                let lib = unsafe { libloading::Library::new(&path).unwrap() };
-
-                let funtwo: Result<
-                    libloading::Symbol<unsafe extern "C" fn() -> InternalScraper>,
-                    libloading::Error,
-                > = unsafe { lib.get(b"new") };
-
-                let pulled_successfully = unsafe { funtwo.unwrap()() };
-                // Loads version in memsafe way from scraper
-                //let scraper = unsafe { funtwo.as_ref().unwrap()() };
-
-                self._library.insert(pulled_successfully, lib);
+                self._library
+                    .push(unsafe { libloading::Library::new(&path).unwrap() })
             } else {
                 let err = format!(
                     "Loading scraper couInternalScraper::neld not find {}",
@@ -133,8 +119,14 @@ impl ScraperManager {
         for each in &mut self._library {
             //let mut internal: Vec<libloading::Symbol<unsafe extern  fn() -> InternalScraper>> = Vec::new();
             //let mut internal = Vec::new();
+            let funtwo: Result<
+                libloading::Symbol<unsafe extern "C" fn() -> InternalScraper>,
+                libloading::Error,
+            > = unsafe { each.get(b"new") };
 
-            let version = each.0.version_get();
+            // Loads version in memsafe way from scraper
+            let scraper = unsafe { funtwo.as_ref().unwrap()() };
+            let version: f32 = scraper.version_get();
 
             if version < SUPPORTED_VERS {
                 let msg = format!(
@@ -146,69 +138,61 @@ impl ScraperManager {
                 panic!("{}", msg);
             }
 
-            //let sites: Vec<String> = scraper.sites_get();
+            let sites: Vec<String> = scraper.sites_get();
 
-            //    self._sites.push(sites);
-            self._scraper.push(each.0.clone());
+            self._sites.push(sites);
+            self._scraper.push(scraper);
+            //unsafe{println!("{:?}", internal[0]().version_get());}
         }
     }
+    pub fn url_load(&mut self, id: usize, params: Vec<String>) -> Vec<String> {
+        let temp: libloading::Symbol<unsafe extern "C" fn(&Vec<String>) -> Vec<String>> =
+            unsafe { self._library[id].get(b"url_get\0").unwrap() };
+unsafe { temp(&params) }
 
-    pub fn returnlibloading(&self, scraper: &InternalScraper) -> &libloading::Library {
-        &self._library[scraper]
     }
-}
+    pub fn url_dump(&self, id: usize, params: Vec<String>) -> Vec<String> {
+        let temp: libloading::Symbol<unsafe extern "C" fn(&Vec<String>) -> Vec<String>> =
+            unsafe { self._library[id].get(b"url_dump\0").unwrap() };
+unsafe { temp(&params) }
 
-pub fn cookie_need(libloading: &libloading::Library) -> (sharedtypes::ScraperType, String) {
-    let temp: libloading::Symbol<unsafe extern "C" fn() -> (sharedtypes::ScraperType, String)> =
-        unsafe { libloading.get(b"cookie_needed\0").unwrap() };
-    unsafe { temp() }
-}
-///
-/// Tells downloader to allow scraper to download.
-///
-pub fn scraper_download_get(libloading: &libloading::Library) -> bool {
-    let temp: libloading::Symbol<unsafe extern "C" fn() -> bool> =
-        unsafe { libloading.get(b"scraper_download_get\0").unwrap() };
-    unsafe { temp() }
-}
-///
-/// Should only be called when scraper needs to download something assuming scraper_download_get returns true.
-/// TODO NOT YET IMPLEMENTED PROPERLY.
-///
-pub fn scraper_download(libloading: &libloading::Library, params: String) -> bool {
-    let temp: libloading::Symbol<unsafe extern "C" fn() -> bool> =
-        unsafe { libloading.get(b"scraper_download\0").unwrap() };
-    unsafe { temp() }
-}
+    }
+    pub fn parser_call(
+        &self,
+        id: usize,
+        params: &String,
+    ) -> Result<HashMap<String, HashMap<String, Vec<String>>>, &'static str> {
+        let temp: libloading::Symbol<
+            unsafe extern "C" fn(
+                &String,
+            ) -> Result<
+                HashMap<String, HashMap<String, Vec<String>>>,
+                &'static str,
+            >,
+        > = unsafe { self._library[id].get(b"parser\0").unwrap() };
+unsafe { temp(params) }
 
-pub fn url_load(libloading: &libloading::Library, params: Vec<String>) -> Vec<String> {
-    let temp: libloading::Symbol<unsafe extern "C" fn(&Vec<String>) -> Vec<String>> =
-        unsafe { libloading.get(b"url_get\0").unwrap() };
-    unsafe { temp(&params) }
-}
-pub fn url_dump(libloading: &libloading::Library, params: Vec<String>) -> Vec<String> {
-    let temp: libloading::Symbol<unsafe extern "C" fn(&Vec<String>) -> Vec<String>> =
-        unsafe { libloading.get(b"url_dump\0").unwrap() };
-    unsafe { temp(&params) }
-}
-///
-/// Calls a parser. Gives the HTML to the parser to parse.
-///
-pub fn parser_call(
-    libloading: &libloading::Library,
-    params: &String,
-) -> Result<sharedtypes::ScraperObject, sharedtypes::ScraperReturn> {
-    let temp: libloading::Symbol<
-        unsafe extern "C" fn(
-            &String,
-        )
-            -> Result<sharedtypes::ScraperObject, sharedtypes::ScraperReturn>,
-    > = unsafe { libloading.get(b"parser\0").unwrap() };
-    unsafe { temp(params) }
-} //ScraperObject
-
-pub fn url_load_test(libloading: &libloading::Library, params: Vec<String>) -> Vec<String> {
-    let temp: libloading::Symbol<unsafe extern "C" fn(&Vec<String>) -> Vec<String>> =
-        unsafe { libloading.get(b"url_get\0").unwrap() };
-    unsafe { temp(&params) }
+    }
+    pub fn cookie_needed(&self, id: usize, params: String) -> (String, String) {
+        let temp: libloading::Symbol<unsafe extern "C" fn() -> (String, String)> =
+            unsafe { self._library[id].get(b"cookie_needed\0").unwrap() };
+unsafe { temp() }
+    }
+    ///
+    /// Tells downloader to allow scraper to download.
+    ///
+    pub fn scraper_download_get(&self, id: usize) -> bool {
+        let temp: libloading::Symbol<unsafe extern "C" fn() -> bool> =
+            unsafe { self._library[id].get(b"scraper_download_get\0").unwrap() };
+unsafe { temp() }
+    }
+    ///
+    /// Should only be called when scraper needs to download something assuming scraper_download_get returns true.
+    /// TODO NOT YET IMPLEMENTED PROPERLY.
+    ///
+    pub fn scraper_download(&self, id: usize, params: String) -> bool {
+        let temp: libloading::Symbol<unsafe extern "C" fn() -> bool> =
+            unsafe { self._library[id].get(b"scraper_download\0").unwrap() };
+unsafe { temp() }
+    }
 }

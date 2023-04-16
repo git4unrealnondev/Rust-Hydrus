@@ -3,19 +3,18 @@ use std::time::{SystemTime, UNIX_EPOCH};
 ///
 /// Returns time as seconds since unix_epoch
 ///
-pub fn time_secs() -> usize {
+pub fn time_secs() -> u128 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_secs()
-        .try_into()
-        .unwrap()
+        .into()
 }
 
 ///
 /// Converts hour & day & minute repeatability.
 ///
-pub fn time_conv(inp: &String) -> usize {
+pub fn time_conv(inp: &String) -> u128 {
     if inp == &"now".to_string() {
         return 0;
     }
@@ -40,7 +39,7 @@ pub fn time_conv(inp: &String) -> usize {
 
     let nums = vec![year, month, week, day, hour, minute, second];
 
-    let mut combine: usize = 0;
+    let mut combine: u128 = 0;
     let mut st = inp.to_string();
 
     for each in 0..strings.len() {
@@ -51,7 +50,7 @@ pub fn time_conv(inp: &String) -> usize {
         if tmp[0].is_empty() {
             break;
         }
-        combine += nums[each] * tmp[0].parse::<usize>().unwrap();
+        combine += nums[each] * tmp[0].parse::<u128>().unwrap();
         st = tmp[1].to_string();
     }
     combine

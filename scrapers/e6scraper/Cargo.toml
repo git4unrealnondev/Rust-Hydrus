@@ -6,10 +6,9 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [profile.release]
-opt-level = 3
+opt-level = "z"
 lto=true
 codegenunits=1
-#debug=true
 strip = true
 
 [lib]
@@ -20,9 +19,3 @@ crate-type = ["dylib"]
 
 [dependencies]
 json = "0.12.4"
-ahash = "0.7.6"
-strum = "0.24.1"
-strum_macros = "0.24.3"
-nohash-hasher = "0.2.0"
-urlencoding = "2.1.2"
-rayon = "1.6.1"

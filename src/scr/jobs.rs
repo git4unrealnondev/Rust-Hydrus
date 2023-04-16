@@ -1,42 +1,21 @@
-use super::sharedtypes;
-use super::sharedtypes::CommitType;
-use super::sharedtypes::ScraperType;
 use crate::scr::database;
 use crate::scr::download;
 use crate::scr::file;
 use crate::scr::scraper;
-use crate::scr::scraper::InternalScraper;
-use crate::scr::threading;
 use crate::scr::time;
 use ahash::AHashMap;
-use http::uri::Authority;
-use log::{error, info};
-use ratelimit::*;
-use reqwest::{Client, Request, Response};
-use std::collections::hash_map::Entry;
-use std::sync::{Arc, Mutex};
+use log::info;
+use std::collections::HashMap;
 use std::time::Duration;
-use strum::IntoEnumIterator;
 
 pub struct Jobs {
     _jobid: Vec<u128>,
-    _secs: usize,
+    _secs: u128,
     _sites: Vec<String>,
     _params: Vec<Vec<String>>,
     //References jobid in _inmemdb hashmap :D
-    _jobstorun: Vec<usize>,
-    _jobref: AHashMap<usize, (JobsRef, scraper::InternalScraper)>,
+    _jobstorun: Vec<u16>,
     scrapermanager: scraper::ScraperManager,
-}
-#[derive(Debug, Clone)]
-pub struct JobsRef {
-    pub _idindb: usize,       // What is my ID in the inmemdb
-    pub _sites: String,       // Site that the user is querying
-    pub _params: Vec<String>, // Anything that the user passes into the db.
-    pub _jobsref: usize,      // reference time to when to run the job
-    pub _jobstime: usize,     // reference time to when job is added
-    pub _committype: CommitType,
-    //pub _scraper: scraper::ScraperManager // Reference to the scraper that will be used
 }
 
 ///
@@ -50,7 +29,6 @@ impl Jobs {
             _params: Vec::new(),
             _secs: 0,
             _jobstorun: Vec::new(),
-            _jobref: AHashMap::new(),
             scrapermanager: newmanager,
         }
     }
@@ -61,165 +39,57 @@ impl Jobs {
     pub fn jobs_get(&mut self, db: &database::Main) {
         self._secs = time::time_secs();
         let ttl = db.jobs_get_max();
-        let hashjobs = db.jobs_get_all();
-        let beans = self.scrapermanager.scraper_get();
-        dbg!(&hashjobs);
-        dbg!(&beans);
-        for each in hashjobs {
-            if time::time_secs() >= each.1._jobsref + each.1._jobstime {
+        if ttl > 0 {
+            for each in 0..ttl {
+                let (a, b, c, d, e) = db.jobs_get(each);
+                let auint = a.parse::<u128>().unwrap();
+                let cuint = c.parse::<u128>().unwrap();
+                let mut add = false;
+
+                //Working with uint. CANT BE NEGATIVE.
+                //oopsie, time is in future skip this.
+                if cuint > auint {
+                    continue;
+                }
+                let beans = self.scrapermanager.sites_get();
+                let mut cnt = 0;
                 for eacha in beans {
-                    if eacha._sites.contains(&each.1._sites) {
-                        self._jobref
-                            .insert(*each.0, (each.1.clone(), eacha.clone()));
+                    if eacha.contains(&b.to_string()) {
+                        add = true;
+                        continue;
                     }
+                    cnt += 1;
                 }
-            }
-        }
-        let msg = format!(
-            "Loaded {} jobs out of {} jobs. Didn't load {} Jobs due to lack of scrapers or timing.",
-            &self._jobref.len(),
-            db.jobs_get_max(),
-            db.jobs_get_max() - self._jobref.len(),
-        );
-        info!("{}", msg);
-        println!("{}", msg);
-    }
-
-    ///
-    /// Runs jobs in a much more sane matter
-    ///
-    pub fn jobs_run_new(
-        &mut self,
-        adb: &mut Arc<Mutex<database::Main>>,
-        thread: &mut threading::threads,
-    ) {
-        let mut dba = adb.clone();
-        let mut db = dba.lock().unwrap();
-
-        //let mut name_ratelimited: AHashMap<String, (u64, Duration)> = AHashMap::new();
-        let mut scraper_and_job: AHashMap<InternalScraper, Vec<JobsRef>> = AHashMap::new();
-        //let mut job_plus_storeddata: AHashMap<String, String> = AHashMap::new();
-
-        // Checks if their are no jobs to run.
-        if self.scrapermanager.scraper_get().is_empty() || self._jobref.is_empty() {
-            println!("No jobs to run...");
-            return;
-        }
-
-        // Appends ratelimited into hashmap for multithread scraper.
-        for scrape in self.scrapermanager.scraper_get() {
-            let name_result = db.settings_get_name(&format!("{:?}_{}", scrape._type, scrape._name));
-            let mut info = String::new();
-
-            // Handles loading of settings into DB.Either Manual or Automatic to describe the functionallity
-            match name_result {
-                Ok(_) => {
-                    //dbg!(name_result);
-                    info = name_result.unwrap().1;
-                }
-                Err(_) => {
-                    let isolatedtitle = format!("{:?}_{}", scrape._type, scrape._name);
-
-                    let (cookie, cookie_name) = self.library_cookie_needed(scrape);
-
-                    db.setting_add(
-                        isolatedtitle,
-                        "Automatic Scraper".to_owned(),
-                        0,
-                        cookie_name.clone(),
-                        true,
-                    );
-                    info = cookie_name;
-                }
-            }
-            // Loops through all jobs in the ref. Adds ref into
-            for each in &self._jobref {
-                let job = each.1;
-
-                // Checks job type. If manual then scraper handles ALL calls from here on.
-                // If Automatic then jobs will handle it.
-                match job.1._type {
-                    ScraperType::Manual => {}
-                    ScraperType::Automatic => {
-                        // Checks if InternalScraper types are the same data.
-                        if &job.1 == scrape {
-                            match scraper_and_job.entry(job.1.clone()) {
-                                Entry::Vacant(e) => {
-                                    e.insert(vec![job.0.clone()]);
-                                }
-                                Entry::Occupied(mut e) => {
-                                    dbg!(job.0.clone());
-                                    e.get_mut().push(job.0.clone());
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Loops through each InternalScraper and creates a thread for it.
-        for each in scraper_and_job {
-            let scraper = each.0;
-
-            // Captures the libloading library from the _library.
-            // Removes item from hashmap so the thread can have ownership of libloaded scraper.
-            let scrap = self.scrapermanager._library.remove(&scraper).unwrap();
-            let jobs = each.1;
-            dbg!(&jobs);
-
-            thread.startwork(scraper, jobs, adb, scrap);
-        }
-
-        /*for each in &self._jobref {
-            for eacha in self.scrapermanager.scraper_get() {
-                dbg!(&eacha);
-                if &each.1 .1 == eacha && !name_ratelimited.contains_key(&each.1 .1._name) {
-                    let scrap = ScraperType::iter();
-                    for eachb in scrap {
-                        name_ratelimited.insert(each.1 .1._name.to_string(), each.1 .1._ratelimit);
-                        //let type = each.1.1.url_get() ;
-                        let name_result = db.settings_get_name(&format!(
-                            "{:?}_{}",
-                            eachb,
-                            each.1 .1._name.to_string()
-                        ));
-                        match name_result {
-                            Ok(_) => {
-                                dbg!(name_result);
-                            }
-                            Err(_) => {
-                                dbg!(eachb, name_result);
-
-                                let (scrapertype, data) = self.scrapermanager.cookie_needed(eacha);
-                                dbg!(scrapertype, data);
-                            }
-                        }
-                    }
+                let test = auint + cuint;
+                if self._secs >= test && add {
+                    self._jobstorun.push(cnt);
+                    let param = vec!(d, e.to_string());
+                    self._params.push(param);
+                    self._sites.push(b);
                 } else {
+                    let msg = format!("Ignoring job: {}. Due to no scraper. ", &b);
+                    println!("{}", msg);
+                    info!("{}", msg);
                     continue;
                 }
             }
-        }*/
-        //dbg!(name_ratelimited);
-    }
+        }
 
-    ///
-    /// Automatic job running.
-    ///
-    ///
-    pub fn automatic_job_run(
-        source_url: &String,
-        ratelimiter_object: &mut Ratelimiter,
-        client: &mut Client,
-        commit_type: sharedtypes::CommitType,
-    ) {
+        let msg = format!(
+            "Loaded {} jobs out of {} jobs due to time or no scraper available.",
+            self._jobstorun.len(),
+            db.jobs_get_max()
+        );
+        info!("{}", msg);
+        println!("{}", msg);
+        db.dbg_show_internals();
     }
 
     ///
     /// Runs jobs as they are needed to.
     ///
-    /*pub fn jobs_run(&mut self, db: &mut database::Main) {
+
+    pub fn jobs_run(&mut self, db: &mut database::Main) {
         // Sets up and checks scrapers
 
         let loaded_params: AHashMap<u128, Vec<String>> = AHashMap::new();
@@ -294,10 +164,10 @@ impl Jobs {
 
             // url is the output from the designated scraper that has the correct
 
+
             let bools: Vec<bool> = Vec::new();
 
-            let url: Vec<String> =
-                self.library_url_dump(self._jobstorun[each].into(), &loaded_params[&each_u128]);
+            let url: Vec<String> = self.library_url_dump(self._jobstorun[each].into(), &loaded_params[&each_u128]);
 
             let boo = self.library_download_get(self._jobstorun[each].into());
             //let mut ratelimiter = block_on(download::ratelimiter_create(ratelimit[&each_u128]));
@@ -309,7 +179,7 @@ impl Jobs {
             println!("Downloading Site: {}", &each);
             // parses db input and adds tags to db.
             let (url_vec, urln_vec) = db.parse_input(&beans);
-            let urls_to_remove: Vec<String> = Vec::new();
+            let  urls_to_remove: Vec<String> = Vec::new();
 
             // Filters out already downloaded files.
             let namespace_id = db.namespace_get(&"parsed_url".to_string()).0;
@@ -321,21 +191,21 @@ impl Jobs {
             // Total files that are already downloaded.
             // Re-adds tags & relationships into DB Only enable if their are changes to scrapers.
             dbg!(&loaded_params[&each_u128]);
-            if self._params[each][1] == "true" {
-                for urls in urln_vec.keys() {
-                    dbg!(format!("Checking url for tags: {}", &urls));
+            if  self._params[each][1] == "true"{
+            for urls in urln_vec.keys() {
+                dbg!(format!("Checking url for tags: {}", &urls));
 
-                    let url_id = db.tag_get_name(urls.to_string(), namespace_id).0;
-                    let fileids = db.relationship_get_fileid(&url_id);
-                    for fids in &fileids {
-                        for tags in &urln_vec[urls] {
-                            db.tag_add(tags.0.to_string(), "".to_string(), tags.1, true);
-                            let tagid = db.tag_get_name(tags.0.to_string(), tags.1).0;
-                            db.relationship_add(*fids, tagid, true);
-                        }
-                    }
+                let url_id = db.tag_get_name(urls.to_string(), &namespace_id).0;
+                let fileids = db.relationship_get_fileid(&url_id);
+                for fids in &fileids {
+                for tags in &urln_vec[urls] {
+                    db.tag_add(tags.0.to_string(), "".to_string(), tags.1, true);
+                    let tagid = db.tag_get_name(tags.0.to_string(), &tags.1).0;
+                    db.relationship_add(*fids, tagid, true);
                 }
-            }
+
+                }
+            }}
 
             let utl_total = url_vec.len();
 
@@ -360,16 +230,16 @@ impl Jobs {
                 let hash = db.file_get_hash(&map.0[&urls.to_string()]).0;
                 let url_namespace = db.namespace_get(&"parsed_url".to_string()).0;
                 db.tag_add(urls.to_string(), "".to_string(), url_namespace, true);
-                let urlid = db.tag_get_name(urls.to_string(), url_namespace).0;
+                let urlid = db.tag_get_name(urls.to_string(), &url_namespace).0;
                 db.relationship_add(hash, urlid, true);
                 for tags in &url_vec[urls] {
                     db.tag_add(tags.0.to_string(), "".to_string(), tags.1, true);
-                    let tagid = db.tag_get_name(tags.0.to_string(), tags.1).0;
+                    let tagid = db.tag_get_name(tags.0.to_string(), &tags.1).0;
                     db.relationship_add(hash, tagid, true);
                 }
             }
         }
-    }*/
+    }
 
     /// ALL of the lower functions are just wrappers for the scraper library.
     /// This is nice because their's no unsafe code anywhere else inside code base.
@@ -377,10 +247,8 @@ impl Jobs {
     ///
     /// Returns a url to grab for.
     ///
-    pub fn library_url_get(&mut self, memid: &InternalScraper, params: &[String]) -> Vec<String> {
-        let libloading = self.scrapermanager.returnlibloading(memid);
-        scraper::url_load(libloading, params.to_vec())
-        //self.scrapermanager.url_load(memid, params.to_vec())
+    pub fn library_url_get(&mut self, memid: usize, params: &[String]) -> Vec<String> {
+         self.scrapermanager.url_load(memid, params.to_vec())
     }
 
     ///
@@ -388,37 +256,29 @@ impl Jobs {
     ///
     pub fn library_parser_call(
         &mut self,
-        memid: &InternalScraper,
+        memid: usize,
         params: &String,
-    ) -> Result<sharedtypes::ScraperObject, sharedtypes::ScraperReturn> {
-        let libloading = self.scrapermanager.returnlibloading(memid);
-        scraper::parser_call(libloading, params)
-        //self.scrapermanager.parser_call(memid, params)
+    ) -> Result<HashMap<String, HashMap<String, Vec<String>>>, &'static str> {
+         self.scrapermanager.parser_call(memid, params)
     }
 
     ///
     /// Returns a url to grab for.
     ///
-    pub fn library_url_dump(&self, memid: &InternalScraper, params: &[String]) -> Vec<String> {
-        let libloading = self.scrapermanager.returnlibloading(memid);
-        scraper::url_dump(libloading, params.to_vec())
-        //self.scrapermanager.url_dump(memid, params.to_vec())
+    pub fn library_url_dump(&mut self, memid: usize, params: &[String]) -> Vec<String> {
+         self.scrapermanager.url_dump(memid, params.to_vec())
     }
     ///
     /// pub fn cookie_needed(&mut self, id: usize, params: String) -> (bool, String)
     ///
-    pub fn library_cookie_needed(&self, memid: &InternalScraper) -> (ScraperType, String) {
-        let libloading = self.scrapermanager.returnlibloading(memid);
-        scraper::cookie_need(libloading)
-        //self.scrapermanager.cookie_needed(memid)
+    pub fn library_cookie_needed(&self, memid: usize, params: String) -> (String, String) {
+         self.scrapermanager.cookie_needed(memid, params)
     }
 
     ///
     /// Tells system if scraper should handle downloads.
     ///
-    pub fn library_download_get(&self, memid: &InternalScraper) -> bool {
-        let libloading = self.scrapermanager.returnlibloading(memid);
-        scraper::scraper_download_get(libloading)
-        //self.scrapermanager.scraper_download_get(memid)
+    pub fn library_download_get(&self, memid: usize) -> bool {
+        self.scrapermanager.scraper_download_get(memid)
     }
 }
