@@ -136,6 +136,7 @@ pub enum CsvCopyMvHard {
 
 pub fn stringto_commit_type(into: &String) -> CommitType {
     for each in CommitType::iter() {
+        dbg!(&each, into);
         if into == &each.to_string() {
             return each;
         }
@@ -148,7 +149,7 @@ pub fn stringto_commit_type(into: &String) -> CommitType {
     panic!("{}", panic);
 }
 
-pub fn stringto_search_type(into: &String) -> Search {
+pub fn stringto_Search_type(into: &String) -> Search {
     for each in Search::iter() {
         if into == &each.to_string() {
             return each;

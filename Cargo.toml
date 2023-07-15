@@ -8,12 +8,12 @@ edition = "2021"
 [dependencies]
 
 libloading = "0.7.3"
-reqwest = { version = "0.11.11", features = ["brotli", "blocking"] }
+reqwest = { version = "0.11.11", features = ["brotli", "blocking", "cookies", "gzip"] }
 tokio = { version = "1", features = ["full"] }
 url = "2.3.1"
 http = "0.2.8"
 json = "0.12.4"
-ratelimit="0.4.4"
+ratelimit = "0.7.0"
 cloudflare-bypasser = "0.1.2"
 async-std = { version = "1", features = ["attributes", "tokio1"] }
 tower ={ version = "0.4.13", features = ["full"]}
@@ -28,6 +28,15 @@ sha2 = "0.10.6"
 futures = "0.3.24"
 urlparse = "0.7.3"
 log = {version="0.4.0", features = ["max_level_debug", "release_max_level_info"]}
+strum_macros = "0.25.1"
+strum = "0.25.0"
+csv = "1.2.2"
+file-format = "0.18.0"
+serde = "1.0.171"
+nohash-hasher = "0.2.0"
+smallest-uint = "0.1.5"
+md5 = "0.7.0"
+sha1 = "0.10.5"
 
 [profile.release]
 opt-level = "z"
