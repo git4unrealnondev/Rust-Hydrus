@@ -1,0 +1,3 @@
+[submodule "Plugins/pluginblurhash/blurhash-rs"]
+	path = Plugins/pluginblurhash/blurhash-rs
+	url = git@github.com:git4unrealnondev/blurhash-rs.git
