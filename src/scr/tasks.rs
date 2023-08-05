@@ -9,7 +9,7 @@ use serde::Deserialize;
 use std::path::Path;
 use std::{fs, io};
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 struct Row {
     path: String,
     tag: String,

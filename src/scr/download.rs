@@ -1,6 +1,8 @@
+use super::plugins::PluginManager;
 //extern crate urlparse;
+use super::database;
 use super::sharedtypes;
-use crate::scr::file;
+use crate::file;
 use bytes::Bytes;
 use file_format::FileFormat;
 use log::{error, info};
@@ -16,33 +18,32 @@ use std::time::Duration;
 use url::Url;
 extern crate reqwest;
 use async_std::task;
-use std::thread;
 use ratelimit::Ratelimiter;
+use std::sync::{Arc, Mutex};
+use std::thread;
+
 ///
 /// Makes ratelimiter and example
 ///
 pub fn ratelimiter_create(number: u64, duration: Duration) -> Ratelimiter {
-    dbg!("Making ratelimiter with: {} {}", &number, &duration);
+    println!(
+        "Making ratelimiter with: {} Request Per: {:?}",
+        &number, &duration
+    );
 
     // The wrapper that implements ratelimiting
-    //tower::ServiceBuilder::new()
-    //    .rate_limit(number, duration)
-    //    .service(client);
     Ratelimiter::builder(number, duration).build().unwrap()
-    //.capacity(1) //number of tokens the bucket will hold
-    //.quantum(number.try_into().unwrap()) //add one token per interval
-    //.interval(duration) //add quantum tokens every 1 second
-    //.build()
 }
 
-pub fn ratelimiter_wait(ratelimit_object:&mut Ratelimiter) {
+pub fn ratelimiter_wait(ratelimit_object: &mut Ratelimiter) {
     let limit = ratelimit_object.try_wait();
-    
+
     match limit {
-        Ok(_) => {}, 
-        Err(sleep) => {std::thread::sleep(sleep);},
+        Ok(_) => {}
+        Err(sleep) => {
+            std::thread::sleep(sleep);
+        }
     }
-    
 }
 
 ///
@@ -69,16 +70,17 @@ pub async fn dltext_new(
     url_string: String,
     ratelimit_object: &mut Ratelimiter,
     client: &mut Client,
+    pluginmanager: Arc<Mutex<PluginManager>>,
 ) -> Result<String, reqwest::Error> {
     //let mut ret: Vec<AHashMap<String, AHashMap<String, Vec<String>>>> = Vec::new();
     //let ex = Executor::new();
-    dbg!(&url_string);
+
     let url = Url::parse(&url_string).unwrap();
     //let url = Url::parse("http://www.google.com").unwrap();
 
     //let requestit = Request::new(Method::GET, url);
     //fut.push();
-    dbg!("Spawned web reach");
+    println!("Spawned web reach to: {}", &url_string);
     //let futureresult = futures::executor::block_on(ratelimit_object.ready())
     //    .unwrap()
     ratelimiter_wait(ratelimit_object);
@@ -135,6 +137,8 @@ pub async fn dlfile_new(
     client: &Client,
     file: &sharedtypes::FileObject,
     location: &String,
+    pluginmanager: Arc<Mutex<PluginManager>>,
+    DB: Arc<Mutex<database::Main>>,
 ) -> (String, String) {
     let mut boolloop = true;
     let mut hash = String::new();
@@ -208,7 +212,7 @@ pub async fn dlfile_new(
     // Gives file extension
     let file_ext = FileFormat::from_bytes(&bytes).extension().to_string();
 
-    let mut content = Cursor::new(bytes);
+    let mut content = Cursor::new(bytes.clone());
 
     // Gets final path of file.
     let orig_path = format!("{}/{}", &final_loc, &hash);
@@ -216,6 +220,13 @@ pub async fn dlfile_new(
 
     // Copies file from memory to disk
     std::io::copy(&mut content, &mut file_path).unwrap();
+
+    // Wouldove rather passed teh Cursor or Bytes Obj but it wouldn't work for some reason with the ABI
+    pluginmanager
+        .lock()
+        .unwrap()
+        .PluginOnDownload(bytes.as_ref(), &hash, &file_ext);
+
     dbg!(&hash);
     (hash, file_ext)
 }

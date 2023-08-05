@@ -1,12 +1,37 @@
-use crate::scr::sharedtypes::jobs_add;
-use crate::scr::sharedtypes::AllFields::EJobsAdd;
-use crate::scr::tasks;
+//use crate::scr::sharedtypes::jobs_add;
+//use crate::scr::sharedtypes::AllFields::EJobsAdd;
+//use crate::scr::tasks;
 use log::{error, info, warn};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 use tokio::task;
 extern crate ratelimit;
 
+#[path = "./scr/cli.rs"]
+mod cli;
+#[path = "./scr/database.rs"]
+mod database;
+#[path = "./scr/download.rs"]
+mod download;
+#[path = "./scr/file.rs"]
+mod file;
+#[path = "./scr/jobs.rs"]
+mod jobs;
+#[path = "./scr/logging.rs"]
+mod logging;
+#[path = "./scr/plugins.rs"]
+mod plugins;
+#[path = "./scr/scraper.rs"]
+mod scraper;
+#[path = "./scr/sharedtypes.rs"]
+mod sharedtypes;
+#[path = "./scr/tasks.rs"]
+mod tasks;
+#[path = "./scr/threading.rs"]
+mod threading;
+#[path = "./scr/time.rs"]
+mod time;
+/*
 mod scr {
     pub mod cli;
     pub mod database;
@@ -20,17 +45,7 @@ mod scr {
     pub mod tasks;
     pub mod threading;
     pub mod time;
-}
-
-///
-/// I dont want to keep writing .to_string on EVERY vector of strings.
-/// Keeps me lazy.
-/// vec_of_strings["one", "two"];
-///
-#[macro_export]
-macro_rules! vec_of_strings {
-    ($($x:expr),*) => (vec![$($x.to_string()),*]);
-}
+}*/
 
 ///
 /// This code is trash. lmao.
@@ -39,7 +54,7 @@ macro_rules! vec_of_strings {
 ///
 
 /// Creates DB from database.rs allows function calls.
-fn makedb(dbloc: &str) -> scr::database::Main {
+fn makedb(dbloc: &str) -> database::Main {
     // Setting up DB VARS
     let path = dbloc.to_string();
     let vers: u64 = 1;
@@ -50,7 +65,7 @@ fn makedb(dbloc: &str) -> scr::database::Main {
 
     //let mut dbcon = scr::database::dbinit(&path);
 
-    scr::database::Main::new(path, vers.try_into().unwrap())
+    database::Main::new(path, vers.try_into().unwrap())
 
     //let dbcon =
     //data.load_mem(&mut data._conn);
@@ -66,12 +81,12 @@ panic = "abort"
 /// Gets file setup out of main.
 /// Checks if null data was written to data.
 fn db_file_sanity(dbloc: &str) {
-    let _dbzero = scr::file::size_eq(dbloc.to_string(), 0);
+    let _dbzero = file::size_eq(dbloc.to_string(), 0);
     match _dbzero {
         Ok(_dbzero) => {
             println!("File is zero: {} will remove and create.", dbloc);
             warn!("File is zero: {} will remove and create.", dbloc);
-            let _fileret = scr::file::remove_file(dbloc.to_string());
+            let _fileret = file::remove_file(dbloc.to_string());
             match _fileret {
                 Err(_fileret) => {
                     error!("ERROR CANT DELETE FILE!!! CLOSING RAPIDLY.");
@@ -87,7 +102,7 @@ fn db_file_sanity(dbloc: &str) {
 /// Makes logging happen
 fn makelog(logloc: &str) {
     //Inits logging::main at log.txt
-    scr::logging::main(logloc)
+    logging::main(logloc)
 }
 
 /// Main function.
@@ -98,16 +113,18 @@ fn main() {
     makelog("./log.txt");
 
     //TODO NEEDS MAIN INFO PULLER HERE. PULLS IN EVERYTHING INTO DB.
-    let all_field = scr::cli::main();
-    if let scr::sharedtypes::AllFields::EJobsAdd(ref tempe) = all_field {
-        dbg!(tempe);
-        dbg!(&tempe.site);
-    }
+    let all_field = cli::main();
+    //if let scr::sharedtypes::AllFields::EJobsAdd(ref tempe) = all_field {
+    //    dbg!(tempe);
+    //    dbg!(&tempe.site);
+    //}
     // Checks main.db log location.
     db_file_sanity(dbloc);
 
     //Inits Database.
     let mut data = makedb(dbloc);
+    let mut alt_connection = database::dbinit(&dbloc.to_string()); // NOTE ONLY USER FOR LOADING DB DYNAMICALLY
+    data.load_table(&sharedtypes::LoadDBTable::Settings, &mut alt_connection);
 
     data.transaction_flush();
     data.check_version();
@@ -118,15 +135,14 @@ fn main() {
         .settings_get_name(&"pluginloadloc".to_string())
         .unwrap()
         .1;
-    let pluginmanager = scr::plugins::PluginManager::new(plugin_loc);
 
     let location = data.settings_get_name(&"FilesLoc".to_string()).unwrap().1;
-    scr::file::folder_make(&format!("./{}", &location));
+    file::folder_make(&format!("./{}", &location));
 
     //TODO Put code here
 
     // Makes new scraper manager.
-    let mut scraper_manager = scr::scraper::ScraperManager::new();
+    let mut scraper_manager = scraper::ScraperManager::new();
     scraper_manager.load(
         "./scrapers".to_string(),
         "/target/release/".to_string(),
@@ -144,21 +160,13 @@ fn main() {
         }
     }*/
 
-    let mut jobmanager = scr::jobs::Jobs::new(scraper_manager);
+    data.load_table(&sharedtypes::LoadDBTable::Jobs, &mut alt_connection);
+    let mut jobmanager = jobs::Jobs::new(scraper_manager);
 
     data.transaction_flush();
 
     match all_field {
-        scr::sharedtypes::AllFields::EJobsAdd(ref jobs_add) => {
-            dbg!(
-                0.to_string(),
-                //&puts[2].to_string(),
-                //puts[0].to_string(),
-                //puts[1].to_string(),
-                //trig,
-                //puts[4].to_string(),
-                &jobs_add.committype
-            );
+        sharedtypes::AllFields::JobsAdd(ref jobs_add) => {
             data.jobs_add_new(
                 &jobs_add.site,
                 &jobs_add.query,
@@ -166,48 +174,46 @@ fn main() {
                 &jobs_add.committype,
                 true,
             );
-            dbg!(jobs_add);
 
             //let positive = AllField;
         }
 
-        scr::sharedtypes::AllFields::EJobsRemove(jobs_remove) => {}
-        scr::sharedtypes::AllFields::ESearch(search) => {
+        sharedtypes::AllFields::JobsRemove(jobs_remove) => {}
+        sharedtypes::AllFields::Search(search) => {
             dbg!(search);
             panic!();
         }
 
-        scr::sharedtypes::AllFields::ETasks(task) => match task {
-            scr::sharedtypes::Tasks::csv(location, csvdata) => {
+        sharedtypes::AllFields::Tasks(task) => match task {
+            sharedtypes::Tasks::Csv(location, csvdata) => {
                 tasks::import_files(&location, csvdata, &mut data);
             }
         },
 
-        scr::sharedtypes::AllFields::ENothing => {}
+        sharedtypes::AllFields::Nothing => {}
     }
 
     data.transaction_flush();
-    //let mut line = String::new();
-    //let b1 = std::io::stdin().read_line(&mut line).unwrap();
-
-    /*data.jobs_add_main(
-        0.to_string(),
-        &puts[2].to_string(),
-        puts[0].to_string(),
-        puts[1].to_string(),
-        trig,
-        puts[4].to_string(),
-    );*/
 
     jobmanager.jobs_get(&data);
 
     // Converts db into Arc for multithreading
     let mut arc = Arc::new(Mutex::new(data));
 
+    let pluginmanager = Arc::new(Mutex::new(plugins::PluginManager::new(
+        plugin_loc,
+        arc.clone(),
+    )));
+
     // Creates a threadhandler that manages callable threads.
-    let mut threadhandler = scr::threading::threads::new();
-    dbg!("a");
-    jobmanager.jobs_run_new(&mut arc, &mut threadhandler);
+    let mut threadhandler = threading::threads::new();
+
+    jobmanager.jobs_run_new(
+        &mut arc,
+        &mut threadhandler,
+        &mut alt_connection,
+        pluginmanager,
+    );
     // Anything below here will run automagically.
     // Jobs run in OS threads
 

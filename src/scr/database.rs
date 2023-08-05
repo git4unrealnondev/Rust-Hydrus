@@ -1,25 +1,37 @@
 #![forbid(unsafe_code)]
-use crate::scr::jobs;
-use crate::scr::scraper;
-use crate::scr::sharedtypes::CommitType;
-use crate::scr::time;
-use crate::vec_of_strings;
+
+use crate::jobs;
+use crate::sharedtypes;
+use crate::time;
+
+//use crate::scr::jobs;
+//use crate::scr::sharedtypes::CommitType;
+//use crate::scr::time;
 use ahash::AHashMap;
 use log::{error, info};
+use std::sync::Arc;
+use std::sync::Mutex;
 //use nohash_hasher::NoHashHasher;
-use super::jobs::JobsRef;
-use super::sharedtypes;
+
 use nohash_hasher::BuildNoHashHasher;
 use nohash_hasher::IntMap;
 use nohash_hasher::NoHashHasher;
 pub use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, ValueRef};
 pub use rusqlite::{params, types::Null, Connection, Result, Transaction};
-use smallest_uint::SmallestUIntFor;
 use std::borrow::BorrowMut;
-use std::cell::RefCell;
 use std::panic;
 use std::path::Path;
 use std::{collections::HashMap, hash::BuildHasherDefault};
+
+///
+/// I dont want to keep writing .to_string on EVERY vector of strings.
+/// Keeps me lazy.
+/// vec_of_strings["one", "two"];
+///
+#[macro_export]
+macro_rules! vec_of_strings {
+    ($($x:expr),*) => (vec![$($x.to_string()),*]);
+}
 
 pub enum tag_relate_conjoin {
     Tag,
@@ -40,7 +52,7 @@ pub fn dbinit(dbpath: &String) -> Connection {
 /// Pulls db into memdb.
 /// main: &mut Main, conn: &Connection
 ///
-pub fn load_mem(tempmem: &mut Main, conn: &Connection) {
+pub fn load_mesm(tempmem: &mut Main, conn: &Connection) {
     //let mut brr =  tempmem._conn.borrow();1
 
     //drop(brr);
@@ -67,12 +79,12 @@ pub fn load_mem(tempmem: &mut Main, conn: &Connection) {
     //drop(fiex);
     //Preserves mutability of database while we have an active connection to database.
     let mut file_vec: Vec<(usize, String, String, String)> = Vec::new();
-    let mut job_vec: Vec<(usize, usize, String, String, CommitType)> = Vec::new();
+    let mut job_vec: Vec<(usize, usize, String, String, sharedtypes::CommitType)> = Vec::new();
     let mut parents_vec: Vec<(usize, String, String, usize)> = Vec::new();
     let mut namespace_vec: Vec<(usize, String, String)> = Vec::new();
     let mut relationship_vec: Vec<(usize, usize)> = Vec::new();
     let mut tag_vec: Vec<(usize, String, String, usize)> = Vec::new();
-    let mut setting_vec: Vec<(String, String, isize, String)> = Vec::new();
+    let mut setting_vec: Vec<(String, String, Option<usize>, String)> = Vec::new();
 
     dbg!("Loading DB.");
     //drop(fiex);
@@ -92,7 +104,7 @@ pub fn load_mem(tempmem: &mut Main, conn: &Connection) {
         let d1: String = job.get(2).unwrap();
         let e1: String = job.get(3).unwrap();
         let c1: String = job.get(4).unwrap();
-        let c: CommitType = sharedtypes::stringto_commit_type(&c1);
+        let c: sharedtypes::CommitType = sharedtypes::stringto_commit_type(&c1);
         let a: usize = a1.parse::<usize>().unwrap();
         let b: usize = b1.parse::<usize>().unwrap();
         tempmem.jobs_add_new_todb(&d1, &e1, b, a, &c);
@@ -176,13 +188,15 @@ pub fn load_mem(tempmem: &mut Main, conn: &Connection) {
 }
 
 /// Holder of database self variables
+
 pub struct Main {
     _dbpath: String,
-    pub _conn: RefCell<Connection>,
+    pub _conn: Arc<Mutex<Connection>>,
     _vers: isize,
     // inmem db with ahash low lookup/insert time. Alernative to hashmap
     _inmemdb: Memdb,
     _dbcommitnum: usize,
+    _tables_loaded: Option<Vec<sharedtypes::LoadDBTable>>,
 }
 
 /// Holds internal in memory hashmap stuff
@@ -203,7 +217,7 @@ struct Memdb {
     _file_url_to_id: AHashMap<String, usize>,
 
     _jobs_max_id: usize,
-    _jobs_ref: IntMap<usize, JobsRef>,
+    _jobs_ref: IntMap<usize, jobs::JobsRef>,
     _jobs_time: IntMap<usize, usize>,
     _jobs_rep: IntMap<usize, usize>,
     _jobs_site: IntMap<usize, String>,
@@ -420,9 +434,9 @@ impl Memdb {
         params: Vec<String>,
         jobstime: usize,
         jobsref: usize,
-        committype: CommitType,
+        committype: sharedtypes::CommitType,
     ) {
-        let job = JobsRef {
+        let job = jobs::JobsRef {
             _idindb: self._jobs_max_id,
             _sites: sites,
             _params: params,
@@ -646,14 +660,16 @@ impl Memdb {
     ///
     /// returns a immutable reference to the database's job table
     ///
-    fn jobs_get_all(&self) -> &HashMap<usize, JobsRef, BuildHasherDefault<NoHashHasher<usize>>> {
+    fn jobs_get_all(
+        &self,
+    ) -> &HashMap<usize, jobs::JobsRef, BuildHasherDefault<NoHashHasher<usize>>> {
         &self._jobs_ref
     }
 
     ///
     /// Returns job by refid inmemdb
     ///
-    fn jobs_get_new(&self, id: &usize) -> &JobsRef {
+    fn jobs_get_new(&self, id: &usize) -> &jobs::JobsRef {
         &self._jobs_ref[id]
     }
 
@@ -899,27 +915,28 @@ impl Main {
         // Cheap workaround to avoid loading errors.
         let dbexist = Path::new(&path).exists();
         let connection = dbinit(&path);
-        let connection2 = dbinit(&path);
         //let conn = connection;
         let memdb = Memdb::new();
         //let path = String::from("./main.db");
 
         let mut memdbmain = Main {
             _dbpath: path.to_owned(),
-            _conn: RefCell::new(Connection::open_in_memory().unwrap()),
+            _conn: Arc::new(Mutex::new(Connection::open_in_memory().unwrap())),
             _vers: vers,
             _inmemdb: memdb,
             _dbcommitnum: 0,
+            _tables_loaded: None,
         };
 
         let mut main = Main {
             _dbpath: path,
-            _conn: RefCell::new(Connection::open_in_memory().unwrap()),
+            _conn: Arc::new(Mutex::new(Connection::open_in_memory().unwrap())),
             _vers: vers,
             _inmemdb: memdbmain._inmemdb,
             _dbcommitnum: 0,
+            _tables_loaded: None,
         };
-        main._conn = RefCell::new(connection);
+        main._conn = Arc::new(Mutex::new(connection));
 
         main.db_open(); // Sets default settings for db settings.
 
@@ -934,7 +951,6 @@ impl Main {
             println!("Database Exists: {} : Skipping creation.", dbexist);
             info!("Database Exists: {} : Skipping creation.", dbexist);
         }
-        load_mem(&mut main, &connection2); // loads db into memory from alternate db connection.
 
         main
     }
@@ -957,7 +973,7 @@ impl Main {
         query: &str,
         time_offset: usize,
         current_time: usize,
-        committype: &CommitType,
+        committype: &sharedtypes::CommitType,
     ) {
         let querya = query.split(' ').map(|s| s.to_string()).collect();
         self._inmemdb.jobref_new(
@@ -978,18 +994,17 @@ impl Main {
         site: &String,
         query: &String,
         time: &String,
-        committype: &CommitType,
+        committype: &sharedtypes::CommitType,
         addtodb: bool,
     ) {
         //let a1: String = time.to_string();
-        dbg!(&time);
         let current_time: usize = time::time_secs();
         let time_offset: usize = time::time_conv(time);
 
         self.jobs_add_new_todb(site, query, time_offset, current_time, committype);
         if addtodb {
             let inp = "INSERT INTO Jobs VALUES(?, ?, ?, ?, ?)";
-            let _out = self._conn.borrow_mut().execute(
+            let _out = self._conn.lock().unwrap().borrow_mut().execute(
                 inp,
                 params![
                     current_time.to_string(),
@@ -1041,14 +1056,14 @@ impl Main {
     ///
     pub fn jobs_get_all(
         &self,
-    ) -> &HashMap<usize, JobsRef, BuildHasherDefault<NoHashHasher<usize>>> {
+    ) -> &HashMap<usize, jobs::JobsRef, BuildHasherDefault<NoHashHasher<usize>>> {
         self._inmemdb.jobs_get_all()
     }
 
     ///
     /// Wrapper
     ///
-    pub fn jobs_get_new(&self, id: &usize) -> &JobsRef {
+    pub fn jobs_get_new(&self, id: &usize) -> &jobs::JobsRef {
         self._inmemdb.jobs_get_new(id)
     }
 
@@ -1139,7 +1154,8 @@ impl Main {
             &table.as_str()
         );
         let conmut = self._conn.borrow_mut();
-        let mut toexec = conmut.prepare(&parsedstring).unwrap();
+        let binding = conmut.lock().unwrap();
+        let mut toexec = binding.prepare(&parsedstring).unwrap();
         let mut outvec = Vec::new();
 
         let mut outs = toexec.query(params![]).unwrap();
@@ -1167,7 +1183,8 @@ impl Main {
     ///
     pub fn table_names(&mut self, table: String) -> Vec<String> {
         let conmut = self._conn.borrow_mut();
-        let mut toexec = conmut
+        let binding = conmut.lock().unwrap();
+        let mut toexec = binding
             .prepare("SELECT name FROM sqlite_master WHERE type='table';")
             .unwrap();
 
@@ -1221,19 +1238,19 @@ impl Main {
         // Making File Table
         let mut name = "File".to_string();
         let mut keys = vec_of_strings!["id", "hash", "extension", "location"];
-        let mut vals = vec_of_strings!["TEXT", "TEXT", "TEXT", "TEXT"];
+        let mut vals = vec_of_strings!["INTEGER", "TEXT", "TEXT", "TEXT"];
         self.table_create(&name, &keys, &vals);
 
         // Making Relationship Table
         name = "Relationship".to_string();
         keys = vec_of_strings!["fileid", "tagid"];
-        vals = vec_of_strings!["TEXT", "TEXT"];
+        vals = vec_of_strings!["INTEGER", "INTEGER"];
         self.table_create(&name, &keys, &vals);
 
         // Making Tags Table
         name = "Tags".to_string();
         keys = vec_of_strings!["id", "name", "parents", "namespace"];
-        vals = vec_of_strings!["TEXT", "TEXT", "TEXT", "TEXT"];
+        vals = vec_of_strings!["INTEGER", "TEXT", "INTEGER", "INTEGER"];
         self.table_create(&name, &keys, &vals);
 
         // Making Parents Table. Relates tags to tag parents.
@@ -1244,26 +1261,26 @@ impl Main {
             "relate_namespace_id",
             "relate_tag_id"
         ];
-        vals = vec_of_strings!["TEXT", "TEXT", "TEXT", "TEXT"];
+        vals = vec_of_strings!["INTEGER", "INTEGER", "INTEGER", "INTEGER"];
         self.table_create(&name, &keys, &vals);
 
         // Making Namespace Table
         name = "Namespace".to_string();
         keys = vec_of_strings!["id", "name", "description"];
 
-        vals = vec_of_strings!["TEXT", "TEXT", "TEXT"];
+        vals = vec_of_strings!["INTEGER", "TEXT", "TEXT"];
         self.table_create(&name, &keys, &vals);
 
         // Making Settings Table
         name = "Settings".to_string();
         keys = vec_of_strings!["name", "pretty", "num", "param"];
-        vals = vec_of_strings!["TEXT", "TEXT", "TEXT", "TEXT"];
+        vals = vec_of_strings!["TEXT", "TEXT", "INTEGER", "TEXT"];
         self.table_create(&name, &keys, &vals);
 
         // Making Jobs Table
         name = "Jobs".to_string();
         keys = vec_of_strings!["time", "reptime", "site", "param", "CommitType"];
-        vals = vec_of_strings!["TEXT", "TEXT", "TEXT", "TEXT", "TEXT"];
+        vals = vec_of_strings!["INTEGER", "INTEGER", "TEXT", "TEXT", "TEXT"];
         self.table_create(&name, &keys, &vals);
 
         self.transaction_flush();
@@ -1279,7 +1296,7 @@ impl Main {
         self.setting_add(
             "VERSION".to_string(),
             "Version that the database is currently on.".to_string(),
-            self._vers,
+            Some(self._vers.try_into().unwrap()),
             "None".to_string(),
             true,
         );
@@ -1287,35 +1304,35 @@ impl Main {
         self.setting_add(
             "DEFAULTRATELIMIT".to_string(),
             "None".to_string(),
-            5,
+            Some(5),
             "None".to_string(),
             true,
         );
         self.setting_add(
             "FilesLoc".to_string(),
             "None".to_string(),
-            0,
+            None,
             "./Files/".to_string(),
             true,
         );
         self.setting_add(
             "DEFAULTUSERAGENT".to_string(),
             "None".to_string(),
-            0,
+            None,
             "DIYHydrus/1.0".to_string(),
             true,
         );
         self.setting_add(
             "pluginloadloc".to_string(),
             "Where plugins get loaded into.".to_string(),
-            0,
-            "./plugins".to_string(),
+            None,
+            "./Plugins/".to_string(),
             true,
         );
         self.setting_add(
             "DBCOMMITNUM".to_string(),
             "Number of transactional items before pushing to db.".to_string(),
-            3000,
+            Some(3000),
             "None".to_string(),
             true,
         );
@@ -1396,6 +1413,278 @@ impl Main {
     }
 
     ///
+    /// Checks if table is loaded in mem and if not then loads it.
+    ///
+    pub fn check_and_load(&mut self, table: sharedtypes::LoadDBTable, conn: &mut Connection) {
+        match &self._tables_loaded {
+            None => {
+                dbg!(&table);
+                self.load_table(&table, conn);
+                self._tables_loaded = Some(Vec::new());
+                self._tables_loaded.as_mut().unwrap().push(table)
+            }
+            Some(vec_table) => {
+                if !vec_table.contains(&table) {
+                    self.load_table(&table, conn);
+                    self._tables_loaded.as_mut().unwrap().push(table);
+                }
+            }
+        }
+    }
+
+    ///
+    /// Adds file into Memdb instance.
+    ///
+    pub fn file_add_db(&mut self, hash: &String, extension: &String, location: &String) -> usize {
+        self._inmemdb.file_put(&hash, &extension, &location)
+    }
+
+    ///
+    /// NOTE USES PASSED CONNECTION FROM FUNCTION NOT THE DB CONNECTION
+    /// GETS ARROUND MEMROY SAFETY ISSUES WITH CLASSES IN RUST
+    ///
+    fn load_files(&mut self, conn: &mut Connection) {
+        info!("Loading: Files");
+        let mut fiex;
+        let files;
+        fiex = conn.prepare("SELECT * FROM File").unwrap();
+        files = fiex
+            .query_map([], |row| {
+                Ok(sharedtypes::DbFileObj {
+                    id: row.get(0).unwrap(),
+                    hash: row.get(1).unwrap(),
+                    ext: row.get(2).unwrap(),
+                    location: row.get(3).unwrap(),
+                })
+            })
+            .unwrap();
+        for each in files {
+            if let Ok(res) = each {
+                self.file_add_db(
+                    &res.hash.unwrap(),
+                    &res.ext.unwrap(),
+                    &res.location.unwrap(),
+                );
+            } else {
+                error!("Bad File cant load {:?}", each);
+            }
+        }
+    }
+
+    ///
+    /// Same as above
+    ///
+    fn load_namespace(&mut self, conn: &mut Connection) {
+        info!("Loading: Namespace");
+        let mut naex = conn.prepare("SELECT * FROM Namespace").unwrap();
+        let namespaces = naex
+            .query_map([], |row| {
+                Ok(sharedtypes::DbNamespaceObj {
+                    id: row.get(0).unwrap(),
+                    name: row.get(1).unwrap(),
+                    description: row.get(2).unwrap(),
+                })
+            })
+            .unwrap();
+        for each in namespaces {
+            if let Ok(res) = each {
+                self.namespace_add_db(&res.name.unwrap());
+            } else {
+                error!("Bad Namespace cant load {:?}", each);
+            }
+        }
+    }
+
+    ///
+    /// Loads jobs in from DB Connection
+    ///
+    fn load_jobs(&mut self, conn: &mut Connection) {
+        info!("Loading: Jobs");
+        let mut jobex = conn.prepare("SELECT * FROM Jobs").unwrap();
+        let mut jobs = jobex
+            .query_map([], |row| {
+                Ok(sharedtypes::DbJobsObj {
+                    time: row.get(0).unwrap(),
+                    reptime: row.get(1).unwrap(),
+                    site: row.get(2).unwrap(),
+                    param: row.get(3).unwrap(),
+                    committype: Some(sharedtypes::stringto_commit_type(&row.get(4).unwrap())),
+                })
+            })
+            .unwrap();
+
+        for each in jobs {
+            if let Ok(res) = each {
+                self.jobs_add_new_todb(
+                    &res.site.unwrap(),
+                    &res.param.unwrap(),
+                    res.reptime.unwrap(),
+                    res.time.unwrap(),
+                    &res.committype.unwrap(),
+                );
+            } else {
+                error!("Bad Job cant load {:?}", each);
+            }
+        }
+    }
+
+    ///
+    /// Loads Parents in from DB Connection
+    ///
+    fn load_parents(&mut self, conn: &mut Connection) {
+        info!("Loading: Parents");
+        let mut paex = conn.prepare("SELECT * FROM Parents").unwrap();
+        let mut parents = paex
+            .query_map([], |row| {
+                Ok(sharedtypes::DbParentsObj {
+                    tag_namespace_id: row.get(0).unwrap(),
+                    tag_id: row.get(1).unwrap(),
+                    relate_namespace_id: row.get(2).unwrap(),
+                    relate_tag_id: row.get(3).unwrap(),
+                })
+            })
+            .unwrap();
+        for each in parents {
+            if let Ok(res) = each {
+                self.parents_add_db(
+                    res.tag_namespace_id,
+                    res.tag_id,
+                    res.relate_namespace_id,
+                    res.relate_tag_id,
+                );
+            } else {
+                error!("Bad Parent cant load {:?}", each);
+            }
+        }
+    }
+
+    ///
+    /// Loads Relationships in from DB connection
+    ///
+    fn load_relationships(&mut self, conn: &mut Connection) {
+        info!("Loading: Relationships");
+        let mut paex = conn.prepare("SELECT * FROM Relationship").unwrap();
+        let relationship = paex
+            .query_map([], |row| {
+                Ok(sharedtypes::DbRelationshipObj {
+                    fileid: row.get(0).unwrap(),
+                    tagid: row.get(1).unwrap(),
+                })
+            })
+            .unwrap();
+        for each in relationship {
+            if let Ok(res) = each {
+                self.relationship_add_db(res.fileid, res.tagid);
+            } else {
+                error!("Bad relationship cant load {:?}", each);
+            }
+        }
+    }
+
+    ///
+    /// Loads settings into db
+    ///
+    fn load_settings(&mut self, conn: &mut Connection) {
+        info!("Loading: settings");
+        let mut setex = conn.prepare("SELECT * FROM Settings").unwrap();
+        let mut settings = setex
+            .query_map([], |row| {
+                Ok(sharedtypes::DbSettingObj {
+                    name: row.get(0).unwrap(),
+                    pretty: row.get(1).unwrap(),
+                    num: row.get(2).unwrap(),
+                    param: row.get(3).unwrap(),
+                })
+            })
+            .unwrap();
+
+        for each in settings {
+            if let Ok(res) = each {
+                let pretty_out = match res.pretty {
+                    None => "".to_string(),
+                    Some(pretty_string) => pretty_string,
+                };
+
+                match res.param {
+                    None => {
+                        self.setting_add_db(res.name, pretty_out, res.num, "".to_string());
+                    }
+                    Some(_) => {
+                        self.setting_add_db(res.name, pretty_out, res.num, res.param.unwrap());
+                    }
+                }
+            } else {
+                error!("Bad Setting cant load {:?}", each);
+            }
+        }
+    }
+
+    ///
+    /// Loads tags into db
+    ///
+    fn load_tags(&mut self, conn: &mut Connection) {
+        info!("Loading: tags");
+        //tag_add_db
+        let mut taex = conn.prepare("SELECT * FROM Tags").unwrap();
+        let mut tags = taex
+            .query_map([], |row| {
+                Ok(sharedtypes::DbTagObj {
+                    id: row.get(0).unwrap(),
+                    name: row.get(1).unwrap(),
+                    parents: None,
+                    namespace: row.get(3).unwrap(),
+                })
+            })
+            .unwrap();
+
+        for each in tags {
+            if let Ok(res) = each {
+                self.tag_add_db(&res.name, &res.namespace.unwrap());
+            } else {
+                error!("Bad Tag cant load {:?}", each);
+            }
+        }
+    }
+
+    ///
+    /// Calls funtions to load DB into memory
+    ///
+    pub fn load_table(&mut self, table: &sharedtypes::LoadDBTable, conn: &mut Connection) {
+        match table {
+            sharedtypes::LoadDBTable::Files => {
+                self.load_files(conn);
+            }
+            sharedtypes::LoadDBTable::Jobs => {
+                self.load_jobs(conn);
+            }
+            sharedtypes::LoadDBTable::Namespace => {
+                self.load_namespace(conn);
+            }
+            sharedtypes::LoadDBTable::Parents => {
+                self.load_parents(conn);
+            }
+            sharedtypes::LoadDBTable::Relationship => {
+                self.load_relationships(conn);
+            }
+            sharedtypes::LoadDBTable::Settings => {
+                self.load_settings(conn);
+            }
+            sharedtypes::LoadDBTable::Tags => {
+                self.load_tags(conn);
+            }
+            sharedtypes::LoadDBTable::All => {
+                self.check_and_load(sharedtypes::LoadDBTable::Files, conn);
+                self.check_and_load(sharedtypes::LoadDBTable::Jobs, conn);
+                self.check_and_load(sharedtypes::LoadDBTable::Namespace, conn);
+                self.check_and_load(sharedtypes::LoadDBTable::Parents, conn);
+                self.check_and_load(sharedtypes::LoadDBTable::Relationship, conn);
+                self.check_and_load(sharedtypes::LoadDBTable::Settings, conn);
+                self.check_and_load(sharedtypes::LoadDBTable::Tags, conn);
+            }
+        }
+    }
+
+    ///
     /// Sets advanced settings for journaling.
     /// NOTE Experimental badness
     ///
@@ -1459,7 +1748,7 @@ impl Main {
     }
 
     ///
-    /// Adds a file into the db.
+    /// Adds a file into the db sqlite.
     /// Do this first.
     ///
     pub fn file_add(
@@ -1471,11 +1760,13 @@ impl Main {
     ) -> usize {
         let file_grab: (usize, bool) = self._inmemdb.file_get_hash(&hash);
 
-        let file_id = self._inmemdb.file_put(&hash, &extension, &location);
+        let file_id = self.file_add_db(&hash, &extension, &location);
+
+        //let file_id = self._inmemdb.file_put(&hash, &extension, &location);
 
         if addtodb && !file_grab.1 {
             let inp = "INSERT INTO File VALUES(?, ?, ?, ?)";
-            let _out = self._conn.borrow_mut().execute(
+            let _out = self._conn.borrow_mut().lock().unwrap().execute(
                 inp,
                 params![
                     &file_id.to_string(),
@@ -1499,16 +1790,23 @@ impl Main {
     }
 
     ///
+    /// Wrapper for inmemdb adding
+    ///
+    fn namespace_add_db(&mut self, name: &String) -> usize {
+        self._inmemdb.namespace_put(name)
+    }
+
+    ///
     /// Adds namespace into DB.
     /// Returns the ID of the namespace.
     ///
     pub fn namespace_add(&mut self, name: &String, description: &String, addtodb: bool) -> usize {
         let namespace_grab: (usize, bool) = self._inmemdb.namespace_get(name);
 
-        let name_id = self._inmemdb.namespace_put(name);
+        let name_id = self.namespace_add_db(name);
         if addtodb && !namespace_grab.1 {
             let inp = "INSERT INTO Namespace VALUES(?, ?, ?)";
-            let _out = self._conn.borrow_mut().execute(
+            let _out = self._conn.borrow_mut().lock().unwrap().execute(
                 inp,
                 params![&name_id.to_string(), &name.to_string(), &description],
             );
@@ -1520,7 +1818,7 @@ impl Main {
     ///
     /// Wrapper that handles inserting parents info into DB.
     ///
-    fn parents_add_db(
+    fn parents_add_sql(
         &mut self,
         tag_namespace_id: &usize,
         tag_id: &usize,
@@ -1528,7 +1826,7 @@ impl Main {
         relate_tag_id: &usize,
     ) {
         let inp = "INSERT INTO Parents VALUES(?, ?, ?, ?)";
-        let _out = self._conn.borrow_mut().execute(
+        let _out = self._conn.borrow_mut().lock().unwrap().execute(
             inp,
             params![
                 tag_namespace_id.to_string(),
@@ -1538,6 +1836,20 @@ impl Main {
             ],
         );
         self.db_commit_man();
+    }
+
+    ///
+    /// Wrapper for inmemdb adding
+    ///
+    fn parents_add_db(
+        &mut self,
+        tag_namespace_id: usize,
+        tag_id: usize,
+        relate_namespace_id: usize,
+        relate_tag_id: usize,
+    ) -> tag_relate_conjoin {
+        self._inmemdb
+            .parents_put(tag_namespace_id, tag_id, relate_namespace_id, relate_tag_id)
     }
 
     ///
@@ -1552,13 +1864,12 @@ impl Main {
         addtodb: bool,
     ) {
         let todo =
-            self._inmemdb
-                .parents_put(tag_namespace_id, tag_id, relate_namespace_id, relate_tag_id);
+            self.parents_add_db(tag_namespace_id, tag_id, relate_namespace_id, relate_tag_id);
 
         match todo {
             tag_relate_conjoin::Tag => {
                 if addtodb {
-                    self.parents_add_db(
+                    self.parents_add_sql(
                         &tag_namespace_id,
                         &tag_id,
                         &relate_namespace_id,
@@ -1569,7 +1880,7 @@ impl Main {
             tag_relate_conjoin::Error => {}
             tag_relate_conjoin::Relate => {
                 if addtodb {
-                    self.parents_add_db(
+                    self.parents_add_sql(
                         &tag_namespace_id,
                         &tag_id,
                         &relate_namespace_id,
@@ -1579,7 +1890,7 @@ impl Main {
             }
             tag_relate_conjoin::Conjoin => {
                 if addtodb {
-                    self.parents_add_db(
+                    self.parents_add_sql(
                         &tag_namespace_id,
                         &tag_id,
                         &relate_namespace_id,
@@ -1589,7 +1900,7 @@ impl Main {
             }
             tag_relate_conjoin::Tag_and_Relate => {
                 if addtodb {
-                    self.parents_add_db(
+                    self.parents_add_sql(
                         &tag_namespace_id,
                         &tag_id,
                         &relate_namespace_id,
@@ -1599,6 +1910,13 @@ impl Main {
             }
             tag_relate_conjoin::None => {}
         }
+    }
+
+    ///
+    /// Adds tags into inmemdb
+    ///
+    fn tag_add_db(&mut self, tags: &String, namespace: &usize) -> usize {
+        self._inmemdb.tags_put(&tags, &namespace)
     }
 
     ///
@@ -1612,11 +1930,11 @@ impl Main {
         addtodb: bool,
     ) -> usize {
         let tags_grab: (usize, bool) = self._inmemdb.tags_get(tags.to_string(), namespace);
-        let tag_id = self._inmemdb.tags_put(&tags, &namespace);
+        let tag_id = self.tag_add_db(&tags, &namespace);
         //println!("{} {} {} {:?} {}", tags, namespace, addtodb, tags_grab, tag_id);
         if addtodb && !tags_grab.1 {
             let inp = "INSERT INTO Tags VALUES(?, ?, ?, ?)";
-            let _out = self._conn.borrow_mut().execute(
+            let _out = self._conn.borrow_mut().lock().unwrap().execute(
                 inp,
                 params![
                     &tag_id.to_string(),
@@ -1631,6 +1949,13 @@ impl Main {
     }
 
     ///
+    /// Wrapper for inmemdb relationship adding
+    ///
+    fn relationship_add_db(&mut self, file: usize, tag: usize) {
+        self._inmemdb.relationship_add(file, tag);
+    }
+
+    ///
     /// Adds relationship into DB.
     /// Inherently trusts user user to not duplicate stuff.
     ///
@@ -1642,11 +1967,18 @@ impl Main {
             let _out = self
                 ._conn
                 .borrow_mut()
+                .lock()
+                .unwrap()
                 .execute(inp, params![&file.to_string(), &tag.to_string()]);
             self.db_commit_man();
         }
 
-        self._inmemdb.relationship_add(file, tag);
+        self.relationship_add_db(file, tag);
+    }
+
+    fn jobs_add_db(&mut self, time: usize, reptime: usize, site: String, param: String) {
+        self._inmemdb
+            .jobs_add(time, reptime, site.to_string(), param.to_string(), false);
     }
 
     pub fn jobs_add(
@@ -1659,9 +1991,11 @@ impl Main {
         addtodb: bool,
         committype: &sharedtypes::CommitType,
     ) {
+        self.jobs_add_db(time, reptime, site.to_string(), param.to_string());
+
         if addtodb {
             let inp = "INSERT INTO Jobs VALUES(?, ?, ?, ?, ?)";
-            let _out = self._conn.borrow_mut().execute(
+            let _out = self._conn.borrow_mut().lock().unwrap().execute(
                 inp,
                 params![
                     time.to_string(),
@@ -1674,8 +2008,20 @@ impl Main {
             self.db_commit_man();
         }
         dbg!(&filler, &addtodb);
-        self._inmemdb
-            .jobs_add(time, reptime, site.to_string(), param.to_string(), filler);
+    }
+
+    ///
+    /// Wrapper for inmemdb insert.
+    ///
+    fn setting_add_db(&mut self, name: String, pretty: String, num: Option<usize>, param: String) {
+        match num {
+            None => {
+                self._inmemdb.settings_add(name, pretty, 0, param);
+            }
+            Some(usize_num) => {
+                self._inmemdb.settings_add(name, pretty, usize_num, param);
+            }
+        }
     }
 
     ///
@@ -1689,14 +2035,14 @@ impl Main {
         &mut self,
         name: String,
         pretty: String,
-        num: isize,
+        num: Option<usize>,
         param: String,
         addtodb: bool,
     ) {
         let temp: isize = -9999;
 
         if addtodb {
-            let _ex = self._conn.borrow_mut().execute(
+            let _ex = self._conn.borrow_mut().lock().unwrap().execute(
                 "INSERT INTO Settings(name, pretty, num, param) VALUES (?1, ?2, ?3, ?4)",
                 params![
                     &name,
@@ -1707,7 +2053,7 @@ impl Main {
                     } else {
                         &pretty
                     },
-                    if num == temp {
+                    if num == None {
                         &Null as &dyn ToSql
                     } else {
                         &num
@@ -1735,12 +2081,9 @@ impl Main {
             }
         }
         // Adds setting into memdbb
-        if num >= 0 {
-            self._inmemdb
-                .settings_add(name, pretty, num.try_into().unwrap(), param);
-        } else {
-            self._inmemdb.settings_add(name, pretty, 0, param);
-        }
+
+        self.setting_add_db(name, pretty, num, param);
+
         self.transaction_flush();
     }
 
@@ -1773,7 +2116,8 @@ impl Main {
     pub fn quer_str(&mut self, inp: String) -> Result<Vec<String>> {
         let conmut = self._conn.borrow_mut();
 
-        let mut toexec = conmut.prepare(&inp).unwrap();
+        let binding = conmut.lock().unwrap();
+        let mut toexec = binding.prepare(&inp).unwrap();
         let rows = toexec.query_map([], |row| row.get(0)).unwrap();
         let mut out = Vec::new();
 
@@ -1788,17 +2132,16 @@ impl Main {
     /// NOTE USE THIS ONY FOR RESULTS THAT RETURN INTS
     ///
     pub fn quer_int(&mut self, inp: String) -> Result<Vec<isize>> {
-        dbg!(&inp);
         let conmut = self._conn.borrow_mut();
-        let mut toexec = conmut.prepare(&inp).unwrap();
+        let binding = conmut.lock().unwrap();
+        let mut toexec = binding.prepare(&inp).unwrap();
         let rows = toexec.query_map([], |row| row.get(0)).unwrap();
         let mut out: Vec<isize> = Vec::new();
 
         for each in rows {
-            let temp: String = each.unwrap();
-            out.push(temp.parse::<isize>().unwrap());
+            let temp: isize = each.unwrap();
+            out.push(temp);
         }
-        dbg!(&out);
         Ok(out)
     }
 
@@ -1807,7 +2150,12 @@ impl Main {
     /// Will not write changes to DB. Have to call write().
     /// Panics to help issues.
     pub fn execute(&mut self, inp: String) -> usize {
-        let _out = self._conn.borrow_mut().execute(&inp, params![]);
+        let _out = self
+            ._conn
+            .borrow_mut()
+            .lock()
+            .unwrap()
+            .execute(&inp, params![]);
 
         match _out {
             Err(_out) => {

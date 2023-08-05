@@ -1,14 +1,13 @@
-use super::database;
-use super::jobs::Jobs;
-use super::jobs::JobsRef;
-use super::scraper::ScraperManager;
-use crate::scr::download;
-use crate::scr::logging::error_log;
-use crate::scr::scraper;
-use crate::scr::sharedtypes;
-use crate::scr::sharedtypes::CommitType;
-use crate::scr::sharedtypes::ScraperObject;
-use crate::scr::sharedtypes::ScraperReturn;
+use crate::database;
+use crate::download;
+use crate::jobs::Jobs;
+use crate::jobs::JobsRef;
+use crate::logging::error_log;
+use crate::plugins::PluginManager;
+use crate::scraper;
+use crate::scraper::ScraperManager;
+use crate::sharedtypes;
+
 use ahash::AHashMap;
 use async_std::task;
 use file_format::{FileFormat, Kind};
@@ -68,6 +67,7 @@ impl threads {
         jobs: Vec<JobsRef>,
         db: &mut Arc<Mutex<database::Main>>,
         scrapermanager: libloading::Library,
+        pluginmanager: Arc<Mutex<PluginManager>>,
     ) {
         let worker = Worker::new(
             self._workers.len(),
@@ -76,6 +76,7 @@ impl threads {
             &mut self._runtime,
             db,
             scrapermanager,
+            pluginmanager,
         );
 
         self._workers.push(worker);
@@ -129,6 +130,7 @@ impl Worker {
         rt: &mut Runtime,
         dba: &mut Arc<Mutex<database::Main>>,
         libloading: libloading::Library,
+        pluginmanager: Arc<Mutex<PluginManager>>,
     ) -> Worker {
         info!(
             "Creating Worker for id: {} Scraper Name: {} With a jobs length of: {}",
@@ -145,14 +147,17 @@ impl Worker {
         //let handle = rt.handle().clone();
         //let handle = Handle::current();
         let insidert = Runtime::new().unwrap();
+
         // Download code goes inside of thread spawn.
         // All urs that Have been pushed into checking.
         // NOTE: If a url is already present for scraping then subsequent URL's will be ignored.
 
+        let manageeplugin = pluginmanager;
+
         let thread = thread::spawn(move || {
             let liba = libloading; // in memory reference to library.
 
-            let mut toparse: AHashMap<CommitType, Vec<String>> = AHashMap::new();
+            let mut toparse: AHashMap<sharedtypes::CommitType, Vec<String>> = AHashMap::new();
             let mut jobvec = Vec::new();
             //let mut allurls: Vec<String> = Vec::new();
             let mut allurls: AHashMap<String, u8> = AHashMap::new();
@@ -191,7 +196,7 @@ impl Worker {
 
                 let urlload = scraper::url_dump(&liba, parpms);
                 let commit = &each._committype;
-                let mut hashtemp: AHashMap<CommitType, Vec<String>> = AHashMap::new();
+                let mut hashtemp: AHashMap<sharedtypes::CommitType, Vec<String>> = AHashMap::new();
                 for eachs in urlload {
                     // Checks if the hashmap contains the committype & its vec contains the data.
                     match hashtemp.get_mut(&commit) {
@@ -203,14 +208,12 @@ impl Worker {
                         }
                         None => {
                             if !allurls.contains_key(&eachs) {
-                                dbg!(&eachs);
                                 hashtemp.insert(commit.clone(), vec![eachs.clone()]);
                                 allurls.insert(eachs, 0);
                             }
                         }
                     }
                 }
-                dbg!(&allurls.len());
                 jobvec.push((hashtemp, each._params.clone()))
             }
 
@@ -224,7 +227,6 @@ impl Worker {
                 );
             }
 
-            dbg!(&jobvec[0].1);
             // Ratelimit object gets created here.
             // Used accross multiple jobs that share host
             let mut ratelimit =
@@ -243,11 +245,12 @@ impl Worker {
                         let mut loopbool = true;
                         let mut respstring = String::new();
                         while loopbool {
-                           download::ratelimiter_wait(&mut ratelimit);
+                            download::ratelimiter_wait(&mut ratelimit);
                             let resp = task::block_on(download::dltext_new(
                                 urlstring.to_string(),
                                 &mut ratelimit,
                                 &mut client,
+                                manageeplugin.clone(),
                             ));
                             match resp {
                                 Ok(_) => {
@@ -268,8 +271,8 @@ impl Worker {
 
                         //Matches response from web request into db.
 
-                        let mut st: Result<ScraperObject, ScraperReturn> =
-                            Result::Err(ScraperReturn::Nothing);
+                        let mut st: Result<sharedtypes::ScraperObject, sharedtypes::ScraperReturn> =
+                            Result::Err(sharedtypes::ScraperReturn::Nothing);
 
                         let mut parserloopbool = true;
 
@@ -305,9 +308,9 @@ impl Worker {
                                                 scrap._ratelimit.1,
                                             );
                                             ratelimit_counter = 0;
-                                            
+
                                             client = download::client_create();
-                                            
+
                                             thread::sleep(time_dur * 12);
                                         }
                                     }
@@ -360,8 +363,6 @@ impl Worker {
                                     .1;
                             }
 
-                            let unwrappydb = &mut db.lock().unwrap();
-
                             //let file = each.1;
                             //temp.push(task::block_on(download::test(url)));
                             let mut hash: String = String::new();
@@ -371,9 +372,15 @@ impl Worker {
                                 // URL doesn't exist in DB Will download
                                 info!("Downloading: {} to: {}", &each.1.source_url, &location);
                                 (hash, file_ext) = task::block_on(download::dlfile_new(
-                                    &client, &each.1, &location,
+                                    &client,
+                                    &each.1,
+                                    &location,
+                                    manageeplugin.clone(),
+                                    db.clone(),
                                 ));
                             } else {
+                                let unwrappydb = &mut db.lock().unwrap();
+
                                 // File already has been downlaoded. Skipping download.
                                 info!(
                                     "Skipping file: {} Due to already existing in Tags Table.",
@@ -408,6 +415,8 @@ impl Worker {
                                 }
                             }
                             {
+                                let unwrappydb = &mut db.lock().unwrap();
+
                                 let source_namespace_url_id =
                                     unwrappydb.namespace_get(&"source_url".to_string()).0;
 

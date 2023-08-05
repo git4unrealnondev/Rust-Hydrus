@@ -1,7 +1,7 @@
 extern crate clap;
 //use std::str::pattern::Searcher;
 
-use crate::scr::sharedtypes::{self, jobs_add, jobs_remove};
+use crate::sharedtypes::{self, JobsAdd, JobsRemove};
 use clap::{App, Arg, SubCommand};
 use log::{error, info};
 //use super::sharedtypes::;
@@ -157,7 +157,7 @@ pub fn main() -> sharedtypes::AllFields {
             let taskmatch = task.unwrap().subcommand_matches(&tasktype);
             if let Some(_) = taskmatch {
                 match taskenum {
-                    sharedtypes::Tasks::csv(Test, csvdata) => {
+                    sharedtypes::Tasks::Csv(Test, csvdata) => {
                         dbg!(taskmatch);
                         let location: &String = taskmatch.unwrap().get_one(&tasktype).unwrap();
 
@@ -166,18 +166,18 @@ pub fn main() -> sharedtypes::AllFields {
                                 dbg!(&csvdata);
                                 match csvdata {
                                     sharedtypes::CsvCopyMvHard::Copy => {
-                                        return sharedtypes::AllFields::ETasks(
-                                            sharedtypes::Tasks::csv(location.to_string(), csvdata),
+                                        return sharedtypes::AllFields::Tasks(
+                                            sharedtypes::Tasks::Csv(location.to_string(), csvdata),
                                         )
                                     }
                                     sharedtypes::CsvCopyMvHard::Move => {
-                                        return sharedtypes::AllFields::ETasks(
-                                            sharedtypes::Tasks::csv(location.to_string(), csvdata),
+                                        return sharedtypes::AllFields::Tasks(
+                                            sharedtypes::Tasks::Csv(location.to_string(), csvdata),
                                         )
                                     }
                                     sharedtypes::CsvCopyMvHard::Hardlink => {
-                                        return sharedtypes::AllFields::ETasks(
-                                            sharedtypes::Tasks::csv(location.to_string(), csvdata),
+                                        return sharedtypes::AllFields::Tasks(
+                                            sharedtypes::Tasks::Csv(location.to_string(), csvdata),
                                         )
                                     }
                                 }
@@ -215,17 +215,17 @@ pub fn main() -> sharedtypes::AllFields {
                     .collect();
 
                 match searchprog {
-                    sharedtypes::Search::fid(_) => {
-                        return sharedtypes::AllFields::ESearch(sharedtypes::Search::fid(retstring))
+                    sharedtypes::Search::Fid(_) => {
+                        return sharedtypes::AllFields::Search(sharedtypes::Search::Fid(retstring))
                     }
-                    sharedtypes::Search::tid(_) => {
-                        return sharedtypes::AllFields::ESearch(sharedtypes::Search::tid(retstring))
+                    sharedtypes::Search::Tid(_) => {
+                        return sharedtypes::AllFields::Search(sharedtypes::Search::Tid(retstring))
                     }
-                    sharedtypes::Search::tag(_) => {
-                        return sharedtypes::AllFields::ESearch(sharedtypes::Search::tag(retstring))
+                    sharedtypes::Search::Tag(_) => {
+                        return sharedtypes::AllFields::Search(sharedtypes::Search::Tag(retstring))
                     }
-                    sharedtypes::Search::hash(_) => {
-                        return sharedtypes::AllFields::ESearch(sharedtypes::Search::hash(
+                    sharedtypes::Search::Hash(_) => {
+                        return sharedtypes::AllFields::Search(sharedtypes::Search::Hash(
                             retstring,
                         ))
                     }
@@ -238,7 +238,7 @@ pub fn main() -> sharedtypes::AllFields {
         let valvec: Vec<String> = vec![id.unwrap().to_string()];
         //["Site", "Query", "Time", "Loop", "ReCommit"]
         let committype = sharedtypes::stringto_commit_type(&valvec[3]);
-        return sharedtypes::AllFields::EJobsAdd(jobs_add {
+        return sharedtypes::AllFields::JobsAdd(JobsAdd {
             site: valvec[0].to_owned(),
             query: valvec[1].to_owned(),
             time: valvec[2].to_owned(),
@@ -278,8 +278,6 @@ pub fn main() -> sharedtypes::AllFields {
                 let valvec: Vec<&String> = subcmd.get_many::<String>("add").unwrap().collect();
                 //valret: Vec<String> = Vec::new();
 
-                dbg!(&valvec, &valvec.len());
-
                 let valret = [
                     valvec[0].to_owned(),
                     valvec[1].to_owned(),
@@ -306,7 +304,7 @@ pub fn main() -> sharedtypes::AllFields {
                     //let radd = "add".to_string();
                     //if valvec[3] == "true" {
                     let committype = sharedtypes::stringto_commit_type(valvec[3]);
-                    return sharedtypes::AllFields::EJobsAdd(jobs_add {
+                    return sharedtypes::AllFields::JobsAdd(JobsAdd {
                         site: valvec[0].to_owned(),
                         query: valvec[1].to_owned(),
                         time: valvec[2].to_owned(),
@@ -347,7 +345,7 @@ pub fn main() -> sharedtypes::AllFields {
                 } else {
                     let rrmv = "remove".to_string();
                     let committype = sharedtypes::stringto_commit_type(valvec[3]);
-                    return sharedtypes::AllFields::EJobsRemove(jobs_remove {
+                    return sharedtypes::AllFields::JobsRemove(JobsRemove {
                         site: valvec[0].to_owned(),
                         query: valvec[1].to_owned(),
                         time: valvec[2].to_owned(),
@@ -370,7 +368,7 @@ pub fn main() -> sharedtypes::AllFields {
             println!("{}", msg);
             info!("{}", msg);
 
-            sharedtypes::AllFields::ENothing
+            sharedtypes::AllFields::Nothing
             //(vec!["".to_string()], "".to_string(), false, false)
         }
     }

@@ -116,7 +116,7 @@ pub fn url_get(params: &Vec<String>) -> Vec<String> {
 ///
 #[no_mangle]
 pub fn url_dump(params: &Vec<String>) -> Vec<String> {
-    dbg!(&params);
+
     let mut ret = Vec::new();
     let hardlimit = 751;
     for i in 1..hardlimit {

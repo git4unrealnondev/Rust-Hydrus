@@ -1,18 +1,20 @@
-use super::sharedtypes;
-use super::sharedtypes::CommitType;
-use super::sharedtypes::ScraperType;
-use crate::scr::database;
-use crate::scr::download;
-use crate::scr::file;
-use crate::scr::scraper;
-use crate::scr::scraper::InternalScraper;
-use crate::scr::threading;
-use crate::scr::time;
+use crate::database;
+use crate::download;
+use crate::file;
+use crate::plugins::PluginManager;
+use crate::scraper;
+use crate::scraper::InternalScraper;
+use crate::sharedtypes;
+use crate::sharedtypes::CommitType;
+use crate::sharedtypes::ScraperType;
+use crate::threading;
+use crate::time;
 use ahash::AHashMap;
 use http::uri::Authority;
 use log::{error, info};
 use ratelimit::*;
 use reqwest::{Client, Request, Response};
+use rusqlite::Connection;
 use std::collections::hash_map::Entry;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -63,8 +65,6 @@ impl Jobs {
         let ttl = db.jobs_get_max();
         let hashjobs = db.jobs_get_all();
         let beans = self.scrapermanager.scraper_get();
-        dbg!(&hashjobs);
-        dbg!(&beans);
         for each in hashjobs {
             if time::time_secs() >= each.1._jobsref + each.1._jobstime {
                 for eacha in beans {
@@ -92,6 +92,8 @@ impl Jobs {
         &mut self,
         adb: &mut Arc<Mutex<database::Main>>,
         thread: &mut threading::threads,
+        alt_connection: &mut Connection,
+        pluginmanager: Arc<Mutex<PluginManager>>,
     ) {
         let mut dba = adb.clone();
         let mut db = dba.lock().unwrap();
@@ -104,6 +106,9 @@ impl Jobs {
         if self.scrapermanager.scraper_get().is_empty() || self._jobref.is_empty() {
             println!("No jobs to run...");
             return;
+        } else {
+            // Loads DB into memory. Everything that hasn't been loaded already
+            db.load_table(&sharedtypes::LoadDBTable::All, alt_connection);
         }
 
         // Appends ratelimited into hashmap for multithread scraper.
@@ -125,7 +130,7 @@ impl Jobs {
                     db.setting_add(
                         isolatedtitle,
                         "Automatic Scraper".to_owned(),
-                        0,
+                        None,
                         cookie_name.clone(),
                         true,
                     );
@@ -148,7 +153,6 @@ impl Jobs {
                                     e.insert(vec![job.0.clone()]);
                                 }
                                 Entry::Occupied(mut e) => {
-                                    dbg!(job.0.clone());
                                     e.get_mut().push(job.0.clone());
                                 }
                             }
@@ -166,9 +170,8 @@ impl Jobs {
             // Removes item from hashmap so the thread can have ownership of libloaded scraper.
             let scrap = self.scrapermanager._library.remove(&scraper).unwrap();
             let jobs = each.1;
-            dbg!(&jobs);
 
-            thread.startwork(scraper, jobs, adb, scrap);
+            thread.startwork(scraper, jobs, adb, scrap, pluginmanager.clone());
         }
 
         /*for each in &self._jobref {

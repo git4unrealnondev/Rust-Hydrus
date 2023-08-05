@@ -1,4 +1,4 @@
-use crate::scr::sharedtypes;
+use crate::sharedtypes;
 use ahash::AHashMap;
 use libloading;
 use log::{error, info, warn};
@@ -118,7 +118,6 @@ impl ScraperManager {
                 > = unsafe { lib.get(b"new") };
 
                 let pulled_successfully = unsafe { funtwo.unwrap()() };
-                println!("debug {}", &path);
                 // Loads version in memsafe way from scraper
                 //let scraper = unsafe { funtwo.as_ref().unwrap()() };
                 self._library.insert(pulled_successfully, lib);
@@ -129,9 +128,8 @@ impl ScraperManager {
                 );
                 warn!("{}", err);
             }
-            
         }
-        
+
         for each in &mut self._library {
             //let mut internal: Vec<libloading::Symbol<unsafe extern  fn() -> InternalScraper>> = Vec::new();
             //let mut internal = Vec::new();
