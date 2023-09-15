@@ -170,16 +170,9 @@ impl Memdb {
     /// Displays all stuff in the memory db.
     ///
     pub fn dbg_show_internals(&self) {
-        for e in 0..self._jobs_max_id {
-            println!(
-                "JOB DB DBG: {} {} {} {} {}",
-                e,
-                self._jobs_time[&e],
-                self._jobs_rep[&e],
-                self._jobs_site[&e],
-                self._jobs_param[&e]
-            );
-        }
+        
+        dbg!(&self._tags_name, &self._tags_parents, &self._tags_relate);
+        
     }
 
     ///
@@ -252,6 +245,7 @@ impl Memdb {
                 .entry(usize_settings_id)
                 .or_insert_with(|| param);
         } else {
+            dbg!(format!("Inserting setting: {} {} {} {} {}", &name, &pretty, &num, &param, self._settings_max_id));
             self._settings_name.insert(name, self._settings_max_id);
             self._settings_pretty.insert(self._settings_max_id, pretty);
             self._settings_num.insert(self._settings_max_id, num);
@@ -269,7 +263,7 @@ impl Memdb {
         }
         let val = self._settings_name[name];
         
-        return Some(sharedtypes::DbSettingObj{name: name.to_string(), pretty: None, num: Some(self._settings_name[name]), param: Some(self._settings_param[&val].to_string())});
+        return Some(sharedtypes::DbSettingObj{name: name.to_string(), pretty: None, num: Some(self._settings_num[&val]), param: Some(self._settings_param[&val].to_string())});
     }
 
     fn jobs_add_new(&mut self, job: jobs::JobsRef) {
@@ -1694,6 +1688,7 @@ impl Main {
                 error!("Bad Setting cant load {:?}", each);
             }
         }
+        self.db_commit_man_set();
     }
 
     ///
@@ -2128,7 +2123,7 @@ impl Main {
     ///
     pub fn namespace_add(&mut self, name: &String, description: &String, addtodb: bool) -> usize {
         let namespace_grab = self._inmemdb.namespace_get(name);
-        let name_id = self.namespace_add_db(name, None);
+        let name_id = self.namespace_add_db(name, namespace_grab);
 
         if addtodb && namespace_grab.is_none() {
             self.namespace_add_sql(name, description, name_id);
@@ -2269,11 +2264,15 @@ impl Main {
         id: Option<usize>,
     ) -> usize {
         let tags_grab = self._inmemdb.tags_get(tags.to_string(), namespace);
-        let tag_id = self.tag_add_db(&tags, &namespace, id);
+        let tag_id = self.tag_add_db(&tags, &namespace, tags_grab);
         self.db_commit_man();
         //println!("{} {} {} {:?} {}", tags, namespace, addtodb, tags_grab, tag_id);
-        if addtodb && !tags_grab.is_none() {
+        if addtodb && tags_grab.is_none() {
+            //dbg!(format!("Commiting to db: {} {} {}", tag_id, tags, namespace));
             self.tag_add_sql(tag_id, tags, parents, namespace);
+        }
+        else {
+            //dbg!(format!("skipping: {} {} {} because {:?}", tag_id, tags, namespace, tags_grab));
         }
         tag_id
     }

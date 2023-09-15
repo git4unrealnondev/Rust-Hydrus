@@ -101,6 +101,7 @@ pub fn import_files(
         }
         println!("Copied to path: {}", &final_path);
 
+        dbg!(&hash, &row);
         // Adds into DB
         let file_id = db.file_add(None, hash, file_ext, location.to_string(), true);
         let namespace_id = db.namespace_add(&row.namespace.to_string(), &"".to_string(), true);

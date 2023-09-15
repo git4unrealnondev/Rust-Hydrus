@@ -413,7 +413,6 @@ impl Worker {
                                     }
                                 }
                                 let fileinfo = unwrappydb.file_get_id(&fileid.unwrap());
-                                dbg!(&fileinfo);
                                 match fileinfo {
                                     None => {
                                         error!("ERROR: File: {} has url but no file info in db table Files. PANICING", &url_tag.unwrap());
@@ -462,15 +461,16 @@ impl Worker {
                                                             &"".to_string(),
                                                             true,
                                                         );
+                                                    let tempe = unwrappydb.tag_get_name(every.1.tag.to_string(), tag_namespace_id);
                                                     let tag_id = unwrappydb.tag_add(
                                                         every.1.tag.to_string(),
                                                         "".to_string(),
                                                         tag_namespace_id,
                                                         true,
-                                                        None,
+                                                        tempe,
                                                     );
-                                                    
-                                                    dbg!(&tag_namespace_id, &tag_id);
+                                                    //unwrappydb.dbg_show_internals();
+                                                    //dbg!(&tag_namespace_id, &tag_id, every);
                                                     
                                                     unwrappydb
                                                         .relationship_add(file_id, tag_id, true);
