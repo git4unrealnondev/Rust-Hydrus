@@ -15,6 +15,7 @@ struct Row {
     tag: String,
     namespace: String,
     parent: Option<String>,
+    id: usize,
 }
 
 ///
@@ -46,7 +47,7 @@ pub fn import_files(
         panic!("CSV ERROR, issue with csv file. No path header.");
     }
 
-    let location = db.settings_get_name(&"FilesLoc".to_string()).unwrap().1;
+    let location = db.settings_get_name(&"FilesLoc".to_string()).unwrap().param.unwrap();
 
     println!("Importing Files to: {}", &location);
 
@@ -101,9 +102,15 @@ pub fn import_files(
         println!("Copied to path: {}", &final_path);
 
         // Adds into DB
-        let file_id = db.file_add(hash, file_ext, location.to_string(), true);
+        let file_id = db.file_add(None, hash, file_ext, location.to_string(), true);
         let namespace_id = db.namespace_add(&row.namespace.to_string(), &"".to_string(), true);
-        let tag_id = db.tag_add(row.tag.to_string(), "".to_string(), namespace_id, true);
+        let tag_id = db.tag_add(
+            row.tag.to_string(),
+            "".to_string(),
+            namespace_id,
+            true,
+            Some(row.id),
+        );
 
         db.relationship_add(file_id, tag_id, true);
     }

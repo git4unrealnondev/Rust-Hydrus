@@ -71,7 +71,7 @@ pub fn main() -> sharedtypes::AllFields {
                         .exclusive(true)
                         .takes_value(true)
                         .help("Searches By Tag name needs namespace.")
-                        .min_values(2)
+                        .min_values(1)
                         .multiple_values(true),
                 )
                 .arg(
@@ -205,7 +205,7 @@ pub fn main() -> sharedtypes::AllFields {
 
     if search != None {
         for searchprog in sharedtypes::Search::iter() {
-            let searchenumtype = searchprog.to_string();
+            let searchenumtype = searchprog.to_string().to_lowercase();
             if search.unwrap().contains_id(&searchenumtype) {
                 let retstring: Vec<String> = search
                     .unwrap()
@@ -225,9 +225,7 @@ pub fn main() -> sharedtypes::AllFields {
                         return sharedtypes::AllFields::Search(sharedtypes::Search::Tag(retstring))
                     }
                     sharedtypes::Search::Hash(_) => {
-                        return sharedtypes::AllFields::Search(sharedtypes::Search::Hash(
-                            retstring,
-                        ))
+                        return sharedtypes::AllFields::Search(sharedtypes::Search::Hash(retstring))
                     }
                 }
             }
@@ -310,13 +308,6 @@ pub fn main() -> sharedtypes::AllFields {
                         time: valvec[2].to_owned(),
                         committype: committype,
                     });
-                    //return (valret, radd, true, true);
-                    // }
-                    //if valvec[3] == "false" {
-                    //      return (valret, radd, false, true);
-                    // }
-
-                    //return (valret, radd, false, false);
                 }
             }
             // Remove Job Handling

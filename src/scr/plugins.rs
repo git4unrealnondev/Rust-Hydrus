@@ -72,17 +72,19 @@ impl PluginManager {
                                     if files.location == None {
                                         //let string_dlpath = download::getfinpath(&loc, &files.hash.as_ref().unwrap());
                                         let location = unwrappy
-                                    .settings_get_name(&"FilesLoc".to_string())
-                                    .unwrap()
-                                    .1;
+                                            .settings_get_name(&"FilesLoc".to_string())
+                                            .unwrap()
+                                            .param;
                                         unwrappy.file_add(
+                                            None,
                                             files.hash.unwrap(),
                                             files.ext.unwrap(),
-                                            location,
+                                            location.unwrap(),
                                             true,
                                         );
                                     } else {
                                         unwrappy.file_add(
+                                            files.id,
                                             files.hash.unwrap(),
                                             files.ext.unwrap(),
                                             files.location.unwrap(),
@@ -95,20 +97,22 @@ impl PluginManager {
                         if let Some(temp) = names.tag {
                             for tags in temp {
                                 let namespace_id = unwrappy.namespace_get(&tags.namespace);
-                                if tags.parents == None && namespace_id.1 == true {
+                                if tags.parents == None && !namespace_id.is_none() {
                                     unwrappy.tag_add(
                                         tags.name,
                                         "".to_string(),
-                                        namespace_id.0,
+                                        namespace_id.unwrap(),
                                         true,
+                                        None,
                                     );
                                 } else {
                                     for parents_obj in tags.parents.unwrap() {
                                         unwrappy.tag_add(
                                             tags.name.to_string(),
                                             parents_obj.relate_tag_id,
-                                            namespace_id.0,
+                                            namespace_id.unwrap(),
                                             true,
+                                            None,
                                         );
                                     }
                                 }
@@ -131,9 +135,9 @@ impl PluginManager {
                             for relations in temp {
                                 let file_id = unwrappy.file_get_hash(&relations.file_hash);
                                 let namespace_id = unwrappy.namespace_get(&relations.tag_namespace);
-                                let tag_id =
-                                    unwrappy.tag_get_name(relations.tag_name, namespace_id.0);
-                                unwrappy.relationship_add(file_id.0, tag_id.0, true);
+                                let tag_id = unwrappy
+                                    .tag_get_name(relations.tag_name, namespace_id.unwrap());
+                                unwrappy.relationship_add(file_id.0, tag_id.unwrap(), true);
                                 //unwrappy.relationship_add(file, tag, addtodb)
                             }
                         }
@@ -149,8 +153,7 @@ impl PluginManager {
     ///
     /// Runs plugin and
     ///
-    pub fn PluginOnDownload(&mut self, CursorPass: &[u8], Hash: &String, Ext: &String) {
-
+    pub fn plugin_on_download(&mut self, cursorpass: &[u8], hashs: &String, exts: &String) {
         if !self
             ._callback
             .contains_key(&sharedtypes::PluginCallback::OnDownload)
@@ -176,7 +179,7 @@ impl PluginManager {
                     //unsafe extern "C" fn(Cursor<Bytes>, &String, &String, Arc<Mutex<database::Main>>),
                 > = lib.get(b"on_download").unwrap();
                 //unwrappy.
-                output = plugindatafunc(CursorPass, Hash, Ext);
+                output = plugindatafunc(cursorpass, hashs, exts);
             }
 
             self.ParsePluginOutput(output);
@@ -187,9 +190,8 @@ impl PluginManager {
     /// Loads plugins into plugin manager
     ///
     fn load_plugins(&mut self, pluginsloc: &String) {
-        
         println!("Starting to load plugins at: {}", pluginsloc);
-        
+
         let ext = ["rlib", "so", "dylib", "dll"];
 
         let plugin_path = Path::new(pluginsloc);

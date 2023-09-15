@@ -57,7 +57,7 @@ mod scr {
 fn makedb(dbloc: &str) -> database::Main {
     // Setting up DB VARS
     let path = dbloc.to_string();
-    let vers: u64 = 1;
+    let vers: u64 = 2;
 
     //let dbexist = Path::new(&path).exists();
 
@@ -134,9 +134,13 @@ fn main() {
     let plugin_loc = data
         .settings_get_name(&"pluginloadloc".to_string())
         .unwrap()
-        .1;
+        .name;
 
-    let location = data.settings_get_name(&"FilesLoc".to_string()).unwrap().1;
+    let location = data
+        .settings_get_name(&"FilesLoc".to_string())
+        .unwrap()
+        .param
+        .unwrap();
     file::folder_make(&format!("./{}", &location));
 
     //TODO Put code here
@@ -180,6 +184,66 @@ fn main() {
 
         sharedtypes::AllFields::JobsRemove(jobs_remove) => {}
         sharedtypes::AllFields::Search(search) => {
+            match &search {
+                sharedtypes::Search::Fid(file) => {}
+                sharedtypes::Search::Tid(tagid) => {}
+                sharedtypes::Search::Tag(tag) => {
+                    if tag.len() == 1 {
+                        logging::info_log(
+                            &"One item was passed into tag search. Will search only based off tag."
+                                .to_string(),
+                        );
+                    } else if tag.len() == 2 {
+                        logging::info_log(&"Normal tag search was done. Searching for 2nd item in namespace to get tag id.".to_string());
+                        dbg!(tag.get(0));
+                        dbg!(tag.get(1));
+
+                        data.load_table(&sharedtypes::LoadDBTable::Files, &mut alt_connection);
+                        data.load_table(&sharedtypes::LoadDBTable::Tags, &mut alt_connection);
+                        data.load_table(
+                            &sharedtypes::LoadDBTable::Relationship,
+                            &mut alt_connection,
+                        );
+                        data.load_table(&sharedtypes::LoadDBTable::Namespace, &mut alt_connection);
+
+                        let tag_namespace = data.namespace_get(&tag.get(1).unwrap());
+
+                        match tag_namespace {
+                            None => {
+                                logging::info_log(&format!("Couldn't fine namespace from search"));
+                            }
+                            Some(namespace_id) => {
+                                let tag_option = data
+                                    .tag_get_name(tag.get(0).unwrap().to_string(), namespace_id);
+                                match tag_option {
+                                    None => {
+                                        logging::info_log(&format!("Couldn't find any tag id's that use namespace_id: {} with tag: {}", namespace_id, tag.get(0).unwrap()));
+                                        logging::info_log(&"Will try a generic search".to_string());
+                                    }
+                                    Some(tag_id) => {
+                                        logging::info_log(&format!("Found a tag id's that use namespace_id: {} with tag: {} tagid {}", namespace_id, tag.get(0).unwrap(), tag_id));
+                                        let file_ids = data.relationship_get_fileid(&tag_id);
+                                        for each in file_ids {
+                                            //dbg!(each);
+                                            let file_info = data.file_get_id(&each).unwrap();
+                                            logging::info_log(&format!(
+                                                "Found File: {} {} {}",
+                                                file_info.0, file_info.1, file_info.2
+                                            ));
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    } else if tag.len() >= 3 {
+                        logging::info_log(&"Three items were passed into the tag search using first and second only.".to_string());
+                    } else if tag.len() == 0 {
+                        logging::info_log(&"Tag was passed into search but no info was provided. THIS SHOULDN'T HAPPEN.".to_string());
+                    }
+                }
+                sharedtypes::Search::Hash(hash) => {}
+            }
+
             dbg!(search);
             panic!();
         }
@@ -227,6 +291,6 @@ fn main() {
 
     //arc.lock().unwrap().transaction_flush();
     //arc.lock().unwrap().transaction_close();
-    //info!("UNLOADING");
+    info!("UNLOADING");
     log::logger().flush();
 }

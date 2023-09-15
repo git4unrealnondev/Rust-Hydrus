@@ -26,3 +26,8 @@ pub fn error_log(error: &String) {
     error!("{}", error);
     panic!("{}", error);
 }
+
+pub fn info_log(info: &String) {
+    info!("{}", info);
+    println!("{}", info);
+}

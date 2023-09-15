@@ -179,9 +179,9 @@ impl Worker {
                 let datafromdb = unwrappydb
                     .settings_get_name(&format!("{}_{}", scrap._type, scrap._name.to_owned()))
                     .unwrap()
-                    .1;
+                    .param;
 
-                scrap_data = datafromdb;
+                scrap_data = datafromdb.unwrap();
                 // drops mutex for other threads to use.
             }
 
@@ -334,9 +334,9 @@ impl Worker {
                             let mut does_url_exist = false;
                             {
                                 let unwrappydb = &mut db.lock().unwrap();
-                                let source_url_id =
+                                let mut source_url_id =
                                     unwrappydb.namespace_get(&"source_url".to_string()); // defaults to 0 due to unknown.
-                                if !source_url_id.1 {
+                                if source_url_id.is_none() {
                                     // Namespace doesn't exist. Will create
                                     unwrappydb.namespace_add(
                                         &"source_url".to_string(),
@@ -348,10 +348,14 @@ impl Worker {
                                         "source_url",
                                         "0"
                                     );
+                                    source_url_id =
+                                    unwrappydb.namespace_get(&"source_url".to_string()); // defaults to 0 due to unknown.
                                 }
-                                let url_tag = unwrappydb
-                                    .tag_get_name(each.1.source_url.to_string(), source_url_id.0);
-                                does_url_exist = url_tag.1;
+                                let url_tag = unwrappydb.tag_get_name(
+                                    each.1.source_url.to_string(),
+                                    source_url_id.unwrap(),
+                                );
+                                does_url_exist = url_tag.is_some();
                             }
 
                             let mut location = String::new();
@@ -360,7 +364,7 @@ impl Worker {
                                 location = unwrappydb
                                     .settings_get_name(&"FilesLoc".to_string())
                                     .unwrap()
-                                    .1;
+                                    .param.unwrap();
                             }
 
                             //let file = each.1;
@@ -389,24 +393,31 @@ impl Worker {
                                 let source_url_id =
                                     unwrappydb.namespace_get(&"source_url".to_string()); // defaults to 0 due to unknown.
 
-                                let url_tag = unwrappydb
-                                    .tag_get_name(each.1.source_url.to_string(), source_url_id.0);
+                                let url_tag = unwrappydb.tag_get_name(
+                                    each.1.source_url.to_string(),
+                                    source_url_id.unwrap(),
+                                );
 
                                 //NOTE: Not the best way to do it. Only allows for one source for multiple examples.
                                 //let fileid =
                                 //    unwrappydb.relationship_get_fileid(&url_tag.0)[0];
-                                let fileid = unwrappydb.relationship_get_one_fileid(&url_tag.0);
+                                let fileid =
+                                    unwrappydb.relationship_get_one_fileid(&url_tag.unwrap());
                                 match fileid {
                                     Some(_) => {}
                                     None => {
-                                        panic!("url has info but no file data. {}", &url_tag.0);
+                                        panic!(
+                                            "url has info but no file data. {}",
+                                            &url_tag.unwrap()
+                                        );
                                     }
                                 }
                                 let fileinfo = unwrappydb.file_get_id(&fileid.unwrap());
+                                dbg!(&fileinfo);
                                 match fileinfo {
                                     None => {
-                                        error!("ERROR: File: {} has url but no file info in db table Files. PANICING", &url_tag.0);
-                                        panic!("ERROR: File: {} has url but no file info in db table Files. PANICING", &url_tag.0);
+                                        error!("ERROR: File: {} has url but no file info in db table Files. PANICING", &url_tag.unwrap());
+                                        panic!("ERROR: File: {} has url but no file info in db table Files. PANICING", &url_tag.unwrap());
                                     }
                                     Some(_) => {
                                         hash = fileinfo.as_ref().unwrap().0.to_string();
@@ -418,10 +429,11 @@ impl Worker {
                                 let unwrappydb = &mut db.lock().unwrap();
 
                                 let source_namespace_url_id =
-                                    unwrappydb.namespace_get(&"source_url".to_string()).0;
+                                    unwrappydb.namespace_get(&"source_url".to_string()).unwrap();
 
                                 // Adds file's source URL into DB
                                 let file_id = unwrappydb.file_add(
+                                    None,
                                     hash.to_string(),
                                     file_ext.to_string(),
                                     location.to_string(),
@@ -432,6 +444,7 @@ impl Worker {
                                     "".to_string(),
                                     source_namespace_url_id,
                                     true,
+                                    None,
                                 );
                                 unwrappydb.relationship_add(file_id, source_url_id, true);
 
@@ -454,7 +467,11 @@ impl Worker {
                                                         "".to_string(),
                                                         tag_namespace_id,
                                                         true,
+                                                        None,
                                                     );
+                                                    
+                                                    dbg!(&tag_namespace_id, &tag_id);
+                                                    
                                                     unwrappydb
                                                         .relationship_add(file_id, tag_id, true);
                                                 }
@@ -476,6 +493,7 @@ impl Worker {
                                                         "".to_string(),
                                                         tag_namespace_id,
                                                         true,
+                                                        None,
                                                     );
 
                                                     let relate_namespace_id = unwrappydb
@@ -489,6 +507,7 @@ impl Worker {
                                                         "".to_string(),
                                                         relate_namespace_id,
                                                         true,
+                                                        None,
                                                     );
 
                                                     unwrappydb.parents_add(

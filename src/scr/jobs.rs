@@ -118,11 +118,11 @@ impl Jobs {
 
             // Handles loading of settings into DB.Either Manual or Automatic to describe the functionallity
             match name_result {
-                Ok(_) => {
+                Some(_) => {
                     //dbg!(name_result);
-                    info = name_result.unwrap().1;
+                    info = name_result.unwrap().name;
                 }
-                Err(_) => {
+                None => {
                     let isolatedtitle = format!("{:?}_{}", scrape._type, scrape._name);
 
                     let (cookie, cookie_name) = self.library_cookie_needed(scrape);

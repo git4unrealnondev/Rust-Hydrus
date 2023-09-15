@@ -225,7 +225,7 @@ pub async fn dlfile_new(
     pluginmanager
         .lock()
         .unwrap()
-        .PluginOnDownload(bytes.as_ref(), &hash, &file_ext);
+        .plugin_on_download(bytes.as_ref(), &hash, &file_ext);
 
     dbg!(&hash);
     (hash, file_ext)
