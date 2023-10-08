@@ -42,3 +42,4 @@ out.*
 *.old
 notes.txt
 dategent
+**.sql

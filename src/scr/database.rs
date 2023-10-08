@@ -76,6 +76,7 @@ struct Memdb {
     _file_max_id: usize,
     _file_hash: AHashMap<String, usize>,
     _file: AHashMap<(String, String, String), usize>,
+    _file_ref: AHashMap<usize, (String, String, String)>,
     //_file_url_to_id: AHashMap<String, usize>,
     _jobs_max_id: usize,
     _jobs_ref: IntMap<usize, jobs::JobsRef>,
@@ -127,6 +128,7 @@ impl Memdb {
             //_file_id:AHashMap::new(),
             _file_hash: AHashMap::new(),
             _file: AHashMap::new(),
+            _file_ref: AHashMap::new(),
             //_file_url_to_id: AHashMap::new(),
             _jobs_time: HashMap::with_hasher(BuildNoHashHasher::default()),
             _jobs_rep: HashMap::with_hasher(BuildNoHashHasher::default()),
@@ -170,9 +172,7 @@ impl Memdb {
     /// Displays all stuff in the memory db.
     ///
     pub fn dbg_show_internals(&self) {
-        
         dbg!(&self._tags_name, &self._tags_parents, &self._tags_relate);
-        
     }
 
     ///
@@ -245,7 +245,6 @@ impl Memdb {
                 .entry(usize_settings_id)
                 .or_insert_with(|| param);
         } else {
-            dbg!(format!("Inserting setting: {} {} {} {} {}", &name, &pretty, &num, &param, self._settings_max_id));
             self._settings_name.insert(name, self._settings_max_id);
             self._settings_pretty.insert(self._settings_max_id, pretty);
             self._settings_num.insert(self._settings_max_id, num);
@@ -259,11 +258,16 @@ impl Memdb {
     ///
     fn settings_get_name(&self, name: &String) -> Option<sharedtypes::DbSettingObj> {
         if !self._settings_name.contains_key(name) {
-            return None
+            return None;
         }
         let val = self._settings_name[name];
-        
-        return Some(sharedtypes::DbSettingObj{name: name.to_string(), pretty: None, num: Some(self._settings_num[&val]), param: Some(self._settings_param[&val].to_string())});
+
+        return Some(sharedtypes::DbSettingObj {
+            name: name.to_string(),
+            pretty: None,
+            num: Some(self._settings_num[&val]),
+            param: Some(self._settings_param[&val].to_string()),
+        });
     }
 
     fn jobs_add_new(&mut self, job: jobs::JobsRef) {
@@ -538,22 +542,25 @@ impl Memdb {
     ///
     fn jobs_get_new(&self, id: &usize) -> Option<jobs::JobsRef> {
         if self._jobs_ref.contains_key(id) {
-            return Some(self._jobs_ref[id].clone())
-        } else {None}
-        
+            return Some(self._jobs_ref[id].clone());
+        } else {
+            None
+        }
     }
 
     ///
     /// Pulls jobs from memdb
     ///
-    fn jobs_get(&self, id: &usize) -> Option<sharedtypes::DbJobsObj>  {
+    fn jobs_get(&self, id: &usize) -> Option<sharedtypes::DbJobsObj> {
         if self._jobs_time.contains_key(&id) {
-            let dbj = sharedtypes::DbJobsObj{time: Some(self._jobs_time[&id]), reptime: Some(self._jobs_rep[&id]), site: Some(self._jobs_site[&id].clone()), param: Some(self._jobs_param[&id].clone()),committype: None};
+            let dbj = sharedtypes::DbJobsObj {
+                time: Some(self._jobs_time[&id]),
+                reptime: Some(self._jobs_rep[&id]),
+                site: Some(self._jobs_site[&id].clone()),
+                param: Some(self._jobs_param[&id].clone()),
+                committype: None,
+            };
             return Some(dbj);
-            
-
-
-
         } else {
             let error = "job_get cannot find job id in hashmap!";
             println!("{}, {}", error, id);
@@ -622,6 +629,14 @@ impl Memdb {
             ),
             file_id,
         );
+        self._file_ref.insert(
+            file_id,
+            (
+                hash.unwrap().to_string(),
+                extension.unwrap().to_string(),
+                location.unwrap().to_string(),
+            ),
+        );
 
         self._file_hash.insert(hash.unwrap().to_string(), file_id);
         self.max_file_increment();
@@ -644,25 +659,10 @@ impl Memdb {
     /// Returns a files info based on id
     ///
     pub fn file_get_id(&self, id: &usize) -> Option<(String, String, String)> {
-        let hash = self
-            ._file_hash
-            .iter()
-            .find_map(|(key, &val)| if &val == id { Some(key) } else { None });
-
-        let structsearch = self
-            ._file
-            .iter()
-            .find_map(|(key, &val)| if &val == id { Some(key) } else { None });
-
-        if hash.is_some() && structsearch.is_some() {
-            Some((
-                hash.unwrap().to_string(),
-                structsearch.unwrap().1.to_string(),
-                structsearch.unwrap().2.to_string(),
-            ))
-        } else {
-            None
+        if self._file_ref.contains_key(id) {
+            return Some(self._file_ref[id].clone());
         }
+        None
     }
 
     ///
@@ -790,7 +790,12 @@ impl Memdb {
     pub fn tag_id_get(&mut self, uid: &usize) -> Option<sharedtypes::DbTagObj> {
         for (key, val) in self._tags_relate.iter() {
             if val == uid {
-                return Some(sharedtypes::DbTagObj { id: Some(uid.clone()), name: (key.0.clone()), parents: None, namespace: Some(key.1.clone()) });
+                return Some(sharedtypes::DbTagObj {
+                    id: Some(uid.clone()),
+                    name: (key.0.clone()),
+                    parents: None,
+                    namespace: Some(key.1.clone()),
+                });
             }
         }
         None
@@ -1004,9 +1009,9 @@ impl Main {
         self._inmemdb.relationship_get_one_fileid(tag)
     }
 
-    ///pub fn relationship_get_tagid(&self, tag: &usize) -> Vec<usize> {
-    ///    self._inmemdb.relationship_get_tagid(tag)
-    //}
+    pub fn relationship_get_tagid(&self, tag: &usize) -> Vec<usize> {
+        self._inmemdb.relationship_get_tagid(tag)
+    }
 
     pub fn settings_get_name(&self, name: &String) -> Option<sharedtypes::DbSettingObj> {
         self._inmemdb.settings_get_name(name)
@@ -1019,7 +1024,9 @@ impl Main {
         self._inmemdb.jobs_total()
     }
 
+    ///
     /// Vacuums database. cleans everything.
+    ///
     pub fn vacuum(&mut self) {
         info!("Starting Vacuum db!");
         self.execute("VACUUM;".to_string());
@@ -1648,6 +1655,15 @@ impl Main {
                 self.relationship_add_db(res.fileid, res.tagid);
             } else {
                 error!("Bad relationship cant load {:?}", each);
+                if each
+                    .err()
+                    .unwrap()
+                    .to_string()
+                    .contains("database disk image is malformed")
+                {
+                    error!("DATABASE IMAGE IS MALFORMED PANICING");
+                    panic!("DATABASE IMAGE IS MALFORMED PANICING");
+                }
             }
         }
     }
@@ -2039,13 +2055,8 @@ impl Main {
         self._dbcommitnum_static = self
             .settings_get_name(&"DBCOMMITNUM".to_string())
             .unwrap()
-            .num.unwrap();
-        dbg!(
-            self._dbcommitnum_static,
-            self.settings_get_name(&"DBCOMMITNUM".to_string())
-                .unwrap()
-                .num
-        );
+            .num
+            .unwrap();
     }
 
     ///
@@ -2263,15 +2274,14 @@ impl Main {
         addtodb: bool,
         id: Option<usize>,
     ) -> usize {
-        let tags_grab = self._inmemdb.tags_get(tags.to_string(), namespace);
-        let tag_id = self.tag_add_db(&tags, &namespace, tags_grab);
+        //let tags_grab = self._inmemdb.tags_get(tags.to_string(), namespace);
+        let tag_id = self.tag_add_db(&tags, &namespace, id);
         self.db_commit_man();
         //println!("{} {} {} {:?} {}", tags, namespace, addtodb, tags_grab, tag_id);
-        if addtodb && tags_grab.is_none() {
+        if addtodb && id.is_none() {
             //dbg!(format!("Commiting to db: {} {} {}", tag_id, tags, namespace));
             self.tag_add_sql(tag_id, tags, parents, namespace);
-        }
-        else {
+        } else {
             //dbg!(format!("skipping: {} {} {} because {:?}", tag_id, tags, namespace, tags_grab));
         }
         tag_id

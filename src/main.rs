@@ -134,7 +134,8 @@ fn main() {
     let plugin_loc = data
         .settings_get_name(&"pluginloadloc".to_string())
         .unwrap()
-        .name;
+        .param
+        .unwrap();
 
     let location = data
         .settings_get_name(&"FilesLoc".to_string())
@@ -241,7 +242,33 @@ fn main() {
                         logging::info_log(&"Tag was passed into search but no info was provided. THIS SHOULDN'T HAPPEN.".to_string());
                     }
                 }
-                sharedtypes::Search::Hash(hash) => {}
+                sharedtypes::Search::Hash(hash) => {
+                    data.load_table(&sharedtypes::LoadDBTable::Files, &mut alt_connection);
+                    data.load_table(&sharedtypes::LoadDBTable::Tags, &mut alt_connection);
+                    data.load_table(&sharedtypes::LoadDBTable::Namespace, &mut alt_connection);
+                    data.load_table(&sharedtypes::LoadDBTable::Relationship, &mut alt_connection);
+
+                    for each in hash {
+                        let file = data.file_get_hash(each);
+                        dbg!(&file);
+
+                        if file.1 {
+                            let tag = data.relationship_get_tagid(&file.0);
+                            dbg!(&tag);
+                            for tag_each in tag {
+                                let tagdata = data.tag_id_get(&tag_each);
+                                let taginfo = tagdata.unwrap();
+                                println!(
+                                    "Id: {:?} Name: {:?} Parents: {:?} Namespace: {:?}",
+                                    &taginfo.id.unwrap(),
+                                    &taginfo.name,
+                                    &taginfo.parents,
+                                    &taginfo.namespace.unwrap()
+                                );
+                            }
+                        }
+                    }
+                }
             }
 
             dbg!(search);
@@ -271,6 +298,8 @@ fn main() {
 
     // Creates a threadhandler that manages callable threads.
     let mut threadhandler = threading::threads::new();
+
+    pluginmanager.lock().unwrap().plugin_on_start();
 
     jobmanager.jobs_run_new(
         &mut arc,

@@ -349,7 +349,8 @@ impl Worker {
                                         "0"
                                     );
                                     source_url_id =
-                                    unwrappydb.namespace_get(&"source_url".to_string()); // defaults to 0 due to unknown.
+                                        unwrappydb.namespace_get(&"source_url".to_string());
+                                    // defaults to 0 due to unknown.
                                 }
                                 let url_tag = unwrappydb.tag_get_name(
                                     each.1.source_url.to_string(),
@@ -364,7 +365,8 @@ impl Worker {
                                 location = unwrappydb
                                     .settings_get_name(&"FilesLoc".to_string())
                                     .unwrap()
-                                    .param.unwrap();
+                                    .param
+                                    .unwrap();
                             }
 
                             //let file = each.1;
@@ -406,6 +408,8 @@ impl Worker {
                                 match fileid {
                                     Some(_) => {}
                                     None => {
+                                        unwrappydb.transaction_flush();
+                                        dbg!(&source_url_id, &each.1, &url_tag); //
                                         panic!(
                                             "url has info but no file data. {}",
                                             &url_tag.unwrap()
@@ -461,7 +465,10 @@ impl Worker {
                                                             &"".to_string(),
                                                             true,
                                                         );
-                                                    let tempe = unwrappydb.tag_get_name(every.1.tag.to_string(), tag_namespace_id);
+                                                    let tempe = unwrappydb.tag_get_name(
+                                                        every.1.tag.to_string(),
+                                                        tag_namespace_id,
+                                                    );
                                                     let tag_id = unwrappydb.tag_add(
                                                         every.1.tag.to_string(),
                                                         "".to_string(),
@@ -471,7 +478,7 @@ impl Worker {
                                                     );
                                                     //unwrappydb.dbg_show_internals();
                                                     //dbg!(&tag_namespace_id, &tag_id, every);
-                                                    
+
                                                     unwrappydb
                                                         .relationship_add(file_id, tag_id, true);
                                                 }
@@ -520,7 +527,9 @@ impl Worker {
                                                 }
                                             }
                                         }
-                                        sharedtypes::TagType::Special => {}
+                                        sharedtypes::TagType::Special => {
+                                            dbg!(&every);
+                                        }
                                     }
                                 }
                             }

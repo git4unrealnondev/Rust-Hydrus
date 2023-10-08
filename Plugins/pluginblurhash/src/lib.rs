@@ -12,9 +12,6 @@ static PLUGIN_DESCRIPTION:&str = "Introduces Blurhash imaging support.";
 #[path = "../../../src/scr/sharedtypes.rs"]
 mod sharedtypes;
 
-pub fn add(left: usize, right: usize) -> usize {
-    left + right
-}
 #[no_mangle]
 pub fn return_info() -> sharedtypes::PluginInfo {
     let callbackvec = vec![sharedtypes::PluginCallback::OnDownload];
@@ -24,6 +21,7 @@ pub fn return_info() -> sharedtypes::PluginInfo {
         version: 1.00,
         api_version: 1.00,
         callbacks: callbackvec,
+        communication: None,
     }
 }
 ///
@@ -31,19 +29,7 @@ pub fn return_info() -> sharedtypes::PluginInfo {
 ///
 fn downloadparse(img: DynamicImage) -> String {
     let rescale_img = resize(&img, WIDTH_IMG, HEIGHT_IMG, FilterType::Triangle);
-    encode(9, 9, WIDTH_IMG, HEIGHT_IMG, &rescale_img.into_raw()).unwrap()
-            
-                //rintln!("BLURHASH WAITING ON DATABASE UNLOCK");
-
-                //println!("BLURHASH UNLOCKED");
-                //name: &String, description: &String, addtodb: bool
-                //let namespace_id = datab.namespace_add(&"blurhash".to_string(), &"Blurhash hash for image. Only Supports PNG & JPEG".to_string(), true);
-                //let tag_id = datab.tag_add(blurhash_hash, "".to_string(), namespace_id, true);
-                //let (file_id, _file_exists) = datab.file_get_hash(Hash);
-                //datab.relationship_add(file_id, tag_id, true);
-                //dbg!(tag_id, file_id, namespace_id);
-            
-    
+    encode(9, 9, WIDTH_IMG, HEIGHT_IMG, &rescale_img.into_raw()).unwrap()    
 }
 
 #[no_mangle]

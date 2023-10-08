@@ -2,17 +2,20 @@ use bytes::Bytes;
 use libloading;
 use log::{error, info, warn};
 use std::collections::HashMap;
-use std::fs;
 use std::io::Cursor;
 use std::path::Path;
 use std::sync::Arc;
 use std::sync::{Mutex, MutexGuard};
+use std::thread::JoinHandle;
+use std::{fs, thread};
 
+use crate::logging;
 use crate::sharedtypes;
 use crate::{database, download};
 
 pub struct PluginManager {
     _plugin: HashMap<String, libloading::Library>,
+    _plugin_coms: HashMap<String, Option<sharedtypes::PluginSharedData>>,
     _callback: HashMap<sharedtypes::PluginCallback, Vec<String>>,
     _database: Arc<Mutex<database::Main>>,
 }
@@ -25,12 +28,161 @@ impl PluginManager {
         let mut reftoself = PluginManager {
             _plugin: HashMap::new(),
             _callback: HashMap::new(),
+            _plugin_coms: HashMap::new(),
             _database: MainDb.clone(),
         };
 
         reftoself.load_plugins(&pluginsloc);
 
         reftoself
+    }
+    ///
+    /// Loads plugins into plugin manager
+    ///
+    fn load_plugins(&mut self, pluginsloc: &String) {
+        println!("Starting to load plugins at: {}", pluginsloc);
+
+        let ext = ["rlib", "so", "dylib", "dll"];
+
+        let plugin_path = Path::new(pluginsloc);
+
+        // Errors out if I cant create a folder
+        if !plugin_path.exists() {
+            let path_check = fs::create_dir_all(&plugin_path);
+            match path_check {
+                Ok(_) => (),
+                Err(_) => panic!(
+                    "{}",
+                    format!("CANNOT CREATE FOLDER: {} DUE TO PERMISSIONS.", &pluginsloc)
+                ),
+            }
+        }
+
+        let dirs = fs::read_dir(&plugin_path).unwrap();
+
+        for entry in dirs {
+            let root: String = entry.as_ref().unwrap().path().display().to_string();
+            let name = root.split('/');
+            let vec: Vec<&str> = name.collect();
+
+            let plugin_loading_path = format!(
+                "{}{}/target/release/lib{}",
+                &pluginsloc,
+                vec[vec.len() - 1],
+                vec[vec.len() - 1]
+            );
+
+            let mut finalpath: Option<String> = None;
+            'extloop: for exts in ext {
+                let testpath = format!("{}.{}", plugin_loading_path, exts);
+
+                // Loading Logic goes here.
+                if Path::new(&testpath).exists() {
+                    info!("Loading scraper at: {}", &testpath);
+                    finalpath = Some(testpath);
+                    break 'extloop;
+                } else {
+                    warn!(
+                        "Loading scraper at: {} FAILED due to path not existing",
+                        &testpath
+                    );
+                    finalpath = None;
+                }
+            }
+            if let Some(pathe) = &finalpath {
+                let plugininfo: sharedtypes::PluginInfo;
+                let lib;
+                unsafe {
+                    lib = libloading::Library::new(pathe).unwrap();
+                    let plugindatafunc: libloading::Symbol<
+                        unsafe extern "C" fn() -> sharedtypes::PluginInfo,
+                    > = lib.get(b"return_info").unwrap();
+                    plugininfo = plugindatafunc();
+                }
+
+                let pluginname = plugininfo.name.clone();
+
+                logging::info_log(&format!(
+                    "Loaded: {} With Description: {} Plugin Version: {} ABI: {} Comms: {:?}",
+                    &pluginname,
+                    &plugininfo.description,
+                    &plugininfo.version,
+                    &plugininfo.api_version,
+                    &plugininfo.communication,)
+                );
+                
+                self._plugin_coms.insert(pluginname.clone(), plugininfo.communication);
+
+                self._plugin.insert(pluginname.clone(), lib);
+
+                for each in plugininfo.callbacks {
+                    match self._callback.get_mut(&each) {
+                        Some(vec_plugin) => {
+                            vec_plugin.push(pluginname.clone());
+                        }
+                        None => {
+                            self._callback.insert(each, vec![pluginname.clone()]);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    ///
+    /// Runs the callback on startup
+    ///
+    pub fn plugin_on_start(&mut self) {
+        // IF theirs no functions with this callback registered then return
+        if !self
+            ._callback
+            .contains_key(&sharedtypes::PluginCallback::OnStart)
+        {
+            return;
+        }
+
+        // Gets all callbacks related to a callback and checks if the plugin
+        for plugin in self._callback[&sharedtypes::PluginCallback::OnStart].clone() {
+            if !self._plugin.contains_key(&plugin) {
+                error!("Could not call Plugin-OnStart");
+                continue;
+            }
+
+            // Does a check to see if we need to determine how to pass data to and fro
+            match &self._plugin_coms[&plugin] {
+                None => {}
+                Some(plugincoms) => {
+                    match &plugincoms.com_channel {
+                        None => {
+                            continue;
+                        }
+                        Some(pluginchannel) => {
+                            match pluginchannel {
+                                sharedtypes::PluginCommunicationChannel::None => {}
+                                sharedtypes::PluginCommunicationChannel::pipe(pipe) => {
+                                    dbg!(pipe);
+                                    let liba = self._plugin.get(&plugin.clone()).clone();
+                                    unsafe {
+                                            
+                                            let plugindatafunc: libloading::Symbol<
+                                                unsafe extern "C" fn(),
+                                                //unsafe extern "C" fn(Cursor<Bytes>, &String, &String, Arc<Mutex<database::Main>>),
+                                            > = liba.unwrap().get(b"on_start").unwrap();
+                                            //unwrappy.
+                                            plugindatafunc();
+                                        }
+                                    let thread = thread::spawn(move || {
+
+                                        
+                                    });
+                                }
+                            }
+                        }
+                    }
+                    continue;
+                }
+            }
+        }
     }
 
     ///
@@ -149,8 +301,7 @@ impl PluginManager {
             }
         }
     }
-
-    ///
+    //
     /// Runs plugin and
     ///
     pub fn plugin_on_download(&mut self, cursorpass: &[u8], hashs: &String, exts: &String) {
@@ -183,103 +334,6 @@ impl PluginManager {
             }
 
             self.ParsePluginOutput(output);
-        }
-    }
-
-    ///
-    /// Loads plugins into plugin manager
-    ///
-    fn load_plugins(&mut self, pluginsloc: &String) {
-        println!("Starting to load plugins at: {}", pluginsloc);
-
-        let ext = ["rlib", "so", "dylib", "dll"];
-
-        let plugin_path = Path::new(pluginsloc);
-
-        // Errors out if I cant create a folder
-        if !plugin_path.exists() {
-            let path_check = fs::create_dir_all(&plugin_path);
-            match path_check {
-                Ok(_) => (),
-                Err(_) => panic!(
-                    "{}",
-                    format!("CANNOT CREATE FOLDER: {} DUE TO PERMISSIONS.", &pluginsloc)
-                ),
-            }
-        }
-
-        let dirs = fs::read_dir(&plugin_path).unwrap();
-
-        for entry in dirs {
-            let root: String = entry.as_ref().unwrap().path().display().to_string();
-            let name = root.split('/');
-            let vec: Vec<&str> = name.collect();
-
-            let plugin_loading_path = format!(
-                "{}{}/target/release/lib{}",
-                &pluginsloc,
-                vec[vec.len() - 1],
-                vec[vec.len() - 1]
-            );
-
-            dbg!(&root, &pluginsloc, vec[vec.len() - 1]);
-
-            dbg!(&plugin_loading_path);
-
-            let mut finalpath: Option<String> = None;
-            'extloop: for exts in ext {
-                let testpath = format!("{}.{}", plugin_loading_path, exts);
-
-                // Loading Logic goes here.
-                if Path::new(&testpath).exists() {
-                    info!("Loading scraper at: {}", &testpath);
-                    finalpath = Some(testpath);
-                    break 'extloop;
-                } else {
-                    warn!(
-                        "Loading scraper at: {} FAILED due to path not existing",
-                        &testpath
-                    );
-                    finalpath = None;
-                }
-            }
-            if let Some(pathe) = &finalpath {
-                let plugininfo: sharedtypes::PluginInfo;
-                let lib;
-                unsafe {
-                    lib = libloading::Library::new(pathe).unwrap();
-                    let plugindatafunc: libloading::Symbol<
-                        unsafe extern "C" fn() -> sharedtypes::PluginInfo,
-                    > = lib.get(b"return_info").unwrap();
-                    plugininfo = plugindatafunc();
-                }
-
-                let pluginname = plugininfo.name.clone();
-
-                info!(
-                    "Loaded: {} With Description: {} Plugin Version: {} ABI: {}",
-                    &pluginname,
-                    &plugininfo.description,
-                    &plugininfo.version,
-                    &plugininfo.api_version
-                );
-
-                self._plugin.insert(pluginname.clone(), lib);
-
-                for each in plugininfo.callbacks {
-                    match self._callback.get_mut(&each) {
-                        Some(vec_plugin) => {
-                            vec_plugin.push(pluginname.clone());
-                        }
-                        None => {
-                            self._callback.insert(each, vec![pluginname.clone()]);
-                        }
-                    }
-                }
-            }
-            dbg!(&self._callback);
-            dbg!(&finalpath);
-            //let path = format!("{}{}lib{}.{}", &root, &pluginsloc, vec[vec.len() - 1], &libext);
         }
     }
 }

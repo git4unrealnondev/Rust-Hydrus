@@ -1,17 +1,17 @@
 [package]
-name = "pluginblurhash"
+name = "webapi"
 version = "0.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-blurhash = { path = "./blurhash-rs" }
+iced = { version = "0.10.0", features = ["qr_code"] }
 nohash-hasher = "0.2.0"
+pipe = { version = "0.4.0", features = ["bidirectional"] }
+read_write = "0.1.2"
 strum = "0.25.0"
 strum_macros = "0.25.1"
-image = "0.24.6"
-pipe = { version = "0.4.0", features = ["bidirectional"] }
 
 [lib]
 crate-type = ["dylib"]

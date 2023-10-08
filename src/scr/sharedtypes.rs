@@ -1,4 +1,5 @@
 use nohash_hasher::NoHashHasher;
+use pipe;
 use std::fmt;
 use std::{collections::HashMap, hash::BuildHasherDefault};
 use strum::IntoEnumIterator;
@@ -295,10 +296,11 @@ pub enum LoadDBTable {
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub enum PluginCallback {
     OnDownload, // Ran when a file is downloaded
+    OnStart,    // Starts when the software start
 }
 
 ///
-///
+/// information block for plugin info
 ///
 #[derive(Debug)]
 pub struct PluginInfo {
@@ -307,6 +309,25 @@ pub struct PluginInfo {
     pub version: f32,
     pub api_version: f32,
     pub callbacks: Vec<PluginCallback>,
+    pub communication: Option<PluginSharedData>,
+}
+
+///
+///
+///
+#[derive(Debug)]
+pub struct PluginSharedData {
+    pub thread: PluginThreadType,
+    pub com_channel: Option<PluginCommunicationChannel>,
+}
+
+///
+///
+///
+#[derive(Debug)]
+pub enum PluginCommunicationChannel {
+    pipe(String),
+    None,
 }
 
 #[allow(dead_code)]
