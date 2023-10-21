@@ -4,6 +4,7 @@
 use log::{error, info, warn};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
+use std::{thread, time};
 use tokio::task;
 extern crate ratelimit;
 
@@ -29,8 +30,8 @@ mod sharedtypes;
 mod tasks;
 #[path = "./scr/threading.rs"]
 mod threading;
-#[path = "./scr/time.rs"]
-mod time;
+#[path = "./scr/time_func.rs"]
+mod time_func;
 /*
 mod scr {
     pub mod cli;
@@ -305,7 +306,7 @@ fn main() {
         &mut arc,
         &mut threadhandler,
         &mut alt_connection,
-        pluginmanager,
+        pluginmanager.clone(),
     );
     // Anything below here will run automagically.
     // Jobs run in OS threads
@@ -320,6 +321,16 @@ fn main() {
 
     //arc.lock().unwrap().transaction_flush();
     //arc.lock().unwrap().transaction_close();
+
+    // Waits until all threads have closed.
+    while !pluginmanager.lock().unwrap().return_thread() {
+        let one_sec = time::Duration::from_secs(1);
+
+        thread::sleep(one_sec);
+
+        // pluginmanager.lock().unwrap().read_thread_data();
+    }
+
     info!("UNLOADING");
     log::logger().flush();
 }

@@ -1,23 +1,35 @@
 use bytes::Bytes;
-use libloading;
+use libloading::{self, Library};
 use log::{error, info, warn};
 use std::collections::HashMap;
 use std::io::Cursor;
 use std::path::Path;
+use std::slice::SliceIndex;
 use std::sync::Arc;
 use std::sync::{Mutex, MutexGuard};
 use std::thread::JoinHandle;
 use std::{fs, thread};
+use std::sync::mpsc;
 
 use crate::logging;
 use crate::sharedtypes;
 use crate::{database, download};
+
+use std::io::Read;
+
+#[path = "./intcoms/server.rs"]
+mod server;
+#[path = "./intcoms/client.rs"]
+mod client;
 
 pub struct PluginManager {
     _plugin: HashMap<String, libloading::Library>,
     _plugin_coms: HashMap<String, Option<sharedtypes::PluginSharedData>>,
     _callback: HashMap<sharedtypes::PluginCallback, Vec<String>>,
     _database: Arc<Mutex<database::Main>>,
+    _thread: HashMap<String, JoinHandle<()>>, // ONLY INSERT INTO ME FOR THE STARTING PLUGIN.
+    _thread_path: HashMap<String, String>,    // Will be used for storing path of plugin name.
+    _thread_data_share: HashMap<String, (os_pipe::PipeReader, os_pipe::PipeWriter)>,
 }
 
 ///
@@ -30,12 +42,38 @@ impl PluginManager {
             _callback: HashMap::new(),
             _plugin_coms: HashMap::new(),
             _database: MainDb.clone(),
+            _thread: HashMap::new(),
+            _thread_path: HashMap::new(),
+            _thread_data_share: HashMap::new(),
         };
 
         reftoself.load_plugins(&pluginsloc);
-
+        
+                let (snd, rcv) = mpsc::channel();
+        let srv = std::thread::spawn(move || server::main(snd));
+        let _ = rcv.recv();
+        if let Err(e) = client::main() {
+            eprintln!("Client exited early with error: {:#}", e);
+        }
+        if let Err(e) = srv.join().expect("server thread panicked") {
+            eprintln!("Server exited early with error: {:#}", e);
+        }
         reftoself
     }
+
+    pub fn return_thread(&self) -> bool {
+        self._thread.is_empty()
+    }
+
+    pub fn read_thread_data(&mut self) {
+        for each in self._thread.keys() {
+            let mut output: String = String::new();
+            let mut th = self._thread_data_share.get_mut(each).unwrap();
+            th.0.read_to_string(&mut output).unwrap();
+            dbg!(output);
+        }
+    }
+
     ///
     /// Loads plugins into plugin manager
     ///
@@ -108,12 +146,15 @@ impl PluginManager {
                     &plugininfo.description,
                     &plugininfo.version,
                     &plugininfo.api_version,
-                    &plugininfo.communication,)
-                );
-                
-                self._plugin_coms.insert(pluginname.clone(), plugininfo.communication);
+                    &plugininfo.communication,
+                ));
+
+                self._plugin_coms
+                    .insert(pluginname.clone(), plugininfo.communication);
 
                 self._plugin.insert(pluginname.clone(), lib);
+                self._thread_path
+                    .insert(pluginname.clone(), pathe.to_string());
 
                 for each in plugininfo.callbacks {
                     match self._callback.get_mut(&each) {
@@ -161,20 +202,34 @@ impl PluginManager {
                                 sharedtypes::PluginCommunicationChannel::None => {}
                                 sharedtypes::PluginCommunicationChannel::pipe(pipe) => {
                                     dbg!(pipe);
-                                    let liba = self._plugin.get(&plugin.clone()).clone();
-                                    unsafe {
-                                            
-                                            let plugindatafunc: libloading::Symbol<
-                                                unsafe extern "C" fn(),
-                                                //unsafe extern "C" fn(Cursor<Bytes>, &String, &String, Arc<Mutex<database::Main>>),
-                                            > = liba.unwrap().get(b"on_start").unwrap();
-                                            //unwrappy.
-                                            plugindatafunc();
-                                        }
-                                    let thread = thread::spawn(move || {
 
-                                        
+                                    // Have to do this wanky ness to allow me to spawn a thread that outlives the &mut self
+                                    // Spawns the function in a seperate thread.
+                                    let liba;
+                                    let (mut reader, mut writer) = os_pipe::pipe().unwrap();
+                                    let reader_clone = reader.try_clone().unwrap();
+                                    let writer_clone = writer.try_clone().unwrap();
+
+                                    unsafe {
+                                        liba = Library::new(self._thread_path[&plugin].to_string())
+                                            .unwrap();
+                                    }
+                                    let thread = thread::spawn(move || unsafe {
+                                        let plugindatafunc: libloading::Symbol<
+                                            unsafe extern "C" fn(
+                                                &mut os_pipe::PipeReader,
+                                                &mut os_pipe::PipeWriter,
+                                            ),
+                                        > = liba.get(b"on_start").unwrap();
+                                        plugindatafunc(
+                                            &mut reader.try_clone().unwrap(),
+                                            &mut writer.try_clone().unwrap(),
+                                        );
                                     });
+
+                                    self._thread.insert(plugin.to_string(), thread);
+                                    self._thread_data_share
+                                        .insert(plugin, (reader_clone, writer_clone));
                                 }
                             }
                         }

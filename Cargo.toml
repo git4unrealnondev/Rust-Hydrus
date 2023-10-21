@@ -35,6 +35,10 @@ json = "0.12.4"
 chrono = "0.4.26"
 pipe = { version = "0.4.0", features = ["bidirectional"] }
 readwrite = "0.2.0"
+axum = "0.6.20"
+os_pipe = "1.1.4"
+interprocess = "1.2.1"
+anyhow = "1.0.75"
 
 [profile.release]
 opt-level = "z"

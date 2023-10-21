@@ -8,7 +8,7 @@ use crate::sharedtypes;
 use crate::sharedtypes::CommitType;
 use crate::sharedtypes::ScraperType;
 use crate::threading;
-use crate::time;
+use crate::time_func;
 use ahash::AHashMap;
 use http::uri::Authority;
 use log::{error, info};
@@ -61,12 +61,12 @@ impl Jobs {
     /// Loads jobs to run into _jobstorun
     ///
     pub fn jobs_get(&mut self, db: &database::Main) {
-        self._secs = time::time_secs();
+        self._secs = time_func::time_secs();
         let ttl = db.jobs_get_max();
         let hashjobs = db.jobs_get_all();
         let beans = self.scrapermanager.scraper_get();
         for each in hashjobs {
-            if time::time_secs() >= each.1._jobsref + each.1._jobstime {
+            if time_func::time_secs() >= each.1._jobsref + each.1._jobstime {
                 for eacha in beans {
                     if eacha._sites.contains(&each.1._sites) {
                         self._jobref

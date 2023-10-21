@@ -4,7 +4,7 @@ use crate::jobs;
 use crate::logging;
 use crate::sharedtypes;
 use crate::sharedtypes::DbJobsObj;
-use crate::time;
+use crate::time_func;
 use ahash::AHashMap;
 use log::{error, info};
 use nohash_hasher::BuildNoHashHasher;
@@ -919,8 +919,8 @@ impl Main {
         addtodb: bool,
     ) {
         //let a1: String = time.to_string();
-        let current_time: usize = time::time_secs();
-        let time_offset: usize = time::time_conv(time);
+        let current_time: usize = time_func::time_secs();
+        let time_offset: usize = time_func::time_conv(time);
 
         self.jobs_add_new_todb(site, query, time_offset, current_time, committype);
         if addtodb {
@@ -1930,8 +1930,8 @@ impl Main {
             }
         }
         for each in hashmap_jobs.keys() {
-            let current_time: usize = time::time_secs();
-            let time_offset: usize = time::time_conv(&each.2);
+            let current_time: usize = time_func::time_secs();
+            let time_offset: usize = time_func::time_conv(&each.2);
             self.jobs_add_new_sql(
                 &each.0,
                 &&each.1,
