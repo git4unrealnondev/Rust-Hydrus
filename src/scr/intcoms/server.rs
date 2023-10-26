@@ -5,6 +5,8 @@ use std::{
     sync::mpsc::Sender,
 };
 
+mod types;
+
 pub fn main(notify: Sender<()>) -> anyhow::Result<()> {
     // Define a function that checks for errors in incoming connections. We'll use this to filter
     // through connections that fail on initialization for one reason or another.
@@ -60,9 +62,15 @@ another process and try again.",
     // Preemptively allocate a sizeable buffer for reading at a later moment. This size should be
     // enough and should be easy to find for the allocator. Since we only have one concurrent
     // client, there's no need to reallocate the buffer repeatedly.
-    let mut buffer = String::with_capacity(5);
 
     for conn in listener.incoming().filter_map(handle_error) {
+        let mut buffer = &mut [b'0', b'0'];
+        let mut bufstr = String::new();
+        let comsStruct = types::coms {
+            com_type: types::eComType::BiDirectional,
+            control: types::eControlSigs::SEND,
+        };
+        let bStruct = types::coms_to_bytes(&comsStruct);
         // Wrap the connection into a buffered reader right away
         // so that we could read a single line out of it.
         let mut conn = BufReader::new(conn);
@@ -72,25 +80,53 @@ another process and try again.",
         // response. Otherwise, because reading and writing on a connection cannot be simultaneous
         // without threads or async, we can deadlock the two processes by having both sides wait for
         // the write buffer to be emptied by the other.
-        conn.read_line(&mut buffer)
-            .context("Socket receive failed")?;
+        conn.read(buffer).context("Socket receive failed")?;
 
         // Now that the read has come through and the client is waiting on the server's write, do
         // it. (`.get_mut()` is to get the writer, `BufReader` doesn't implement a pass-through
         // `Write`.)
-        conn.get_mut().write_all(b"Hello from serverllllllllllllllllllllllllllllllllllllllllllllllll!\n")?;
+        conn.get_mut().write_all(b"Hello from server!\n")?;
 
         // Print out the result, getting the newline for free!
-        print!("Client answered: {}", buffer);
+
+        let instruct: types::coms = types::con_coms(buffer);
+        //std::mem::forget(buffer.clone());
+        dbg!(&buffer);
+
+        print!(
+            "Client answered: {:?} {:?}\n",
+            instruct.com_type, instruct.control
+        );
+
+        match instruct.control {
+            types::eControlSigs::SEND => {
+                bufstr.clear();
+                conn.read_line(&mut bufstr)
+                    .context("Socket receive failed")?;
+
+                dbg!(&bufstr);
+                //bufstr.clear();
+
+                conn.get_mut()
+                    .write_all(bStruct)
+                    .context("Socket send failed")?;
+                bufstr.clear();
+                conn.read_line(&mut bufstr)
+                    .context("Socket receive failed")?;
+                dbg!(&bufstr);
+            }
+            types::eControlSigs::HALT => {}
+            types::eControlSigs::BREAK => {}
+        }
 
         // Let's add an exit condition to shut the server down gracefully.
-        if buffer == "stop\n" {
-            break;
-        }
+        //if buffer == "stop\n" {
+        //    break;
+        //}
 
         // Clear the buffer so that the next iteration will display new data instead of messages
         // stacking on top of one another.
-        buffer.clear();
+        //buffer.clear();
     }
     Ok(())
 }

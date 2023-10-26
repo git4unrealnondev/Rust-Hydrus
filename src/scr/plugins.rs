@@ -5,11 +5,11 @@ use std::collections::HashMap;
 use std::io::Cursor;
 use std::path::Path;
 use std::slice::SliceIndex;
+use std::sync::mpsc;
 use std::sync::Arc;
 use std::sync::{Mutex, MutexGuard};
 use std::thread::JoinHandle;
 use std::{fs, thread};
-use std::sync::mpsc;
 
 use crate::logging;
 use crate::sharedtypes;
@@ -17,10 +17,10 @@ use crate::{database, download};
 
 use std::io::Read;
 
-#[path = "./intcoms/server.rs"]
-mod server;
 #[path = "./intcoms/client.rs"]
 mod client;
+#[path = "./intcoms/server.rs"]
+mod server;
 
 pub struct PluginManager {
     _plugin: HashMap<String, libloading::Library>,
@@ -48,8 +48,8 @@ impl PluginManager {
         };
 
         reftoself.load_plugins(&pluginsloc);
-        
-                let (snd, rcv) = mpsc::channel();
+
+        /*let (snd, rcv) = mpsc::channel();
         let srv = std::thread::spawn(move || server::main(snd));
         let _ = rcv.recv();
         if let Err(e) = client::main() {
@@ -57,7 +57,7 @@ impl PluginManager {
         }
         if let Err(e) = srv.join().expect("server thread panicked") {
             eprintln!("Server exited early with error: {:#}", e);
-        }
+        }*/
         reftoself
     }
 
