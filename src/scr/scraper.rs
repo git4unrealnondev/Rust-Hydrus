@@ -51,7 +51,7 @@ impl InternalScraper {
         vecs
     }
 
-    pub fn url_get(&self, params: Vec<String>) -> String {
+    pub fn url_get(&self, _params: Vec<String>) -> String {
         "a".to_string()
     }
 
@@ -175,7 +175,7 @@ pub fn scraper_download_get(libloading: &libloading::Library) -> bool {
 /// Should only be called when scraper needs to download something assuming scraper_download_get returns true.
 /// TODO NOT YET IMPLEMENTED PROPERLY.
 ///
-pub fn scraper_download(libloading: &libloading::Library, params: String) -> bool {
+pub fn scraper_download(libloading: &libloading::Library, _params: String) -> bool {
     let temp: libloading::Symbol<unsafe extern "C" fn() -> bool> =
         unsafe { libloading.get(b"scraper_download\0").unwrap() };
     unsafe { temp() }

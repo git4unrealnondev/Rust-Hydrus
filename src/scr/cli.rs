@@ -5,7 +5,7 @@ use crate::sharedtypes::{self, JobsAdd, JobsRemove};
 use clap::{App, Arg, SubCommand};
 use log::{error, info};
 //use super::sharedtypes::;
-use clap::parser::ValuesRef;
+
 use strum::IntoEnumIterator;
 //mod sharedtypes;
 
@@ -276,7 +276,7 @@ pub fn main() -> sharedtypes::AllFields {
                 let valvec: Vec<&String> = subcmd.get_many::<String>("add").unwrap().collect();
                 //valret: Vec<String> = Vec::new();
 
-                let valret = [
+                let _valret = [
                     valvec[0].to_owned(),
                     valvec[1].to_owned(),
                     valvec[2].to_owned(),
@@ -313,7 +313,7 @@ pub fn main() -> sharedtypes::AllFields {
             // Remove Job Handling
             if subcmd.contains_id("remove") {
                 let valvec: Vec<&String> = subcmd.get_many::<String>("remove").unwrap().collect();
-                let valret: Vec<String> = [
+                let _valret: Vec<String> = [
                     valvec[0].to_owned(),
                     valvec[1].to_owned(),
                     valvec[2].to_owned(),
@@ -334,8 +334,8 @@ pub fn main() -> sharedtypes::AllFields {
                     error!("{}", msg);
                     panic!("{}", msg);
                 } else {
-                    let rrmv = "remove".to_string();
-                    let committype = sharedtypes::stringto_commit_type(valvec[3]);
+                    let _rrmv = "remove".to_string();
+                    let _committype = sharedtypes::stringto_commit_type(valvec[3]);
                     return sharedtypes::AllFields::JobsRemove(JobsRemove {
                         site: valvec[0].to_owned(),
                         query: valvec[1].to_owned(),

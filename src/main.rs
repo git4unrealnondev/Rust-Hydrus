@@ -2,10 +2,10 @@
 //use crate::scr::sharedtypes::AllFields::EJobsAdd;
 //use crate::scr::tasks;
 use log::{error, info, warn};
-use std::path::Path;
+
 use std::sync::{Arc, Mutex};
 use std::{thread, time};
-use tokio::task;
+
 extern crate ratelimit;
 
 #[path = "./scr/cli.rs"]
@@ -184,11 +184,11 @@ fn main() {
             //let positive = AllField;
         }
 
-        sharedtypes::AllFields::JobsRemove(jobs_remove) => {}
+        sharedtypes::AllFields::JobsRemove(_jobs_remove) => {}
         sharedtypes::AllFields::Search(search) => {
             match &search {
-                sharedtypes::Search::Fid(file) => {}
-                sharedtypes::Search::Tid(tagid) => {}
+                sharedtypes::Search::Fid(_file) => {}
+                sharedtypes::Search::Tid(_tagid) => {}
                 sharedtypes::Search::Tag(tag) => {
                     if tag.len() == 1 {
                         logging::info_log(

@@ -7,7 +7,7 @@ use file_format::FileFormat;
 use log::{error, info};
 use serde::Deserialize;
 use std::path::Path;
-use std::{fs, io};
+use std::{fs};
 
 #[derive(Debug, Deserialize)]
 struct Row {

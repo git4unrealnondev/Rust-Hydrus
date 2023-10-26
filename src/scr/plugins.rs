@@ -1,19 +1,19 @@
-use bytes::Bytes;
+
 use libloading::{self, Library};
 use log::{error, info, warn};
 use std::collections::HashMap;
-use std::io::Cursor;
+
 use std::path::Path;
 use std::slice::SliceIndex;
-use std::sync::mpsc;
+
 use std::sync::Arc;
-use std::sync::{Mutex, MutexGuard};
+use std::sync::{Mutex};
 use std::thread::JoinHandle;
 use std::{fs, thread};
 
 use crate::logging;
 use crate::sharedtypes;
-use crate::{database, download};
+use crate::{database};
 
 use std::io::Read;
 
@@ -68,7 +68,7 @@ impl PluginManager {
     pub fn read_thread_data(&mut self) {
         for each in self._thread.keys() {
             let mut output: String = String::new();
-            let mut th = self._thread_data_share.get_mut(each).unwrap();
+            let th = self._thread_data_share.get_mut(each).unwrap();
             th.0.read_to_string(&mut output).unwrap();
             dbg!(output);
         }
@@ -206,7 +206,7 @@ impl PluginManager {
                                     // Have to do this wanky ness to allow me to spawn a thread that outlives the &mut self
                                     // Spawns the function in a seperate thread.
                                     let liba;
-                                    let (mut reader, mut writer) = os_pipe::pipe().unwrap();
+                                    let (reader, writer) = os_pipe::pipe().unwrap();
                                     let reader_clone = reader.try_clone().unwrap();
                                     let writer_clone = writer.try_clone().unwrap();
 
@@ -337,7 +337,7 @@ impl PluginManager {
                             }
                         }
 
-                        if let Some(temp) = names.jobs {}
+                        if let Some(_temp) = names.jobs {}
                         if let Some(temp) = names.relationship {
                             for relations in temp {
                                 let file_id = unwrappy.file_get_hash(&relations.file_hash);
@@ -348,10 +348,10 @@ impl PluginManager {
                                 //unwrappy.relationship_add(file, tag, addtodb)
                             }
                         }
-                        if let Some(temp) = names.parents {}
+                        if let Some(_temp) = names.parents {}
                     }
                 }
-                sharedtypes::DBPluginOutputEnum::Del(name) => for names in name {},
+                sharedtypes::DBPluginOutputEnum::Del(name) => for _names in name {},
                 sharedtypes::DBPluginOutputEnum::None => {}
             }
         }

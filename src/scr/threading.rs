@@ -1,32 +1,32 @@
 use crate::database;
 use crate::download;
-use crate::jobs::Jobs;
+
 use crate::jobs::JobsRef;
 use crate::logging::error_log;
 use crate::plugins::PluginManager;
 use crate::scraper;
-use crate::scraper::ScraperManager;
+
 use crate::sharedtypes;
 
 use ahash::AHashMap;
 use async_std::task;
-use file_format::{FileFormat, Kind};
+
 use futures;
-use futures::future::join_all;
+
 use log::{error, info};
-use std::borrow::Borrow;
-use std::sync::mpsc;
+
+
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::thread;
 use std::time::Duration;
-use std::{collections::HashMap, hash::BuildHasherDefault};
+
 use strum::IntoEnumIterator;
-use strum_macros::EnumIter;
-use tokio::runtime::Handle;
+
+
 use tokio::runtime::Runtime;
-use tokio::time::Timeout;
-use url::Url;
+
+
 
 pub struct threads {
     _workers: Vec<Worker>,
@@ -39,9 +39,9 @@ pub struct threads {
 ///
 impl threads {
     pub fn new() -> Self {
-        let mut workers = Vec::new();
+        let workers = Vec::new();
 
-        let mut rt = Runtime::new().unwrap();
+        let rt = Runtime::new().unwrap();
 
         threads {
             _workers: workers,
@@ -53,7 +53,7 @@ impl threads {
     /// Creates a pool of threads. need to add checking.
     ///
     pub fn creates_thread_pool(&mut self, size: usize) {
-        for id in 0..size {
+        for _id in 0..size {
             //self._workers.push(Worker::new(id), );
         }
     }
@@ -138,15 +138,15 @@ impl Worker {
             &scraper._name,
             &jobs.len()
         );
-        let mut db = dba.clone();
+        let db = dba.clone();
         let jblist = jobs.clone();
         let scrap = scraper.clone();
         //
-        let rta = rt;
+        let _rta = rt;
 
         //let handle = rt.handle().clone();
         //let handle = Handle::current();
-        let insidert = Runtime::new().unwrap();
+        let _insidert = Runtime::new().unwrap();
 
         // Download code goes inside of thread spawn.
         // All urs that Have been pushed into checking.
@@ -157,12 +157,12 @@ impl Worker {
         let thread = thread::spawn(move || {
             let liba = libloading; // in memory reference to library.
 
-            let mut toparse: AHashMap<sharedtypes::CommitType, Vec<String>> = AHashMap::new();
+            let toparse: AHashMap<sharedtypes::CommitType, Vec<String>> = AHashMap::new();
             let mut jobvec = Vec::new();
             //let mut allurls: Vec<String> = Vec::new();
             let mut allurls: AHashMap<String, u8> = AHashMap::new();
 
-            let u64andduration = &scraper._ratelimit;
+            let _u64andduration = &scraper._ratelimit;
 
             // Have to lock DB from Arc & Mutex. Forces DB to lock in the meantime to avoid any data races.
             /*let mut ratelimiter = download::ratelimiter_create(
@@ -173,7 +173,7 @@ impl Worker {
 
             let mut scrap_data = String::new();
             {
-                let mut unwrappydb = &mut db.lock().unwrap();
+                let unwrappydb = &mut db.lock().unwrap();
                 //let t = scrap._type;
                 //println!("{}",t);
                 let datafromdb = unwrappydb
@@ -232,7 +232,7 @@ impl Worker {
             let mut ratelimit =
                 download::ratelimiter_create(scrap._ratelimit.0, scrap._ratelimit.1);
             let mut ratelimit_counter = 0;
-            let mut ratelimit_total = 10;
+            let ratelimit_total = 10;
 
             let mut client = download::client_create();
             for each in jobvec {
@@ -274,7 +274,7 @@ impl Worker {
                         let mut st: Result<sharedtypes::ScraperObject, sharedtypes::ScraperReturn> =
                             Result::Err(sharedtypes::ScraperReturn::Nothing);
 
-                        let mut parserloopbool = true;
+                        let parserloopbool = true;
 
                         while parserloopbool {
                             st = scraper::parser_call(&liba, &respstring);

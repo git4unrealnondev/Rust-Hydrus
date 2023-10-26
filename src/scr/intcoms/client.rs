@@ -11,7 +11,7 @@ pub fn main() -> anyhow::Result<()> {
     call_conn(1000, "beans".to_string())
 }
 
-fn call_conn(size: usize, message: String) -> anyhow::Result<()> {
+fn call_conn(size: usize, _message: String) -> anyhow::Result<()> {
     let name = {
         // This scoping trick allows us to nicely contain the import inside the `match`, so that if
         // any imports of variants named `Both` happen down the line, they won't collide with the
@@ -23,12 +23,12 @@ fn call_conn(size: usize, message: String) -> anyhow::Result<()> {
         }
     };
 
-    let comsStruct = types::coms {
+    let coms_struct = types::coms {
         com_type: types::eComType::BiDirectional,
         control: types::eControlSigs::SEND,
     };
-    let bStruct = types::coms_to_bytes(&comsStruct);
-    let mut buffers = &mut [b'0', b'0'];
+    let b_struct = types::coms_to_bytes(&coms_struct);
+    let buffers = &mut [b'0', b'0'];
 
     // Preemptively allocate a sizeable buffer for reading.
     // This size should be enough and should be easy to find for the allocator.
@@ -46,7 +46,7 @@ fn call_conn(size: usize, message: String) -> anyhow::Result<()> {
     // writen or if a write operation returns an error. (`.get_mut()` is to get the writer,
     // `BufReader` doesn't implement a pass-through `Write`.)
     conn.get_mut()
-        .write_all(bStruct)
+        .write_all(b_struct)
         .context("Socket send failed")?;
 
     // We now employ the buffer we allocated prior and read until EOF, which the server will

@@ -20,8 +20,8 @@ pub struct coms {
 ///
 /// Turns a coms structure into bytes.
 ///
-pub fn coms_to_bytes(sComs: &coms) -> &[u8] {
-    unsafe { any_as_u8_slice(sComs) }
+pub fn coms_to_bytes(scoms: &coms) -> &[u8] {
+    unsafe { any_as_u8_slice(scoms) }
 }
 
 ///

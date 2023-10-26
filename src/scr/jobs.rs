@@ -1,6 +1,6 @@
 use crate::database;
-use crate::download;
-use crate::file;
+
+
 use crate::plugins::PluginManager;
 use crate::scraper;
 use crate::scraper::InternalScraper;
@@ -10,15 +10,15 @@ use crate::sharedtypes::ScraperType;
 use crate::threading;
 use crate::time_func;
 use ahash::AHashMap;
-use http::uri::Authority;
-use log::{error, info};
-use ratelimit::*;
-use reqwest::{Client, Request, Response};
+
+use log::{info};
+
+
 use rusqlite::Connection;
 use std::collections::hash_map::Entry;
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
-use strum::IntoEnumIterator;
+
+
 
 pub struct Jobs {
     _jobid: Vec<u128>,
@@ -62,7 +62,7 @@ impl Jobs {
     ///
     pub fn jobs_get(&mut self, db: &database::Main) {
         self._secs = time_func::time_secs();
-        let ttl = db.jobs_get_max();
+        let _ttl = db.jobs_get_max();
         let hashjobs = db.jobs_get_all();
         let beans = self.scrapermanager.scraper_get();
         for each in hashjobs {
@@ -95,7 +95,7 @@ impl Jobs {
         alt_connection: &mut Connection,
         pluginmanager: Arc<Mutex<PluginManager>>,
     ) {
-        let mut dba = adb.clone();
+        let dba = adb.clone();
         let mut db = dba.lock().unwrap();
 
         //let mut name_ratelimited: AHashMap<String, (u64, Duration)> = AHashMap::new();
@@ -125,7 +125,7 @@ impl Jobs {
                 None => {
                     let isolatedtitle = format!("{:?}_{}", scrape._type, scrape._name);
 
-                    let (cookie, cookie_name) = self.library_cookie_needed(scrape);
+                    let (_cookie, cookie_name) = self.library_cookie_needed(scrape);
 
                     db.setting_add(
                         isolatedtitle,

@@ -64,13 +64,13 @@ another process and try again.",
     // client, there's no need to reallocate the buffer repeatedly.
 
     for conn in listener.incoming().filter_map(handle_error) {
-        let mut buffer = &mut [b'0', b'0'];
+        let buffer = &mut [b'0', b'0'];
         let mut bufstr = String::new();
-        let comsStruct = types::coms {
+        let coms_struct = types::coms {
             com_type: types::eComType::BiDirectional,
             control: types::eControlSigs::SEND,
         };
-        let bStruct = types::coms_to_bytes(&comsStruct);
+        let b_struct = types::coms_to_bytes(&coms_struct);
         // Wrap the connection into a buffered reader right away
         // so that we could read a single line out of it.
         let mut conn = BufReader::new(conn);
@@ -108,7 +108,7 @@ another process and try again.",
                 //bufstr.clear();
 
                 conn.get_mut()
-                    .write_all(bStruct)
+                    .write_all(b_struct)
                     .context("Socket send failed")?;
                 bufstr.clear();
                 conn.read_line(&mut bufstr)

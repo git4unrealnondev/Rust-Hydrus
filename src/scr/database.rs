@@ -814,7 +814,7 @@ impl Main {
         let memdb = Memdb::new();
         //let path = String::from("./main.db");
 
-        let mut memdbmain = Main {
+        let memdbmain = Main {
             _dbpath: path.to_owned(),
             _conn: Arc::new(Mutex::new(Connection::open_in_memory().unwrap())),
             _vers: vers,
@@ -887,7 +887,7 @@ impl Main {
         &mut self,
         site: &String,
         query: &String,
-        time: &String,
+        _time: &String,
         committype: &sharedtypes::CommitType,
         current_time: usize,
         time_offset: usize,
@@ -1095,7 +1095,7 @@ impl Main {
     /// Get table names
     /// Returns: Vec of strings
     ///
-    pub fn table_names(&mut self, table: String) -> Vec<String> {
+    pub fn table_names(&mut self, _table: String) -> Vec<String> {
         let conmut = self._conn.borrow_mut();
         let binding = conmut.lock().unwrap();
         let mut toexec = binding
@@ -1120,10 +1120,10 @@ impl Main {
     pub fn pull_data<'a>(
         &mut self,
         table: String,
-        collumn: String,
-        search_term: String,
+        _collumn: String,
+        _search_term: String,
     ) -> Vec<&'a str> {
-        let name = "Tags".to_string();
+        let _name = "Tags".to_string();
         let list = vec!["a", "b"];
 
         //println!("PRAGMA table_info({});", &table);
@@ -1335,7 +1335,7 @@ impl Main {
         let mut toexec = binding.prepare(&query_string).unwrap();
         let mut rows = toexec.query(params![]).unwrap();
 
-        for each in rows.next().unwrap() {
+        for _each in rows.next().unwrap() {
             out = true;
         }
         out
@@ -1415,7 +1415,7 @@ impl Main {
     ///
     pub fn check_version(&mut self) {
         let mut query_string = "SELECT num FROM Settings WHERE name='VERSION';";
-        let mut query_string_manual = "SELECT num FROM Settings_Old WHERE name='VERSION';";
+        let query_string_manual = "SELECT num FROM Settings_Old WHERE name='VERSION';";
 
         let mut g1 = self.quer_int(query_string.to_string()).unwrap();
 
@@ -1431,10 +1431,10 @@ impl Main {
                 let vers: Result<usize> = each.get(0);
                 let izce;
                 match &ver {
-                    Ok(string_ver) => {
+                    Ok(_string_ver) => {
                         izce = ver.unwrap().parse::<usize>().unwrap();
                     }
-                    Err(unk_err) => {
+                    Err(_unk_err) => {
                         //let vers:usize = each.get(0).unwrap();
 
                         izce = vers.unwrap();
@@ -1579,7 +1579,7 @@ impl Main {
     fn load_jobs(&mut self, conn: &mut Connection) {
         logging::info_log(&"Database is Loading: Jobs".to_string());
         let mut jobex = conn.prepare("SELECT * FROM Jobs").unwrap();
-        let mut jobs = jobex
+        let jobs = jobex
             .query_map([], |row| {
                 Ok(sharedtypes::DbJobsObj {
                     time: row.get(0).unwrap(),
@@ -1612,7 +1612,7 @@ impl Main {
     fn load_parents(&mut self, conn: &mut Connection) {
         logging::info_log(&"Database is Loading: Parents".to_string());
         let mut paex = conn.prepare("SELECT * FROM Parents").unwrap();
-        let mut parents = paex
+        let parents = paex
             .query_map([], |row| {
                 Ok(sharedtypes::DbParentsObj {
                     tag_namespace_id: row.get(0).unwrap(),
@@ -1674,7 +1674,7 @@ impl Main {
     fn load_settings(&mut self, conn: &mut Connection) {
         logging::info_log(&"Database is Loading: Settings".to_string());
         let mut setex = conn.prepare("SELECT * FROM Settings").unwrap();
-        let mut settings = setex
+        let settings = setex
             .query_map([], |row| {
                 Ok(sharedtypes::DbSettingObj {
                     name: row.get(0)?,
@@ -1713,7 +1713,7 @@ impl Main {
     fn load_tags(&mut self, conn: &mut Connection) {
         logging::info_log(&"Database is Loading: Tags".to_string());
         let mut taex = conn.prepare("SELECT * FROM Tags").unwrap();
-        let mut tag = taex.query_map([], |row| {
+        let tag = taex.query_map([], |row| {
             Ok(sharedtypes::DbTagObj {
                 id: row.get(0).unwrap(),
                 name: row.get(1).unwrap(),
@@ -1823,7 +1823,7 @@ impl Main {
     /// Pulls OLD db into memdb.
     /// main: &mut Main, conn: &Connection
     ///
-    pub fn load_mesm(&mut self, addtodb: bool) {
+    pub fn load_mesm(&mut self, _addtodb: bool) {
         dbg!("Loading DB.");
         //let mut brr =  tempmem._conn.borrow();1
 
@@ -1835,7 +1835,7 @@ impl Main {
         let mut hashmap_files: HashMap<(usize, String, String, String), u32> = HashMap::new();
         let mut hashmap_jobs: HashMap<(String, String, String, sharedtypes::CommitType), u32> =
             HashMap::new();
-        let mut hashmap_namespace: HashMap<(usize, String, String), u32> = HashMap::new();
+        let _hashmap_namespace: HashMap<(usize, String, String), u32> = HashMap::new();
         let mut hashmap_parents: HashMap<(usize, usize, usize, usize), u32> = HashMap::new();
         let mut hashmap_namespace: HashMap<(usize, String, String), u32> = HashMap::new();
         let mut hashmap_relationships: HashMap<(usize, usize), u32> = HashMap::new();
@@ -1855,11 +1855,11 @@ impl Main {
                 let b: usize = b1.parse::<usize>().unwrap();
                 let re1: String = match set.get(1) {
                     Ok(re1) => re1,
-                    Err(error) => "".to_string(),
+                    Err(_error) => "".to_string(),
                 };
                 let re3: String = match set.get(3) {
                     Ok(re3) => re3,
-                    Err(error) => "".to_string(),
+                    Err(_error) => "".to_string(),
                 };
 
                 hashmap_settings.insert((set.get(0).unwrap(), re1, b.try_into().unwrap(), re3), 0);
@@ -1924,8 +1924,8 @@ impl Main {
                 let e1: String = job.get(3).unwrap();
                 let c1: String = job.get(4).unwrap();
                 let c: sharedtypes::CommitType = sharedtypes::stringto_commit_type(&c1);
-                let a: usize = a1.parse::<usize>().unwrap();
-                let b: usize = b1.parse::<usize>().unwrap();
+                let _a: usize = a1.parse::<usize>().unwrap();
+                let _b: usize = b1.parse::<usize>().unwrap();
                 hashmap_jobs.insert((d1, e1, b1, c), 0);
             }
         }
@@ -2424,7 +2424,7 @@ impl Main {
         param: String,
         addtodb: bool,
     ) {
-        let temp: isize = -9999;
+        let _temp: isize = -9999;
 
         if addtodb {
             self.setting_add_sql(name.to_string(), pretty.to_string(), num, param.to_string());

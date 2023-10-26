@@ -1,5 +1,5 @@
 use nohash_hasher::NoHashHasher;
-use pipe;
+
 use std::fmt;
 use std::{collections::HashMap, hash::BuildHasherDefault};
 use strum::IntoEnumIterator;

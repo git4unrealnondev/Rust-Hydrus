@@ -70,7 +70,7 @@ pub async fn dltext_new(
     url_string: String,
     ratelimit_object: &mut Ratelimiter,
     client: &mut Client,
-    pluginmanager: Arc<Mutex<PluginManager>>,
+    _pluginmanager: Arc<Mutex<PluginManager>>,
 ) -> Result<String, reqwest::Error> {
     //let mut ret: Vec<AHashMap<String, AHashMap<String, Vec<String>>>> = Vec::new();
     //let ex = Executor::new();
@@ -138,7 +138,7 @@ pub async fn dlfile_new(
     file: &sharedtypes::FileObject,
     location: &String,
     pluginmanager: Arc<Mutex<PluginManager>>,
-    DB: Arc<Mutex<database::Main>>,
+    _DB: Arc<Mutex<database::Main>>,
 ) -> (String, String) {
     let mut boolloop = true;
     let mut hash = String::new();
@@ -235,7 +235,7 @@ pub fn hash_file(filename: &String) -> String {
     let mut hasher = Sha512::new();
     let mut file = fs::File::open(filename).unwrap();
 
-    let bytes_written = io::copy(&mut file, &mut hasher).unwrap();
+    let _bytes_written = io::copy(&mut file, &mut hasher).unwrap();
     let hash_bytes = hasher.finalize();
 
     format!("{:X}", hash_bytes)
