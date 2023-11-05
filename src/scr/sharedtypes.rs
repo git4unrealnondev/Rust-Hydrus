@@ -1,4 +1,5 @@
 use nohash_hasher::NoHashHasher;
+use serde::{Deserialize, Serialize};
 
 use std::fmt;
 use std::{collections::HashMap, hash::BuildHasherDefault};
@@ -114,7 +115,7 @@ pub struct DbSettingObj {
 ///
 /// Database Tags Object
 ///
-#[derive(Debug)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct DbTagObj {
     pub id: Option<usize>,
     pub name: String,

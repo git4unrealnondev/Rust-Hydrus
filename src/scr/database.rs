@@ -708,38 +708,15 @@ impl Memdb {
     ///
     /// Adds a file to memdb.Tags
     ///
-    /*pub fn tags_name_putl_test(&mut self, tag: String, namespace: &String, id: Option<usize>, namespace_id: Option<usize>) -> usize {
-        if self._tags_name.contains_key(&tag) {
-            return self._tags_name[&tag];
-        }
-        let ret_name: usize = self._tags_max_id;
-
-        self._tags_name.insert(tag, ret_name);
-
-        self.namespace_put(namespace, id);
-
-        let ret_tag: usize = self._tags_max_id;
-        //self._tags_relate.insert((tag.to_string(), *namespace), ret_name);
-
-        self.max_tags_increment();
-
-        ret_tag
-    }*/
-
-    ///
-    /// Adds a file to memdb.Tags
-    ///
-    pub fn tags_put(&mut self, tag: &String, namespace: &usize, id: Option<usize>) -> usize {
+    pub fn tags_put(&mut self, tag: String, namespace: &usize, id: Option<usize>) -> usize {
         //if self._tags_name.contains_key(tag) {
         //    return self._tags_name[tag];
         //}
         if self
             ._tags_relate
-            .contains_key(&(tag.to_string(), *namespace))
+            .contains_key(&(tag.clone(), *namespace))
         {
-            //let tagid = self._tags_name[&(tags.to_string(), namespace)];
-
-            let urin: usize = self._tags_relate[&(tag.to_string(), *namespace)];
+            let urin: usize = self._tags_relate[&(tag, *namespace)];
             return urin;
         }
         //println!("{} {}", tag, namespace);
@@ -749,11 +726,11 @@ impl Memdb {
             Some(uid) => uid,
         };
 
-        self._tags_name.insert(tag.to_string(), ret_name);
+        self._tags_name.insert(tag.clone(), ret_name);
         self._tags_namespace.insert(*namespace, 0);
 
         self._tags_relate
-            .insert((tag.to_string(), *namespace), ret_name);
+            .insert((tag, *namespace), ret_name);
 
         self.max_tags_increment();
 
@@ -1001,6 +978,9 @@ impl Main {
         self._inmemdb.tag_id_get(uid)
     }
 
+    ///
+    /// 
+    ///
     pub fn relationship_get_fileid(&self, tag: &usize) -> HashSet<usize> {
         self._inmemdb.relationship_get_fileid(tag)
     }
@@ -1489,7 +1469,6 @@ impl Main {
     pub fn check_and_load(&mut self, table: sharedtypes::LoadDBTable, conn: &mut Connection) {
         match &self._tables_loaded {
             None => {
-                dbg!(&table);
                 self.load_table(&table, conn);
                 self._tables_loaded = Some(Vec::new());
                 self._tables_loaded.as_mut().unwrap().push(table)
@@ -1726,7 +1705,7 @@ impl Main {
             Ok(tags) => {
                 for each in tags {
                     if let Ok(res) = each {
-                        self.tag_add_db(&res.name, &res.namespace.unwrap(), res.id);
+                        self.tag_add_db(res.name, &res.namespace.unwrap(), res.id);
                     } else {
                         error!("Bad Tag cant load {:?}", each);
                     }
@@ -2242,8 +2221,8 @@ impl Main {
     ///
     /// Adds tags into inmemdb
     ///
-    fn tag_add_db(&mut self, tags: &String, namespace: &usize, id: Option<usize>) -> usize {
-        self._inmemdb.tags_put(&tags, &namespace, id)
+    fn tag_add_db(&mut self, tags: String, namespace: &usize, id: Option<usize>) -> usize {
+        self._inmemdb.tags_put(tags, &namespace, id)
     }
 
     ///
@@ -2275,7 +2254,7 @@ impl Main {
         id: Option<usize>,
     ) -> usize {
         //let tags_grab = self._inmemdb.tags_get(tags.to_string(), namespace);
-        let tag_id = self.tag_add_db(&tags, &namespace, id);
+        let tag_id = self.tag_add_db(tags.to_string(), &namespace, id);
         self.db_commit_man();
         //println!("{} {} {} {:?} {}", tags, namespace, addtodb, tags_grab, tag_id);
         if addtodb && id.is_none() {

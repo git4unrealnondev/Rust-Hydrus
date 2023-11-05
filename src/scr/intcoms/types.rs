@@ -1,3 +1,6 @@
+use crate::{sharedtypes::DbTagObj};
+
+
 #[derive(Debug)]
 pub enum eComType {
     SendOnly,
@@ -13,7 +16,10 @@ pub enum eControlSigs {
     BREAK, // STOP NOW PANIC
 }
 
-pub struct coms {
+///
+/// Main communication block structure.
+///
+pub struct Coms {
     pub com_type: eComType,
     pub control: eControlSigs,
 }
@@ -36,7 +42,7 @@ unsafe fn any_as_u8_slice<T: Sized>(p: &T) -> &[u8] {
 ///
 /// Turns bytes into a coms structure.
 ///
-pub fn con_coms(input: &mut [u8; 2]) -> coms {
+pub fn con_coms(input: &mut [u8; 2]) -> Coms {
     unsafe { std::mem::transmute(*input) }
 }
 
@@ -47,6 +53,12 @@ pub fn con_econtrolsigs(input: &mut [u8; 1]) -> eControlSigs {
     unsafe { std::mem::transmute(*input) }
 }
 
+///
+/// Turns bytes into a uszie structure.
+///
+pub fn con_usize(input: &mut [u8; 8]) -> usize {
+    unsafe { std::mem::transmute(*input) }
+}
 
 ///
 /// Turns bytes into a SupportedRequests structure.
@@ -61,8 +73,9 @@ pub fn con_supportedrequests(input: &mut [u8; 16]) -> SupportedRequests {
 #[derive(Debug)]
 pub enum SupportedDBRequests {
     db_tag_id_get(usize),
-    relationship_get_tagid(usize),
-    file_get_id(usize),
+    db_relationship_get_tagid(usize),
+    db_get_file(usize),
+    db_relationship_get_fileid(usize),
 }
 
 ///
@@ -79,4 +92,17 @@ pub enum SupportedPluginRequests {}
 pub enum SupportedRequests {
     Database(SupportedDBRequests),
     PluginCross(SupportedPluginRequests),
+}
+
+///
+/// Will send over arbitrary data
+///
+pub struct ArbitraryData {
+    pub buffer_size: usize,
+    pub buffer_data: Vec<u8>,
+}
+
+pub fn demo<T, const N: usize>(v: Vec<T>) -> [T; N] {
+    v.try_into()
+        .unwrap_or_else(|v: Vec<T>| panic!("Expected a Vec of length {} but it was {}", N, v.len()))
 }

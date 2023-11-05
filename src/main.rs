@@ -132,6 +132,7 @@ fn main() {
     let mut data = makedb(dbloc);
     let mut alt_connection = database::dbinit(&dbloc.to_string()); // NOTE ONLY USER FOR LOADING DB DYNAMICALLY
     data.load_table(&sharedtypes::LoadDBTable::Settings, &mut alt_connection);
+    data.load_table(&sharedtypes::LoadDBTable::All, &mut alt_connection); // TODO REVERT ALL TO SETTINGS
 
     data.transaction_flush();
     data.check_version();
@@ -245,7 +246,7 @@ fn main() {
                         }
                     } else if tag.len() >= 3 {
                         logging::info_log(&"Three items were passed into the tag search using first and second only.".to_string());
-                    } else if tag.len() == 0 {
+                    } else if tag.is_empty() {
                         logging::info_log(&"Tag was passed into search but no info was provided. THIS SHOULDN'T HAPPEN.".to_string());
                     }
                 }

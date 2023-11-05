@@ -43,10 +43,10 @@ impl PluginManager {
         reftoself.load_plugins(&pluginsloc);
 
         let (snd, rcv) = mpsc::channel();
-        
+
         let mut ipc_coms = server::plugin_ipc_interact::new(main_db);
-        let srv =  std::thread::spawn(move || ipc_coms.spawn_listener(snd));
-        
+        let srv = std::thread::spawn(move || ipc_coms.spawn_listener(snd));
+
         //let srv = std::thread::spawn(move || server::main(snd));
         let _ = rcv.recv();
         if let Err(e) = client::main() {
