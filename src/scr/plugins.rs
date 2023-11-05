@@ -1,13 +1,9 @@
-
 use libloading::{self, Library};
 use log::{error, info, warn};
 use std::collections::HashMap;
-
 use std::path::Path;
 use std::slice::SliceIndex;
-
-use std::sync::Arc;
-use std::sync::{Mutex};
+use std::sync::{Mutex, Arc, mpsc};
 use std::thread::JoinHandle;
 use std::{fs, thread};
 
@@ -36,12 +32,12 @@ pub struct PluginManager {
 /// Plugin Manager Handler
 ///
 impl PluginManager {
-    pub fn new(pluginsloc: String, MainDb: Arc<Mutex<database::Main>>) -> Self {
+    pub fn new(pluginsloc: String, main_db: Arc<Mutex<database::Main>>) -> Self {
         let mut reftoself = PluginManager {
             _plugin: HashMap::new(),
             _callback: HashMap::new(),
             _plugin_coms: HashMap::new(),
-            _database: MainDb.clone(),
+            _database: main_db.clone(),
             _thread: HashMap::new(),
             _thread_path: HashMap::new(),
             _thread_data_share: HashMap::new(),
@@ -243,7 +239,7 @@ impl PluginManager {
     ///
     /// Parses output from plugin.
     ///
-    fn ParsePluginOutput(&mut self, plugin_data: Vec<sharedtypes::DBPluginOutputEnum>) {
+    fn parse_plugin_output(&mut self, plugin_data: Vec<sharedtypes::DBPluginOutputEnum>) {
         let mut unwrappy = self._database.lock().unwrap();
 
         for each in plugin_data {
@@ -388,7 +384,7 @@ impl PluginManager {
                 output = plugindatafunc(cursorpass, hashs, exts);
             }
 
-            self.ParsePluginOutput(output);
+            self.parse_plugin_output(output);
         }
     }
 }

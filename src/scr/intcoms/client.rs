@@ -18,8 +18,8 @@ fn call_conn(size: usize, _message: String) -> anyhow::Result<()> {
         // enum we're working with here. Maybe someone should make a macro for this.
         use NameTypeSupport::*;
         match NameTypeSupport::query() {
-            OnlyPaths => "/tmp/example.sock",
-            OnlyNamespaced | Both => "@example.sock",
+            OnlyPaths => "/tmp/RustHydrus.sock",
+            OnlyNamespaced | Both => "@RustHydrus.sock",
         }
     };
 

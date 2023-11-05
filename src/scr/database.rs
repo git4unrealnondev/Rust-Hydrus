@@ -696,13 +696,13 @@ impl Memdb {
     ///
     /// Namespace get name from id
     ///
-    pub fn namespace_id_get(&self, uid: &usize) -> String {
+    pub fn namespace_id_get(&self, uid: &usize) -> Option<String> {
         for (key, val) in self._namespace_name.iter() {
             if val == uid {
-                return key.to_string();
+                return Some(key.to_string());
             }
         }
-        "".to_string()
+        None
     }
 
     ///
@@ -1335,7 +1335,7 @@ impl Main {
         let mut toexec = binding.prepare(&query_string).unwrap();
         let mut rows = toexec.query(params![]).unwrap();
 
-        for _each in rows.next().unwrap() {
+        if let Some(_each) = rows.next().unwrap() {
             out = true;
         }
         out
@@ -1426,7 +1426,7 @@ impl Main {
             let mut toexec = binding.prepare(&query_string).unwrap();
             let mut rows = toexec.query(params![]).unwrap();
             g1.clear();
-            for each in rows.next().unwrap() {
+            while let Some(each) = rows.next().unwrap() {
                 let ver: Result<String> = each.get(0);
                 let vers: Result<usize> = each.get(0);
                 let izce;
@@ -1453,7 +1453,7 @@ impl Main {
             let mut toexec = binding.prepare(&query_string).unwrap();
             let mut rows = toexec.query(params![]).unwrap();
             g1.clear();
-            for each in rows.next().unwrap() {
+            while let Some(each) = rows.next().unwrap() {
                 let ver: String = each.get(0).unwrap();
                 //let vers = ver.try_into().unwrap();
                 let izce = ver.parse().unwrap();

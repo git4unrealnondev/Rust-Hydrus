@@ -4,6 +4,8 @@ use std::{
     io::{self, prelude::*, BufReader},
     sync::mpsc::Sender,
 };
+use std::sync::{Mutex, Arc, mpsc};
+use crate::{database, sharedtypes::DbTagObj};
 
 mod types;
 
@@ -28,8 +30,8 @@ pub fn main(notify: Sender<()>) -> anyhow::Result<()> {
         // enum we're working with here. Maybe someone should make a macro for this.
         use NameTypeSupport::*;
         match NameTypeSupport::query() {
-            OnlyPaths => "/tmp/example.sock",
-            OnlyNamespaced | Both => "@example.sock",
+            OnlyPaths => "/tmp/RustHydrus.sock",
+            OnlyNamespaced | Both => "@RustHydrus.sock",
         }
     };
 
@@ -129,4 +131,55 @@ another process and try again.",
         //buffer.clear();
     }
     Ok(())
+}
+
+struct plugin_ipc_interact{
+    db_interface: db_interact, 
+}
+
+///
+/// This is going to be the main way to talk to the plugin system and stuffins.
+///
+impl plugin_ipc_interact{
+    pub fn new(main_db: Arc<Mutex<database::Main>>) -> Self{
+        plugin_ipc_interact{db_interface: db_interact{_database: main_db}}
+    }
+}
+
+
+
+
+struct db_interact{
+    _database: Arc<Mutex<database::Main>>,
+}
+
+///
+/// Storage object for database interactions with the plugin system
+///
+impl db_interact {
+    
+    ///
+    /// Stores database inside of self for DB interactions with plugin system
+    ///
+    pub fn new(main_db: Arc<Mutex<database::Main>>) -> Self {
+        let reftoself = db_interact {_database: main_db};
+        
+        reftoself
+    }
+    
+    pub fn db_tag_id_get(&mut self, uid: &usize) -> Option<DbTagObj> {
+            self._database.lock().unwrap().tag_id_get(uid)
+    }
+    pub fn db_relationship_get_tagid(&mut self, tag: &usize) -> Vec<usize> {
+        self._database.lock().unwrap().relationship_get_tagid(tag)
+    }
+    pub fn db_get_file(&mut self, fileid: &usize) -> Option<(String, String, String)> {
+        self._database.lock().unwrap().file_get_id(fileid)
+    }
+}
+
+enum db_transaction {
+    db_tag_id_get,
+    db_relationship_get_tagid,
+    db_get_file
 }

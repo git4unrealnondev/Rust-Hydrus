@@ -227,7 +227,8 @@ pub async fn dlfile_new(
         .unwrap()
         .plugin_on_download(bytes.as_ref(), &hash, &file_ext);
 
-    dbg!(&hash);
+    println!("Downloaded hash: {}", &hash);
+    
     (hash, file_ext)
 }
 

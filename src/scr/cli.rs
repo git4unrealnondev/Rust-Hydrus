@@ -157,7 +157,7 @@ pub fn main() -> sharedtypes::AllFields {
             let taskmatch = task.unwrap().subcommand_matches(&tasktype);
             if let Some(_) = taskmatch {
                 match taskenum {
-                    sharedtypes::Tasks::Csv(Test, csvdata) => {
+                    sharedtypes::Tasks::Csv(test, csvdata) => {
                         dbg!(taskmatch);
                         let location: &String = taskmatch.unwrap().get_one(&tasktype).unwrap();
 
@@ -185,7 +185,7 @@ pub fn main() -> sharedtypes::AllFields {
                             }
                         }
 
-                        dbg!(Test, csvdata);
+                        dbg!(test, csvdata);
 
                         let mv = taskmatch.unwrap().contains_id(&"move");
                         let cp = taskmatch.unwrap().contains_id(&"copy");

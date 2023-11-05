@@ -8,36 +8,33 @@ edition = "2021"
 [dependencies]
 
 libloading = "0.7.3"
-reqwest = { version = "0.11.11", features = ["brotli", "blocking", "cookies", "gzip"] }
-tokio = { version = "1", features = ["full"] }
+reqwest = { version = "0.11.11", features = ["cookies", "gzip", "gzip","brotli", "default-tls", "cookie_store", "cookie_crate"], default-features = false }
+#tokio = { version = "1", features = ["full"] }
 url = "2.3.1"
 http = "0.2.8"
 ratelimit = "0.7.0"
 async-std = { version = "1", features = ["attributes", "tokio1"] }
-rusqlite = {version = "0.27.0", features = ["bundled"] }
+rusqlite = {version = "0.27.0", features=["modern_sqlite", "bundled"] }
 fast_log = "1.5.25"
 ahash = "0.7.6"
-clap = "3.2.8"
-bytes = "1.4.0"
-sha2 = "0.10.6"
-futures = "0.3.24"
+clap = { features = ["std"], default-features = false, version = "3.2.8" }
+bytes = { default-features = false, version = "1.4.0" }
+sha2 = { default-features = false, version = "0.10.6" }
+futures = { features = ["executor"], default-features = false, version = "0.3.24" }
 urlparse = "0.7.3"
-log = {version="0.4.0", features = ["max_level_debug", "release_max_level_info"]}
+log = {version="0.4.0", default-features = false }
 strum_macros = "0.25.1"
-strum = "0.25.0"
+strum = { default-features = false, version = "0.25.0" }
 csv = "1.2.2"
 file-format = "0.18.0"
-serde = {version = "1.0.171", features = ["derive"]}
+serde = {version = "1.0.171", features = ["derive"], default-features = false }
 nohash-hasher = "0.2.0"
-md5 = "0.7.0"
-sha1 = "0.10.5"
+md5 = { default-features = false, version = "0.7.0" }
+sha1 = { default-features = false, features=["std"],version = "0.10.5" }
 json = "0.12.4"
-chrono = "0.4.26"
-pipe = { version = "0.4.0", features = ["bidirectional"] }
-readwrite = "0.2.0"
-axum = "0.6.20"
+chrono = { default-features = false, version = "0.4.26" }
+interprocess = { default-features = false, version = "1.2.1" }
 os_pipe = "1.1.4"
-interprocess = "1.2.1"
 anyhow = "1.0.75"
 
 [profile.release]

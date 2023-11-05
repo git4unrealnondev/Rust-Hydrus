@@ -24,13 +24,13 @@ use std::time::Duration;
 use strum::IntoEnumIterator;
 
 
-use tokio::runtime::Runtime;
+//use tokio::runtime::Runtime;
 
 
 
 pub struct threads {
     _workers: Vec<Worker>,
-    _runtime: Runtime,
+    //_runtime: Runtime,
 }
 
 ///
@@ -41,11 +41,11 @@ impl threads {
     pub fn new() -> Self {
         let workers = Vec::new();
 
-        let rt = Runtime::new().unwrap();
+        //let rt = Runtime::new().unwrap();
 
         threads {
             _workers: workers,
-            _runtime: rt,
+            //_runtime: rt,
         }
     }
 
@@ -73,7 +73,7 @@ impl threads {
             self._workers.len(),
             scraper,
             jobs,
-            &mut self._runtime,
+            //&mut self._runtime,
             db,
             scrapermanager,
             pluginmanager,
@@ -127,7 +127,7 @@ impl Worker {
         id: usize,
         scraper: scraper::InternalScraper,
         jobs: Vec<JobsRef>,
-        rt: &mut Runtime,
+        //rt: &mut Runtime,
         dba: &mut Arc<Mutex<database::Main>>,
         libloading: libloading::Library,
         pluginmanager: Arc<Mutex<PluginManager>>,
@@ -142,11 +142,11 @@ impl Worker {
         let jblist = jobs.clone();
         let scrap = scraper.clone();
         //
-        let _rta = rt;
+        //let _rta = rt;
 
         //let handle = rt.handle().clone();
         //let handle = Handle::current();
-        let _insidert = Runtime::new().unwrap();
+        //let _insidert = Runtime::new().unwrap();
 
         // Download code goes inside of thread spawn.
         // All urs that Have been pushed into checking.
