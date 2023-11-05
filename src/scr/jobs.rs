@@ -1,6 +1,5 @@
 use crate::database;
 
-
 use crate::plugins::PluginManager;
 use crate::scraper;
 use crate::scraper::InternalScraper;
@@ -11,14 +10,11 @@ use crate::threading;
 use crate::time_func;
 use ahash::AHashMap;
 
-use log::{info};
-
+use log::info;
 
 use rusqlite::Connection;
 use std::collections::hash_map::Entry;
 use std::sync::{Arc, Mutex};
-
-
 
 pub struct Jobs {
     _jobid: Vec<u128>,

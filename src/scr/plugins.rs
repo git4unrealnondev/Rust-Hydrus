@@ -2,21 +2,18 @@ use libloading::{self, Library};
 use log::{error, info, warn};
 use std::collections::HashMap;
 use std::path::Path;
-use std::slice::SliceIndex;
-use std::sync::{Mutex, Arc, mpsc};
+use std::sync::{mpsc, Arc, Mutex};
 use std::thread::JoinHandle;
 use std::{fs, thread};
 
+use crate::database;
 use crate::logging;
 use crate::sharedtypes;
-use crate::{database};
 
 use std::io::Read;
 
-#[path = "./intcoms/client.rs"]
-mod client;
-#[path = "./intcoms/server.rs"]
-mod server;
+use crate::client;
+use crate::server;
 
 pub struct PluginManager {
     _plugin: HashMap<String, libloading::Library>,
@@ -45,15 +42,19 @@ impl PluginManager {
 
         reftoself.load_plugins(&pluginsloc);
 
-        /*let (snd, rcv) = mpsc::channel();
-        let srv = std::thread::spawn(move || server::main(snd));
+        let (snd, rcv) = mpsc::channel();
+        
+        let mut ipc_coms = server::plugin_ipc_interact::new(main_db);
+        let srv =  std::thread::spawn(move || ipc_coms.spawn_listener(snd));
+        
+        //let srv = std::thread::spawn(move || server::main(snd));
         let _ = rcv.recv();
         if let Err(e) = client::main() {
             eprintln!("Client exited early with error: {:#}", e);
         }
         if let Err(e) = srv.join().expect("server thread panicked") {
             eprintln!("Server exited early with error: {:#}", e);
-        }*/
+        }
         reftoself
     }
 

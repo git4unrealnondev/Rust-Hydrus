@@ -6,8 +6,8 @@ use csv;
 use file_format::FileFormat;
 use log::{error, info};
 use serde::Deserialize;
+use std::fs;
 use std::path::Path;
-use std::{fs};
 
 #[derive(Debug, Deserialize)]
 struct Row {

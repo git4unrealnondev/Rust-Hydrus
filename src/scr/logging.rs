@@ -27,6 +27,9 @@ pub fn error_log(error: &String) {
     panic!("{}", error);
 }
 
+///
+/// Dumps info to log and prints it.
+///
 pub fn info_log(info: &String) {
     info!("{}", info);
     println!("{}", info);

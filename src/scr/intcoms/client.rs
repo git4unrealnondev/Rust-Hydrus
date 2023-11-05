@@ -27,7 +27,7 @@ fn call_conn(size: usize, _message: String) -> anyhow::Result<()> {
         com_type: types::eComType::BiDirectional,
         control: types::eControlSigs::SEND,
     };
-    let b_struct = types::coms_to_bytes(&coms_struct);
+    let b_struct = types::x_to_bytes(&coms_struct);
     let buffers = &mut [b'0', b'0'];
 
     // Preemptively allocate a sizeable buffer for reading.
@@ -42,14 +42,17 @@ fn call_conn(size: usize, _message: String) -> anyhow::Result<()> {
     // Wrap it into a buffered reader right away so that we could read a single line out of it.
     let mut conn = BufReader::new(conn);
 
-    // Write our message into the stream. This will finish either when the whole message has been
-    // writen or if a write operation returns an error. (`.get_mut()` is to get the writer,
-    // `BufReader` doesn't implement a pass-through `Write`.)
+    // Sends the plugin com type.
     conn.get_mut()
         .write_all(b_struct)
         .context("Socket send failed")?;
 
-    // We now employ the buffer we allocated prior and read until EOF, which the server will
+    
+    let typerequets = types::SupportedRequests::Database(types::SupportedDBRequests::db_tag_id_get(13));
+    
+    init_data_request(&mut conn,&typerequets);
+    
+    /*// We now employ the buffer we allocated prior and read until EOF, which the server will
     // similarly invoke with `.shutdown()`, verifying validity of UTF-8 on the fly.
     conn.read_line(&mut buffer)
         .context("Socket receive failed")?;
@@ -65,6 +68,24 @@ fn call_conn(size: usize, _message: String) -> anyhow::Result<()> {
         .write_all(b"beans1\n")
         .context("Socket send failed")?;
     // Print out the result, getting the newline for free!
-    print!("Server answered: {}", buffer);
+    print!("Server answered: {}", buffer);*/
     Ok(())
+}
+
+pub fn init_data_request(conn: &mut BufReader<LocalSocketStream>, requesttype: &types::SupportedRequests) {
+    let buffer: &mut [u8; 1] = &mut [b'0'];
+    conn.read(buffer).context("plugin failed 2nd step init").unwrap();
+    
+    let econtrolsig = types::con_econtrolsigs(buffer);
+    
+    match econtrolsig {
+        types::eControlSigs::HALT=> {return},
+        types::eControlSigs::SEND=> {},
+        types::eControlSigs::BREAK=> {panic!("This plugin was called to break. Will break NOW.");},
+    }
+    
+    let b_requesttype = types::x_to_bytes(requesttype);
+    conn.get_mut().write_all(b_requesttype).unwrap();
+    println!("clinet dnoe");
+    
 }

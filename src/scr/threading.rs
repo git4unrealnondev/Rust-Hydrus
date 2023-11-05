@@ -15,7 +15,6 @@ use futures;
 
 use log::{error, info};
 
-
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::thread;
@@ -23,10 +22,7 @@ use std::time::Duration;
 
 use strum::IntoEnumIterator;
 
-
 //use tokio::runtime::Runtime;
-
-
 
 pub struct threads {
     _workers: Vec<Worker>,

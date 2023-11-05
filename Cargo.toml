@@ -41,6 +41,6 @@ anyhow = "1.0.75"
 opt-level = "z"
 lto=true
 codegenunits=1
-strip = false
+strip = true
 panic = "abort"
 debug = true

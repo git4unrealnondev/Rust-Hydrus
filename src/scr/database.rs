@@ -33,12 +33,12 @@ macro_rules! vec_of_strings {
     ($($x:expr),*) => (vec![$($x.to_string()),*]);
 }
 
-pub enum tag_relate_conjoin {
+pub enum TagRelateConjoin {
     Tag,
     Error,
     Relate,
     Conjoin,
-    Tag_and_Relate,
+    TagAndRelate,
     None,
 }
 
@@ -327,7 +327,7 @@ impl Memdb {
         tag_id: usize,
         relate_namespace_id: usize,
         relate_tag_id: usize,
-    ) -> (tag_relate_conjoin, &usize) {
+    ) -> (TagRelateConjoin, &usize) {
         // Checks if keys exists in each hashmap.
         // Twohashmaps and one relational hashmap. Should be decently good.
         let tag_usize = self._parents_tag.get(&(tag_namespace_id, tag_id));
@@ -337,19 +337,19 @@ impl Memdb {
 
         match tag_usize {
             None => match relate_usize {
-                None => (tag_relate_conjoin::Tag_and_Relate, &0),
-                Some(_) => (tag_relate_conjoin::Tag, &0),
+                None => (TagRelateConjoin::TagAndRelate, &0),
+                Some(_) => (TagRelateConjoin::Tag, &0),
             },
             Some(_) => match relate_usize {
-                None => (tag_relate_conjoin::Relate, tag_usize.unwrap()),
+                None => (TagRelateConjoin::Relate, tag_usize.unwrap()),
                 Some(_) => {
                     let tag_conjoin = self
                         ._parents_conjoin
                         .get(&(*tag_usize.unwrap(), *relate_usize.unwrap()));
 
                     match tag_conjoin {
-                        None => (tag_relate_conjoin::Conjoin, &0),
-                        Some(_) => (tag_relate_conjoin::None, tag_conjoin.unwrap()),
+                        None => (TagRelateConjoin::Conjoin, &0),
+                        Some(_) => (TagRelateConjoin::None, tag_conjoin.unwrap()),
                     }
                 }
             },
@@ -387,18 +387,18 @@ impl Memdb {
         tag_id: usize,
         relate_namespace_id: usize,
         relate_tag_id: usize,
-    ) -> tag_relate_conjoin {
+    ) -> TagRelateConjoin {
         let (tag_enum, fin_uint) =
             self.parents_get(tag_namespace_id, tag_id, relate_namespace_id, relate_tag_id);
 
         match tag_enum {
-            tag_relate_conjoin::Error => {
+            TagRelateConjoin::Error => {
                 // Error happened. :D
                 error!("WARNING: PARENTS_GET GOT ERROR FOR UNKNOWN POSSIBLE DB CORRUPTION: {} {} : {} {} :", tag_namespace_id, tag_id, relate_namespace_id, relate_tag_id);
                 error!("PANICING DUE TO PARENTS_GET FAIL");
                 panic!("Check Log for details");
             }
-            tag_relate_conjoin::Tag => {
+            TagRelateConjoin::Tag => {
                 // Missing tag and namespace
                 let namespace = tag_namespace_id;
                 let fint = *fin_uint;
@@ -408,9 +408,9 @@ impl Memdb {
                     .insert((self._parents_tag_max_id, fint), self._parents_max_id);
                 self.parents_tag_increment();
                 self.parents_conjoin_increment();
-                tag_relate_conjoin::Tag
+                TagRelateConjoin::Tag
             }
-            tag_relate_conjoin::Relate => {
+            TagRelateConjoin::Relate => {
                 // Missing tag_relate and namespace_relate
                 let fint = *fin_uint;
                 self._parents_relate.insert(
@@ -421,9 +421,9 @@ impl Memdb {
                     .insert((fint, self._parents_relate_max_id), self._parents_max_id);
                 self.parents_relate_increment();
                 self.parents_conjoin_increment();
-                tag_relate_conjoin::Relate
+                TagRelateConjoin::Relate
             }
-            tag_relate_conjoin::Conjoin => {
+            TagRelateConjoin::Conjoin => {
                 // Missing Conjoin linkage between two hashmaps
                 let tid = self._parents_tag.get(&(tag_namespace_id, tag_id)).unwrap();
                 let rid = self
@@ -433,9 +433,9 @@ impl Memdb {
                 self._parents_conjoin
                     .insert((*tid, *rid), self._parents_max_id);
                 self.parents_conjoin_increment();
-                tag_relate_conjoin::Conjoin
+                TagRelateConjoin::Conjoin
             }
-            tag_relate_conjoin::Tag_and_Relate => {
+            TagRelateConjoin::TagAndRelate => {
                 // Missing tag&namespace and relate&namespace
                 self._parents_tag
                     .insert((tag_namespace_id, tag_id), self._parents_tag_max_id);
@@ -450,11 +450,11 @@ impl Memdb {
                 self.parents_tag_increment();
                 self.parents_relate_increment();
                 self.parents_conjoin_increment();
-                tag_relate_conjoin::Tag_and_Relate
+                TagRelateConjoin::TagAndRelate
             }
-            tag_relate_conjoin::None => {
+            TagRelateConjoin::None => {
                 // Missing Nothing
-                tag_relate_conjoin::None
+                TagRelateConjoin::None
             }
         }
     }
@@ -2174,7 +2174,7 @@ impl Main {
         tag_id: usize,
         relate_namespace_id: usize,
         relate_tag_id: usize,
-    ) -> tag_relate_conjoin {
+    ) -> TagRelateConjoin {
         self._inmemdb
             .parents_put(tag_namespace_id, tag_id, relate_namespace_id, relate_tag_id)
     }
@@ -2194,7 +2194,7 @@ impl Main {
             self.parents_add_db(tag_namespace_id, tag_id, relate_namespace_id, relate_tag_id);
 
         match todo {
-            tag_relate_conjoin::Tag => {
+            TagRelateConjoin::Tag => {
                 if addtodb {
                     self.parents_add_sql(
                         &tag_namespace_id,
@@ -2204,8 +2204,8 @@ impl Main {
                     );
                 }
             }
-            tag_relate_conjoin::Error => {}
-            tag_relate_conjoin::Relate => {
+            TagRelateConjoin::Error => {}
+            TagRelateConjoin::Relate => {
                 if addtodb {
                     self.parents_add_sql(
                         &tag_namespace_id,
@@ -2215,7 +2215,7 @@ impl Main {
                     );
                 }
             }
-            tag_relate_conjoin::Conjoin => {
+            TagRelateConjoin::Conjoin => {
                 if addtodb {
                     self.parents_add_sql(
                         &tag_namespace_id,
@@ -2225,7 +2225,7 @@ impl Main {
                     );
                 }
             }
-            tag_relate_conjoin::Tag_and_Relate => {
+            TagRelateConjoin::TagAndRelate => {
                 if addtodb {
                     self.parents_add_sql(
                         &tag_namespace_id,
@@ -2235,7 +2235,7 @@ impl Main {
                     );
                 }
             }
-            tag_relate_conjoin::None => {}
+            TagRelateConjoin::None => {}
         }
     }
 

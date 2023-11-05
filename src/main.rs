@@ -32,6 +32,12 @@ mod tasks;
 mod threading;
 #[path = "./scr/time_func.rs"]
 mod time_func;
+// Needed for the plugin coms system.
+#[path = "./scr/intcoms/client.rs"]
+mod client;
+#[path = "./scr/intcoms/server.rs"]
+mod server;
+
 /*
 mod scr {
     pub mod cli;
