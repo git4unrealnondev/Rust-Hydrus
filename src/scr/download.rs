@@ -138,7 +138,7 @@ pub async fn dlfile_new(
     file: &sharedtypes::FileObject,
     location: &String,
     pluginmanager: Arc<Mutex<PluginManager>>,
-    _DB: Arc<Mutex<database::Main>>,
+
 ) -> (String, String) {
     let mut boolloop = true;
     let mut hash = String::new();

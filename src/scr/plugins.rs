@@ -42,7 +42,7 @@ impl PluginManager {
 
         reftoself.load_plugins(&pluginsloc);
 
-        let (snd, rcv) = mpsc::channel();
+        /*let (snd, rcv) = mpsc::channel();
 
         let mut ipc_coms = server::plugin_ipc_interact::new(main_db);
         let srv = std::thread::spawn(move || ipc_coms.spawn_listener(snd));
@@ -54,7 +54,7 @@ impl PluginManager {
         }
         if let Err(e) = srv.join().expect("server thread panicked") {
             eprintln!("Server exited early with error: {:#}", e);
-        }
+        }*/
         reftoself
     }
 
@@ -254,10 +254,10 @@ impl PluginManager {
                         if let Some(temp) = names.namespace {
                             for namespace in temp {
                                 // IF Valid ID && Name && Description info are valid then we have a valid namespace id to pull
-                                if namespace.id == None
-                                    && namespace.name != None
-                                    && namespace.description != None
-                                    && namespace_id != None
+                                if namespace.id.is_none()
+                                    && namespace.name.is_some()
+                                    && namespace.description.is_some()
+                                    && namespace_id.is_some()
                                 {
                                     namespace_id = Some(unwrappy.namespace_add(
                                         &namespace.name.unwrap(),
@@ -272,8 +272,8 @@ impl PluginManager {
                         }
                         if let Some(temp) = names.file {
                             for files in temp {
-                                if files.id == None && files.hash != None && files.ext != None {
-                                    if files.location == None {
+                                if files.id.is_none() && files.hash.is_some() && files.ext.is_some() {
+                                    if files.location.is_none() {
                                         //let string_dlpath = download::getfinpath(&loc, &files.hash.as_ref().unwrap());
                                         let location = unwrappy
                                             .settings_get_name(&"FilesLoc".to_string())
@@ -301,7 +301,7 @@ impl PluginManager {
                         if let Some(temp) = names.tag {
                             for tags in temp {
                                 let namespace_id = unwrappy.namespace_get(&tags.namespace);
-                                if tags.parents == None && !namespace_id.is_none() {
+                                if tags.parents.is_none() && namespace_id.is_some() {
                                     unwrappy.tag_add(
                                         tags.name,
                                         "".to_string(),

@@ -542,7 +542,7 @@ impl Memdb {
     ///
     fn jobs_get_new(&self, id: &usize) -> Option<jobs::JobsRef> {
         if self._jobs_ref.contains_key(id) {
-            return Some(self._jobs_ref[id].clone());
+            Some(self._jobs_ref[id].clone())
         } else {
             None
         }
@@ -560,7 +560,7 @@ impl Memdb {
                 param: Some(self._jobs_param[&id].clone()),
                 committype: None,
             };
-            return Some(dbj);
+            Some(dbj)
         } else {
             let error = "job_get cannot find job id in hashmap!";
             println!("{}, {}", error, id);
@@ -712,10 +712,7 @@ impl Memdb {
         //if self._tags_name.contains_key(tag) {
         //    return self._tags_name[tag];
         //}
-        if self
-            ._tags_relate
-            .contains_key(&(tag.clone(), *namespace))
-        {
+        if self._tags_relate.contains_key(&(tag.clone(), *namespace)) {
             let urin: usize = self._tags_relate[&(tag, *namespace)];
             return urin;
         }
@@ -729,8 +726,7 @@ impl Memdb {
         self._tags_name.insert(tag.clone(), ret_name);
         self._tags_namespace.insert(*namespace, 0);
 
-        self._tags_relate
-            .insert((tag, *namespace), ret_name);
+        self._tags_relate.insert((tag, *namespace), ret_name);
 
         self.max_tags_increment();
 
@@ -764,11 +760,11 @@ impl Memdb {
     ///
     /// Gets tag name by id
     ///
-    pub fn tag_id_get(&mut self, uid: &usize) -> Option<sharedtypes::DbTagObj> {
+    pub fn tag_id_get(&mut self, uid: usize) -> Option<sharedtypes::DbTagObj> {
         for (key, val) in self._tags_relate.iter() {
-            if val == uid {
+            if val == &uid {
                 return Some(sharedtypes::DbTagObj {
-                    id: Some(uid.clone()),
+                    id: Some(uid),
                     name: (key.0.clone()),
                     parents: None,
                     namespace: Some(key.1.clone()),
@@ -864,7 +860,7 @@ impl Main {
         &mut self,
         site: &String,
         query: &String,
-        _time: &String,
+        _time: &str,
         committype: &sharedtypes::CommitType,
         current_time: usize,
         time_offset: usize,
@@ -974,12 +970,12 @@ impl Main {
         }*/
     }
 
-    pub fn tag_id_get(&mut self, uid: &usize) -> Option<sharedtypes::DbTagObj> {
+    pub fn tag_id_get(&mut self, uid: usize) -> Option<sharedtypes::DbTagObj> {
         self._inmemdb.tag_id_get(uid)
     }
 
     ///
-    /// 
+    ///
     ///
     pub fn relationship_get_fileid(&self, tag: &usize) -> HashSet<usize> {
         self._inmemdb.relationship_get_fileid(tag)
@@ -1403,23 +1399,21 @@ impl Main {
             error!("Could not check_version due to length of recieved version being less then one. Trying manually!!!");
             //let out = self.execute("SELECT num from Settings WHERE name='VERSION';".to_string());
             let binding = self._conn.lock().unwrap();
-            let mut toexec = binding.prepare(&query_string).unwrap();
+            let mut toexec = binding.prepare(query_string).unwrap();
             let mut rows = toexec.query(params![]).unwrap();
             g1.clear();
             while let Some(each) = rows.next().unwrap() {
                 let ver: Result<String> = each.get(0);
                 let vers: Result<usize> = each.get(0);
-                let izce;
-                match &ver {
+                //let izce;
+                let izce = match &ver {
                     Ok(_string_ver) => {
-                        izce = ver.unwrap().parse::<usize>().unwrap();
+                        ver.unwrap().parse::<usize>().unwrap()
                     }
                     Err(_unk_err) => {
-                        //let vers:usize = each.get(0).unwrap();
-
-                        izce = vers.unwrap();
+                        vers.unwrap()
                     }
-                }
+                };
 
                 g1.push(izce.try_into().unwrap())
             }
@@ -1630,16 +1624,14 @@ impl Main {
             })
             .unwrap();
         for each in relationship {
-            if let Ok(res) = each {
-                self.relationship_add_db(res.fileid, res.tagid);
-            } else {
-                error!("Bad relationship cant load {:?}", each);
-                if each
-                    .err()
-                    .unwrap()
-                    .to_string()
-                    .contains("database disk image is malformed")
-                {
+            match each {
+                Ok(res) => {
+                    self.relationship_add_db(res.fileid, res.tagid);
+                }
+                Err(err) => {
+                    error!("Bad relationship cant load {:?}", err);
+                    err.to_string().contains("database disk image is malformed");
+
                     error!("DATABASE IMAGE IS MALFORMED PANICING");
                     panic!("DATABASE IMAGE IS MALFORMED PANICING");
                 }

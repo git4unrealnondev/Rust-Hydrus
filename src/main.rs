@@ -132,7 +132,7 @@ fn main() {
     let mut data = makedb(dbloc);
     let mut alt_connection = database::dbinit(&dbloc.to_string()); // NOTE ONLY USER FOR LOADING DB DYNAMICALLY
     data.load_table(&sharedtypes::LoadDBTable::Settings, &mut alt_connection);
-    data.load_table(&sharedtypes::LoadDBTable::All, &mut alt_connection); // TODO REVERT ALL TO SETTINGS
+    //data.load_table(&sharedtypes::LoadDBTable::All, &mut alt_connection); // TODO REVERT ALL TO SETTINGS
 
     data.transaction_flush();
     data.check_version();
@@ -215,11 +215,11 @@ fn main() {
                         );
                         data.load_table(&sharedtypes::LoadDBTable::Namespace, &mut alt_connection);
 
-                        let tag_namespace = data.namespace_get(&tag.get(1).unwrap());
+                        let tag_namespace = data.namespace_get(tag.get(1).unwrap());
 
                         match tag_namespace {
                             None => {
-                                logging::info_log(&format!("Couldn't fine namespace from search"));
+                                logging::info_log(&"Couldn't fine namespace from search".to_string());
                             }
                             Some(namespace_id) => {
                                 let tag_option = data
@@ -264,7 +264,7 @@ fn main() {
                             let tag = data.relationship_get_tagid(&file.0);
                             dbg!(&tag);
                             for tag_each in tag {
-                                let tagdata = data.tag_id_get(&tag_each);
+                                let tagdata = data.tag_id_get(tag_each);
                                 let taginfo = tagdata.unwrap();
                                 println!(
                                     "Id: {:?} Name: {:?} Parents: {:?} Namespace: {:?}",

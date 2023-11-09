@@ -195,7 +195,7 @@ impl Worker {
                 let mut hashtemp: AHashMap<sharedtypes::CommitType, Vec<String>> = AHashMap::new();
                 for eachs in urlload {
                     // Checks if the hashmap contains the committype & its vec contains the data.
-                    match hashtemp.get_mut(&commit) {
+                    match hashtemp.get_mut(commit) {
                         Some(ve) => {
                             if !allurls.contains_key(&eachs) {
                                 ve.push(eachs.clone());
@@ -291,6 +291,12 @@ impl Worker {
                                         info!("ST: {:?} RESP: {}", &st, &respstring);
                                         dbg!("Sleeping: {} Secs due to ratelimit.", time);
 
+
+ {
+                                                let unwrappydb = &mut db.lock().unwrap();
+                                                unwrappydb.transaction_flush();
+                                            }
+
                                         thread::sleep(time_dur);
                                         ratelimit_counter += 1;
                                         if ratelimit_counter >= ratelimit_total {
@@ -378,7 +384,6 @@ impl Worker {
                                     &each.1,
                                     &location,
                                     manageeplugin.clone(),
-                                    db.clone(),
                                 ));
                             } else {
                                 let unwrappydb = &mut db.lock().unwrap();

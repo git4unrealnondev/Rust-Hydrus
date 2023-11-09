@@ -38,7 +38,7 @@ pub fn time_conv(inp: &String) -> usize {
         "s".to_string(),
     ];
 
-    let nums = vec![year, month, week, day, hour, minute, second];
+    let nums = [year, month, week, day, hour, minute, second];
 
     let mut combine: usize = 0;
     let mut st = inp.to_string();

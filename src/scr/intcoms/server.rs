@@ -1,16 +1,16 @@
 use crate::{database, sharedtypes::DbTagObj};
 use anyhow::Context;
 use interprocess::local_socket::{LocalSocketListener, LocalSocketStream, NameTypeSupport};
+use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
 use std::{
     io::{self, prelude::*, BufReader},
     mem,
     sync::mpsc::Sender,
 };
-use std::collections::HashSet;
 
-use crate::sharedtypes;
 use crate::logging;
+use crate::sharedtypes;
 
 mod types;
 
@@ -75,7 +75,7 @@ another process and try again.",
         let mut bufstr = String::new();
         let coms_struct = types::Coms {
             com_type: types::eComType::BiDirectional,
-            control: types::eControlSigs::SEND,
+            control: types::eControlSigs::Send,
         };
         let b_struct = types::x_to_bytes(&coms_struct);
         // Wrap the connection into a buffered reader right away
@@ -100,13 +100,13 @@ another process and try again.",
         //std::mem::forget(buffer.clone());
         dbg!(&buffer);
 
-        print!(
-            "Client answered: {:?} {:?}\n",
+        println!(
+            "Client answered: {:?} {:?}",
             instruct.com_type, instruct.control
         );
 
         match instruct.control {
-            types::eControlSigs::SEND => {
+            types::eControlSigs::Send => {
                 bufstr.clear();
                 conn.read_line(&mut bufstr)
                     .context("Socket receive failed")?;
@@ -122,8 +122,8 @@ another process and try again.",
                     .context("Socket receive failed")?;
                 dbg!(&bufstr);
             }
-            types::eControlSigs::HALT => {}
-            types::eControlSigs::BREAK => {}
+            types::eControlSigs::Halt => {}
+            types::eControlSigs::Break => {}
         }
 
         // Let's add an exit condition to shut the server down gracefully.
@@ -150,9 +150,6 @@ pub struct plugin_ipc_interact {
 ///
 impl plugin_ipc_interact {
     pub fn new(main_db: Arc<Mutex<database::Main>>) -> Self {
-        
-        
-        
         plugin_ipc_interact {
             db_interface: DbInteract { _database: main_db },
         }
@@ -213,10 +210,10 @@ impl plugin_ipc_interact {
         for conn in listener.incoming().filter_map(handle_error) {
             let buffer = &mut [b'0', b'0'];
 
-            let mut pluginComType: types::eComType = types::eComType::None; // Default value for no data
+            let mut plugin_com_type: types::eComType = types::eComType::None; // Default value for no data
 
             let mut conn = BufReader::new(conn);
-            logging::info_log(&"Incoming connection from Plugin.".to_string());
+            //logging::info_log(&"Incoming connection from Plugin.".to_string());
 
             // Since our client example writes first, the server should read a line and only then send a
             // response. Otherwise, because reading and writing on a connection cannot be simultaneous
@@ -229,20 +226,20 @@ impl plugin_ipc_interact {
             //Control flow for sending / receiving data from a plugin.
             match instruct.control {
                 // If we get SEND then everything is good.
-                types::eControlSigs::SEND => {}
+                types::eControlSigs::Send => {}
                 // If we get HALT then stop connection. Natural stop.
-                types::eControlSigs::HALT => {
+                types::eControlSigs::Halt => {
                     break;
                 }
                 // HALT EVERYTHING WILL STOP ALL PLUGINS FROM COMUNICATING.
-                types::eControlSigs::BREAK => {
+                types::eControlSigs::Break => {
                     self.halt_all_coms();
                 }
             }
 
-            pluginComType = instruct.com_type;
+            plugin_com_type = instruct.com_type;
 
-            match &pluginComType {
+            match &plugin_com_type {
                 types::eComType::SendOnly => {}    //TBD
                 types::eComType::RecieveOnly => {} //TBD
                 types::eComType::BiDirectional => {
@@ -275,17 +272,17 @@ impl plugin_ipc_interact {
     ) {
         //let arbdata = types::ArbitraryData{buffer_size: size, buffer_data:data};
         let b_size = types::x_to_bytes(&size);
-        let b_arbdata = types::x_to_bytes(&data);
+        //let b_arbdata = types::x_to_bytes(&data);
         //dbg!(&b_arbdata);
         conn.get_mut()
-            .write_all(&b_size)
+            .write_all(b_size)
             .context("Socket send failed")
             .unwrap();
-            
+
         //let arraytest: &mut [u8; 72] = &mut types::demo(data.to_vec());
         //let mut objtag = types::con_dbtagobj(arraytest);
         //dbg!(objtag);
-            
+
         conn.get_mut()
             .write_all(&data)
             .context("Socket send failed")
@@ -300,7 +297,7 @@ impl plugin_ipc_interact {
         conn: &mut BufReader<LocalSocketStream>,
     ) -> types::SupportedRequests {
         let buffer: &mut [u8; 16] = &mut [b'0'; 16];
-        let b_control = types::x_to_bytes(&types::eControlSigs::SEND);
+        let b_control = types::x_to_bytes(&types::eControlSigs::Send);
         conn.get_mut()
             .write_all(b_control)
             .context("Socket send failed")
@@ -329,28 +326,27 @@ impl DbInteract {
     /// Stores database inside of self for DB interactions with plugin system
     ///
     pub fn new(main_db: Arc<Mutex<database::Main>>) -> Self {
-        let reftoself = DbInteract { _database: main_db };
 
-        reftoself
+        DbInteract { _database: main_db }
     }
     ///
     /// Helper function to return data about a passed object into size and bytes array.
     ///
     fn data_size_to_b<T: serde::Serialize>(data_object: &T) -> (usize, Vec<u8>) {
         let tmp = data_object;
-        let bytd = types::x_to_bytes(tmp).to_vec();
-        let byt:Vec<u8> = bincode::serialize(&tmp).unwrap();
+        //let bytd = types::x_to_bytes(tmp).to_vec();
+        let byt: Vec<u8> = bincode::serialize(&tmp).unwrap();
         let sze = byt.len();
         (sze, byt)
     }
-    
+
     pub fn dbactions_to_function(
         &mut self,
         dbaction: types::SupportedDBRequests,
     ) -> (usize, Vec<u8>) {
         match dbaction {
             types::SupportedDBRequests::db_tag_id_get(id) => {
-                let data = self.db_tag_id_get(&id);
+                let data = self.db_tag_id_get(id);
                 Self::data_size_to_b(&data)
             }
             types::SupportedDBRequests::db_relationship_get_tagid(id) => {
@@ -371,28 +367,31 @@ impl DbInteract {
     ///
     /// Wrapper for DB function. Takes in tag id returns tag object
     ///
-    pub fn db_tag_id_get(&mut self, uid: &usize) -> Option<DbTagObj> {
+    pub fn db_tag_id_get(&mut self, uid: usize) -> Option<DbTagObj> {
         self._database.lock().unwrap().tag_id_get(uid)
     }
-    
+
     ///
     /// Wrapper for DB function. Returns a list of tag's associated with fileid
     ///
     pub fn db_relationship_get_tagid(&mut self, tag: &usize) -> Vec<usize> {
         self._database.lock().unwrap().relationship_get_tagid(tag)
     }
-    
+
     ///
     /// Wrapper for DB function. Returns a files info based on id
     ///
     pub fn db_get_file(&mut self, fileid: &usize) -> Option<(String, String, String)> {
         self._database.lock().unwrap().file_get_id(fileid)
     }
-    
+
     ///
     /// Wrapper for DB function. Returns a list of fileid's associated with tagid
     ///
     pub fn db_relationship_get_fileid(&mut self, tagid: &usize) -> HashSet<usize> {
-        self._database.lock().unwrap().relationship_get_fileid(tagid)
+        self._database
+            .lock()
+            .unwrap()
+            .relationship_get_fileid(tagid)
     }
 }

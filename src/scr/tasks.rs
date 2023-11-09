@@ -33,7 +33,7 @@ pub fn import_files(
         panic!("Path: {} Doesn't exist. Exiting. Check logs", &location);
     }
 
-    let mut rdr = csv::ReaderBuilder::new().from_path(&location).unwrap();
+    let mut rdr = csv::ReaderBuilder::new().from_path(location).unwrap();
 
     let mut headers: Vec<String> = Vec::new();
     let headerrecord = rdr.headers().unwrap().clone();

@@ -40,9 +40,9 @@ coredump = "0.1.2"
 bincode = "1.3.3"
 
 [profile.release]
-opt-level = "z"
+opt-level = 3
 lto=true
 codegenunits=1
-strip = true
+#strip = true
 panic = "abort"
 debug = true

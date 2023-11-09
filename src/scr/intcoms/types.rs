@@ -1,5 +1,4 @@
-use crate::{sharedtypes::DbTagObj};
-
+use crate::sharedtypes::DbTagObj;
 
 #[derive(Debug)]
 pub enum eComType {
@@ -11,9 +10,9 @@ pub enum eComType {
 
 #[derive(Debug)]
 pub enum eControlSigs {
-    SEND,  // Sending data to and fro
-    HALT,  // Come to a stop naturally
-    BREAK, // STOP NOW PANIC
+    Send,  // Sending data to and fro
+    Halt,  // Come to a stop naturally
+    Break, // STOP NOW PANIC
 }
 
 ///
