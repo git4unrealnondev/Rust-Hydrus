@@ -20,8 +20,6 @@ use std::sync::Mutex;
 use std::thread;
 use std::time::Duration;
 
-use strum::IntoEnumIterator;
-
 //use tokio::runtime::Runtime;
 
 pub struct threads {
@@ -291,11 +289,10 @@ impl Worker {
                                         info!("ST: {:?} RESP: {}", &st, &respstring);
                                         dbg!("Sleeping: {} Secs due to ratelimit.", time);
 
-
- {
-                                                let unwrappydb = &mut db.lock().unwrap();
-                                                unwrappydb.transaction_flush();
-                                            }
+                                        {
+                                            let unwrappydb = &mut db.lock().unwrap();
+                                            unwrappydb.transaction_flush();
+                                        }
 
                                         thread::sleep(time_dur);
                                         ratelimit_counter += 1;
@@ -386,8 +383,10 @@ impl Worker {
                                     manageeplugin.clone(),
                                 ));
                             } else {
+                                let fileid;
+                                {
                                 let unwrappydb = &mut db.lock().unwrap();
-
+                                
                                 // File already has been downlaoded. Skipping download.
                                 info!(
                                     "Skipping file: {} Due to already existing in Tags Table.",
@@ -404,30 +403,66 @@ impl Worker {
                                 //NOTE: Not the best way to do it. Only allows for one source for multiple examples.
                                 //let fileid =
                                 //    unwrappydb.relationship_get_fileid(&url_tag.0)[0];
-                                let fileid =
+                                fileid =
                                     unwrappydb.relationship_get_one_fileid(&url_tag.unwrap());
+                                }
                                 match fileid {
-                                    Some(_) => {}
+                                    Some(fileid_use) => {
+                                                                                // We have a TAG id but not a relationship. Checking the file info.
+                                        //let fileinfo = unwrappydb.file_get_id(&fileid_use);
+                                        //panic!("{:?}", fileinfo);
+                                    }
                                     None => {
-                                        unwrappydb.transaction_flush();
-                                        dbg!(&source_url_id, &each.1, &url_tag); //
-                                        panic!(
-                                            "url has info but no file data. {}",
-                                            &url_tag.unwrap()
+
+                                        
+                                        info!("URL Tag was unexpected. downloading file.");
+                                        info!(
+                                            "Downloading: {} to: {}",
+                                            &each.1.source_url, &location
                                         );
+                                    
+                                        (hash, file_ext) = task::block_on(download::dlfile_new(
+                                            &client,
+                                            &each.1,
+                                            &location,
+                                            manageeplugin.clone(),
+                                        ));
+                                        //panic!("nono relate");
+                                        
+                                        /*match fileinfo {
+                                            None => {
+                                                // No file here will download
+                                                
+                                                                                        download::ratelimiter_wait(&mut ratelimit);
+                                        // URL doesn't exist in DB Will download
+                                        info!(
+                                            "Downloading: {} to: {}",
+                                            &each.1.source_url, &location
+                                        );
+                                        (hash, file_ext) = task::block_on(download::dlfile_new(
+                                            &client,
+                                            &each.1,
+                                            &location,
+                                            manageeplugin.clone(),
+                                        ));
+                                            }
+                                            Some(_) => {
+                                                // File found adding relationship
+                                                panic!("File exists but no relationship exists. panicing");
+                                            }
+                                        }*/
+
+
+                                        //unwrappydb.transaction_flush();
+                                        //dbg!(&source_url_id, &each.1, &url_tag); //
+                                        //panic!(
+                                        //    "url has info but no file data. {}",
+                                        //    &url_tag.unwrap()
+                                        //);
                                     }
                                 }
-                                let fileinfo = unwrappydb.file_get_id(&fileid.unwrap());
-                                match fileinfo {
-                                    None => {
-                                        error!("ERROR: File: {} has url but no file info in db table Files. PANICING", &url_tag.unwrap());
-                                        panic!("ERROR: File: {} has url but no file info in db table Files. PANICING", &url_tag.unwrap());
-                                    }
-                                    Some(_) => {
-                                        hash = fileinfo.as_ref().unwrap().0.to_string();
-                                        file_ext = fileinfo.as_ref().unwrap().1.to_string();
-                                    }
-                                }
+                         
+                                
                             }
                             {
                                 let unwrappydb = &mut db.lock().unwrap();

@@ -459,16 +459,6 @@ impl Memdb {
         }
     }
 
-    /*pub enum tag_relate_conjoin {
-        Tag,
-        Error,
-        Relate,
-        Conjoin,
-        Tag_and_Relate,
-        Tag_and_Relatead_Conjoin,
-        None,
-    }*/
-
     ///
     /// Checks if relationship exists in db.
     ///
@@ -1407,12 +1397,8 @@ impl Main {
                 let vers: Result<usize> = each.get(0);
                 //let izce;
                 let izce = match &ver {
-                    Ok(_string_ver) => {
-                        ver.unwrap().parse::<usize>().unwrap()
-                    }
-                    Err(_unk_err) => {
-                        vers.unwrap()
-                    }
+                    Ok(_string_ver) => ver.unwrap().parse::<usize>().unwrap(),
+                    Err(_unk_err) => vers.unwrap(),
                 };
 
                 g1.push(izce.try_into().unwrap())
@@ -1905,7 +1891,7 @@ impl Main {
             let time_offset: usize = time_func::time_conv(&each.2);
             self.jobs_add_new_sql(
                 &each.0,
-                &&each.1,
+                &each.1,
                 &each.2,
                 &each.3,
                 current_time,
@@ -2021,7 +2007,16 @@ impl Main {
     pub fn namespace_get(&mut self, inp: &String) -> Option<usize> {
         self._inmemdb.namespace_get(inp)
     }
-
+    
+    
+    ///
+    /// Returns namespace as a string from an ID returns None if it doesn't exist.
+    ///
+    pub fn namespace_get_string(&self, inp: &usize) -> Option<String> {
+        self._inmemdb.namespace_id_get(inp)
+    }
+    
+    
     pub fn db_commit_man_set(&mut self) {
         self._dbcommitnum_static = self
             .settings_get_name(&"DBCOMMITNUM".to_string())
@@ -2353,7 +2348,7 @@ impl Main {
                 } else {
                     &pretty
                 },
-                if num == None {
+                if num.is_none() {
                     &Null as &dyn ToSql
                 } else {
                     &num

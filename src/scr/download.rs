@@ -123,7 +123,7 @@ pub fn hash_bytes(bytes: &Bytes, hash: sharedtypes::HashesSupported) -> (String,
             let mut hasher = Sha512::new();
             hasher.update(bytes);
             let hastring = format!("{:X}", hasher.finalize());
-            let dune = &hastring == &hash;
+            let dune = hastring == hash;
             (hastring, dune)
         }
         sharedtypes::HashesSupported::None => ("".to_string(), false),
@@ -138,7 +138,6 @@ pub async fn dlfile_new(
     file: &sharedtypes::FileObject,
     location: &String,
     pluginmanager: Arc<Mutex<PluginManager>>,
-
 ) -> (String, String) {
     let mut boolloop = true;
     let mut hash = String::new();

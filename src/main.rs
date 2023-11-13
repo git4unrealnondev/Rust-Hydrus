@@ -219,7 +219,9 @@ fn main() {
 
                         match tag_namespace {
                             None => {
-                                logging::info_log(&"Couldn't fine namespace from search".to_string());
+                                logging::info_log(
+                                    &"Couldn't fine namespace from search".to_string(),
+                                );
                             }
                             Some(namespace_id) => {
                                 let tag_option = data
@@ -271,7 +273,7 @@ fn main() {
                                     &taginfo.id.unwrap(),
                                     &taginfo.name,
                                     &taginfo.parents,
-                                    &taginfo.namespace.unwrap()
+                                    &data.namespace_get_string(&taginfo.namespace.unwrap()).unwrap(),
                                 );
                             }
                         }
@@ -279,8 +281,8 @@ fn main() {
                 }
             }
 
-            dbg!(search);
-            panic!();
+            //dbg!(search);
+            //panic!();
         }
 
         sharedtypes::AllFields::Tasks(task) => match task {

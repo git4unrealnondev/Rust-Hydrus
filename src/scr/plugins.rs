@@ -272,7 +272,8 @@ impl PluginManager {
                         }
                         if let Some(temp) = names.file {
                             for files in temp {
-                                if files.id.is_none() && files.hash.is_some() && files.ext.is_some() {
+                                if files.id.is_none() && files.hash.is_some() && files.ext.is_some()
+                                {
                                     if files.location.is_none() {
                                         //let string_dlpath = download::getfinpath(&loc, &files.hash.as_ref().unwrap());
                                         let location = unwrappy

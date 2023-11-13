@@ -10,7 +10,6 @@ use std::{
 };
 
 use crate::logging;
-use crate::sharedtypes;
 
 mod types;
 
@@ -74,8 +73,8 @@ another process and try again.",
         let buffer = &mut [b'0', b'0'];
         let mut bufstr = String::new();
         let coms_struct = types::Coms {
-            com_type: types::eComType::BiDirectional,
-            control: types::eControlSigs::Send,
+            com_type: types::EComType::BiDirectional,
+            control: types::EControlSigs::Send,
         };
         let b_struct = types::x_to_bytes(&coms_struct);
         // Wrap the connection into a buffered reader right away
@@ -106,7 +105,7 @@ another process and try again.",
         );
 
         match instruct.control {
-            types::eControlSigs::Send => {
+            types::EControlSigs::Send => {
                 bufstr.clear();
                 conn.read_line(&mut bufstr)
                     .context("Socket receive failed")?;
@@ -122,8 +121,8 @@ another process and try again.",
                     .context("Socket receive failed")?;
                 dbg!(&bufstr);
             }
-            types::eControlSigs::Halt => {}
-            types::eControlSigs::Break => {}
+            types::EControlSigs::Halt => {}
+            types::EControlSigs::Break => {}
         }
 
         // Let's add an exit condition to shut the server down gracefully.
@@ -141,16 +140,16 @@ another process and try again.",
 ///
 /// Storage for database interaction object for IPC
 ///
-pub struct plugin_ipc_interact {
+pub struct PluginIpcInteract {
     db_interface: DbInteract,
 }
 
 ///
 /// This is going to be the main way to talk to the plugin system and stuffins.
 ///
-impl plugin_ipc_interact {
+impl PluginIpcInteract {
     pub fn new(main_db: Arc<Mutex<database::Main>>) -> Self {
-        plugin_ipc_interact {
+        PluginIpcInteract {
             db_interface: DbInteract { _database: main_db },
         }
     }
@@ -210,7 +209,7 @@ impl plugin_ipc_interact {
         for conn in listener.incoming().filter_map(handle_error) {
             let buffer = &mut [b'0', b'0'];
 
-            let mut plugin_com_type: types::eComType = types::eComType::None; // Default value for no data
+            let mut plugin_com_type: types::EComType = types::EComType::None; // Default value for no data
 
             let mut conn = BufReader::new(conn);
             //logging::info_log(&"Incoming connection from Plugin.".to_string());
@@ -226,13 +225,13 @@ impl plugin_ipc_interact {
             //Control flow for sending / receiving data from a plugin.
             match instruct.control {
                 // If we get SEND then everything is good.
-                types::eControlSigs::Send => {}
+                types::EControlSigs::Send => {}
                 // If we get HALT then stop connection. Natural stop.
-                types::eControlSigs::Halt => {
+                types::EControlSigs::Halt => {
                     break;
                 }
                 // HALT EVERYTHING WILL STOP ALL PLUGINS FROM COMUNICATING.
-                types::eControlSigs::Break => {
+                types::EControlSigs::Break => {
                     self.halt_all_coms();
                 }
             }
@@ -240,9 +239,9 @@ impl plugin_ipc_interact {
             plugin_com_type = instruct.com_type;
 
             match &plugin_com_type {
-                types::eComType::SendOnly => {}    //TBD
-                types::eComType::RecieveOnly => {} //TBD
-                types::eComType::BiDirectional => {
+                types::EComType::SendOnly => {}    //TBD
+                types::EComType::RecieveOnly => {} //TBD
+                types::EComType::BiDirectional => {
                     //Default
                     let plugin_supportedrequests = self.send_data_request(&mut conn);
 
@@ -254,7 +253,7 @@ impl plugin_ipc_interact {
                         types::SupportedRequests::PluginCross(_plugindata) => {}
                     }
                 }
-                types::eComType::None => {} // Do nothing.
+                types::EComType::None => {} // Do nothing.
             }
         }
         Ok(())
@@ -297,7 +296,7 @@ impl plugin_ipc_interact {
         conn: &mut BufReader<LocalSocketStream>,
     ) -> types::SupportedRequests {
         let buffer: &mut [u8; 16] = &mut [b'0'; 16];
-        let b_control = types::x_to_bytes(&types::eControlSigs::Send);
+        let b_control = types::x_to_bytes(&types::EControlSigs::Send);
         conn.get_mut()
             .write_all(b_control)
             .context("Socket send failed")
@@ -326,7 +325,6 @@ impl DbInteract {
     /// Stores database inside of self for DB interactions with plugin system
     ///
     pub fn new(main_db: Arc<Mutex<database::Main>>) -> Self {
-
         DbInteract { _database: main_db }
     }
     ///
@@ -345,19 +343,19 @@ impl DbInteract {
         dbaction: types::SupportedDBRequests,
     ) -> (usize, Vec<u8>) {
         match dbaction {
-            types::SupportedDBRequests::db_tag_id_get(id) => {
+            types::SupportedDBRequests::TagIdGet(id) => {
                 let data = self.db_tag_id_get(id);
                 Self::data_size_to_b(&data)
             }
-            types::SupportedDBRequests::db_relationship_get_tagid(id) => {
+            types::SupportedDBRequests::RelationshipGetTagid(id) => {
                 let data = self.db_relationship_get_tagid(&id);
                 Self::data_size_to_b(&data)
             }
-            types::SupportedDBRequests::db_get_file(id) => {
+            types::SupportedDBRequests::GetFile(id) => {
                 let data = self.db_get_file(&id);
                 Self::data_size_to_b(&data)
             }
-            types::SupportedDBRequests::db_relationship_get_fileid(id) => {
+            types::SupportedDBRequests::RelationshipGetFileid(id) => {
                 let data = self.db_relationship_get_fileid(&id);
                 Self::data_size_to_b(&data)
             }

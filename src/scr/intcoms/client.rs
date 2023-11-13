@@ -10,29 +10,26 @@ use crate::sharedtypes;
 mod types;
 
 pub fn main() -> anyhow::Result<()> {
-    call_conn(1000, "beans".to_string())
+    call_conn()
 }
 
-fn call_conn(size: usize, _message: String) -> anyhow::Result<()> {
+fn call_conn() -> anyhow::Result<()> {
     //let _buffers = &mut [b'0', b'0'];
 
     // Preemptively allocate a sizeable buffer for reading.
     // This size should be enough and should be easy to find for the allocator.
     //let _buffer = String::with_capacity(size);
 
-    let typerequets =
-        types::SupportedRequests::Database(types::SupportedDBRequests::db_tag_id_get(13));
-
-    init_data_request(&typerequets);
-
-    let typerequets = types::SupportedRequests::Database(
-        types::SupportedDBRequests::db_relationship_get_tagid(0),
-    );
+    let typerequets = types::SupportedRequests::Database(types::SupportedDBRequests::TagIdGet(13));
 
     init_data_request(&typerequets);
 
     let typerequets =
-        types::SupportedRequests::Database(types::SupportedDBRequests::db_get_file(1));
+        types::SupportedRequests::Database(types::SupportedDBRequests::RelationshipGetTagid(0));
+
+    init_data_request(&typerequets);
+
+    let typerequets = types::SupportedRequests::Database(types::SupportedDBRequests::GetFile(1));
 
     init_data_request(&typerequets);
 
@@ -58,8 +55,8 @@ fn call_conn(size: usize, _message: String) -> anyhow::Result<()> {
 
 pub fn init_data_request(requesttype: &types::SupportedRequests) {
     let coms_struct = types::Coms {
-        com_type: types::eComType::BiDirectional,
-        control: types::eControlSigs::Send,
+        com_type: types::EComType::BiDirectional,
+        control: types::EControlSigs::Send,
     };
 
     let name = {
@@ -98,9 +95,9 @@ pub fn init_data_request(requesttype: &types::SupportedRequests) {
     let econtrolsig = types::con_econtrolsigs(buffer);
 
     match econtrolsig {
-        types::eControlSigs::Halt => return,
-        types::eControlSigs::Send => {}
-        types::eControlSigs::Break => {
+        types::EControlSigs::Halt => return,
+        types::EControlSigs::Send => {}
+        types::EControlSigs::Break => {
             panic!("This plugin was called to break. Will break NOW.");
         }
     }
@@ -132,21 +129,21 @@ pub fn init_data_request(requesttype: &types::SupportedRequests) {
 fn handle_supportedrequesttypes(data_buffer: &mut [u8], requesttype: &types::SupportedRequests) {
     match requesttype {
         types::SupportedRequests::Database(db_actions) => match db_actions {
-            types::SupportedDBRequests::db_tag_id_get(id) => {
+            types::SupportedDBRequests::TagIdGet(id) => {
                 let opjtag: Option<sharedtypes::DbTagObj> =
                     bincode::deserialize(data_buffer).unwrap();
                 //dbg!(opjtag);
             }
-            types::SupportedDBRequests::db_relationship_get_tagid(id) => {
+            types::SupportedDBRequests::RelationshipGetTagid(id) => {
                 let opjtag: Vec<usize> = bincode::deserialize(data_buffer).unwrap();
                 dbg!(opjtag);
             }
-            types::SupportedDBRequests::db_relationship_get_fileid(id) => {
+            types::SupportedDBRequests::RelationshipGetFileid(id) => {
                 let opjtag: HashSet<usize> = bincode::deserialize(data_buffer).unwrap();
                 dbg!(opjtag);
             }
-            types::SupportedDBRequests::db_get_file(id) => {
-                let  opjtag: Option<(String, String, String)> =
+            types::SupportedDBRequests::GetFile(id) => {
+                let opjtag: Option<(String, String, String)> =
                     bincode::deserialize(data_buffer).unwrap();
                 dbg!(opjtag);
                 //return bincode::deserialize(&data_buffer[..]).unwrap()

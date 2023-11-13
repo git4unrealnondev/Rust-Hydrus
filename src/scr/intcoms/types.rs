@@ -1,7 +1,7 @@
 use crate::sharedtypes::DbTagObj;
 
 #[derive(Debug)]
-pub enum eComType {
+pub enum EComType {
     SendOnly,
     RecieveOnly,
     BiDirectional,
@@ -9,7 +9,7 @@ pub enum eComType {
 }
 
 #[derive(Debug)]
-pub enum eControlSigs {
+pub enum EControlSigs {
     Send,  // Sending data to and fro
     Halt,  // Come to a stop naturally
     Break, // STOP NOW PANIC
@@ -19,8 +19,8 @@ pub enum eControlSigs {
 /// Main communication block structure.
 ///
 pub struct Coms {
-    pub com_type: eComType,
-    pub control: eControlSigs,
+    pub com_type: EComType,
+    pub control: EControlSigs,
 }
 
 ///
@@ -48,7 +48,7 @@ pub fn con_coms(input: &mut [u8; 2]) -> Coms {
 ///
 /// Turns bytes into a controlsig structure.
 ///
-pub fn con_econtrolsigs(input: &mut [u8; 1]) -> eControlSigs {
+pub fn con_econtrolsigs(input: &mut [u8; 1]) -> EControlSigs {
     unsafe { std::mem::transmute(*input) }
 }
 
@@ -71,10 +71,10 @@ pub fn con_supportedrequests(input: &mut [u8; 16]) -> SupportedRequests {
 ///
 #[derive(Debug)]
 pub enum SupportedDBRequests {
-    db_tag_id_get(usize),
-    db_relationship_get_tagid(usize),
-    db_get_file(usize),
-    db_relationship_get_fileid(usize),
+    TagIdGet(usize),
+    RelationshipGetTagid(usize),
+    GetFile(usize),
+    RelationshipGetFileid(usize),
 }
 
 ///
