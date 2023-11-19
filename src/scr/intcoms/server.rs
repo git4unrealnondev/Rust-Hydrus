@@ -1,6 +1,8 @@
-use crate::{database, sharedtypes::DbTagObj};
+use crate::{database, sharedtypes::DbFileObj, sharedtypes::DbTagObjCompatability};
 use anyhow::Context;
 use interprocess::local_socket::{LocalSocketListener, LocalSocketStream, NameTypeSupport};
+use nohash_hasher::IntMap;
+use nohash_hasher::IntSet;
 use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
 use std::{
@@ -344,52 +346,21 @@ impl DbInteract {
     ) -> (usize, Vec<u8>) {
         match dbaction {
             types::SupportedDBRequests::TagIdGet(id) => {
-                let data = self.db_tag_id_get(id);
-                Self::data_size_to_b(&data)
+                let unwrappy = self._database.lock().unwrap();
+                Self::data_size_to_b(&unwrappy.tag_id_get(&id))
             }
             types::SupportedDBRequests::RelationshipGetTagid(id) => {
-                let data = self.db_relationship_get_tagid(&id);
-                Self::data_size_to_b(&data)
+                let unwrappy = self._database.lock().unwrap();
+                Self::data_size_to_b(&unwrappy.relationship_get_tagid(&id))
             }
             types::SupportedDBRequests::GetFile(id) => {
-                let data = self.db_get_file(&id);
-                Self::data_size_to_b(&data)
+                let unwrappy = self._database.lock().unwrap();
+                Self::data_size_to_b(&unwrappy.file_get_id(&id))
             }
             types::SupportedDBRequests::RelationshipGetFileid(id) => {
-                let data = self.db_relationship_get_fileid(&id);
-                Self::data_size_to_b(&data)
+                let unwrappy = self._database.lock().unwrap();
+                Self::data_size_to_b(&unwrappy.relationship_get_fileid(&id))
             }
         }
-    }
-
-    ///
-    /// Wrapper for DB function. Takes in tag id returns tag object
-    ///
-    pub fn db_tag_id_get(&mut self, uid: usize) -> Option<DbTagObj> {
-        self._database.lock().unwrap().tag_id_get(uid)
-    }
-
-    ///
-    /// Wrapper for DB function. Returns a list of tag's associated with fileid
-    ///
-    pub fn db_relationship_get_tagid(&mut self, tag: &usize) -> Vec<usize> {
-        self._database.lock().unwrap().relationship_get_tagid(tag)
-    }
-
-    ///
-    /// Wrapper for DB function. Returns a files info based on id
-    ///
-    pub fn db_get_file(&mut self, fileid: &usize) -> Option<(String, String, String)> {
-        self._database.lock().unwrap().file_get_id(fileid)
-    }
-
-    ///
-    /// Wrapper for DB function. Returns a list of fileid's associated with tagid
-    ///
-    pub fn db_relationship_get_fileid(&mut self, tagid: &usize) -> HashSet<usize> {
-        self._database
-            .lock()
-            .unwrap()
-            .relationship_get_fileid(tagid)
     }
 }

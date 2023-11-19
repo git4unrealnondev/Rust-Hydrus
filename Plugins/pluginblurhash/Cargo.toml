@@ -12,6 +12,7 @@ strum = "0.25.0"
 strum_macros = "0.25.1"
 image = "0.24.6"
 pipe = { version = "0.4.0", features = ["bidirectional"] }
+serde = { version = "1.0.192", features = ["serde_derive"] }
 
 [lib]
 crate-type = ["dylib"]

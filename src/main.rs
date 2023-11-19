@@ -60,6 +60,14 @@ mod scr {
 /// Will probably work :D
 ///
 
+fn pause() {
+    use std::io::{stdout, stdin, Write, Read};
+    let mut stdout = stdout();
+    stdout.write(b"Press Enter to continue...").unwrap();
+    stdout.flush().unwrap();
+    stdin().read(&mut [0]).unwrap();
+}
+
 /// Creates DB from database.rs allows function calls.
 fn makedb(dbloc: &str) -> database::Main {
     // Setting up DB VARS
@@ -132,23 +140,32 @@ fn main() {
     let mut data = makedb(dbloc);
     let mut alt_connection = database::dbinit(&dbloc.to_string()); // NOTE ONLY USER FOR LOADING DB DYNAMICALLY
     data.load_table(&sharedtypes::LoadDBTable::Settings, &mut alt_connection);
-    //data.load_table(&sharedtypes::LoadDBTable::All, &mut alt_connection); // TODO REVERT ALL TO SETTINGS
-
+    data.load_table(&sharedtypes::LoadDBTable::All, &mut alt_connection); // TODO REVERT ALL TO SETTINGS
+    //data.debugdb();
+    //data.transaction_flush();
+    //pause();
     data.transaction_flush();
     data.check_version();
 
     //dbg!(data.settings_get_name(&"pluginloadloc".to_string()));
     //Inits ScraperManager
-    let plugin_loc = data
-        .settings_get_name(&"pluginloadloc".to_string())
-        .unwrap()
-        .param
-        .unwrap();
+    /*let plugin_loc = data
+    .settings_get_name(&"pluginloadloc".to_string())
+    .unwrap()
+    .param.as_ref()
+    .unwrap();*/
+
+    let plugin_option = data.settings_get_name(&"pluginloadloc".to_string());
+    let plugin_loc = match plugin_option {
+        None => "".to_string(),
+        Some(pluginobj) => pluginobj.param.as_ref().unwrap().clone(),
+    };
 
     let location = data
         .settings_get_name(&"FilesLoc".to_string())
         .unwrap()
         .param
+        .as_ref()
         .unwrap();
     file::folder_make(&format!("./{}", &location));
 
@@ -162,29 +179,18 @@ fn main() {
         "so".to_string(),
     );
 
-    // Looks like some search functionality. From before when I had searching as an option.
-    /*if name == "id" {
-        dbg!(&puts);
-        let uid = puts[0].parse::<usize>().unwrap();
-        let a = data.relationship_get_tagid(&uid);
-
-        for each in &a {
-            println!("{:?}", data.tag_id_get(each));
-        }
-    }*/
-
     data.load_table(&sharedtypes::LoadDBTable::Jobs, &mut alt_connection);
     let mut jobmanager = jobs::Jobs::new(scraper_manager);
 
     data.transaction_flush();
 
     match all_field {
-        sharedtypes::AllFields::JobsAdd(ref jobs_add) => {
+        sharedtypes::AllFields::JobsAdd(jobs_add) => {
             data.jobs_add_new(
                 &jobs_add.site,
                 &jobs_add.query,
                 &jobs_add.time,
-                &jobs_add.committype,
+                Some(jobs_add.committype),
                 true,
             );
 
@@ -224,8 +230,10 @@ fn main() {
                                 );
                             }
                             Some(namespace_id) => {
-                                let tag_option = data
-                                    .tag_get_name(tag.get(0).unwrap().to_string(), namespace_id);
+                                let tag_option = data.tag_get_name(
+                                    tag.get(0).unwrap().clone(),
+                                    namespace_id.clone(),
+                                );
                                 match tag_option {
                                     None => {
                                         logging::info_log(&format!("Couldn't find any tag id's that use namespace_id: {} with tag: {}", namespace_id, tag.get(0).unwrap()));
@@ -233,13 +241,16 @@ fn main() {
                                     }
                                     Some(tag_id) => {
                                         logging::info_log(&format!("Found a tag id's that use namespace_id: {} with tag: {} tagid {}", namespace_id, tag.get(0).unwrap(), tag_id));
-                                        let file_ids = data.relationship_get_fileid(&tag_id);
+                                        let file_ids =
+                                            data.relationship_get_fileid(&tag_id).unwrap();
                                         for each in file_ids {
                                             //dbg!(each);
                                             let file_info = data.file_get_id(&each).unwrap();
                                             logging::info_log(&format!(
                                                 "Found File: {} {} {}",
-                                                file_info.0, file_info.1, file_info.2
+                                                file_info.id.unwrap(),
+                                                file_info.location,
+                                                file_info.hash
                                             ));
                                         }
                                     }
@@ -260,22 +271,24 @@ fn main() {
 
                     for each in hash {
                         let file = data.file_get_hash(each);
-                        dbg!(&file);
 
-                        if file.1 {
-                            let tag = data.relationship_get_tagid(&file.0);
-                            dbg!(&tag);
-                            for tag_each in tag {
-                                let tagdata = data.tag_id_get(tag_each);
-                                let taginfo = tagdata.unwrap();
-                                println!(
-                                    "Id: {:?} Name: {:?} Parents: {:?} Namespace: {:?}",
-                                    &taginfo.id.unwrap(),
-                                    &taginfo.name,
-                                    &taginfo.parents,
-                                    &data.namespace_get_string(&taginfo.namespace.unwrap()).unwrap(),
-                                );
+
+                        match file {
+                            Some(fileone) => {
+                                let tag = data.relationship_get_tagid(fileone).unwrap();
+
+                                for tag_each in tag {
+                                    let tagdata = data.tag_id_get(&tag_each).unwrap();
+                                    println!(
+                                        "Id: {:?} Name: {:?} Namespace: {:?}",
+                                        &tag_each,
+                                        &tagdata.name,
+                                        //&tagdata.parents,
+                                        &data.namespace_get_string(&tagdata.namespace).unwrap().name,
+                                    );
+                                }
                             }
+                            None => {}
                         }
                     }
                 }
@@ -302,7 +315,7 @@ fn main() {
     let mut arc = Arc::new(Mutex::new(data));
 
     let pluginmanager = Arc::new(Mutex::new(plugins::PluginManager::new(
-        plugin_loc,
+        plugin_loc.to_string(),
         arc.clone(),
     )));
 

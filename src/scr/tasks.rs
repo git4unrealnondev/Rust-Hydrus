@@ -51,7 +51,9 @@ pub fn import_files(
         .settings_get_name(&"FilesLoc".to_string())
         .unwrap()
         .param
-        .unwrap();
+        .as_ref()
+        .unwrap()
+        .to_owned();
 
     println!("Importing Files to: {}", &location);
 
@@ -73,7 +75,7 @@ pub fn import_files(
 
         let hash_exists = db.file_get_hash(&hash);
 
-        if hash_exists.1 {
+        if hash_exists.is_some() {
             //delfiles.insert(row.path.to_string(), "".to_owned());
             fs::remove_file(&row.path).unwrap(); // Removes file that's already in DB.
             println!("File: {} already in DB. Skipping import.", &row.path);
@@ -107,8 +109,8 @@ pub fn import_files(
 
         dbg!(&hash, &row);
         // Adds into DB
-        let file_id = db.file_add(None, hash, file_ext, location.to_string(), true);
-        let namespace_id = db.namespace_add(&row.namespace.to_string(), &"".to_string(), true);
+        let file_id = db.file_add(None, &hash, &file_ext, &location, true);
+        let namespace_id = db.namespace_add(row.namespace, None, true);
         let tag_id = db.tag_add(
             row.tag.to_string(),
             "".to_string(),
@@ -117,7 +119,7 @@ pub fn import_files(
             Some(row.id),
         );
 
-        db.relationship_add(file_id, tag_id, true);
+        db.relationship_add(file_id.to_owned(), tag_id.to_owned(), true);
     }
     db.transaction_flush();
     println!("Clearing any files from any move ops.");

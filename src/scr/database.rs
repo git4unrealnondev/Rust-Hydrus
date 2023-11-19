@@ -9,6 +9,7 @@ use ahash::AHashMap;
 use log::{error, info};
 use nohash_hasher::BuildNoHashHasher;
 use nohash_hasher::IntMap;
+use nohash_hasher::IntSet;
 use nohash_hasher::NoHashHasher;
 pub use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, ValueRef};
 pub use rusqlite::{params, types::Null, Connection, Result, Transaction};
@@ -21,7 +22,8 @@ use std::sync::Mutex;
 use std::{collections::HashMap, hash::BuildHasherDefault};
 
 //mod db;
-//use db::inmemdbnew::inmemdbnew;
+mod db;
+use crate::database::db::inmemdbnew::NewinMemDB;
 
 ///
 /// I dont want to keep writing .to_string on EVERY vector of strings.
@@ -55,12 +57,12 @@ pub struct Main {
     pub _conn: Arc<Mutex<Connection>>,
     _vers: isize,
     // inmem db with ahash low lookup/insert time. Alernative to hashmap
-    _inmemdb: Memdb,
+    _inmemdb: NewinMemDB,
     _dbcommitnum: usize,
     _dbcommitnum_static: usize,
     _tables_loaded: Option<Vec<sharedtypes::LoadDBTable>>,
 }
-
+/*
 /// Holds internal in memory hashmap stuff
 #[allow(dead_code)]
 struct Memdb {
@@ -231,7 +233,7 @@ impl Memdb {
     ///
     /// Adds Setting to memdb.
     ///
-    fn settings_add(&mut self, name: String, pretty: String, num: usize, param: String) {
+    /*fn settings_add(&mut self, name: String, pretty: String, num: usize, param: String) {
         // IF we have a key by name then update existing listing.
         if self._settings_name.contains_key(&name) {
             let usize_settings_id = self._settings_name[&name];
@@ -251,7 +253,7 @@ impl Memdb {
             self._settings_param.insert(self._settings_max_id, param);
             self.max_settings_increment();
         }
-    }
+    }*/
     ///
     /// Gets Setting from memdb.
     /// Returns the num & param from memdb.
@@ -271,14 +273,15 @@ impl Memdb {
     }
 
     fn jobs_add_new(&mut self, job: jobs::JobsRef) {
-        self._jobs_ref.insert(job._idindb, job);
+        panic!();
+        //self._jobs_ref.insert(job._idindb, job);
         self.max_jobs_increment();
     }
 
     ///
     /// Adds job to memdb.
     ///
-    fn jobs_add(
+    /*fn jobs_add(
         &mut self,
         jobs_time: usize,
         jobs_rep: usize,
@@ -294,7 +297,7 @@ impl Memdb {
             .insert(self._jobs_max_id, commit);
         self.max_jobs_increment();
         self._jobs_max_id - 1
-    }
+    }*/
 
     ///
     /// Made job ref and adds job into db.
@@ -308,7 +311,7 @@ impl Memdb {
         committype: sharedtypes::CommitType,
     ) {
         let job = jobs::JobsRef {
-            _idindb: self._jobs_max_id,
+            //_idindb: self._jobs_max_id,
             _sites: sites,
             _params: params,
             _jobsref: jobsref,
@@ -381,7 +384,7 @@ impl Memdb {
     ///
     /// Creates a parent inside memdb.
     ///
-    fn parents_put(
+    /*fn parents_put(
         &mut self,
         tag_namespace_id: usize,
         tag_id: usize,
@@ -457,7 +460,7 @@ impl Memdb {
                 TagRelateConjoin::None
             }
         }
-    }
+    }*/
 
     ///
     /// Checks if relationship exists in db.
@@ -511,12 +514,12 @@ impl Memdb {
     ///
     /// Adds relationship to db.
     ///
-    fn relationship_add(&mut self, file: usize, tag: usize) {
+    /*fn relationship_add(&mut self, file: usize, tag: usize) {
         //self._relationship_fileid.insert(file, file);
         //self._relationship_tagid.insert(tag, tag);
         self._relationship_relate
             .insert((file, tag), self._relationship_max_id);
-    }
+    }*/
 
     ///
     /// returns a immutable reference to the database's job table
@@ -726,7 +729,7 @@ impl Memdb {
     ///
     /// Does tags contain key?
     ///
-    pub fn tags_get(&self, tags: String, namespace: usize) -> Option<usize> {
+    /*pub fn tags_get(&self, tags: String, namespace: &usize) -> Option<usize> {
         if self
             ._tags_relate
             .contains_key(&(tags.to_string(), namespace))
@@ -739,7 +742,7 @@ impl Memdb {
         } else {
             None
         }
-    }
+    }*/
 
     pub fn dbg(&mut self) {
         for each in &self._tags_relate {
@@ -747,23 +750,21 @@ impl Memdb {
         }
     }
 
-    ///
-    /// Gets tag name by id
-    ///
-    pub fn tag_id_get(&mut self, uid: usize) -> Option<sharedtypes::DbTagObj> {
+
+    /*pub fn tag_id_get(&mut self, uid: usize) -> Option<sharedtypes::DbTagObj> {
         for (key, val) in self._tags_relate.iter() {
             if val == &uid {
                 return Some(sharedtypes::DbTagObj {
-                    id: Some(uid),
+                    id: uid,
                     name: (key.0.clone()),
                     parents: None,
-                    namespace: Some(key.1.clone()),
+                    namespace: key.1.clone(),
                 });
             }
         }
         None
-    }
-}
+    }*/
+}*/
 
 /// Contains DB functions.
 impl Main {
@@ -774,7 +775,7 @@ impl Main {
         let dbexist = Path::new(&path).exists();
         let connection = dbinit(&path);
         //let conn = connection;
-        let memdb = Memdb::new();
+        let memdb = NewinMemDB::new();
         //let path = String::from("./main.db");
 
         let memdbmain = Main {
@@ -824,26 +825,37 @@ impl Main {
     ///
     /// Shows internals in db
     ///
-    pub fn dbg_show_internals(&self) {
-        self._inmemdb.dbg_show_internals();
-    }
+    //pub fn dbg_show_internals(&self) {
+    //    self._inmemdb.dbg_show_internals();
+    //}
 
     pub fn jobs_add_new_todb(
         &mut self,
-        site: &String,
-        query: &str,
-        time_offset: usize,
-        current_time: usize,
-        committype: &sharedtypes::CommitType,
+        site: Option<String>,
+        query: Option<String>,
+        time_offset: Option<usize>,
+        current_time: Option<usize>,
+        committype: Option<sharedtypes::CommitType>,
     ) {
-        let querya = query.split(' ').map(|s| s.to_string()).collect();
-        self._inmemdb.jobref_new(
+        //let querya = query.split(' ').map(|s| s.to_string()).collect();
+        let wrap = sharedtypes::DbJobsObj {
+            site: site,
+            param: query,
+            time: current_time,
+            reptime: time_offset,
+            committype: committype,
+        };
+        //let wrap = jobs::JobsRef{};
+
+        self._inmemdb.jobref_new(wrap);
+
+        /*self._inmemdb.jobref_new(
             site.to_string(),
             querya,
             current_time,
             time_offset,
             committype.clone(),
-        );
+        );*/
     }
 
     fn jobs_add_new_sql(
@@ -878,16 +890,29 @@ impl Main {
         site: &String,
         query: &String,
         time: &String,
-        committype: &sharedtypes::CommitType,
+        committype: Option<sharedtypes::CommitType>,
         addtodb: bool,
     ) {
         //let a1: String = time.to_string();
         let current_time: usize = time_func::time_secs();
-        let time_offset: usize = time_func::time_conv(time);
+        let time_offset: usize = time_func::time_conv(&time);
 
-        self.jobs_add_new_todb(site, query, time_offset, current_time, committype);
+        self.jobs_add_new_todb(
+            Some(site.to_owned()),
+            Some(query.to_owned()),
+            Some(time_offset),
+            Some(current_time),
+            committype,
+        );
         if addtodb {
-            self.jobs_add_new_sql(site, query, time, committype, current_time, time_offset);
+            self.jobs_add_new_sql(
+                site,
+                query,
+                time,
+                &committype.unwrap(),
+                current_time,
+                time_offset,
+            );
         }
     }
 
@@ -929,7 +954,7 @@ impl Main {
     ///
     pub fn jobs_get_all(
         &self,
-    ) -> &HashMap<usize, jobs::JobsRef, BuildHasherDefault<NoHashHasher<usize>>> {
+    ) -> &HashMap<usize, sharedtypes::DbJobsObj, BuildHasherDefault<NoHashHasher<usize>>> {
         self._inmemdb.jobs_get_all()
     }
 
@@ -944,50 +969,38 @@ impl Main {
     /// Pull job by id
     /// TODO NEEDS TO ADD IN PROPER POLLING FROM DB.
     ///
-    pub fn jobs_get(&self, id: usize) -> Option<DbJobsObj> {
-        self._inmemdb.jobs_get(&id)
+    //pub fn jobs_get(&self, id: usize) -> Option<DbJobsObj> {
+    //    self._inmemdb.jobs_get(&id)
+    //}
 
-        /*if self._inmemdb.jobs_exist(&id).is_some() {
-            self._inmemdb.jobs_get(id)
-        } else {
-            (
-                "".to_string(),
-                "".to_string(),
-                "".to_string(),
-                "".to_string(),
-                false,
-            )
-        }*/
-    }
-
-    pub fn tag_id_get(&mut self, uid: usize) -> Option<sharedtypes::DbTagObj> {
+    pub fn tag_id_get(&self, uid: &usize) -> Option<&sharedtypes::DbTagNNS> {
         self._inmemdb.tag_id_get(uid)
     }
 
     ///
     ///
     ///
-    pub fn relationship_get_fileid(&self, tag: &usize) -> HashSet<usize> {
+    pub fn relationship_get_fileid(&self, tag: &usize) -> Option<&IntSet<usize>> {
         self._inmemdb.relationship_get_fileid(tag)
     }
 
-    pub fn relationship_get_one_fileid(&self, tag: &usize) -> Option<usize> {
+    pub fn relationship_get_one_fileid(&self, tag: &usize) -> Option<&usize> {
         self._inmemdb.relationship_get_one_fileid(tag)
     }
 
-    pub fn relationship_get_tagid(&self, tag: &usize) -> Vec<usize> {
+    pub fn relationship_get_tagid(&self, tag: &usize) -> Option<&IntSet<usize>> {
         self._inmemdb.relationship_get_tagid(tag)
     }
 
-    pub fn settings_get_name(&self, name: &String) -> Option<sharedtypes::DbSettingObj> {
+    pub fn settings_get_name(&self, name: &String) -> Option<&sharedtypes::DbSettingObj> {
         self._inmemdb.settings_get_name(name)
     }
 
     ///
     /// Returns total jobs from _inmemdb
     ///
-    pub fn jobs_get_max(&self) -> usize {
-        self._inmemdb.jobs_total()
+    pub fn jobs_get_max(&self) -> &usize {
+        self._inmemdb.jobs_get_max()
     }
 
     ///
@@ -1165,54 +1178,49 @@ impl Main {
         self.transaction_flush();
     }
     pub fn updatedb(&mut self) {
-        self._inmemdb.settings_add(
+        self.setting_add(
             "DBCOMMITNUM".to_string(),
-            "Number of transactional items before pushing to db.".to_string(),
-            3000,
-            "None".to_string(),
+            Some("Number of transactional items before pushing to db.".to_string()),
+            Some(3000),
+            None,
+            true,
         );
 
         self.setting_add(
             "VERSION".to_string(),
-            "Version that the database is currently on.".to_string(),
+            Some("Version that the database is currently on.".to_string()),
             Some(self._vers.try_into().unwrap()),
-            "None".to_string(),
+            None,
             true,
         );
         info!("Set VERSION to 1.");
-        self.setting_add(
-            "DEFAULTRATELIMIT".to_string(),
-            "None".to_string(),
-            Some(5),
-            "None".to_string(),
-            true,
-        );
+        self.setting_add("DEFAULTRATELIMIT".to_string(), None, Some(5), None, true);
         self.setting_add(
             "FilesLoc".to_string(),
-            "None".to_string(),
             None,
-            "./Files/".to_string(),
+            None,
+            Some("./Files/".to_string()),
             true,
         );
         self.setting_add(
             "DEFAULTUSERAGENT".to_string(),
-            "None".to_string(),
             None,
-            "DIYHydrus/1.0".to_string(),
+            None,
+            Some("DIYHydrus/1.0".to_string()),
             true,
         );
         self.setting_add(
             "pluginloadloc".to_string(),
-            "Where plugins get loaded into.".to_string(),
+            Some("Where plugins get loaded into.".to_string()),
             None,
-            "./Plugins/".to_string(),
+            Some("./Plugins/".to_string()),
             true,
         );
         self.setting_add(
             "DBCOMMITNUM".to_string(),
-            "Number of transactional items before pushing to db.".to_string(),
+            Some("Number of transactional items before pushing to db.".to_string()),
             Some(3000),
-            "None".to_string(),
+            None,
             true,
         );
         self.transaction_flush();
@@ -1359,9 +1367,9 @@ impl Main {
 
         self.setting_add(
             "VERSION".to_string(),
-            "Version that the database is currently on.".to_string(),
+            Some("Version that the database is currently on.".to_string()),
             Some(2),
-            "".to_string(),
+            None,
             true,
         );
 
@@ -1467,12 +1475,19 @@ impl Main {
     ///
     pub fn file_add_db(
         &mut self,
-        id: Option<usize>,
-        hash: Option<&String>,
-        extension: Option<&String>,
-        location: Option<&String>,
+        id_insert: Option<usize>,
+        hash_insert: String,
+        extension_insert: String,
+        location_insert: String,
     ) -> usize {
-        self._inmemdb.file_put(id, hash, extension, location)
+        let file = sharedtypes::DbFileObj {
+            id: id_insert,
+            hash: hash_insert,
+            ext: extension_insert,
+            location: location_insert,
+        };
+
+        self._inmemdb.file_put(file)
     }
 
     ///
@@ -1496,12 +1511,7 @@ impl Main {
             .unwrap();
         for each in files {
             if let Ok(res) = each {
-                self.file_add_db(
-                    res.id,
-                    Some(&res.hash.unwrap()),
-                    Some(&res.ext.unwrap()),
-                    Some(&res.location.unwrap()),
-                );
+                self.file_add_db(res.id, res.hash, res.ext, res.location);
             } else {
                 error!("Bad File cant load {:?}", each);
             }
@@ -1525,7 +1535,7 @@ impl Main {
             .unwrap();
         for each in namespaces {
             if let Ok(res) = each {
-                self.namespace_add_db(&res.name.unwrap(), res.id);
+                self.namespace_add_db(res);
             } else {
                 error!("Bad Namespace cant load {:?}", each);
             }
@@ -1552,13 +1562,7 @@ impl Main {
 
         for each in jobs {
             if let Ok(res) = each {
-                self.jobs_add_new_todb(
-                    &res.site.unwrap(),
-                    &res.param.unwrap(),
-                    res.reptime.unwrap(),
-                    res.time.unwrap(),
-                    &res.committype.unwrap(),
-                );
+                self.jobs_add_new_todb(res.site, res.param, res.reptime, res.time, res.committype);
             } else {
                 error!("Bad Job cant load {:?}", each);
             }
@@ -1644,19 +1648,7 @@ impl Main {
 
         for each in settings {
             if let Ok(res) = each {
-                let pretty_out = match res.pretty {
-                    None => "".to_string(),
-                    Some(pretty_string) => pretty_string,
-                };
-
-                match res.param {
-                    None => {
-                        self.setting_add_db(res.name, pretty_out, res.num, "".to_string());
-                    }
-                    Some(_) => {
-                        self.setting_add_db(res.name, pretty_out, res.num, res.param.unwrap());
-                    }
-                }
+                self.setting_add_db(res.name, res.pretty, res.num, res.param);
             } else {
                 error!("Bad Setting cant load {:?}", each);
             }
@@ -1671,7 +1663,7 @@ impl Main {
         logging::info_log(&"Database is Loading: Tags".to_string());
         let mut taex = conn.prepare("SELECT * FROM Tags").unwrap();
         let tag = taex.query_map([], |row| {
-            Ok(sharedtypes::DbTagObj {
+            Ok(sharedtypes::DbTagObjCompatability {
                 id: row.get(0).unwrap(),
                 name: row.get(1).unwrap(),
                 parents: None,
@@ -1683,7 +1675,7 @@ impl Main {
             Ok(tags) => {
                 for each in tags {
                     if let Ok(res) = each {
-                        self.tag_add_db(res.name, &res.namespace.unwrap(), res.id);
+                        self.tag_add(res.name, "".to_string(), res.namespace, false, Some(res.id));
                     } else {
                         error!("Bad Tag cant load {:?}", each);
                     }
@@ -1747,15 +1739,20 @@ impl Main {
     ///
     /// Wrapper
     ///
-    pub fn file_get_hash(&self, hash: &String) -> (usize, bool) {
+    pub fn file_get_hash(&self, hash: &String) -> Option<&usize> {
         self._inmemdb.file_get_hash(hash)
     }
 
     ///
     /// Wrapper
     ///
-    pub fn tag_get_name(&self, tag: String, namespace: usize) -> Option<usize> {
-        self._inmemdb.tags_get(tag, namespace)
+    pub fn tag_get_name(&self, tag: String, namespace: usize) -> Option<&usize> {
+        let tagobj = &sharedtypes::DbTagNNS {
+            name: tag,
+            namespace: namespace,
+        };
+
+        self._inmemdb.tags_get_id(tagobj)
     }
 
     ///
@@ -1825,9 +1822,9 @@ impl Main {
         for each in hashmap_settings.keys() {
             self.setting_add_sql(
                 each.0.to_string(),
-                each.1.to_string(),
+                &Some(each.1.to_owned()),
                 each.2,
-                each.3.to_string(),
+                &Some(each.3.to_owned()),
             );
         }
         hashmap_settings.clear();
@@ -1860,12 +1857,7 @@ impl Main {
             //    &each.2.to_string(),
             //);
 
-            self.file_add_sql(
-                each.1.to_string(),
-                each.2.to_string(),
-                each.3.to_string(),
-                each.0,
-            );
+            self.file_add_sql(&each.1, &each.2, &each.3, &each.0);
         }
 
         {
@@ -1921,7 +1913,7 @@ impl Main {
         }
         for each in hashmap_namespace.keys() {
             //let name_id = self.namespace_add_db(&each.0.to_string());
-            self.namespace_add_sql(&each.1.to_string(), &each.2.to_string(), each.0);
+            self.namespace_add_sql(&each.1.to_string(), &Some(each.2.to_string()), &each.0);
         }
         hashmap_namespace.clear();
         {
@@ -1992,9 +1984,7 @@ impl Main {
             }
         }
         for each in hashmap_tags.keys() {
-            //let tag_id = self.tag_add_db(&each.0, &each.2);
             self.tag_add_sql(each.0, each.1.to_string(), each.2.to_string(), each.3);
-            //self.tag_add(each.0.to_string(), each.1.to_string(), each.2, addtodb);
         }
 
         hashmap_tags.clear();
@@ -2002,21 +1992,18 @@ impl Main {
 
     ///
     /// db get namespace wrapper
-    /// Returns 0, false if namespace doesn't exist.
     ///
-    pub fn namespace_get(&mut self, inp: &String) -> Option<usize> {
+    pub fn namespace_get(&self, inp: &String) -> Option<&usize> {
         self._inmemdb.namespace_get(inp)
     }
-    
-    
+
     ///
     /// Returns namespace as a string from an ID returns None if it doesn't exist.
     ///
-    pub fn namespace_get_string(&self, inp: &usize) -> Option<String> {
+    pub fn namespace_get_string(&self, inp: &usize) -> Option<&sharedtypes::DbNamespaceObj> {
         self._inmemdb.namespace_id_get(inp)
     }
-    
-    
+
     pub fn db_commit_man_set(&mut self) {
         self._dbcommitnum_static = self
             .settings_get_name(&"DBCOMMITNUM".to_string())
@@ -2028,17 +2015,21 @@ impl Main {
     ///
     /// Adds file via SQL
     ///
-    fn file_add_sql(&mut self, hash: String, extension: String, location: String, file_id: usize) {
+    fn file_add_sql(
+        &mut self,
+        hash: &String,
+        extension: &String,
+        location: &String,
+        file_id: &usize,
+    ) {
+        //println!("FILE_SQL {} {} {} {}", hash, extension, location, file_id);
         let inp = "INSERT INTO File VALUES(?, ?, ?, ?)";
-        let _out = self._conn.borrow_mut().lock().unwrap().execute(
-            inp,
-            params![
-                &file_id.to_string(),
-                &hash.to_string(),
-                &extension.to_string(),
-                &location.to_string()
-            ],
-        );
+        let _out = self
+            ._conn
+            .borrow_mut()
+            .lock()
+            .unwrap()
+            .execute(inp, params![file_id, hash, extension, location,]);
         self.db_commit_man();
     }
 
@@ -2049,21 +2040,30 @@ impl Main {
     pub fn file_add(
         &mut self,
         id: Option<usize>,
-        hash: String,
-        extension: String,
-        location: String,
+        hash: &String,
+        extension: &String,
+        location: &String,
         addtodb: bool,
     ) -> usize {
-        let file_grab: (usize, bool) = self._inmemdb.file_get_hash(&hash);
+        let file_grab = self.file_get_hash(&hash);
 
-        let file_id = self.file_add_db(id, Some(&hash), Some(&extension), Some(&location));
-
-        //let file_id = self._inmemdb.file_put(&hash, &extension, &location);
-
-        if addtodb && !file_grab.1 {
-            self.file_add_sql(hash, extension, location, file_id);
+        match file_grab {
+            None => {
+                let file_id = self.file_add_db(
+                    id.to_owned(),
+                    hash.to_owned(),
+                    extension.to_owned(),
+                    location.to_owned(),
+                );
+                if addtodb {
+                    self.file_add_sql(&hash, &extension, &location, &file_id);
+                    file_id
+                } else {
+                    file_id
+                }
+            }
+            Some(file_id) => file_id.to_owned(),
         }
-        file_id
     }
 
     ///
@@ -2071,26 +2071,28 @@ impl Main {
     /// Returns info for file in Option
     // DO NOT USE UNLESS NECISSARY. LOG(n2) * 3
     ///
-    pub fn file_get_id(&self, fileid: &usize) -> Option<(String, String, String)> {
+    pub fn file_get_id(&self, fileid: &usize) -> Option<&sharedtypes::DbFileObj> {
         self._inmemdb.file_get_id(fileid)
     }
 
     ///
     /// Wrapper for inmemdb adding
     ///
-    fn namespace_add_db(&mut self, name: &String, id: Option<usize>) -> usize {
-        self._inmemdb.namespace_put(name, id)
+    fn namespace_add_db(&mut self, namespace_obj: sharedtypes::DbNamespaceObj) -> usize {
+        self._inmemdb.namespace_put(namespace_obj)
     }
 
     ///
     ///
     ///
-    fn namespace_add_sql(&mut self, name: &String, description: &String, name_id: usize) {
+    fn namespace_add_sql(&mut self, name: &String, description: &Option<String>, name_id: &usize) {
         let inp = "INSERT INTO Namespace VALUES(?, ?, ?)";
-        let _out = self._conn.borrow_mut().lock().unwrap().execute(
-            inp,
-            params![&name_id.to_string(), &name.to_string(), &description],
-        );
+        let _out = self
+            ._conn
+            .borrow_mut()
+            .lock()
+            .unwrap()
+            .execute(inp, params![name_id, name, description]);
         self.db_commit_man();
     }
 
@@ -2098,14 +2100,29 @@ impl Main {
     /// Adds namespace into DB.
     /// Returns the ID of the namespace.
     ///
-    pub fn namespace_add(&mut self, name: &String, description: &String, addtodb: bool) -> usize {
-        let namespace_grab = self._inmemdb.namespace_get(name);
-        let name_id = self.namespace_add_db(name, namespace_grab);
+    pub fn namespace_add(
+        &mut self,
+        name: String,
+        description: Option<String>,
+        addtodb: bool,
+    ) -> usize {
+        let namespace_grab = self._inmemdb.namespace_get(&name);
+        match namespace_grab {
+            None => {}
+            Some(id) => return id.to_owned(),
+        }
+
+        let ns_id = self._inmemdb.namespace_get_max();
+        let ns = sharedtypes::DbNamespaceObj {
+            id: ns_id,
+            name: name,
+            description: description,
+        };
 
         if addtodb && namespace_grab.is_none() {
-            self.namespace_add_sql(name, description, name_id);
+            self.namespace_add_sql(&ns.name, &ns.description, &ns_id);
         }
-        name_id
+        self.namespace_add_db(ns)
     }
 
     ///
@@ -2140,7 +2157,7 @@ impl Main {
         tag_id: usize,
         relate_namespace_id: usize,
         relate_tag_id: usize,
-    ) -> TagRelateConjoin {
+    ) -> usize {
         self._inmemdb
             .parents_put(tag_namespace_id, tag_id, relate_namespace_id, relate_tag_id)
     }
@@ -2156,60 +2173,48 @@ impl Main {
         relate_tag_id: usize,
         addtodb: bool,
     ) {
+        
+        let parent = self._inmemdb.parents_get(&sharedtypes::DbParentsObj{tag_namespace_id: tag_namespace_id, tag_id: tag_id, relate_tag_id: relate_tag_id, relate_namespace_id: relate_namespace_id});
+        
         let todo =
             self.parents_add_db(tag_namespace_id, tag_id, relate_namespace_id, relate_tag_id);
 
-        match todo {
-            TagRelateConjoin::Tag => {
-                if addtodb {
-                    self.parents_add_sql(
-                        &tag_namespace_id,
-                        &tag_id,
-                        &relate_namespace_id,
-                        &relate_tag_id,
-                    );
-                }
-            }
-            TagRelateConjoin::Error => {}
-            TagRelateConjoin::Relate => {
-                if addtodb {
-                    self.parents_add_sql(
-                        &tag_namespace_id,
-                        &tag_id,
-                        &relate_namespace_id,
-                        &relate_tag_id,
-                    );
-                }
-            }
-            TagRelateConjoin::Conjoin => {
-                if addtodb {
-                    self.parents_add_sql(
-                        &tag_namespace_id,
-                        &tag_id,
-                        &relate_namespace_id,
-                        &relate_tag_id,
-                    );
-                }
-            }
-            TagRelateConjoin::TagAndRelate => {
-                if addtodb {
-                    self.parents_add_sql(
-                        &tag_namespace_id,
-                        &tag_id,
-                        &relate_namespace_id,
-                        &relate_tag_id,
-                    );
-                }
-            }
-            TagRelateConjoin::None => {}
+        if addtodb &parent.is_none(){
+            self.parents_add_sql(
+                &tag_namespace_id,
+                &tag_id,
+                &relate_namespace_id,
+                &relate_tag_id,
+            );
         }
     }
 
     ///
-    /// Adds tags into inmemdb
+    /// Adds tag into inmemdb
     ///
-    fn tag_add_db(&mut self, tags: String, namespace: &usize, id: Option<usize>) -> usize {
-        self._inmemdb.tags_put(tags, &namespace, id)
+    fn tag_add_db(&mut self, tag: String, namespace: &usize, ond_id: Option<usize>) -> usize {
+        match self._inmemdb.tags_get_id(&sharedtypes::DbTagNNS {
+            name: tag.to_string(),
+            namespace: namespace.to_owned(),
+        }) {
+            None => {
+                let tag_id_max = self._inmemdb.tags_max_return().to_owned();
+                let tag_info = sharedtypes::DbTagObjCompatability {
+                    id: tag_id_max,
+                    name: tag,
+                    parents: None,
+                    namespace: namespace.clone(),
+                };
+                self._inmemdb.tags_put(tag_info);
+                return tag_id_max;
+            }
+            Some(tag_id_max) => return tag_id_max.to_owned(),
+        }
+
+        //let choose_id = match id {
+        //    None => self._inmemdb.tags_max_return().clone(),
+        //    Some(matchid) => matchid
+        //};
     }
 
     ///
@@ -2230,6 +2235,14 @@ impl Main {
     }
 
     ///
+    /// prints db info
+    ///
+    pub fn debugdb(&self) {
+        self._inmemdb.dumpe_data();
+    }
+    
+    
+    ///
     /// Adds tag into DB if it doesn't exist in the memdb.
     ///
     pub fn tag_add(
@@ -2240,17 +2253,47 @@ impl Main {
         addtodb: bool,
         id: Option<usize>,
     ) -> usize {
-        //let tags_grab = self._inmemdb.tags_get(tags.to_string(), namespace);
-        let tag_id = self.tag_add_db(tags.to_string(), &namespace, id);
-        self.db_commit_man();
-        //println!("{} {} {} {:?} {}", tags, namespace, addtodb, tags_grab, tag_id);
-        if addtodb && id.is_none() {
-            //dbg!(format!("Commiting to db: {} {} {}", tag_id, tags, namespace));
-            self.tag_add_sql(tag_id, tags, parents, namespace);
-        } else {
-            //dbg!(format!("skipping: {} {} {} because {:?}", tag_id, tags, namespace, tags_grab));
-        }
-        tag_id
+        let tagnns = sharedtypes::DbTagNNS {
+            name: tags.to_string(),
+            namespace: namespace,
+        };
+        match id {
+            None => {
+                // Do we have an ID coming in to add manually?
+
+                let tags_grab = self._inmemdb.tags_get_id(&tagnns).copied();
+                match tags_grab {
+                    None => {
+                        let tag_id = self.tag_add_db(tagnns.name.clone(), &tagnns.namespace, None);
+                        if addtodb {
+                            self.tag_add_sql(
+                                tag_id.clone(),
+                                tagnns.name,
+                                "".to_string(),
+                                tagnns.namespace,
+                            );
+                            self.db_commit_man();
+                        }
+                        return tag_id;
+                    }
+                    Some(tag_id) => return tag_id,
+                };
+            }
+            Some(tag_idin) => {
+                // We've got an ID coming in will check if it exists.
+                let tag_id = self.tag_add_db(tagnns.name.clone(), &tagnns.namespace, Some(tag_idin));
+                if addtodb {
+                    self.tag_add_sql(
+                        tag_id.clone(),
+                        tagnns.name,
+                        "".to_string(),
+                        tagnns.namespace,
+                    );
+                    self.db_commit_man();
+                }
+                return tag_id;
+            }
+        };
     }
 
     ///
@@ -2279,18 +2322,28 @@ impl Main {
     /// Inherently trusts user user to not duplicate stuff.
     ///
     pub fn relationship_add(&mut self, file: usize, tag: usize, addtodb: bool) {
-        let existcheck = self._inmemdb.relationship_get(file, tag);
+        let existcheck = self._inmemdb.relationship_get(&file, &tag);
 
         if addtodb && !existcheck {
+            //println!("relationship a ");
             self.relationship_add_sql(file, tag);
         }
 
-        self.relationship_add_db(file, tag);
+        if !existcheck {
+            //println!("relationship b ");
+            self.relationship_add_db(file, tag);
+        }
+        //println!("relationship complete : {} {}", file, tag);
     }
 
     fn jobs_add_db(&mut self, time: usize, reptime: usize, site: String, param: String) {
-        self._inmemdb
-            .jobs_add(time, reptime, site.to_string(), param.to_string(), false);
+        self._inmemdb.jobs_add(DbJobsObj {
+            time: Some(time),
+            reptime: Some(reptime),
+            site: Some(site),
+            param: Some(param),
+            committype: None,
+        });
     }
 
     pub fn jobs_add(
@@ -2325,25 +2378,30 @@ impl Main {
     ///
     /// Wrapper for inmemdb insert.
     ///
-    fn setting_add_db(&mut self, name: String, pretty: String, num: Option<usize>, param: String) {
-        match num {
-            None => {
-                self._inmemdb.settings_add(name, pretty, 0, param);
-            }
-            Some(usize_num) => {
-                self._inmemdb.settings_add(name, pretty, usize_num, param);
-            }
-        }
+    fn setting_add_db(
+        &mut self,
+        name: String,
+        pretty: Option<String>,
+        num: Option<usize>,
+        param: Option<String>,
+    ) {
+        self._inmemdb.settings_add(name, pretty, num, param);
     }
 
-    fn setting_add_sql(&mut self, name: String, pretty: String, num: Option<usize>, param: String) {
+    fn setting_add_sql(
+        &mut self,
+        name: String,
+        pretty: &Option<String>,
+        num: Option<usize>,
+        param: &Option<String>,
+    ) {
         let _ex = self._conn.borrow_mut().lock().unwrap().execute(
             "INSERT INTO Settings(name, pretty, num, param) VALUES (?1, ?2, ?3, ?4) ON CONFLICT(name) DO UPDATE SET pretty=?2, num=?3, param=?4 ;",
             params![
                 &name,
                 //Hella jank workaround. can only pass 1 type into a function without doing workaround.
                 //This makes it work should be fine for one offs.
-                if &pretty == "None" {
+                if pretty.is_none() {
                     &Null as &dyn ToSql
                 } else {
                     &pretty
@@ -2353,7 +2411,7 @@ impl Main {
                 } else {
                     &num
                 },
-                if &param == "None" {
+                if param.is_none() {
                     &Null as &dyn ToSql
                 } else {
                     &param
@@ -2385,15 +2443,15 @@ impl Main {
     pub fn setting_add(
         &mut self,
         name: String,
-        pretty: String,
+        pretty: Option<String>,
         num: Option<usize>,
-        param: String,
+        param: Option<String>,
         addtodb: bool,
     ) {
         let _temp: isize = -9999;
 
         if addtodb {
-            self.setting_add_sql(name.to_string(), pretty.to_string(), num, param.to_string());
+            self.setting_add_sql(name.to_string(), &pretty, num, &param);
         }
         // Adds setting into memdbb
 
@@ -2424,6 +2482,51 @@ impl Main {
     pub fn get_db_loc(&self) -> String {
         self._dbpath.to_string()
     }
+    
+    ///
+    /// database searching advanced.
+    ///
+    pub fn db_search_adv(&self, db_search: sharedtypes::DbSearchQuery) {
+        
+        let namespaceone_unwrap = self.search_for_namespace(&db_search.tag_one);
+        //let namespacetwo_unwrap = self.search_for_namespace(db_search.tag_two);
+        
+        if namespaceone_unwrap.is_none()  {
+            logging::info_log(
+                &format!("Couldn't find namespace from search: {:?} {:?}", db_search.tag_one, namespaceone_unwrap),
+            );
+            return
+        }
+        let namespaceone = namespaceone_unwrap.unwrap();
+        //let tagtwo = namespacetwo_unwrap.unwrap();
+        
+        
+        
+    }
+    
+    ///
+    /// Parses data from search query to return an id
+    ///
+    fn search_for_namespace(&self, search: &sharedtypes::DbSearchObject) -> Option<usize>{
+        match &search.namespace {
+            None => {
+                match search.namespace_id {
+                    None => None,
+                    Some(id) => Some(id)
+                }
+            },
+            Some(id_string) => {
+                match self.namespace_get(id_string) {
+                    None => None,
+                    Some(id) => Some(id.clone())
+                }
+            },
+        }
+        
+        
+        
+    }
+    
 
     ///
     /// Querys the db use this for select statements.

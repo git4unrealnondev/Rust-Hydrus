@@ -44,9 +44,9 @@ fn downloadparse(img: DynamicImage) -> String {
             let string_blurhash = downloadparse(good_lmimg);
             
             let plugin_output = sharedtypes::DBPluginOutput {
-                file: Some(vec!(sharedtypes::DbFileObj{id: None, hash: Some(hash_in.to_string()), ext: Some(ext_in.to_string()), location: None})),
+                file: Some(vec!(sharedtypes::PluginFileObj{id: None, hash: Some(hash_in.to_string()), ext: Some(ext_in.to_string()), location: None})),
                 jobs: None,
-                namespace: Some(vec!(sharedtypes::DbNamespaceObj{id: None, name: Some(PLUGIN_NAME.to_string()), description: Some(PLUGIN_DESCRIPTION.to_string())})),
+                namespace: Some(vec!(sharedtypes::PluginNamespaceObj{id: None, name: Some(PLUGIN_NAME.to_string()), description: Some(PLUGIN_DESCRIPTION.to_string())})),
                 parents: None,
                 setting:None,
                 tag: Some(vec!(sharedtypes::DBPluginTagOut{name: string_blurhash.to_string(), namespace: PLUGIN_NAME.to_string(), parents: None})),

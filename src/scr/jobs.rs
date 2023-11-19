@@ -23,19 +23,19 @@ pub struct Jobs {
     _params: Vec<Vec<String>>,
     //References jobid in _inmemdb hashmap :D
     _jobstorun: Vec<usize>,
-    _jobref: AHashMap<usize, (JobsRef, scraper::InternalScraper)>,
+    _jobref: AHashMap<usize, (sharedtypes::DbJobsObj, scraper::InternalScraper)>,
     scrapermanager: scraper::ScraperManager,
 }
-#[derive(Debug, Clone)]
+/*#[derive(Debug, Clone)]
 pub struct JobsRef {
-    pub _idindb: usize,       // What is my ID in the inmemdb
+    //pub _idindb: usize,       // What is my ID in the inmemdb
     pub _sites: String,       // Site that the user is querying
     pub _params: Vec<String>, // Anything that the user passes into the db.
     pub _jobsref: usize,      // reference time to when to run the job
     pub _jobstime: usize,     // reference time to when job is added
     pub _committype: CommitType,
     //pub _scraper: scraper::ScraperManager // Reference to the scraper that will be used
-}
+}*/
 
 ///
 /// Jobs manager creates & manages jobs
@@ -62,11 +62,18 @@ impl Jobs {
         let hashjobs = db.jobs_get_all();
         let beans = self.scrapermanager.scraper_get();
         for each in hashjobs {
-            if time_func::time_secs() >= each.1._jobsref + each.1._jobstime {
+            dbg!(
+                time_func::time_secs(),
+                each.1.time.unwrap(),
+                each.1.reptime.unwrap()
+            );
+            if time_func::time_secs() >= each.1.time.unwrap() + each.1.reptime.unwrap() {
                 for eacha in beans {
-                    if eacha._sites.contains(&each.1._sites) {
+                    let dbsite = each.1.site.to_owned();
+                    dbg!(&dbsite, &eacha._sites);
+                    if eacha._sites.contains(&dbsite.unwrap()) {
                         self._jobref
-                            .insert(*each.0, (each.1.clone(), eacha.clone()));
+                            .insert(*each.0, (each.1.to_owned(), eacha.to_owned()));
                     }
                 }
             }
@@ -95,7 +102,8 @@ impl Jobs {
         let mut db = dba.lock().unwrap();
 
         //let mut name_ratelimited: AHashMap<String, (u64, Duration)> = AHashMap::new();
-        let mut scraper_and_job: AHashMap<InternalScraper, Vec<JobsRef>> = AHashMap::new();
+        let mut scraper_and_job: AHashMap<InternalScraper, Vec<sharedtypes::DbJobsObj>> =
+            AHashMap::new();
         //let mut job_plus_storeddata: AHashMap<String, String> = AHashMap::new();
 
         // Checks if their are no jobs to run.
@@ -116,7 +124,7 @@ impl Jobs {
             match name_result {
                 Some(_) => {
                     //dbg!(name_result);
-                    info = name_result.unwrap().name;
+                    //&name_result.unwrap().name
                 }
                 None => {
                     let isolatedtitle = format!("{:?}_{}", scrape._type, scrape._name);
@@ -125,14 +133,13 @@ impl Jobs {
 
                     db.setting_add(
                         isolatedtitle,
-                        "Automatic Scraper".to_owned(),
+                        Some("Automatic Scraper".to_owned()),
                         None,
-                        cookie_name.clone(),
+                        Some(cookie_name),
                         true,
                     );
-                    info = cookie_name;
                 }
-            }
+            };
             // Loops through all jobs in the ref. Adds ref into
             for each in &self._jobref {
                 let job = each.1;

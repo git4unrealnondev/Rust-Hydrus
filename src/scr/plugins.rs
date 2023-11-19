@@ -260,8 +260,8 @@ impl PluginManager {
                                     && namespace_id.is_some()
                                 {
                                     namespace_id = Some(unwrappy.namespace_add(
-                                        &namespace.name.unwrap(),
-                                        &namespace.description.unwrap(),
+                                        namespace.name.unwrap(),
+                                        namespace.description,
                                         true,
                                     ));
                                 } else {
@@ -279,20 +279,21 @@ impl PluginManager {
                                         let location = unwrappy
                                             .settings_get_name(&"FilesLoc".to_string())
                                             .unwrap()
-                                            .param;
+                                            .param
+                                            .to_owned();
                                         unwrappy.file_add(
                                             None,
-                                            files.hash.unwrap(),
-                                            files.ext.unwrap(),
-                                            location.unwrap(),
+                                            &files.hash.unwrap(),
+                                            &files.ext.unwrap(),
+                                            &location.unwrap(),
                                             true,
                                         );
                                     } else {
                                         unwrappy.file_add(
                                             files.id,
-                                            files.hash.unwrap(),
-                                            files.ext.unwrap(),
-                                            files.location.unwrap(),
+                                            &files.hash.unwrap(),
+                                            &files.ext.unwrap(),
+                                            &files.location.unwrap(),
                                             true,
                                         );
                                     }
@@ -301,12 +302,13 @@ impl PluginManager {
                         }
                         if let Some(temp) = names.tag {
                             for tags in temp {
-                                let namespace_id = unwrappy.namespace_get(&tags.namespace);
+                                let namespace_id = unwrappy.namespace_get(&tags.namespace).cloned();
+                                //match namespace_id {}
                                 if tags.parents.is_none() && namespace_id.is_some() {
                                     unwrappy.tag_add(
                                         tags.name,
                                         "".to_string(),
-                                        namespace_id.unwrap(),
+                                        namespace_id.unwrap().clone(),
                                         true,
                                         None,
                                     );
@@ -315,7 +317,7 @@ impl PluginManager {
                                         unwrappy.tag_add(
                                             tags.name.to_string(),
                                             parents_obj.relate_tag_id,
-                                            namespace_id.unwrap(),
+                                            namespace_id.unwrap().clone(),
                                             true,
                                             None,
                                         );
@@ -327,9 +329,9 @@ impl PluginManager {
                             for settings in temp {
                                 unwrappy.setting_add(
                                     settings.name,
-                                    settings.pretty.unwrap(),
+                                    settings.pretty,
                                     settings.num,
-                                    settings.param.unwrap(),
+                                    settings.param,
                                     true,
                                 );
                             }
@@ -338,11 +340,16 @@ impl PluginManager {
                         if let Some(_temp) = names.jobs {}
                         if let Some(temp) = names.relationship {
                             for relations in temp {
-                                let file_id = unwrappy.file_get_hash(&relations.file_hash);
+                                let file_id = unwrappy.file_get_hash(&relations.file_hash).cloned();
                                 let namespace_id = unwrappy.namespace_get(&relations.tag_namespace);
                                 let tag_id = unwrappy
-                                    .tag_get_name(relations.tag_name, namespace_id.unwrap());
-                                unwrappy.relationship_add(file_id.0, tag_id.unwrap(), true);
+                                    .tag_get_name(relations.tag_name, namespace_id.unwrap().clone())
+                                    .cloned();
+                                unwrappy.relationship_add(
+                                    file_id.unwrap().clone(),
+                                    tag_id.unwrap().clone(),
+                                    true,
+                                );
                                 //unwrappy.relationship_add(file, tag, addtodb)
                             }
                         }

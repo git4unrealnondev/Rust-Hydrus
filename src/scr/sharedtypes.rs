@@ -7,7 +7,7 @@ use strum::IntoEnumIterator;
 use strum_macros::Display;
 use strum_macros::EnumIter;
 
-#[derive(Debug, EnumIter, Clone, Eq, Hash, PartialEq)]
+#[derive(Debug, EnumIter, Clone, Eq, Hash, PartialEq, Copy)]
 pub enum CommitType {
     StopOnNothing, // Processes all files and data doesn't stop processing.
     StopOnFile,    // Stops processing if it sees a file it's already seen.
@@ -50,8 +50,20 @@ pub struct ScraperObject {
 /// File object
 /// should of done this sooner lol
 ///
-#[derive(Debug)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct DbFileObj {
+    pub id: Option<usize>,
+    pub hash: String,
+    pub ext: String,
+    pub location: String,
+}
+
+///
+/// File object
+/// Should only be used for parsing data from plugins
+///
+#[derive(Debug, Deserialize, Serialize)]
+pub struct PluginFileObj {
     pub id: Option<usize>,
     pub hash: Option<String>,
     pub ext: Option<String>,
@@ -64,6 +76,17 @@ pub struct DbFileObj {
 ///
 #[derive(Debug)]
 pub struct DbNamespaceObj {
+    pub id: usize,
+    pub name: String,
+    pub description: Option<String>,
+}
+
+///
+/// Namespace object
+/// should of done this sooner lol
+///
+#[derive(Debug)]
+pub struct PluginNamespaceObj {
     pub id: Option<usize>,
     pub name: Option<String>,
     pub description: Option<String>,
@@ -72,7 +95,7 @@ pub struct DbNamespaceObj {
 ///
 /// Database Jobs object
 ///
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct DbJobsObj {
     pub time: Option<usize>,
     pub reptime: Option<usize>,
@@ -84,7 +107,7 @@ pub struct DbJobsObj {
 ///
 /// Database Parents Object.
 ///
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy)]
 pub struct DbParentsObj {
     pub tag_namespace_id: usize,
     pub tag_id: usize,
@@ -116,11 +139,58 @@ pub struct DbSettingObj {
 /// Database Tags Object
 ///
 #[derive(Debug, Deserialize, Serialize)]
-pub struct DbTagObj {
-    pub id: Option<usize>,
+pub struct DbTagObjCompatability {
+    pub id: usize,
     pub name: String,
     pub parents: Option<usize>,
-    pub namespace: Option<usize>,
+    pub namespace: usize,
+}
+
+///
+/// Database search object
+///
+#[derive(Debug)]
+pub struct DbSearchObject {
+    pub tag: String,
+    pub namespace: Option<String>,
+    pub namespace_id: Option<usize>,
+}
+
+///
+/// Database search enum between 2 tags
+///
+#[derive(Debug)]
+pub enum DbSearchTypeEnum {
+    AND,
+    OR,
+}
+
+///
+/// Database search query
+///
+#[derive(Debug)]
+pub struct DbSearchQuery {
+    pub tag_one: DbSearchObject,
+    pub tag_two: DbSearchObject,
+    pub search_enum: DbSearchTypeEnum,
+}
+
+///
+/// Database Tags Object
+///
+#[derive(Debug)]
+pub struct DbTagObjNNS {
+    pub id: usize,
+    pub parents: Option<usize>,
+}
+
+///
+/// Database Tags Object
+///
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize, Serialize)]
+pub struct DbTagNNS {
+    pub name: String,
+    pub namespace: usize,
 }
 
 ///
@@ -167,8 +237,8 @@ pub struct DBPluginOutput {
     pub relationship: Option<Vec<DbPluginRelationshipObj>>, // Adds a relationship into the DB.
     pub parents: Option<Vec<DbParentsObj>>, // Adds a parent object in db
     pub jobs: Option<Vec<DbJobsObj>>,       // Adds a job
-    pub namespace: Option<Vec<DbNamespaceObj>>, // Adds a namespace
-    pub file: Option<Vec<DbFileObj>>,       // Adds a file into db
+    pub namespace: Option<Vec<PluginNamespaceObj>>, // Adds a namespace
+    pub file: Option<Vec<PluginFileObj>>,   // Adds a file into db
 }
 
 ///

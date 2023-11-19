@@ -1,4 +1,4 @@
-use crate::sharedtypes::DbTagObj;
+use crate::sharedtypes::DbTagObjCompatability;
 
 #[derive(Debug)]
 pub enum EComType {

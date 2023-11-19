@@ -130,7 +130,7 @@ fn handle_supportedrequesttypes(data_buffer: &mut [u8], requesttype: &types::Sup
     match requesttype {
         types::SupportedRequests::Database(db_actions) => match db_actions {
             types::SupportedDBRequests::TagIdGet(id) => {
-                let opjtag: Option<sharedtypes::DbTagObj> =
+                let opjtag: Option<sharedtypes::DbTagObjCompatability> =
                     bincode::deserialize(data_buffer).unwrap();
                 //dbg!(opjtag);
             }

@@ -1,5 +1,3 @@
-use ahash::AHashMap;
-use json;
 use nohash_hasher::NoHashHasher;
 use rayon::prelude::*;
 use std::io;
@@ -55,11 +53,30 @@ impl InternalScraper {
 /// Builds the URL for scraping activities.
 ///
 fn build_url(params: &Vec<String>, pagenum: u64) -> String {
-    let url = "https://e621.net/posts.json";
+    let url = "https://e621.net/posts.json?tags=";
     let tag_store = "&tags=";
     let page = "&page=";
     let formatted: String = "".to_string();
 
+    if params.is_empty() {
+        return "".to_string();
+    } else {
+        let mut mutstring = String::new(); 
+        if params.len() == 1 {mutstring = params[0].clone()}
+        if params.len() >= 2 {
+            
+            for each in &params[0..params.len()-2] {
+                mutstring += &format!("{}+",each);
+            }
+            mutstring += &params[params.len()-1];
+            
+        }
+
+        
+        return format!("https://e621.net/posts.json?tags={}&page={}", mutstring, pagenum)
+    }
+    
+    
     if params.is_empty() {
         return "".to_string();
     } else {
@@ -369,13 +386,27 @@ pub fn parser(params: &String) -> Result<sharedtypes::ScraperObject, sharedtypes
             );
         }
 
+        let url = match js["posts"][inc]["file"]["url"].is_null() {
+            false => {
+                js["posts"][inc]["file"]["url"].to_string()
+            },
+            true => {
+                //let base = "https://static1.e621.net/data/1c/a6/1ca6868a2b0f5e7129d2b478198bfa91.webm";
+                let base = "https://static1.e621.net/data";
+                let md5 = js["posts"][inc]["file"]["md5"].to_string();
+                let ext = js["posts"][inc]["file"]["ext"].to_string();
+                dbg!(format!("{}/{}/{}/{}.{}",base, &md5[0..2], &md5[2..4], &md5, &ext));
+                format!("{}/{}/{}/{}.{}",base, &md5[0..2], &md5[2..4], &md5, ext)
+            }
+        };
         let file: sharedtypes::FileObject = sharedtypes::FileObject {
-            source_url: js["posts"][inc]["file"]["url"].to_string(),
+            source_url: url,
             hash: sharedtypes::HashesSupported::Md5(js["posts"][inc]["file"]["md5"].to_string()),
             tag_list: tags_list,
         };
 
         files.insert(inc.try_into().unwrap(), file);
+        
 
         /*//println!("{:?}", &tags_list);
         //dbg!();
@@ -417,6 +448,9 @@ pub fn parser(params: &String) -> Result<sharedtypes::ScraperObject, sharedtypes
         vecvecstr.insert(js["posts"][inc]["file"]["url"].to_string(), vecstr);*/
     }
     //panic!();
+    
+    //println!("{}",&js["posts"]);
+    
     Ok(sharedtypes::ScraperObject { file: files })
     //return Ok(vecvecstr);
 }
