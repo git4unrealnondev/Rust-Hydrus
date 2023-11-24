@@ -28,7 +28,6 @@ strum = { default-features = false, version = "0.25.0" }
 csv = "1.2.2"
 file-format = "0.18.0"
 serde = {version = "1.0.171", features = ["derive"], default-features = false }
-nohash-hasher = "0.2.0"
 md5 = { default-features = false, version = "0.7.0" }
 sha1 = { default-features = false, features=["std"],version = "0.10.5" }
 json = "0.12.4"

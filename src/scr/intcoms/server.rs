@@ -1,8 +1,6 @@
 use crate::{database, sharedtypes::DbFileObj, sharedtypes::DbTagObjCompatability};
 use anyhow::Context;
 use interprocess::local_socket::{LocalSocketListener, LocalSocketStream, NameTypeSupport};
-use nohash_hasher::IntMap;
-use nohash_hasher::IntSet;
 use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
 use std::{

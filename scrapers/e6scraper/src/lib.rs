@@ -1,9 +1,7 @@
-use nohash_hasher::NoHashHasher;
-use rayon::prelude::*;
+use std::collections::HashMap;
 use std::io;
 use std::io::BufRead;
 use std::time::Duration;
-use std::{collections::HashMap, hash::BuildHasherDefault};
 
 #[path = "../../../src/scr/sharedtypes.rs"]
 mod sharedtypes;
@@ -52,67 +50,70 @@ impl InternalScraper {
 ///
 /// Builds the URL for scraping activities.
 ///
-fn build_url(params: &Vec<String>, pagenum: u64) -> String {
-    let url = "https://e621.net/posts.json?tags=";
+fn build_url(params: &Vec<sharedtypes::ScraperParam>, pagenum: u64) -> String {
+    let url_base = "https://e621.net/posts.json".to_string();
     let tag_store = "&tags=";
     let page = "&page=";
-    let formatted: String = "".to_string();
+    let mut param_tags_string: String = "".to_string();
+    let mut params_normal: Vec<String> = Vec::new();
+    let mut params_database: Vec<String> = Vec::new();
+    let mut params_normal_count: usize = 0;
+    let mut params_database_count: usize = 0;
 
     if params.is_empty() {
         return "".to_string();
-    } else {
-        let mut mutstring = String::new(); 
-        if params.len() == 1 {mutstring = params[0].clone()}
-        if params.len() >= 2 {
-            
-            for each in &params[0..params.len()-2] {
-                mutstring += &format!("{}+",each);
-            }
-            mutstring += &params[params.len()-1];
-            
-        }
-
-        
-        return format!("https://e621.net/posts.json?tags={}&page={}", mutstring, pagenum)
     }
-    
-    
-    if params.is_empty() {
-        return "".to_string();
-    } else {
-        let endint = params.len() - 1;
-        let endtwo = params.len() - 2;
-        let end = &params[endint];
-        let mut format_string = "".to_string();
-        //for each in 0..endint {
-        for (each, temp) in params.iter().enumerate().take(endint) {
-            format_string += &params[each].replace(' ', "+");
-            if each != endtwo {
-                format_string += "+";
+
+    // Gets params into db.
+    for each in params {
+        match each.param_type {
+            sharedtypes::ScraperParamType::Normal => {
+                params_normal.push(each.param_data.to_string());
+                params_normal_count += 1;
+            }
+            sharedtypes::ScraperParamType::Database => {
+                params_database.push(each.param_data.to_string());
+                params_database_count += 1;
             }
         }
-        return format!(
-            "{}{}{}{}{}{}",
-            url, params[endint], tag_store, format_string, page, pagenum
-        );
     }
 
-    if params.len() == 1 {
-        formatted = format!("{}{}{}", &url, &tag_store, &params[0].replace(' ', "+"));
-        return format!("{}{}{}", formatted, page, pagenum);
+    // Catch for normal tags being lower then 0
+    match params_normal_count {
+        0 => return "".to_string(),
+        _ => {}
     }
 
-    if params.len() == 2 {
-        formatted = format!(
-            "{}{}{}{}",
-            &url,
-            &params[1],
-            &tag_store,
-            &params[0].replace(' ', "+")
-        );
+    // Catch for database tags being correct. "Sould be one"
+    let param_finalize_string = match params_database_count {
+        0 => "?tags=".to_string(),
+        1 => params_database.pop().unwrap() + tag_store,
+        _ => {
+            panic!(
+                "Scraper e6scraper: IS PANICING RECIEVED ONE TOO MANY SAUCY DB COUNTS : {:?} {:?}",
+                params_database, params_normal
+            );
+        }
+    };
+
+    // Gets last item in "normal" tags
+    let params_last = params_normal.pop().unwrap();
+
+    // Loops through all normal tags and inserts it into the tag string
+    for each in params_normal {
+        param_tags_string += &(each + "+")
     }
-    format!("{}{}{}", formatted, page, pagenum)
+    
+    // Adds on teh last string to the tags
+    param_tags_string = param_tags_string + &params_last;
+
+    // Does final formatting
+    let url = url_base + &param_finalize_string + &param_tags_string + page + &pagenum.to_string();
+
+    // Returns url
+    return url.to_string();
 }
+
 ///
 /// Reutrns an internal scraper object.
 /// Only really useful to store variables. not useful for calling functions. :C
@@ -125,15 +126,14 @@ pub fn new() -> InternalScraper {
 /// Returns one url from the parameters.
 ///
 #[no_mangle]
-pub fn url_get(params: &Vec<String>) -> Vec<String> {
+pub fn url_get(params: &Vec<sharedtypes::ScraperParam>) -> Vec<String> {
     vec![build_url(params, 1)]
 }
 ///
 /// Dumps a list of urls to scrape
 ///
 #[no_mangle]
-pub fn url_dump(params: &Vec<String>) -> Vec<String> {
-
+pub fn url_dump(params: &Vec<sharedtypes::ScraperParam>) -> Vec<String> {
     let mut ret = Vec::new();
     let hardlimit = 751;
     for i in 1..hardlimit {
@@ -173,10 +173,11 @@ pub fn cookie_url() -> String {
 ///
 fn json_sub_tag(
     tag_count: &mut u64,
-    tags_list: &mut HashMap<u64, sharedtypes::TagObject, BuildHasherDefault<NoHashHasher<u64>>>,
+    tags_list: &mut HashMap<u64, sharedtypes::TagObject>,
     jso: &json::JsonValue,
     sub: &str,
     relates: Option<(String, String)>,
+    tagtype: sharedtypes::TagType,
 ) {
     match relates {
         None => {
@@ -187,7 +188,7 @@ fn json_sub_tag(
                         namespace: sub.to_string(),
                         relates_to: None,
                         tag: each.to_string(),
-                        tag_type: sharedtypes::TagType::Normal,
+                        tag_type: tagtype,
                     },
                 );
                 //dbg!(&tag_count, sharedtypes::TagObject{namespace: sub.to_string(), relates_to: None, tag:each.to_string()});
@@ -204,7 +205,7 @@ fn json_sub_tag(
                         namespace: sub.to_string(),
                         relates_to: Some(temp.clone()),
                         tag: each.to_string(),
-                        tag_type: sharedtypes::TagType::Normal,
+                        tag_type: tagtype,
                     },
                 );
                 //dbg!(&tag_count, &tags_list[&tag_count]);
@@ -214,6 +215,139 @@ fn json_sub_tag(
     }
 }
 
+fn parse_pools(
+    js: &json::JsonValue,
+) -> Result<sharedtypes::ScraperObject, sharedtypes::ScraperReturn> {
+    let mut files: HashMap<u64, sharedtypes::FileObject> = HashMap::default();
+    let mut cnttotal = 0;    
+    
+    // For each in tag pools pulled.
+    for multpool in js.members() {
+        
+        if multpool["id"].is_null() {
+            continue;
+        }
+
+        let mut tag_count: u64 = 0;
+        let mut tags_list: HashMap<u64, sharedtypes::TagObject> = HashMap::default();
+        
+        // Add poolid if not exist
+        tags_list.insert(
+            tag_count,
+            sharedtypes::TagObject {
+                namespace: "pool_id".to_string(),
+                relates_to: None,
+                tag: multpool["id"].to_string(),
+                tag_type: sharedtypes::TagType::Normal,
+            },
+        );
+        tag_count += 1;
+
+        // Add pool creator
+        tags_list.insert(
+            tag_count,
+            sharedtypes::TagObject {
+                namespace: "pool_creator".to_string(),
+                relates_to: Some(("pool_id".to_string(), multpool["id"].to_string())),
+                tag: multpool["creator_name"].to_string(),
+                tag_type: sharedtypes::TagType::Normal,
+            },
+        );
+        tag_count += 1;
+
+        // Add pool creator id
+        tags_list.insert(
+            tag_count,
+            sharedtypes::TagObject {
+                namespace: "pool_creator_id".to_string(),
+                relates_to: Some((
+                    "pool_creator".to_string(),
+                    multpool["creator_name"].to_string(),
+                )),
+                tag: multpool["creator_id"].to_string(),
+                tag_type: sharedtypes::TagType::Normal,
+            },
+        );
+        tag_count += 1;
+
+        // Add pool name
+        tags_list.insert(
+            tag_count,
+            sharedtypes::TagObject {
+                namespace: "pool_name".to_string(),
+                relates_to: Some(("pool_id".to_string(), multpool["id"].to_string())),
+                tag: multpool["name"].to_string(),
+                tag_type: sharedtypes::TagType::Normal,
+            },
+        );
+        tag_count += 1;
+
+        // Add pool description
+        tags_list.insert(
+            tag_count,
+            sharedtypes::TagObject {
+                namespace: "pool_description".to_string(),
+                relates_to: Some(("pool_id".to_string(), multpool["id"].to_string())),
+                tag: multpool["description"].to_string(),
+                tag_type: sharedtypes::TagType::Normal,
+            },
+        );
+        tag_count += 1;
+
+        let mut cnt = 0;
+        //dbg!(&multpool);
+         //dbg!(&multpool.entries());
+        //dbg!(&multpool["pool_ids"]);
+        for postids in multpool["post_ids"].members() {
+            dbg!(&postids);
+
+            
+            
+            // Relates the file id to pool
+            tags_list.insert(
+                tag_count,
+                sharedtypes::TagObject {
+                    namespace: "pool_id".to_string(),
+                    relates_to: Some(("id".to_string(), postids.to_string())),
+                    tag: multpool["id"].to_string(),
+                    tag_type: sharedtypes::TagType::Normal,
+                },
+            );
+            tag_count += 1;
+            // TODO need to fix the pool positing. Needs to relate the pool position with the ID better.
+            tags_list.insert(
+                tag_count,
+                sharedtypes::TagObject {
+                    namespace: "pool_position".to_string(),
+                    relates_to: Some(("id".to_string(), postids.to_string())),
+                    tag: cnt.to_string(),
+                    tag_type: sharedtypes::TagType::Normal,
+                },
+            );
+            tag_count += 1;
+            
+            tags_list.insert(
+                tag_count,
+                sharedtypes::TagObject {
+                    namespace: "pool_id".to_string(),
+                    relates_to: Some(("pool_position".to_string(), cnt.to_string())),
+                    tag: multpool["id"].to_string(),
+                    tag_type: sharedtypes::TagType::Normal,
+                },
+            );
+            tag_count += 1;
+
+            cnt += 1;
+        }
+        files.insert(cnttotal, sharedtypes::FileObject{source_url: None, hash: None, tag_list: tags_list});
+    }
+    
+    
+    
+
+    Ok(sharedtypes::ScraperObject { file: files })
+}
+
 ///
 /// Parses return from download.
 ///
@@ -221,8 +355,7 @@ fn json_sub_tag(
 pub fn parser(params: &String) -> Result<sharedtypes::ScraperObject, sharedtypes::ScraperReturn> {
     //let vecvecstr: AHashMap<String, AHashMap<String, Vec<String>>> = AHashMap::new();
 
-    let mut files: HashMap<u64, sharedtypes::FileObject, BuildHasherDefault<NoHashHasher<u64>>> =
-        HashMap::with_hasher(BuildHasherDefault::default());
+    let mut files: HashMap<u64, sharedtypes::FileObject> = HashMap::default();
     if let Err(_) = json::parse(params) {
         if params.contains("Please confirm you are not a robot.") {
             return Err(sharedtypes::ScraperReturn::Timeout(20));
@@ -244,19 +377,22 @@ pub fn parser(params: &String) -> Result<sharedtypes::ScraperObject, sharedtypes
 
     // Write a &str in the file (ignoring the result).
     //writeln!(&mut file, "{}", js.to_string()).unwrap();
-
-    if js["posts"].is_empty() {
+    println!("Parsing");
+    if js["posts"].is_empty() & !js["posts"].is_null() {
+        dbg!(js);
         return Err(sharedtypes::ScraperReturn::Nothing);
+    } else if js["posts"].is_null() {
+        println!("{}", &js);
+        let pool = parse_pools(&js);
+        dbg!(&pool);
+        return pool;
+        //panic!();
     }
 
     for inc in 0..js["posts"].len() {
         let mut tag_count: u64 = 0;
 
-        let mut tags_list: HashMap<
-            u64,
-            sharedtypes::TagObject,
-            BuildHasherDefault<NoHashHasher<u64>>,
-        > = HashMap::with_hasher(BuildHasherDefault::default());
+        let mut tags_list: HashMap<u64, sharedtypes::TagObject> = HashMap::default();
         //dbg!(&tag_count);
         json_sub_tag(
             &mut tag_count,
@@ -264,6 +400,7 @@ pub fn parser(params: &String) -> Result<sharedtypes::ScraperObject, sharedtypes
             &js["posts"][inc]["tags"],
             "general",
             None,
+            sharedtypes::TagType::Normal,
         );
         json_sub_tag(
             &mut tag_count,
@@ -271,6 +408,7 @@ pub fn parser(params: &String) -> Result<sharedtypes::ScraperObject, sharedtypes
             &js["posts"][inc]["tags"],
             "species",
             None,
+            sharedtypes::TagType::Normal,
         );
         json_sub_tag(
             &mut tag_count,
@@ -278,6 +416,7 @@ pub fn parser(params: &String) -> Result<sharedtypes::ScraperObject, sharedtypes
             &js["posts"][inc]["tags"],
             "character",
             None,
+            sharedtypes::TagType::Normal,
         );
         json_sub_tag(
             &mut tag_count,
@@ -285,6 +424,7 @@ pub fn parser(params: &String) -> Result<sharedtypes::ScraperObject, sharedtypes
             &js["posts"][inc]["tags"],
             "copyright",
             None,
+            sharedtypes::TagType::Normal,
         );
         json_sub_tag(
             &mut tag_count,
@@ -292,6 +432,7 @@ pub fn parser(params: &String) -> Result<sharedtypes::ScraperObject, sharedtypes
             &js["posts"][inc]["tags"],
             "artist",
             None,
+            sharedtypes::TagType::Normal,
         );
         json_sub_tag(
             &mut tag_count,
@@ -299,6 +440,7 @@ pub fn parser(params: &String) -> Result<sharedtypes::ScraperObject, sharedtypes
             &js["posts"][inc]["tags"],
             "lore",
             None,
+            sharedtypes::TagType::Normal,
         );
         json_sub_tag(
             &mut tag_count,
@@ -306,6 +448,7 @@ pub fn parser(params: &String) -> Result<sharedtypes::ScraperObject, sharedtypes
             &js["posts"][inc]["tags"],
             "meta",
             None,
+            sharedtypes::TagType::Normal,
         );
         json_sub_tag(
             &mut tag_count,
@@ -313,14 +456,31 @@ pub fn parser(params: &String) -> Result<sharedtypes::ScraperObject, sharedtypes
             &js["posts"][inc],
             "sources",
             None,
+            sharedtypes::TagType::Normal,
         );
         json_sub_tag(
             &mut tag_count,
             &mut tags_list,
             &js["posts"][inc],
-            "pools",
+            "pool_id",
             Some(("id".to_string(), js["posts"][inc]["id"].to_string())),
+            sharedtypes::TagType::Normal,
         );
+
+        if !js["posts"][inc]["pools"].is_null() {
+            for each in js["posts"][inc]["pools"].members() {
+                tags_list.insert(
+                    tag_count,
+                    sharedtypes::TagObject {
+                        namespace: "".to_string(),
+                        relates_to: None,
+                        tag: format!("https://e621.net/pools?format=json&search[id={}]", each),
+                        tag_type: sharedtypes::TagType::ParseUrl,
+                    },
+                );
+                tag_count += 1;
+            }
+        }
 
         json_sub_tag(
             &mut tag_count,
@@ -328,8 +488,9 @@ pub fn parser(params: &String) -> Result<sharedtypes::ScraperObject, sharedtypes
             &js["posts"][inc]["relationships"],
             "children",
             Some(("id".to_string(), js["posts"][inc]["id"].to_string())),
+            sharedtypes::TagType::Normal,
         );
-        if js["posts"][inc]["description"].is_empty() {
+        if !js["posts"][inc]["description"].is_empty() {
             tags_list.insert(
                 tag_count,
                 sharedtypes::TagObject {
@@ -352,15 +513,6 @@ pub fn parser(params: &String) -> Result<sharedtypes::ScraperObject, sharedtypes
                 tag_type: sharedtypes::TagType::Normal,
             },
         );
-        /*tags_list.insert(
-            tag_count,
-            sharedtypes::TagObject {
-                namespace: "md5".to_string(),
-                relates_to: None,
-                tag: js["posts"][inc]["file"]["md5"].to_string(),
-                tag_type: sharedtypes::TagType::Hash(sharedtypes::HashesSupported::md5),
-            },
-        );*/
         tag_count += 1;
         tags_list.insert(
             tag_count,
@@ -373,84 +525,43 @@ pub fn parser(params: &String) -> Result<sharedtypes::ScraperObject, sharedtypes
         );
         tag_count += 1;
         if !js["posts"][inc]["relationships"]["parent_id"].is_null() {
-            //dbg!(&js["posts"][inc]["relationships"]["parent_id"]);
-            //dbg!(&js["posts"][inc]["relationships"]["parent_id"].to_string());
-            tags_list.insert(
-                tag_count,
-                sharedtypes::TagObject {
-                    namespace: "parent_id".to_string(),
-                    relates_to: Some(("id".to_string(), js["posts"][inc]["id"].to_string())),
-                    tag: js["posts"][inc]["relationships"]["parent_id"].to_string(),
-                    tag_type: sharedtypes::TagType::Normal,
-                },
+            json_sub_tag(
+                &mut tag_count,
+                &mut tags_list,
+                &js["posts"][inc]["relationships"],
+                "parent_id",
+                Some(("id".to_string(), js["posts"][inc]["id"].to_string())),
+                sharedtypes::TagType::Normal,
             );
         }
 
         let url = match js["posts"][inc]["file"]["url"].is_null() {
-            false => {
-                js["posts"][inc]["file"]["url"].to_string()
-            },
+            false => js["posts"][inc]["file"]["url"].to_string(),
             true => {
                 //let base = "https://static1.e621.net/data/1c/a6/1ca6868a2b0f5e7129d2b478198bfa91.webm";
                 let base = "https://static1.e621.net/data";
                 let md5 = js["posts"][inc]["file"]["md5"].to_string();
                 let ext = js["posts"][inc]["file"]["ext"].to_string();
-                dbg!(format!("{}/{}/{}/{}.{}",base, &md5[0..2], &md5[2..4], &md5, &ext));
-                format!("{}/{}/{}/{}.{}",base, &md5[0..2], &md5[2..4], &md5, ext)
+                dbg!(format!(
+                    "{}/{}/{}/{}.{}",
+                    base,
+                    &md5[0..2],
+                    &md5[2..4],
+                    &md5,
+                    &ext
+                ));
+                format!("{}/{}/{}/{}.{}", base, &md5[0..2], &md5[2..4], &md5, ext)
             }
         };
         let file: sharedtypes::FileObject = sharedtypes::FileObject {
-            source_url: url,
-            hash: sharedtypes::HashesSupported::Md5(js["posts"][inc]["file"]["md5"].to_string()),
+            source_url: Some(url),
+            hash: Some(sharedtypes::HashesSupported::Md5(
+                js["posts"][inc]["file"]["md5"].to_string(),
+            )),
             tag_list: tags_list,
         };
-
         files.insert(inc.try_into().unwrap(), file);
-        
-
-        /*//println!("{:?}", &tags_list);
-        //dbg!();
-        //dbg!(&tag_count);
-        let mut vecstr: AHashMap<String, Vec<String>> = AHashMap::new();
-        retvec(&mut vecstr, &js["posts"][inc]["tags"], "general");
-        retvec(&mut vecstr, &js["posts"][inc]["tags"], "species");
-        retvec(&mut vecstr, &js["posts"][inc]["tags"], "character");
-        retvec(&mut vecstr, &js["posts"][inc]["tags"], "copyright");
-        retvec(&mut vecstr, &js["posts"][inc]["tags"], "artist");
-        retvec(&mut vecstr, &js["posts"][inc]["tags"], "lore");
-        retvec(&mut vecstr, &js["posts"][inc]["tags"], "meta");
-        retvec(&mut vecstr, &js["posts"][inc], "sources");
-        retvec(&mut vecstr, &js["posts"][inc], "pools");
-        retvec(&mut vecstr, &js["posts"][inc]["relationships"], "parent_id");
-        retvec(&mut vecstr, &js["posts"][inc]["relationships"], "children");
-
-        // Filtering for parents
-        if js["posts"][inc]["relationships"]["parent_id"].to_string() != "null".to_string() {
-            vecstr.insert(
-                "parent_id".to_string(),
-                [js["posts"][inc]["relationships"]["parent_id"].to_string()].to_vec(),
-            );
-        }
-        if !&js["posts"][inc]["description"].is_empty() {
-            vecstr.insert(
-                "description".to_string(),
-                [js["posts"][inc]["description"].to_string()].to_vec(),
-            );
-        }
-        vecstr.insert(
-            "md5".to_string(),
-            [js["posts"][inc]["file"]["md5"].to_string()].to_vec(),
-        );
-        vecstr.insert(
-            "id".to_string(),
-            [js["posts"][inc]["id"].to_string()].to_vec(),
-        );
-        vecvecstr.insert(js["posts"][inc]["file"]["url"].to_string(), vecstr);*/
     }
-    //panic!();
-    
-    //println!("{}",&js["posts"]);
-    
     Ok(sharedtypes::ScraperObject { file: files })
     //return Ok(vecvecstr);
 }

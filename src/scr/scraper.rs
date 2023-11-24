@@ -181,13 +181,13 @@ pub fn scraper_download(libloading: &libloading::Library, _params: String) -> bo
     unsafe { temp() }
 }
 
-pub fn url_load(libloading: &libloading::Library, params: Vec<String>) -> Vec<String> {
-    let temp: libloading::Symbol<unsafe extern "C" fn(&Vec<String>) -> Vec<String>> =
+pub fn url_load(libloading: &libloading::Library, params: &Vec<sharedtypes::ScraperParam>) -> Vec<String> {
+    let temp: libloading::Symbol<unsafe extern "C" fn(&Vec<sharedtypes::ScraperParam>) -> Vec<String>> =
         unsafe { libloading.get(b"url_get\0").unwrap() };
-    unsafe { temp(&params) }
+    unsafe { temp(params) }
 }
-pub fn url_dump(libloading: &libloading::Library, params: Vec<String>) -> Vec<String> {
-    let temp: libloading::Symbol<unsafe extern "C" fn(&Vec<String>) -> Vec<String>> =
+pub fn url_dump(libloading: &libloading::Library, params: &Vec<sharedtypes::ScraperParam>) -> Vec<String> {
+    let temp: libloading::Symbol<unsafe extern "C" fn(&Vec<sharedtypes::ScraperParam>) -> Vec<String>> =
         unsafe { libloading.get(b"url_dump\0").unwrap() };
     unsafe { temp(&params) }
 }

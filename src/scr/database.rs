@@ -7,10 +7,6 @@ use crate::sharedtypes::DbJobsObj;
 use crate::time_func;
 use ahash::AHashMap;
 use log::{error, info};
-use nohash_hasher::BuildNoHashHasher;
-use nohash_hasher::IntMap;
-use nohash_hasher::IntSet;
-use nohash_hasher::NoHashHasher;
 pub use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, ValueRef};
 pub use rusqlite::{params, types::Null, Connection, Result, Transaction};
 use std::borrow::BorrowMut;
@@ -62,709 +58,6 @@ pub struct Main {
     _dbcommitnum_static: usize,
     _tables_loaded: Option<Vec<sharedtypes::LoadDBTable>>,
 }
-/*
-/// Holds internal in memory hashmap stuff
-#[allow(dead_code)]
-struct Memdb {
-    _table_names: (
-        &'static str,
-        &'static str,
-        &'static str,
-        &'static str,
-        &'static str,
-        &'static str,
-    ),
-
-    _file_max_id: usize,
-    _file_hash: AHashMap<String, usize>,
-    _file: AHashMap<(String, String, String), usize>,
-    _file_ref: AHashMap<usize, (String, String, String)>,
-    //_file_url_to_id: AHashMap<String, usize>,
-    _jobs_max_id: usize,
-    _jobs_ref: IntMap<usize, jobs::JobsRef>,
-    _jobs_time: IntMap<usize, usize>,
-    _jobs_rep: IntMap<usize, usize>,
-    _jobs_site: IntMap<usize, String>,
-    _jobs_param: IntMap<usize, String>,
-    _jobs_commitunfinished: IntMap<usize, bool>,
-
-    _namespace_max_id: usize,
-    _namespace_name: AHashMap<String, usize>,
-    _namespace_description: AHashMap<usize, String>,
-
-    //_parents_relate: IntMap<(usize, usize, usize, usize), usize>,
-    _parents_tag: AHashMap<(usize, usize), usize>,
-    _parents_tag_max_id: usize,
-    _parents_relate: AHashMap<(usize, usize), usize>,
-    _parents_relate_max_id: usize,
-    _parents_conjoin: AHashMap<(usize, usize), usize>,
-    _parents_max_id: usize,
-
-    _relationship_max_id: usize,
-    _relationship_fileid: IntMap<usize, usize>,
-    _relationship_tagid: IntMap<usize, usize>,
-    _relationship_relate: AHashMap<(usize, usize), usize>,
-
-    _settings_max_id: usize,
-    _settings_name: AHashMap<String, usize>,
-    _settings_pretty: AHashMap<usize, String>,
-    _settings_num: AHashMap<usize, usize>,
-    _settings_param: AHashMap<usize, String>,
-
-    _tags_max_id: usize,
-    _tags_name: AHashMap<String, usize>,
-    _tags_parents: IntMap<usize, usize>,
-    _tags_namespace: IntMap<usize, usize>,
-    _tags_relate: AHashMap<(String, usize), usize>,
-}
-
-/// Functions for working with memorory db.
-/// Uses AHash for maximum speed.
-#[allow(dead_code)]
-
-impl Memdb {
-    pub fn new() -> Self {
-        Memdb {
-            _table_names: ("File", "Jobs", "Namespace", "Parents", "Settings", "Tags"),
-            //_table_names: ,
-            //_file_id:AHashMap::new(),
-            _file_hash: AHashMap::new(),
-            _file: AHashMap::new(),
-            _file_ref: AHashMap::new(),
-            //_file_url_to_id: AHashMap::new(),
-            _jobs_time: HashMap::with_hasher(BuildNoHashHasher::default()),
-            _jobs_rep: HashMap::with_hasher(BuildNoHashHasher::default()),
-            _jobs_ref: HashMap::with_hasher(BuildNoHashHasher::default()),
-            _jobs_site: HashMap::with_hasher(BuildNoHashHasher::default()),
-            _jobs_param: HashMap::with_hasher(BuildNoHashHasher::default()),
-            _jobs_commitunfinished: HashMap::with_hasher(BuildNoHashHasher::default()),
-            //_namespace_id:AHashMap::new(),
-            _namespace_name: AHashMap::new(),
-            _namespace_description: AHashMap::new(),
-            //_parents_id:AHashMap::new(),
-            _parents_relate: AHashMap::new(),
-            _parents_tag: AHashMap::new(),
-            _parents_conjoin: AHashMap::new(),
-
-            _relationship_fileid: HashMap::with_hasher(BuildNoHashHasher::default()),
-            _relationship_tagid: HashMap::with_hasher(BuildNoHashHasher::default()),
-            _relationship_relate: AHashMap::new(),
-            _settings_name: AHashMap::new(),
-            _settings_pretty: AHashMap::new(),
-            _settings_num: AHashMap::new(),
-            _settings_param: AHashMap::new(),
-            //_tags_id:AHashMap::new(),
-            _tags_name: AHashMap::new(),
-            _tags_parents: HashMap::with_hasher(BuildNoHashHasher::default()),
-            _tags_namespace: HashMap::with_hasher(BuildNoHashHasher::default()),
-            _tags_relate: AHashMap::new(),
-            _file_max_id: 0,
-            _jobs_max_id: 0,
-            _namespace_max_id: 0,
-            _parents_max_id: 0,
-            _parents_tag_max_id: 0,
-            _parents_relate_max_id: 0,
-            _relationship_max_id: 0,
-            _settings_max_id: 0,
-            _tags_max_id: 0,
-        }
-    }
-
-    ///
-    /// Displays all stuff in the memory db.
-    ///
-    pub fn dbg_show_internals(&self) {
-        dbg!(&self._tags_name, &self._tags_parents, &self._tags_relate);
-    }
-
-    ///
-    /// Increments All counters.
-    ///
-    fn max_increment(&mut self) {
-        self._file_max_id += 1;
-        self._namespace_max_id += 1;
-        self._parents_max_id += 1;
-        self._relationship_max_id += 1;
-        self._settings_max_id += 1;
-        self._tags_max_id += 1;
-        self._jobs_max_id += 1;
-    }
-
-    ///
-    /// Increments the file counter.
-    ///
-    fn max_file_increment(&mut self) {
-        self._file_max_id += 1;
-    }
-
-    ///
-    /// Increments the file counter.
-    ///
-    fn max_tags_increment(&mut self) {
-        self._tags_max_id += 1;
-    }
-
-    ///
-    /// Increments the file counter.
-    ///
-    fn max_namespace_increment(&mut self) {
-        self._namespace_max_id += 1;
-    }
-
-    ///
-    /// Increments the jobs counter.
-    ///
-    fn max_jobs_increment(&mut self) {
-        self._jobs_max_id += 1;
-    }
-    ///
-    /// Increments the settings counter.
-    ///
-    fn max_settings_increment(&mut self) {
-        self._settings_max_id += 1;
-    }
-    ///
-    /// Increments the relationship counter.
-    ///
-    fn max_relationship_increment(&mut self) {
-        self._relationship_max_id += 1;
-    }
-
-    ///
-    /// Adds Setting to memdb.
-    ///
-    /*fn settings_add(&mut self, name: String, pretty: String, num: usize, param: String) {
-        // IF we have a key by name then update existing listing.
-        if self._settings_name.contains_key(&name) {
-            let usize_settings_id = self._settings_name[&name];
-            self._settings_pretty
-                .entry(usize_settings_id)
-                .or_insert_with(|| pretty);
-            self._settings_num
-                .entry(usize_settings_id)
-                .or_insert_with(|| num);
-            self._settings_param
-                .entry(usize_settings_id)
-                .or_insert_with(|| param);
-        } else {
-            self._settings_name.insert(name, self._settings_max_id);
-            self._settings_pretty.insert(self._settings_max_id, pretty);
-            self._settings_num.insert(self._settings_max_id, num);
-            self._settings_param.insert(self._settings_max_id, param);
-            self.max_settings_increment();
-        }
-    }*/
-    ///
-    /// Gets Setting from memdb.
-    /// Returns the num & param from memdb.
-    ///
-    fn settings_get_name(&self, name: &String) -> Option<sharedtypes::DbSettingObj> {
-        if !self._settings_name.contains_key(name) {
-            return None;
-        }
-        let val = self._settings_name[name];
-
-        return Some(sharedtypes::DbSettingObj {
-            name: name.to_string(),
-            pretty: None,
-            num: Some(self._settings_num[&val]),
-            param: Some(self._settings_param[&val].to_string()),
-        });
-    }
-
-    fn jobs_add_new(&mut self, job: jobs::JobsRef) {
-        panic!();
-        //self._jobs_ref.insert(job._idindb, job);
-        self.max_jobs_increment();
-    }
-
-    ///
-    /// Adds job to memdb.
-    ///
-    /*fn jobs_add(
-        &mut self,
-        jobs_time: usize,
-        jobs_rep: usize,
-        jobs_site: String,
-        jobs_param: String,
-        commit: bool,
-    ) -> usize {
-        self._jobs_time.insert(self._jobs_max_id, jobs_time);
-        self._jobs_site.insert(self._jobs_max_id, jobs_site);
-        self._jobs_rep.insert(self._jobs_max_id, jobs_rep);
-        self._jobs_param.insert(self._jobs_max_id, jobs_param);
-        self._jobs_commitunfinished
-            .insert(self._jobs_max_id, commit);
-        self.max_jobs_increment();
-        self._jobs_max_id - 1
-    }*/
-
-    ///
-    /// Made job ref and adds job into db.
-    ///
-    fn jobref_new(
-        &mut self,
-        sites: String,
-        params: Vec<String>,
-        jobstime: usize,
-        jobsref: usize,
-        committype: sharedtypes::CommitType,
-    ) {
-        let job = jobs::JobsRef {
-            //_idindb: self._jobs_max_id,
-            _sites: sites,
-            _params: params,
-            _jobsref: jobsref,
-            _jobstime: jobstime,
-            _committype: committype,
-        };
-        self.jobs_add_new(job);
-    }
-
-    ///
-    /// Checks if a parent exists.
-    ///
-    fn parents_get(
-        &self,
-        tag_namespace_id: usize,
-        tag_id: usize,
-        relate_namespace_id: usize,
-        relate_tag_id: usize,
-    ) -> (TagRelateConjoin, &usize) {
-        // Checks if keys exists in each hashmap.
-        // Twohashmaps and one relational hashmap. Should be decently good.
-        let tag_usize = self._parents_tag.get(&(tag_namespace_id, tag_id));
-        let relate_usize = self
-            ._parents_relate
-            .get(&(relate_namespace_id, relate_tag_id));
-
-        match tag_usize {
-            None => match relate_usize {
-                None => (TagRelateConjoin::TagAndRelate, &0),
-                Some(_) => (TagRelateConjoin::Tag, &0),
-            },
-            Some(_) => match relate_usize {
-                None => (TagRelateConjoin::Relate, tag_usize.unwrap()),
-                Some(_) => {
-                    let tag_conjoin = self
-                        ._parents_conjoin
-                        .get(&(*tag_usize.unwrap(), *relate_usize.unwrap()));
-
-                    match tag_conjoin {
-                        None => (TagRelateConjoin::Conjoin, &0),
-                        Some(_) => (TagRelateConjoin::None, tag_conjoin.unwrap()),
-                    }
-                }
-            },
-        }
-        //self._parents_relate.contains_key(&(tag_namespace_id, tag_id, relate_namespace_id, relate_tag_id));
-    }
-
-    ///
-    /// Increase parents tag increase
-    ///
-    fn parents_tag_increment(&mut self) {
-        self._parents_tag_max_id += 1;
-    }
-
-    ///
-    /// Increases relates tag increase
-    ///
-    fn parents_relate_increment(&mut self) {
-        self._parents_relate_max_id += 1;
-    }
-
-    ///
-    /// parents conjoin relates tag increase
-    ///
-    fn parents_conjoin_increment(&mut self) {
-        self._parents_max_id += 1;
-    }
-
-    ///
-    /// Creates a parent inside memdb.
-    ///
-    /*fn parents_put(
-        &mut self,
-        tag_namespace_id: usize,
-        tag_id: usize,
-        relate_namespace_id: usize,
-        relate_tag_id: usize,
-    ) -> TagRelateConjoin {
-        let (tag_enum, fin_uint) =
-            self.parents_get(tag_namespace_id, tag_id, relate_namespace_id, relate_tag_id);
-
-        match tag_enum {
-            TagRelateConjoin::Error => {
-                // Error happened. :D
-                error!("WARNING: PARENTS_GET GOT ERROR FOR UNKNOWN POSSIBLE DB CORRUPTION: {} {} : {} {} :", tag_namespace_id, tag_id, relate_namespace_id, relate_tag_id);
-                error!("PANICING DUE TO PARENTS_GET FAIL");
-                panic!("Check Log for details");
-            }
-            TagRelateConjoin::Tag => {
-                // Missing tag and namespace
-                let namespace = tag_namespace_id;
-                let fint = *fin_uint;
-                self._parents_tag
-                    .insert((namespace, tag_id), self._parents_tag_max_id);
-                self._parents_conjoin
-                    .insert((self._parents_tag_max_id, fint), self._parents_max_id);
-                self.parents_tag_increment();
-                self.parents_conjoin_increment();
-                TagRelateConjoin::Tag
-            }
-            TagRelateConjoin::Relate => {
-                // Missing tag_relate and namespace_relate
-                let fint = *fin_uint;
-                self._parents_relate.insert(
-                    (relate_namespace_id, relate_tag_id),
-                    self._parents_relate_max_id,
-                );
-                self._parents_conjoin
-                    .insert((fint, self._parents_relate_max_id), self._parents_max_id);
-                self.parents_relate_increment();
-                self.parents_conjoin_increment();
-                TagRelateConjoin::Relate
-            }
-            TagRelateConjoin::Conjoin => {
-                // Missing Conjoin linkage between two hashmaps
-                let tid = self._parents_tag.get(&(tag_namespace_id, tag_id)).unwrap();
-                let rid = self
-                    ._parents_relate
-                    .get(&(relate_namespace_id, relate_tag_id))
-                    .unwrap();
-                self._parents_conjoin
-                    .insert((*tid, *rid), self._parents_max_id);
-                self.parents_conjoin_increment();
-                TagRelateConjoin::Conjoin
-            }
-            TagRelateConjoin::TagAndRelate => {
-                // Missing tag&namespace and relate&namespace
-                self._parents_tag
-                    .insert((tag_namespace_id, tag_id), self._parents_tag_max_id);
-                self._parents_relate.insert(
-                    (relate_namespace_id, relate_tag_id),
-                    self._parents_relate_max_id,
-                );
-                self._parents_conjoin.insert(
-                    (self._parents_tag_max_id, self._parents_relate_max_id),
-                    self._parents_max_id,
-                );
-                self.parents_tag_increment();
-                self.parents_relate_increment();
-                self.parents_conjoin_increment();
-                TagRelateConjoin::TagAndRelate
-            }
-            TagRelateConjoin::None => {
-                // Missing Nothing
-                TagRelateConjoin::None
-            }
-        }
-    }*/
-
-    ///
-    /// Checks if relationship exists in db.
-    ///
-    fn relationship_get(&self, file: usize, tag: usize) -> bool {
-        if self._relationship_relate.contains_key(&(file, tag)) {
-            return true;
-        }
-
-        false
-    }
-
-    ///
-    /// Returns a list of fileid's associated with tagid
-    ///
-    fn relationship_get_fileid(&self, tag: &usize) -> HashSet<usize> {
-        let mut comp: HashSet<usize> = HashSet::new();
-        for each in self._relationship_relate.keys() {
-            if &each.1 == tag {
-                comp.insert(each.0);
-            }
-        }
-        comp
-    }
-
-    ///
-    /// relationship gets only one fileid
-    ///
-    fn relationship_get_one_fileid(&self, tag: &usize) -> Option<usize> {
-        for each in self._relationship_relate.keys() {
-            if &each.1 == tag {
-                return Some(each.0);
-            }
-        }
-        None
-    }
-
-    ///
-    /// Returns a list of tag's associated with fileid
-    ///
-    fn relationship_get_tagid(&self, file: &usize) -> Vec<usize> {
-        let mut comp: Vec<usize> = Vec::new();
-        for each in self._relationship_relate.keys() {
-            if &each.0 == file {
-                comp.push(each.1);
-            }
-        }
-        comp
-    }
-
-    ///
-    /// Adds relationship to db.
-    ///
-    /*fn relationship_add(&mut self, file: usize, tag: usize) {
-        //self._relationship_fileid.insert(file, file);
-        //self._relationship_tagid.insert(tag, tag);
-        self._relationship_relate
-            .insert((file, tag), self._relationship_max_id);
-    }*/
-
-    ///
-    /// returns a immutable reference to the database's job table
-    ///
-    pub fn jobs_get_all(
-        &self,
-    ) -> &HashMap<usize, jobs::JobsRef, BuildHasherDefault<NoHashHasher<usize>>> {
-        &self._jobs_ref
-    }
-
-    ///
-    /// Returns job by refid inmemdb
-    ///
-    fn jobs_get_new(&self, id: &usize) -> Option<jobs::JobsRef> {
-        if self._jobs_ref.contains_key(id) {
-            Some(self._jobs_ref[id].clone())
-        } else {
-            None
-        }
-    }
-
-    ///
-    /// Pulls jobs from memdb
-    ///
-    fn jobs_get(&self, id: &usize) -> Option<sharedtypes::DbJobsObj> {
-        if self._jobs_time.contains_key(&id) {
-            let dbj = sharedtypes::DbJobsObj {
-                time: Some(self._jobs_time[&id]),
-                reptime: Some(self._jobs_rep[&id]),
-                site: Some(self._jobs_site[&id].clone()),
-                param: Some(self._jobs_param[&id].clone()),
-                committype: None,
-            };
-            Some(dbj)
-        } else {
-            let error = "job_get cannot find job id in hashmap!";
-            println!("{}, {}", error, id);
-            error!("{}, {}", error, id);
-            panic!("{}, {}", error, id)
-        }
-    }
-
-    ///
-    /// Checks if job exists in current memdb.
-    ///
-    pub fn jobs_exist(&self, id: usize) -> bool {
-        self._jobs_time.contains_key(&id)
-    }
-
-    ///
-    /// Returns total jobs in db.
-    ///
-    pub fn jobs_total(&self) -> usize {
-        self._jobs_max_id
-    }
-
-    /// Gets max_id from every max_id field.
-    /// let (fid, nid, pid, rid, sid, tid, jid) = self.max_id_return();
-    ///
-    fn max_id_return(&mut self) -> (usize, usize, usize, usize, usize, usize, usize) {
-        (
-            self._file_max_id,
-            self._namespace_max_id,
-            self._parents_max_id,
-            self._relationship_max_id,
-            self._settings_max_id,
-            self._tags_max_id,
-            self._jobs_max_id,
-        )
-    }
-
-    ///
-    /// Adds a file to memdb.Jobs
-    ///
-    pub fn file_put(
-        &mut self,
-        id: Option<usize>,
-        hash: Option<&String>,
-        extension: Option<&String>,
-        location: Option<&String>,
-    ) -> usize {
-        if self._file_hash.contains_key(&hash.unwrap().to_string()) {
-            return self._file_hash[&hash.unwrap().to_string()];
-        }
-        let ret_name: usize = self._file_max_id;
-
-        let file_id = match id {
-            None => {
-                let (fid, _nid, _pid, _rid, _sid, _tid, _jid) = self.max_id_return();
-                fid
-            }
-            Some(file_uid) => file_uid,
-        };
-
-        self._file.insert(
-            (
-                hash.unwrap().to_string(),
-                extension.unwrap().to_string(),
-                location.unwrap().to_string(),
-            ),
-            file_id,
-        );
-        self._file_ref.insert(
-            file_id,
-            (
-                hash.unwrap().to_string(),
-                extension.unwrap().to_string(),
-                location.unwrap().to_string(),
-            ),
-        );
-
-        self._file_hash.insert(hash.unwrap().to_string(), file_id);
-        self.max_file_increment();
-
-        ret_name
-    }
-
-    ///
-    /// Gets a file from memdb via hash.
-    ///
-    pub fn file_get_hash(&self, hash: &String) -> (usize, bool) {
-        if self._file_hash.contains_key(hash) {
-            (self._file_hash[hash], true)
-        } else {
-            (0, false)
-        }
-    }
-
-    ///
-    /// Returns a files info based on id
-    ///
-    pub fn file_get_id(&self, id: &usize) -> Option<(String, String, String)> {
-        if self._file_ref.contains_key(id) {
-            return Some(self._file_ref[id].clone());
-        }
-        None
-    }
-
-    ///
-    /// Does namespace exist? If so return number.
-    ///
-    pub fn namespace_put(&mut self, name: &String, id: Option<usize>) -> usize {
-        if self._namespace_name.contains_key(name) {
-            return self._namespace_name[name];
-        }
-        let go_id = match id {
-            None => self._namespace_max_id,
-            Some(outid) => outid,
-        };
-
-        self._namespace_name.insert(name.to_string(), go_id);
-        self.max_namespace_increment();
-        go_id
-    }
-
-    ///
-    /// Does namespace contain key?
-    ///
-    pub fn namespace_get(&self, name: &String) -> Option<usize> {
-        if self._namespace_name.contains_key(name) {
-            Some(self._namespace_name[name])
-        } else {
-            None
-        }
-    }
-
-    ///
-    /// Namespace get name from id
-    ///
-    pub fn namespace_id_get(&self, uid: &usize) -> Option<String> {
-        for (key, val) in self._namespace_name.iter() {
-            if val == uid {
-                return Some(key.to_string());
-            }
-        }
-        None
-    }
-
-    ///
-    /// Adds a file to memdb.Tags
-    ///
-    pub fn tags_put(&mut self, tag: String, namespace: &usize, id: Option<usize>) -> usize {
-        //if self._tags_name.contains_key(tag) {
-        //    return self._tags_name[tag];
-        //}
-        if self._tags_relate.contains_key(&(tag.clone(), *namespace)) {
-            let urin: usize = self._tags_relate[&(tag, *namespace)];
-            return urin;
-        }
-        //println!("{} {}", tag, namespace);
-
-        let ret_name = match id {
-            None => self._tags_max_id,
-            Some(uid) => uid,
-        };
-
-        self._tags_name.insert(tag.clone(), ret_name);
-        self._tags_namespace.insert(*namespace, 0);
-
-        self._tags_relate.insert((tag, *namespace), ret_name);
-
-        self.max_tags_increment();
-
-        ret_name
-    }
-
-    ///
-    /// Does tags contain key?
-    ///
-    /*pub fn tags_get(&self, tags: String, namespace: &usize) -> Option<usize> {
-        if self
-            ._tags_relate
-            .contains_key(&(tags.to_string(), namespace))
-        {
-            //let tagid = self._tags_name[&(tags.to_string(), namespace)];
-
-            let urin: usize = self._tags_relate[&(tags, namespace)];
-
-            Some(urin)
-        } else {
-            None
-        }
-    }*/
-
-    pub fn dbg(&mut self) {
-        for each in &self._tags_relate {
-            println!("{:?}", each);
-        }
-    }
-
-
-    /*pub fn tag_id_get(&mut self, uid: usize) -> Option<sharedtypes::DbTagObj> {
-        for (key, val) in self._tags_relate.iter() {
-            if val == &uid {
-                return Some(sharedtypes::DbTagObj {
-                    id: uid,
-                    name: (key.0.clone()),
-                    parents: None,
-                    namespace: key.1.clone(),
-                });
-            }
-        }
-        None
-    }*/
-}*/
 
 /// Contains DB functions.
 impl Main {
@@ -920,7 +213,7 @@ impl Main {
     /// Adds job to system.
     /// Will not add job to system if time is now.
     ///
-    pub fn jobs_add_maian(
+    pub fn jobs_add_main(
         &mut self,
         jobs_time: String,
         jobs_rep: &str,
@@ -954,7 +247,7 @@ impl Main {
     ///
     pub fn jobs_get_all(
         &self,
-    ) -> &HashMap<usize, sharedtypes::DbJobsObj, BuildHasherDefault<NoHashHasher<usize>>> {
+    ) -> &HashMap<usize, sharedtypes::DbJobsObj> {
         self._inmemdb.jobs_get_all()
     }
 
@@ -974,13 +267,13 @@ impl Main {
     //}
 
     pub fn tag_id_get(&self, uid: &usize) -> Option<&sharedtypes::DbTagNNS> {
-        self._inmemdb.tag_id_get(uid)
+        self._inmemdb.tags_get_data(uid)
     }
 
     ///
     ///
     ///
-    pub fn relationship_get_fileid(&self, tag: &usize) -> Option<&IntSet<usize>> {
+    pub fn relationship_get_fileid(&self, tag: &usize) -> Option<&HashSet<usize>> {
         self._inmemdb.relationship_get_fileid(tag)
     }
 
@@ -988,7 +281,7 @@ impl Main {
         self._inmemdb.relationship_get_one_fileid(tag)
     }
 
-    pub fn relationship_get_tagid(&self, tag: &usize) -> Option<&IntSet<usize>> {
+    pub fn relationship_get_tagid(&self, tag: &usize) -> Option<&HashSet<usize>> {
         self._inmemdb.relationship_get_tagid(tag)
     }
 
@@ -2175,11 +1468,8 @@ impl Main {
     ) {
         
         let parent = self._inmemdb.parents_get(&sharedtypes::DbParentsObj{tag_namespace_id: tag_namespace_id, tag_id: tag_id, relate_tag_id: relate_tag_id, relate_namespace_id: relate_namespace_id});
-        
-        let todo =
-            self.parents_add_db(tag_namespace_id, tag_id, relate_namespace_id, relate_tag_id);
 
-        if addtodb &parent.is_none(){
+        if addtodb & &parent.is_none(){
             self.parents_add_sql(
                 &tag_namespace_id,
                 &tag_id,
@@ -2187,12 +1477,14 @@ impl Main {
                 &relate_tag_id,
             );
         }
+        
+        self.parents_add_db(tag_namespace_id, tag_id, relate_namespace_id, relate_tag_id);
     }
 
     ///
     /// Adds tag into inmemdb
     ///
-    fn tag_add_db(&mut self, tag: String, namespace: &usize, ond_id: Option<usize>) -> usize {
+    fn tag_add_db(&mut self, tag: String, namespace: &usize) -> usize {
         match self._inmemdb.tags_get_id(&sharedtypes::DbTagNNS {
             name: tag.to_string(),
             namespace: namespace.to_owned(),
@@ -2264,7 +1556,7 @@ impl Main {
                 let tags_grab = self._inmemdb.tags_get_id(&tagnns).copied();
                 match tags_grab {
                     None => {
-                        let tag_id = self.tag_add_db(tagnns.name.clone(), &tagnns.namespace, None);
+                        let tag_id = self.tag_add_db(tagnns.name.clone(), &tagnns.namespace);
                         if addtodb {
                             self.tag_add_sql(
                                 tag_id.clone(),
@@ -2279,9 +1571,9 @@ impl Main {
                     Some(tag_id) => return tag_id,
                 };
             }
-            Some(tag_idin) => {
+            Some(_) => {
                 // We've got an ID coming in will check if it exists.
-                let tag_id = self.tag_add_db(tagnns.name.clone(), &tagnns.namespace, Some(tag_idin));
+                let tag_id = self.tag_add_db(tagnns.name.clone(), &tagnns.namespace);
                 if addtodb {
                     self.tag_add_sql(
                         tag_id.clone(),
@@ -2607,4 +1899,60 @@ impl Main {
     pub fn transaction_execute(trans: Transaction, inp: String) {
         trans.execute(&inp, params![]).unwrap();
     }
+    
+    
+    ///
+    /// Sqlite wrapper for deleteing a relationship from table.
+    ///
+    fn delete_relationship(&mut self, file_id: &usize, tag_id: &usize) {
+        let inp = "DELETE FROM Relationship WHERE fileid = ? AND tagid = ?";
+            let _out = self._conn.borrow_mut().lock().unwrap().execute(
+                inp,
+                params![
+                    file_id.to_string(),
+                    tag_id.to_string(),
+                ],
+            );
+        self.db_commit_man();
+    }
+    
+    ///
+    /// Sqlite wrapper for deleteing a tag from table.
+    ///
+    fn delete_tag_id(&mut self, tag_id: &usize) {
+        let inp = "DELETE FROM Tags WHERE tid = ?";
+            let _out = self._conn.borrow_mut().lock().unwrap().execute(
+                inp,
+                params![
+                    tag_id.to_string(),
+                ],
+            );
+        self.db_commit_man();
+    }
+    
+    ///
+    /// Removes tag & relationship from db.
+    ///
+    pub fn delete_tag_relationship(&mut self, tagid: &usize) {
+        
+        let relationships = self._inmemdb.relationship_get_fileid(tagid);
+        
+        // Gets list of fileids from internal db.
+        let fileids = match relationships {
+            None => return,
+            Some(fileids) => {
+                fileids
+            },
+        };
+        
+        for file in &fileids.clone() {
+            self._inmemdb.relationship_remove(file, tagid);
+            self.delete_relationship(file, tagid);
+        }
+        
+        self._inmemdb.tag_remove(tagid);
+        self.delete_tag_id(tagid);
+        
+    }
+    
 }

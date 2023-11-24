@@ -105,25 +105,25 @@ pub async fn test(url: String) -> String {
 ///
 /// Hashes the bytes and compares it to what the scraper should of recieved.
 ///
-pub fn hash_bytes(bytes: &Bytes, hash: sharedtypes::HashesSupported) -> (String, bool) {
+pub fn hash_bytes(bytes: &Bytes, hash: &sharedtypes::HashesSupported) -> (String, bool) {
     match hash {
         sharedtypes::HashesSupported::Md5(hash) => {
             let digest = md5::compute(bytes);
             //let sharedtypes::HashesSupported(hashe, _) => hash;
-            (format!("{:x}", digest), format!("{:x}", digest) == hash)
+            (format!("{:x}", digest), &format!("{:x}", digest) == hash)
         }
         sharedtypes::HashesSupported::Sha1(hash) => {
             let mut hasher = sha1::Sha1::new();
             hasher.update(bytes);
             let hastring = format!("{:X}", hasher.finalize());
-            let dune = &hastring == &hash;
+            let dune = &hastring == hash;
             (hastring, dune)
         }
         sharedtypes::HashesSupported::Sha256(hash) => {
             let mut hasher = Sha512::new();
             hasher.update(bytes);
             let hastring = format!("{:X}", hasher.finalize());
-            let dune = hastring == hash;
+            let dune = &hastring == hash;
             (hastring, dune)
         }
         sharedtypes::HashesSupported::None => ("".to_string(), false),
@@ -148,7 +148,13 @@ pub async fn dlfile_new(
         let errloop = true;
 
         while errloop {
-            let url = Url::parse(&file.source_url).unwrap();
+            
+            let fileurlmatch = match &file.source_url {
+                None => {panic!("Tried to call dlfilenew when their was no file :C info: {:?}", file);},
+                Some(fileurl) => fileurl
+            };
+            
+            let url = Url::parse(fileurlmatch).unwrap();
 
             let mut futureresult = client.get(url.as_ref()).send().await;
             loop {
@@ -190,17 +196,22 @@ pub async fn dlfile_new(
         // Final Hash
         hash = format!("{:X}", hasher.finalize());
 
+        let parsedhash = match &file.hash {
+            None => {panic!("DlFileNew: Cannot parse hash info : {:?}", &file);},
+            Some(inputhash) => inputhash,
+        };
+        
         // Check and compare  to what the scraper wants
-        let status = hash_bytes(&bytes, file.hash.clone());
+        let status = hash_bytes(&bytes, &parsedhash);
 
         // Logging
         if !status.1 {
             error!(
                 "Parser file: {} FAILED HASHCHECK: {} {}",
-                file.hash, status.0, status.1
+                &parsedhash, status.0, status.1
             )
         } else {
-            info!("Parser returned: {} Got: {}", &file.hash, status.0);
+            info!("Parser returned: {} Got: {}", &parsedhash, status.0);
             //dbg!("Parser returned: {} Got: {}", &file.hash, status.0);
         }
         boolloop = !status.1;

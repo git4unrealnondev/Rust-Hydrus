@@ -143,7 +143,7 @@ fn main() {
     data.load_table(&sharedtypes::LoadDBTable::All, &mut alt_connection); // TODO REVERT ALL TO SETTINGS
     //data.debugdb();
     //data.transaction_flush();
-    //pause();
+    pause();
     data.transaction_flush();
     data.check_version();
 

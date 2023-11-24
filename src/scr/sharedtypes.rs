@@ -1,6 +1,4 @@
-use nohash_hasher::NoHashHasher;
 use serde::{Deserialize, Serialize};
-
 use std::fmt;
 use std::{collections::HashMap, hash::BuildHasherDefault};
 use strum::IntoEnumIterator;
@@ -43,7 +41,7 @@ pub enum ScraperReturn {
 ///
 #[derive(Debug)]
 pub struct ScraperObject {
-    pub file: HashMap<u64, FileObject, BuildHasherDefault<NoHashHasher<u64>>>,
+    pub file: HashMap<u64, FileObject>,
 }
 
 ///
@@ -181,7 +179,7 @@ pub struct DbSearchQuery {
 #[derive(Debug)]
 pub struct DbTagObjNNS {
     pub id: usize,
-    pub parents: Option<usize>,
+    //pub parents: Option<usize>,
 }
 
 ///
@@ -246,9 +244,9 @@ pub struct DBPluginOutput {
 ///
 #[derive(Debug)]
 pub struct FileObject {
-    pub source_url: String,
-    pub hash: HashesSupported, // Hash of file
-    pub tag_list: HashMap<u64, TagObject, BuildHasherDefault<NoHashHasher<u64>>>,
+    pub source_url: Option<String>,
+    pub hash: Option<HashesSupported>, // Hash of file
+    pub tag_list: HashMap<u64, TagObject>,
 }
 
 ///
@@ -266,10 +264,11 @@ pub struct TagObject {
 ///
 /// Tag Type object. Represents metadata for parser.
 ///
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 #[allow(dead_code)]
 pub enum TagType {
-    Normal,  // Normal tag.
+    Normal,   // Normal tag.
+    ParseUrl, // Scraper to download and parse a new url.
     Special, // Probably will add support for something like file descriptors or plugin specific things.
 }
 
@@ -431,3 +430,21 @@ pub fn stringto_search_type(into: &String) -> Search {
     panic!("{}", panic);
 }
 // let temp = AllFields::JobsAdd(JobsAdd{Site: "yeet".to_owned(), Query: "yeet".to_owned(), Time: "Lo".to_owned(), Loop: "yes".to_owned(), ReCommit: "Test".
+
+///
+/// Straper type passed to params
+///
+#[derive(Debug, Clone)]
+pub enum ScraperParamType {
+    Normal,
+    Database,
+}
+
+///
+/// Used to hold Scraper Parameters in db.
+///
+#[derive(Debug, Clone)]
+pub struct ScraperParam {
+    pub param_data: String,
+    pub param_type: ScraperParamType,
+}

@@ -60,6 +60,7 @@ impl Jobs {
         self._secs = time_func::time_secs();
         let _ttl = db.jobs_get_max();
         let hashjobs = db.jobs_get_all();
+        dbg!(&hashjobs);
         let beans = self.scrapermanager.scraper_get();
         for each in hashjobs {
             dbg!(
@@ -67,11 +68,14 @@ impl Jobs {
                 each.1.time.unwrap(),
                 each.1.reptime.unwrap()
             );
+            dbg!(time_func::time_secs());
             if time_func::time_secs() >= each.1.time.unwrap() + each.1.reptime.unwrap() {
+                dbg!("a");
                 for eacha in beans {
                     let dbsite = each.1.site.to_owned();
                     dbg!(&dbsite, &eacha._sites);
                     if eacha._sites.contains(&dbsite.unwrap()) {
+                        dbg!("b");
                         self._jobref
                             .insert(*each.0, (each.1.to_owned(), eacha.to_owned()));
                     }
@@ -383,9 +387,9 @@ impl Jobs {
     ///
     /// Returns a url to grab for.
     ///
-    pub fn library_url_get(&mut self, memid: &InternalScraper, params: &[String]) -> Vec<String> {
+    pub fn library_url_get(&mut self, memid: &InternalScraper, params: &Vec<sharedtypes::ScraperParam>) -> Vec<String> {
         let libloading = self.scrapermanager.returnlibloading(memid);
-        scraper::url_load(libloading, params.to_vec())
+        scraper::url_load(libloading, params)
         //self.scrapermanager.url_load(memid, params.to_vec())
     }
 
@@ -405,9 +409,9 @@ impl Jobs {
     ///
     /// Returns a url to grab for.
     ///
-    pub fn library_url_dump(&self, memid: &InternalScraper, params: &[String]) -> Vec<String> {
+    pub fn library_url_dump(&self, memid: &InternalScraper, params: &Vec<sharedtypes::ScraperParam>) -> Vec<String> {
         let libloading = self.scrapermanager.returnlibloading(memid);
-        scraper::url_dump(libloading, params.to_vec())
+        scraper::url_dump(libloading, params)
         //self.scrapermanager.url_dump(memid, params.to_vec())
     }
     ///

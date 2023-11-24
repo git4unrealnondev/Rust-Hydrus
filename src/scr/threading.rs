@@ -3,6 +3,7 @@ use crate::download;
 
 //use crate::jobs::JobsRef;
 use crate::logging::{error_log, info_log};
+use crate::pause;
 use crate::plugins::PluginManager;
 use crate::scraper;
 
@@ -15,6 +16,7 @@ use futures;
 
 //use log::{error, info};
 
+use std::ops::Index;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::thread;
@@ -165,7 +167,24 @@ impl Worker {
                 &db.lock().unwrap(),
             );*/
 
-            let mut scrap_data = String::new();
+
+
+            // Dedupes URL's to search for.
+            // Groups all URLS into one vec to search through later.
+            // Changing to vec of vec of strings. Needed for advanced job cancellation.
+            let jobcnt: u32 = 0;
+            let mut dnpjob: Vec<String> = Vec::new();
+            for each in jblist {
+                //dbg!(&each);
+                let mut params: Vec<sharedtypes::ScraperParam> = Vec::new();
+
+                let string_params = each.param.as_ref().unwrap().clone();
+                let parpms: Vec<String> = string_params
+                    .split_whitespace()
+                    .map(str::to_string)
+                    .collect();
+
+                let scrap_data;
             {
                 let unwrappydb = &mut db.lock().unwrap();
                 //let t = scrap._type;
@@ -179,42 +198,35 @@ impl Worker {
                 scrap_data = datafromdb.unwrap();
                 // drops mutex for other threads to use.
             }
+                
+                for par in parpms {
+                    params.push(sharedtypes::ScraperParam{param_data: par, param_type: sharedtypes::ScraperParamType::Normal});
+                }
+                
+                params.push(sharedtypes::ScraperParam{param_data: scrap_data, param_type: sharedtypes::ScraperParamType::Database});
 
-            // Dedupes URL's to search for.
-            // Groups all URLS into one vec to search through later.
-            // Changing to vec of vec of strings. Needed for advanced job cancellation.
-            for each in jblist {
-                //dbg!(&each);
-
-                let string_params = each.param.as_ref().unwrap().clone();
-                let parpms = string_params
-                    .split_whitespace()
-                    .map(str::to_string)
-                    .collect();
-
-                //parpms.push(scrap_data.clone());
-
-                let urlload = scraper::url_dump(&liba, parpms);
+                let urlload = scraper::url_dump(&liba, &params);
                 let commit = each.committype.clone().unwrap();
-                let mut hashtemp: AHashMap<sharedtypes::CommitType, Vec<String>> = AHashMap::new();
+                let mut hashtemp: AHashMap<sharedtypes::CommitType, Vec<(String, u32)>> = AHashMap::new();
                 for eachs in urlload {
                     // Checks if the hashmap contains the committype & its vec contains the data.
                     match hashtemp.get_mut(&commit) {
                         Some(ve) => {
                             if !allurls.contains_key(&eachs) {
-                                ve.push(eachs.clone());
+                                ve.push((eachs.clone(), jobcnt));
                                 allurls.insert(eachs, 0);
                             }
                         }
                         None => {
                             if !allurls.contains_key(&eachs) {
-                                hashtemp.insert(commit, vec![eachs.clone()]);
+                                hashtemp.insert(commit, vec![(eachs.clone(), jobcnt)] );
                                 allurls.insert(eachs, 0);
                             }
                         }
                     }
                 }
-                jobvec.push((hashtemp, each.param))
+                jobvec.push((hashtemp, each.param));
+                
             }
 
             // This is literlly just for debugging. Keep me here.
@@ -235,23 +247,54 @@ impl Worker {
             let ratelimit_total = 10;
 
             let mut client = download::client_create();
-            for each in jobvec {
+             for each in jobvec {
+                dbg!(&each);
+                
+                
+                //for loo in dnpjob {
+                    
+                //}
+                
                 //handle.enter();
                 //let resp = insidert.spawn(async move {
                 //    download::dltext_new(each.1, &mut ratelimit).await
                 //});
-                for eachy in each.0 {
-                    for urlstring in eachy.1 {
+                let mut cnt = 0;
+                'mainloop: for mut eachy in each.0 {
+                    for urlstring in &eachy.1.clone() {
                         let mut loopbool = true;
                         let mut respstring = String::new();
-                        while loopbool {
+                        'mainloop: while loopbool {
+                            
+                            //if dnpjob.contains(&urlstring.1.try_into().unwrap()) {continue 'mainloop;}
+                            //dbg!(&dnpjob, &urlstring.1);
                             download::ratelimiter_wait(&mut ratelimit);
-                            let resp = task::block_on(download::dltext_new(
-                                urlstring.to_string(),
+                            let resp = match dnpjob.is_empty() {
+                                false => {
+                                    let urlzero = dnpjob.index(0).clone();
+                                    dbg!(&urlzero);
+                                    pause();
+                                    dnpjob.remove(0);
+                                    task::block_on(download::dltext_new(
+                                urlzero.to_string(),
                                 &mut ratelimit,
                                 &mut client,
                                 manageeplugin.clone(),
-                            ));
+                            ))
+                                },
+                                true => {
+                                    task::block_on(download::dltext_new(
+                                urlstring.0.to_string(),
+                                &mut ratelimit,
+                                &mut client,
+                                manageeplugin.clone(),
+                            ))
+                                }
+                            };
+                            
+                            
+                            
+                            //cnt += 1;
                             match resp {
                                 Ok(_) => {
                                     respstring = resp.unwrap();
@@ -284,7 +327,11 @@ impl Worker {
                                     sharedtypes::ScraperReturn::EMCStop(error) => {
                                         error_log(error);
                                     }
-                                    sharedtypes::ScraperReturn::Nothing => break,
+                                    sharedtypes::ScraperReturn::Nothing => {
+                                            //dnpjob.push();
+                                            //jobcnt += 1;
+                                            break
+                                    },
                                     sharedtypes::ScraperReturn::Stop(error) => {
                                         info_log(&format!("{}", error));
                                         break;
@@ -358,8 +405,14 @@ impl Worker {
                                         unwrappydb.namespace_get(&"source_url".to_string());
                                     // defaults to 0 due to unknown.
                                 }
+                                
+                                let sourceurl = match each.1.source_url {
+                                    None => {panic!("Threading: Cannot find source URL in each.1 info: {:?}", each.1);},
+                                    Some(ref urlpassed) => urlpassed
+                                };
+                                
                                 let url_tag = unwrappydb.tag_get_name(
-                                    each.1.source_url.to_string(),
+                                    sourceurl.clone(),
                                     source_url_id.unwrap().clone(),
                                 );
                                 does_url_exist = url_tag.is_some();
@@ -377,6 +430,11 @@ impl Worker {
                                     .to_owned();
                             }
 
+                            let sourceurl = match each.1.source_url {
+                                    None => {panic!("Threading: Cannot find source URL in each.1 info: {:?}", each.1);},
+                                    Some( ref urlpassed) => urlpassed
+                                };
+                            
                             //let file = each.1;
                             //temp.push(task::block_on(download::test(url)));
                             let mut hash: String = String::new();
@@ -384,7 +442,7 @@ impl Worker {
                             if !does_url_exist {
                                 download::ratelimiter_wait(&mut ratelimit);
                                 // URL doesn't exist in DB Will download
-                                info_log(&format!("Downloading: {} to: {}", &each.1.source_url, &location));
+                                info_log(&format!("Downloading: {} to: {}", &sourceurl, &location));
                                 (hash, file_ext) = task::block_on(download::dlfile_new(
                                     &client,
                                     &each.1,
@@ -398,13 +456,13 @@ impl Worker {
                                     // File already has been downlaoded. Skipping download.
                                     info_log(&format!(
                                         "Skipping file: {} Due to already existing in Tags Table.",
-                                        &each.1.source_url
+                                        &sourceurl
                                     ));
                                     let source_url_id =
                                         unwrappydb.namespace_get(&"source_url".to_string()); // defaults to 0 due to unknown.
 
                                     let url_tag = unwrappydb.tag_get_name(
-                                        each.1.source_url.to_string(),
+                                        sourceurl.clone(),
                                         source_url_id.unwrap().clone(),
                                     );
 
@@ -424,7 +482,7 @@ impl Worker {
                                         info_log(&format!("URL Tag was unexpected. downloading file."));
                                         info_log(&format!(
                                             "Downloading: {} to: {}",
-                                            &each.1.source_url, &location
+                                            &sourceurl, &location
                                         ));
 
                                         (hash, file_ext) = task::block_on(download::dlfile_new(
@@ -433,37 +491,6 @@ impl Worker {
                                             &location,
                                             manageeplugin.clone(),
                                         ));
-                                        //panic!("nono relate");
-
-                                        /*match fileinfo {
-                                            None => {
-                                                // No file here will download
-
-                                                                                        download::ratelimiter_wait(&mut ratelimit);
-                                        // URL doesn't exist in DB Will download
-                                        info!(
-                                            "Downloading: {} to: {}",
-                                            &each.1.source_url, &location
-                                        );
-                                        (hash, file_ext) = task::block_on(download::dlfile_new(
-                                            &client,
-                                            &each.1,
-                                            &location,
-                                            manageeplugin.clone(),
-                                        ));
-                                            }
-                                            Some(_) => {
-                                                // File found adding relationship
-                                                panic!("File exists but no relationship exists. panicing");
-                                            }
-                                        }*/
-
-                                        //unwrappydb.transaction_flush();
-                                        //dbg!(&source_url_id, &each.1, &url_tag); //
-                                        //panic!(
-                                        //    "url has info but no file data. {}",
-                                        //    &url_tag.unwrap()
-                                        //);
                                     }
                                 }
                             }
@@ -479,7 +506,7 @@ impl Worker {
                                 let file_id =
                                     unwrappydb.file_add(None, &hash, &file_ext, &location, true);
                                 let source_url_id = unwrappydb.tag_add(
-                                    each.1.source_url.to_string(),
+                                    sourceurl.clone(),
                                     "".to_string(),
                                     source_namespace_url_id.clone(),
                                     true,
@@ -496,6 +523,14 @@ impl Worker {
                                     //println!("threading every: {:?}", &every);
                                     // Matches tag type. Changes depending on what type of tag (metadata)
                                     match &every.1.tag_type {
+                                        sharedtypes::TagType::ParseUrl => {
+                                            println!("Recieved Parseable tag will search it at end of loop.");
+                                            
+                                            dnpjob.push(every.1.tag.to_string());
+                                            //eachy.1.push((every.1.tag.to_string(), jobcnt));
+                                            
+                                            
+                                        },
                                         sharedtypes::TagType::Normal => {
                                             match every.1.relates_to {
                                                 None => {
@@ -514,20 +549,6 @@ impl Worker {
                                                         true,
                                                         None,
                                                     );
-                                                    /*let temp = unwrappydb.tag_get_name(
-                                                        every.1.tag.to_string(),
-                                                        tag_namespace_id,
-                                                    );
-                                                    let tag_id = unwrappydb.tag_add(
-                                                        every.1.tag.to_string(),
-                                                        "".to_string(),
-                                                        tag_namespace_id,
-                                                        true,
-                                                        Some(tempe),
-                                                    );*/
-                                                    //unwrappydb.dbg_show_internals();
-                                                    //dbg!(&tag_namespace_id, &tag_id, every);
-
                                                     unwrappydb.relationship_add(
                                                         file_id.to_owned(),
                                                         tag_id,
@@ -595,21 +616,7 @@ impl Worker {
                     unwrappydb.del_from_jobs_table(&"param".to_string(), &each.1.as_ref().unwrap());
                     unwrappydb.transaction_flush();
                 }
-
-                //dbg!(resps)
             }
-
-            //let dur = Duration::from_millis(1);
-            //thread::sleep(dur);
-            //for each in resps {
-            //    let st = scraper::parser_call(&liba, &each.text().await.unwrap().to_string());
-            //dbg!(st);
-            //}
-
-            //dbg!(toparse);
-            //dbg!(ratelimiter);
-
-            //thread::sleep(Duration::from_millis(10000));
             dbg!("SPAWNED2");
         });
         //dbg!(&id, &thread, &scraper, &jobs );
@@ -621,85 +628,3 @@ impl Worker {
         }
     }
 }
-
-/* let thread = rt.spawn( async {
-
-        let mut toparse: AHashMap<CommitType, Vec<String>> = AHashMap::new();
-        let mut allurls: Vec<String> = Vec::new();
-
-        let u64andduration = &scraper._ratelimit;
-
-        // Have to lock DB from Arc & Mutex. Forces DB to lock in the meantime to avoid any data races.
-        /*let mut ratelimiter = download::ratelimiter_create(
-            u64andduration.0,
-            u64andduration.1,
-            &db.lock().unwrap(),
-        );*/
-
-        let unwrappydb = &mut db.lock().unwrap();
-        //let t = scrap._type;
-        //println!("{}",t);
-        let datafromdb = unwrappydb.settings_get_name(&format!("{}_{}",scrap._type.to_string(), scrap._name.to_owned())).unwrap().1;
-
-        // Dedupes URL's to search for.
-        // Groups all URLS into one vec to search through later.
-        for each in jblist {
-            dbg!(&each);
-
-
-
-            let mut parpms = each._params ;
-            parpms.push(datafromdb.clone());
-
-            let urlload = scraper::url_dump(&liba, parpms);
-            let commit = each._committype;
-            for eachs in urlload {
-                // Checks if the hashmap contains the committype & its vec contains the data.
-                match toparse.get_mut(&commit) {
-                    Some(ve) => {
-                        if !allurls.contains(&eachs) {
-                            ve.push(eachs.clone());
-                            allurls.push(eachs);
-                        }
-                    }
-                    None => {
-                        if !allurls.contains(&eachs) {
-                            dbg!(&eachs);
-                            toparse.insert(commit.clone(), vec![eachs.clone()]);
-                            allurls.push(eachs);
-                        }
-                    }
-                }
-            }
-        }
-
-        // This is literlly just for debugging. Keep me here.
-        // May use this for the plugins system.
-        for each in &toparse {
-            info!(
-                "Type: {} Has {} URLS Loaded to scrape.",
-                each.0,
-                each.1.len()
-            );
-        }
-        //dbg!(toparse);
-        //let onesearch = allurls[0].to_string();
-        for each in toparse {
-            let resps = "";
-                //rt.block_on(download::dltext_new(scrap._ratelimit, each.1, &liba));
-            dbg!(resps);
-            break
-
-            //dbg!(resps)
-        }
-        //for each in resps {
-        //    let st = scraper::parser_call(&liba, &each.text().await.unwrap().to_string());
-        //dbg!(st);
-        //}
-
-        //dbg!(toparse);
-        //dbg!(ratelimiter);
-
-        //thread::sleep(Duration::from_millis(10000));
-        dbg!("SPAWNED2");
-});*/
