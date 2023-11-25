@@ -21,7 +21,6 @@ pub enum test {
     /// Db Tasks Structure
     #[clap(subcommand)]
     Tasks(TasksStruct),
-
 }
 
 #[derive(Subcommand, Debug)]

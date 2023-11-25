@@ -141,9 +141,7 @@ fn main() {
     let mut alt_connection = database::dbinit(&dbloc.to_string()); // NOTE ONLY USER FOR LOADING DB DYNAMICALLY
     data.load_table(&sharedtypes::LoadDBTable::Settings, &mut alt_connection);
     data.load_table(&sharedtypes::LoadDBTable::All, &mut alt_connection); // TODO REVERT ALL TO SETTINGS
-                                                                          //data.debugdb();
-                                                                          //data.transaction_flush();
-    pause();
+    
     data.transaction_flush();
     data.check_version();
 
@@ -332,7 +330,7 @@ fn main() {
     data.transaction_flush();
 
     jobmanager.jobs_get(&data);
-    data.debugdb();
+    
     // Converts db into Arc for multithreading
     let mut arc = Arc::new(Mutex::new(data));
 

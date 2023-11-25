@@ -17,18 +17,13 @@ mod cli_structs;
 ///
 pub fn main() -> sharedtypes::AllFields {
     let args = cli_structs::MainWrapper::parse();
-    
-    
-    
+
     if let None = &args.a {
         return AllFields::Nothing;
     }
-    
-    
-    match &args.a.as_ref().unwrap() {
-            cli_structs::test::Job(jobstruct) => match jobstruct {
 
-            
+    match &args.a.as_ref().unwrap() {
+        cli_structs::test::Job(jobstruct) => match jobstruct {
             cli_structs::JobStruct::Add(addstruct) => {
                 let comtype = sharedtypes::CommitType::from_str(&addstruct.committype);
                 match comtype {
@@ -62,11 +57,7 @@ pub fn main() -> sharedtypes::AllFields {
         cli_structs::test::Tasks(taskstruct) => match taskstruct {
             cli_structs::TasksStruct::Csv(csvstruct) => {}
         },
-        
-
     }
-    
-
 
     dbg!(&args);
     AllFields::Nothing

@@ -3,8 +3,13 @@ use image::{self, DynamicImage};
 use image::imageops::resize;
 use image::imageops::FilterType;
 
+// Default image width to scale to before encoding to blurhash
 static WIDTH_IMG:u32 = 500;
 static HEIGHT_IMG:u32 = 500;
+
+// "Level of detail" of blur
+static ENCODE_IMG_X:u32 = 5;
+static ENCODE_IMG_Y:u32 = 5;
 
 static PLUGIN_NAME:&str = "blurhash";
 static PLUGIN_DESCRIPTION:&str = "Introduces Blurhash imaging support.";
@@ -29,7 +34,7 @@ pub fn return_info() -> sharedtypes::PluginInfo {
 ///
 fn downloadparse(img: DynamicImage) -> String {
     let rescale_img = resize(&img, WIDTH_IMG, HEIGHT_IMG, FilterType::Triangle);
-    encode(9, 9, WIDTH_IMG, HEIGHT_IMG, &rescale_img.into_raw()).unwrap()    
+    encode(ENCODE_IMG_X, ENCODE_IMG_Y, WIDTH_IMG, HEIGHT_IMG, &rescale_img.into_raw()).unwrap()    
 }
 
 #[no_mangle]
