@@ -387,7 +387,11 @@ impl Jobs {
     ///
     /// Returns a url to grab for.
     ///
-    pub fn library_url_get(&mut self, memid: &InternalScraper, params: &Vec<sharedtypes::ScraperParam>) -> Vec<String> {
+    pub fn library_url_get(
+        &mut self,
+        memid: &InternalScraper,
+        params: &Vec<sharedtypes::ScraperParam>,
+    ) -> Vec<String> {
         let libloading = self.scrapermanager.returnlibloading(memid);
         scraper::url_load(libloading, params)
         //self.scrapermanager.url_load(memid, params.to_vec())
@@ -409,7 +413,11 @@ impl Jobs {
     ///
     /// Returns a url to grab for.
     ///
-    pub fn library_url_dump(&self, memid: &InternalScraper, params: &Vec<sharedtypes::ScraperParam>) -> Vec<String> {
+    pub fn library_url_dump(
+        &self,
+        memid: &InternalScraper,
+        params: &Vec<sharedtypes::ScraperParam>,
+    ) -> Vec<String> {
         let libloading = self.scrapermanager.returnlibloading(memid);
         scraper::url_dump(libloading, params)
         //self.scrapermanager.url_dump(memid, params.to_vec())

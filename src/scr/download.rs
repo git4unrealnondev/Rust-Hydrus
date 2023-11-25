@@ -148,12 +148,16 @@ pub async fn dlfile_new(
         let errloop = true;
 
         while errloop {
-            
             let fileurlmatch = match &file.source_url {
-                None => {panic!("Tried to call dlfilenew when their was no file :C info: {:?}", file);},
-                Some(fileurl) => fileurl
+                None => {
+                    panic!(
+                        "Tried to call dlfilenew when their was no file :C info: {:?}",
+                        file
+                    );
+                }
+                Some(fileurl) => fileurl,
             };
-            
+
             let url = Url::parse(fileurlmatch).unwrap();
 
             let mut futureresult = client.get(url.as_ref()).send().await;
@@ -197,10 +201,12 @@ pub async fn dlfile_new(
         hash = format!("{:X}", hasher.finalize());
 
         let parsedhash = match &file.hash {
-            None => {panic!("DlFileNew: Cannot parse hash info : {:?}", &file);},
+            None => {
+                panic!("DlFileNew: Cannot parse hash info : {:?}", &file);
+            }
             Some(inputhash) => inputhash,
         };
-        
+
         // Check and compare  to what the scraper wants
         let status = hash_bytes(&bytes, &parsedhash);
 

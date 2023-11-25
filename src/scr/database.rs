@@ -245,9 +245,7 @@ impl Main {
     ///
     /// Wrapper
     ///
-    pub fn jobs_get_all(
-        &self,
-    ) -> &HashMap<usize, sharedtypes::DbJobsObj> {
+    pub fn jobs_get_all(&self) -> &HashMap<usize, sharedtypes::DbJobsObj> {
         self._inmemdb.jobs_get_all()
     }
 
@@ -1466,10 +1464,14 @@ impl Main {
         relate_tag_id: usize,
         addtodb: bool,
     ) {
-        
-        let parent = self._inmemdb.parents_get(&sharedtypes::DbParentsObj{tag_namespace_id: tag_namespace_id, tag_id: tag_id, relate_tag_id: relate_tag_id, relate_namespace_id: relate_namespace_id});
+        let parent = self._inmemdb.parents_get(&sharedtypes::DbParentsObj {
+            tag_namespace_id: tag_namespace_id,
+            tag_id: tag_id,
+            relate_tag_id: relate_tag_id,
+            relate_namespace_id: relate_namespace_id,
+        });
 
-        if addtodb & &parent.is_none(){
+        if addtodb & &parent.is_none() {
             self.parents_add_sql(
                 &tag_namespace_id,
                 &tag_id,
@@ -1477,7 +1479,7 @@ impl Main {
                 &relate_tag_id,
             );
         }
-        
+
         self.parents_add_db(tag_namespace_id, tag_id, relate_namespace_id, relate_tag_id);
     }
 
@@ -1532,8 +1534,7 @@ impl Main {
     pub fn debugdb(&self) {
         self._inmemdb.dumpe_data();
     }
-    
-    
+
     ///
     /// Adds tag into DB if it doesn't exist in the memdb.
     ///
@@ -1774,51 +1775,40 @@ impl Main {
     pub fn get_db_loc(&self) -> String {
         self._dbpath.to_string()
     }
-    
+
     ///
     /// database searching advanced.
     ///
     pub fn db_search_adv(&self, db_search: sharedtypes::DbSearchQuery) {
-        
         let namespaceone_unwrap = self.search_for_namespace(&db_search.tag_one);
         //let namespacetwo_unwrap = self.search_for_namespace(db_search.tag_two);
-        
-        if namespaceone_unwrap.is_none()  {
-            logging::info_log(
-                &format!("Couldn't find namespace from search: {:?} {:?}", db_search.tag_one, namespaceone_unwrap),
-            );
-            return
+
+        if namespaceone_unwrap.is_none() {
+            logging::info_log(&format!(
+                "Couldn't find namespace from search: {:?} {:?}",
+                db_search.tag_one, namespaceone_unwrap
+            ));
+            return;
         }
         let namespaceone = namespaceone_unwrap.unwrap();
         //let tagtwo = namespacetwo_unwrap.unwrap();
-        
-        
-        
     }
-    
+
     ///
     /// Parses data from search query to return an id
     ///
-    fn search_for_namespace(&self, search: &sharedtypes::DbSearchObject) -> Option<usize>{
+    fn search_for_namespace(&self, search: &sharedtypes::DbSearchObject) -> Option<usize> {
         match &search.namespace {
-            None => {
-                match search.namespace_id {
-                    None => None,
-                    Some(id) => Some(id)
-                }
+            None => match search.namespace_id {
+                None => None,
+                Some(id) => Some(id),
             },
-            Some(id_string) => {
-                match self.namespace_get(id_string) {
-                    None => None,
-                    Some(id) => Some(id.clone())
-                }
+            Some(id_string) => match self.namespace_get(id_string) {
+                None => None,
+                Some(id) => Some(id.clone()),
             },
         }
-        
-        
-        
     }
-    
 
     ///
     /// Querys the db use this for select statements.
@@ -1899,60 +1889,86 @@ impl Main {
     pub fn transaction_execute(trans: Transaction, inp: String) {
         trans.execute(&inp, params![]).unwrap();
     }
-    
-    
+
     ///
     /// Sqlite wrapper for deleteing a relationship from table.
     ///
-    fn delete_relationship(&mut self, file_id: &usize, tag_id: &usize) {
+    fn delete_relationship_sql(&mut self, file_id: &usize, tag_id: &usize) {
         let inp = "DELETE FROM Relationship WHERE fileid = ? AND tagid = ?";
-            let _out = self._conn.borrow_mut().lock().unwrap().execute(
-                inp,
-                params![
-                    file_id.to_string(),
-                    tag_id.to_string(),
-                ],
-            );
+        let _out = self
+            ._conn
+            .borrow_mut()
+            .lock()
+            .unwrap()
+            .execute(inp, params![file_id.to_string(), tag_id.to_string(),]);
         self.db_commit_man();
     }
-    
+
     ///
     /// Sqlite wrapper for deleteing a tag from table.
     ///
-    fn delete_tag_id(&mut self, tag_id: &usize) {
-        let inp = "DELETE FROM Tags WHERE tid = ?";
-            let _out = self._conn.borrow_mut().lock().unwrap().execute(
-                inp,
-                params![
-                    tag_id.to_string(),
-                ],
-            );
+    fn delete_tag_sql(&mut self, tag_id: &usize) {
+        let inp = "DELETE FROM Tags WHERE id = ?";
+        let _out = self
+            ._conn
+            .borrow_mut()
+            .lock()
+            .unwrap()
+            .execute(inp, params![tag_id.to_string(),]);
         self.db_commit_man();
     }
-    
+
+    ///
+    /// Sqlite wrapper for deleteing a tag from table.
+    ///
+    fn delete_namespace_sql(&mut self, namespace_id: &usize) {
+        let inp = "DELETE FROM Namespace WHERE id = ?";
+        let _out = self
+            ._conn
+            .borrow_mut()
+            .lock()
+            .unwrap()
+            .execute(inp, params![namespace_id.to_string(),]);
+        self.db_commit_man();
+    }
+
     ///
     /// Removes tag & relationship from db.
     ///
     pub fn delete_tag_relationship(&mut self, tagid: &usize) {
-        
         let relationships = self._inmemdb.relationship_get_fileid(tagid);
-        
+
         // Gets list of fileids from internal db.
         let fileids = match relationships {
             None => return,
-            Some(fileids) => {
-                fileids
-            },
+            Some(fileids) => fileids,
         };
-        
+
         for file in &fileids.clone() {
             self._inmemdb.relationship_remove(file, tagid);
-            self.delete_relationship(file, tagid);
+            self.delete_relationship_sql(file, tagid);
         }
-        
+
         self._inmemdb.tag_remove(tagid);
-        self.delete_tag_id(tagid);
-        
+        self.delete_tag_sql(tagid);
     }
-    
+
+    ///
+    /// Deletes namespace by id
+    /// Removes tags & relationships assocated.
+    ///
+    pub fn namespace_delete_id(&mut self, id: &usize) {
+        let tagids_unwrap = self._inmemdb.namespace_get_fileids(id);
+        let tagids = match tagids_unwrap {
+            None => return,
+            Some(tagids) => tagids.clone(),
+        };
+
+        for each in tagids.iter() {
+            self.delete_tag_relationship(each);
+        }
+
+        self._inmemdb.namespace_delete(id);
+        self.delete_namespace_sql(id);
+    }
 }

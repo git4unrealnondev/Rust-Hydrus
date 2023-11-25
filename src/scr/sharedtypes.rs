@@ -1,11 +1,11 @@
 use serde::{Deserialize, Serialize};
-use std::fmt;
 use std::{collections::HashMap, hash::BuildHasherDefault};
+use std::{default, fmt};
 use strum::IntoEnumIterator;
-use strum_macros::Display;
 use strum_macros::EnumIter;
+use strum_macros::{Display, EnumString};
 
-#[derive(Debug, EnumIter, Clone, Eq, Hash, PartialEq, Copy)]
+#[derive(Debug, EnumIter, Clone, Eq, Hash, PartialEq, Copy, EnumString)]
 pub enum CommitType {
     StopOnNothing, // Processes all files and data doesn't stop processing.
     StopOnFile,    // Stops processing if it sees a file it's already seen.
@@ -321,6 +321,20 @@ pub enum AllFields {
 #[derive(Debug, EnumIter, Display)]
 pub enum Tasks {
     Csv(String, CsvCopyMvHard), // CSV importation. cp mv hardlink
+    Remove(TasksRemove),
+}
+
+#[derive(Debug, EnumIter, Display)]
+pub enum TasksRemove {
+    Remove_Namespace_Id(usize),
+    Remove_Namespace_String(String),
+    None,
+}
+
+impl Default for TasksRemove {
+    fn default() -> Self {
+        TasksRemove::None
+    }
 }
 
 ///

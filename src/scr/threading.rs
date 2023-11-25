@@ -167,8 +167,6 @@ impl Worker {
                 &db.lock().unwrap(),
             );*/
 
-
-
             // Dedupes URL's to search for.
             // Groups all URLS into one vec to search through later.
             // Changing to vec of vec of strings. Needed for advanced job cancellation.
@@ -185,29 +183,36 @@ impl Worker {
                     .collect();
 
                 let scrap_data;
-            {
-                let unwrappydb = &mut db.lock().unwrap();
-                //let t = scrap._type;
-                //println!("{}",t);
-                let datafromdb = unwrappydb
-                    .settings_get_name(&format!("{}_{}", scrap._type, scrap._name.to_owned()))
-                    .unwrap()
-                    .param
-                    .clone();
+                {
+                    let unwrappydb = &mut db.lock().unwrap();
+                    //let t = scrap._type;
+                    //println!("{}",t);
+                    let datafromdb = unwrappydb
+                        .settings_get_name(&format!("{}_{}", scrap._type, scrap._name.to_owned()))
+                        .unwrap()
+                        .param
+                        .clone();
 
-                scrap_data = datafromdb.unwrap();
-                // drops mutex for other threads to use.
-            }
-                
-                for par in parpms {
-                    params.push(sharedtypes::ScraperParam{param_data: par, param_type: sharedtypes::ScraperParamType::Normal});
+                    scrap_data = datafromdb.unwrap();
+                    // drops mutex for other threads to use.
                 }
-                
-                params.push(sharedtypes::ScraperParam{param_data: scrap_data, param_type: sharedtypes::ScraperParamType::Database});
+
+                for par in parpms {
+                    params.push(sharedtypes::ScraperParam {
+                        param_data: par,
+                        param_type: sharedtypes::ScraperParamType::Normal,
+                    });
+                }
+
+                params.push(sharedtypes::ScraperParam {
+                    param_data: scrap_data,
+                    param_type: sharedtypes::ScraperParamType::Database,
+                });
 
                 let urlload = scraper::url_dump(&liba, &params);
                 let commit = each.committype.clone().unwrap();
-                let mut hashtemp: AHashMap<sharedtypes::CommitType, Vec<(String, u32)>> = AHashMap::new();
+                let mut hashtemp: AHashMap<sharedtypes::CommitType, Vec<(String, u32)>> =
+                    AHashMap::new();
                 for eachs in urlload {
                     // Checks if the hashmap contains the committype & its vec contains the data.
                     match hashtemp.get_mut(&commit) {
@@ -219,14 +224,13 @@ impl Worker {
                         }
                         None => {
                             if !allurls.contains_key(&eachs) {
-                                hashtemp.insert(commit, vec![(eachs.clone(), jobcnt)] );
+                                hashtemp.insert(commit, vec![(eachs.clone(), jobcnt)]);
                                 allurls.insert(eachs, 0);
                             }
                         }
                     }
                 }
                 jobvec.push((hashtemp, each.param));
-                
             }
 
             // This is literlly just for debugging. Keep me here.
@@ -247,14 +251,13 @@ impl Worker {
             let ratelimit_total = 10;
 
             let mut client = download::client_create();
-             for each in jobvec {
+            for each in jobvec {
                 dbg!(&each);
-                
-                
+
                 //for loo in dnpjob {
-                    
+
                 //}
-                
+
                 //handle.enter();
                 //let resp = insidert.spawn(async move {
                 //    download::dltext_new(each.1, &mut ratelimit).await
@@ -265,7 +268,6 @@ impl Worker {
                         let mut loopbool = true;
                         let mut respstring = String::new();
                         'mainloop: while loopbool {
-                            
                             //if dnpjob.contains(&urlstring.1.try_into().unwrap()) {continue 'mainloop;}
                             //dbg!(&dnpjob, &urlstring.1);
                             download::ratelimiter_wait(&mut ratelimit);
@@ -276,24 +278,20 @@ impl Worker {
                                     pause();
                                     dnpjob.remove(0);
                                     task::block_on(download::dltext_new(
-                                urlzero.to_string(),
-                                &mut ratelimit,
-                                &mut client,
-                                manageeplugin.clone(),
-                            ))
-                                },
-                                true => {
-                                    task::block_on(download::dltext_new(
-                                urlstring.0.to_string(),
-                                &mut ratelimit,
-                                &mut client,
-                                manageeplugin.clone(),
-                            ))
+                                        urlzero.to_string(),
+                                        &mut ratelimit,
+                                        &mut client,
+                                        manageeplugin.clone(),
+                                    ))
                                 }
+                                true => task::block_on(download::dltext_new(
+                                    urlstring.0.to_string(),
+                                    &mut ratelimit,
+                                    &mut client,
+                                    manageeplugin.clone(),
+                                )),
                             };
-                            
-                            
-                            
+
                             //cnt += 1;
                             match resp {
                                 Ok(_) => {
@@ -328,17 +326,20 @@ impl Worker {
                                         error_log(error);
                                     }
                                     sharedtypes::ScraperReturn::Nothing => {
-                                            //dnpjob.push();
-                                            //jobcnt += 1;
-                                            break
-                                    },
+                                        //dnpjob.push();
+                                        //jobcnt += 1;
+                                        break;
+                                    }
                                     sharedtypes::ScraperReturn::Stop(error) => {
                                         info_log(&format!("{}", error));
                                         break;
                                     }
                                     sharedtypes::ScraperReturn::Timeout(time) => {
                                         let time_dur = Duration::from_secs(*time);
-                                        info_log(&format!("Sleeping: {} Secs due to ratelimit.", time));
+                                        info_log(&format!(
+                                            "Sleeping: {} Secs due to ratelimit.",
+                                            time
+                                        ));
                                         info_log(&format!("ST: {:?} RESP: {}", &st, &respstring));
                                         dbg!("Sleeping: {} Secs due to ratelimit.", time);
 
@@ -405,12 +406,14 @@ impl Worker {
                                         unwrappydb.namespace_get(&"source_url".to_string());
                                     // defaults to 0 due to unknown.
                                 }
-                                
+
                                 let sourceurl = match each.1.source_url {
-                                    None => {panic!("Threading: Cannot find source URL in each.1 info: {:?}", each.1);},
-                                    Some(ref urlpassed) => urlpassed
+                                    None => {
+                                        panic!("Threading: Cannot find source URL in each.1 info: {:?}", each.1);
+                                    }
+                                    Some(ref urlpassed) => urlpassed,
                                 };
-                                
+
                                 let url_tag = unwrappydb.tag_get_name(
                                     sourceurl.clone(),
                                     source_url_id.unwrap().clone(),
@@ -431,10 +434,15 @@ impl Worker {
                             }
 
                             let sourceurl = match each.1.source_url {
-                                    None => {panic!("Threading: Cannot find source URL in each.1 info: {:?}", each.1);},
-                                    Some( ref urlpassed) => urlpassed
-                                };
-                            
+                                None => {
+                                    panic!(
+                                        "Threading: Cannot find source URL in each.1 info: {:?}",
+                                        each.1
+                                    );
+                                }
+                                Some(ref urlpassed) => urlpassed,
+                            };
+
                             //let file = each.1;
                             //temp.push(task::block_on(download::test(url)));
                             let mut hash: String = String::new();
@@ -479,7 +487,9 @@ impl Worker {
                                         //panic!("{:?}", fileinfo);
                                     }
                                     None => {
-                                        info_log(&format!("URL Tag was unexpected. downloading file."));
+                                        info_log(&format!(
+                                            "URL Tag was unexpected. downloading file."
+                                        ));
                                         info_log(&format!(
                                             "Downloading: {} to: {}",
                                             &sourceurl, &location
@@ -525,12 +535,10 @@ impl Worker {
                                     match &every.1.tag_type {
                                         sharedtypes::TagType::ParseUrl => {
                                             println!("Recieved Parseable tag will search it at end of loop.");
-                                            
+
                                             dnpjob.push(every.1.tag.to_string());
                                             //eachy.1.push((every.1.tag.to_string(), jobcnt));
-                                            
-                                            
-                                        },
+                                        }
                                         sharedtypes::TagType::Normal => {
                                             match every.1.relates_to {
                                                 None => {

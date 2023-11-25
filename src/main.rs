@@ -61,7 +61,7 @@ mod scr {
 ///
 
 fn pause() {
-    use std::io::{stdout, stdin, Write, Read};
+    use std::io::{stdin, stdout, Read, Write};
     let mut stdout = stdout();
     stdout.write(b"Press Enter to continue...").unwrap();
     stdout.flush().unwrap();
@@ -141,8 +141,8 @@ fn main() {
     let mut alt_connection = database::dbinit(&dbloc.to_string()); // NOTE ONLY USER FOR LOADING DB DYNAMICALLY
     data.load_table(&sharedtypes::LoadDBTable::Settings, &mut alt_connection);
     data.load_table(&sharedtypes::LoadDBTable::All, &mut alt_connection); // TODO REVERT ALL TO SETTINGS
-    //data.debugdb();
-    //data.transaction_flush();
+                                                                          //data.debugdb();
+                                                                          //data.transaction_flush();
     pause();
     data.transaction_flush();
     data.check_version();
@@ -272,7 +272,6 @@ fn main() {
                     for each in hash {
                         let file = data.file_get_hash(each);
 
-
                         match file {
                             Some(fileone) => {
                                 let tag = data.relationship_get_tagid(fileone).unwrap();
@@ -284,7 +283,10 @@ fn main() {
                                         &tag_each,
                                         &tagdata.name,
                                         //&tagdata.parents,
-                                        &data.namespace_get_string(&tagdata.namespace).unwrap().name,
+                                        &data
+                                            .namespace_get_string(&tagdata.namespace)
+                                            .unwrap()
+                                            .name,
                                     );
                                 }
                             }
@@ -302,6 +304,26 @@ fn main() {
             sharedtypes::Tasks::Csv(location, csvdata) => {
                 tasks::import_files(&location, csvdata, &mut data);
             }
+            sharedtypes::Tasks::Remove(sharedtypes::TasksRemove::Remove_Namespace_Id(id)) => {
+                data.delete_tag_relationship(&id);
+            }
+            sharedtypes::Tasks::Remove(sharedtypes::TasksRemove::Remove_Namespace_String(
+                id_string,
+            )) => {
+                let id = data.namespace_get(&id_string).cloned();
+                match id {
+                    None => {
+                        println!(
+                            "Cannot find the tasks remove string in namespace {}",
+                            id_string
+                        );
+                    }
+                    Some(id_usize) => {
+                        data.delete_tag_relationship(&id_usize);
+                    }
+                }
+            }
+            sharedtypes::Tasks::Remove(sharedtypes::TasksRemove::None) => {}
         },
 
         sharedtypes::AllFields::Nothing => {}
@@ -310,7 +332,7 @@ fn main() {
     data.transaction_flush();
 
     jobmanager.jobs_get(&data);
-
+    data.debugdb();
     // Converts db into Arc for multithreading
     let mut arc = Arc::new(Mutex::new(data));
 
@@ -330,6 +352,7 @@ fn main() {
         &mut alt_connection,
         pluginmanager.clone(),
     );
+
     // Anything below here will run automagically.
     // Jobs run in OS threads
 

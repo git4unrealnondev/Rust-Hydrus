@@ -1,14 +1,79 @@
 extern crate clap;
 //use std::str::pattern::Searcher;
 
-use crate::sharedtypes::{self, JobsAdd, JobsRemove};
-use clap::{App, Arg, SubCommand};
+use std::str::FromStr;
+
+use crate::sharedtypes::{self, AllFields, JobsAdd, JobsRemove};
+use clap::{Arg, Parser};
 use log::{error, info};
 //use super::sharedtypes::;
 
 use strum::IntoEnumIterator;
-//mod sharedtypes;
 
+mod cli_structs;
+
+///
+/// Returns the main argument and parses data.
+///
+pub fn main() -> sharedtypes::AllFields {
+    let args = cli_structs::MainWrapper::parse();
+    
+    
+    
+    if let None = &args.a {
+        return AllFields::Nothing;
+    }
+    
+    
+    match &args.a.as_ref().unwrap() {
+            cli_structs::test::Job(jobstruct) => match jobstruct {
+
+            
+            cli_structs::JobStruct::Add(addstruct) => {
+                let comtype = sharedtypes::CommitType::from_str(&addstruct.committype);
+                match comtype {
+                    Ok(comfinal) => {
+                        return sharedtypes::AllFields::JobsAdd(sharedtypes::JobsAdd {
+                            site: addstruct.site.to_string(),
+                            query: addstruct.query.to_string(),
+                            time: addstruct.time.to_string(),
+                            committype: comfinal,
+                        });
+                    }
+                    Err(_) => {
+                        let enum_vec = sharedtypes::CommitType::iter().collect::<Vec<_>>();
+                        println!(
+                            "Could not parse commit type. Expected one of {:?}",
+                            enum_vec
+                        );
+                        return sharedtypes::AllFields::Nothing;
+                    }
+                }
+            }
+            cli_structs::JobStruct::Remove(remove) => {
+                return sharedtypes::AllFields::JobsRemove(sharedtypes::JobsRemove {
+                    site: remove.site.to_string(),
+                    query: remove.query.to_string(),
+                    time: remove.time.to_string(),
+                })
+            }
+        },
+        cli_structs::test::Search(searchstruct) => {}
+        cli_structs::test::Tasks(taskstruct) => match taskstruct {
+            cli_structs::TasksStruct::Csv(csvstruct) => {}
+        },
+        
+
+    }
+    
+
+
+    dbg!(&args);
+    AllFields::Nothing
+}
+
+//;
+/*
 pub fn main() -> sharedtypes::AllFields {
     let app = App::new("rust-hyrdrus")
         .version("1.0")
@@ -94,6 +159,22 @@ pub fn main() -> sharedtypes::AllFields {
             SubCommand::with_name("task")
                 .about("Runs Specified tasks against DB.")
                 .subcommand(
+                    SubCommand::with_name("remove")
+                        .about("Removes 'X' from db")
+                        .arg(
+                            Arg::new("Remove_Namespace_String")
+                                .long("Remove_Namespace_String")
+                                .takes_value(true)
+                                .help("Removes namespace string from db."),
+                        )
+                        .arg(
+                            Arg::new("Remove_Namespace_Id")
+                                .long("Remove_Namespace_Id")
+                                .takes_value(true)
+                                .help("Removes namespace from db by id."),
+                        ),
+                )
+                .subcommand(
                     SubCommand::with_name("csv")
                         .about("Imports a CSV File")
                         .arg(
@@ -151,57 +232,149 @@ pub fn main() -> sharedtypes::AllFields {
 
     let task = matches.subcommand_matches(&"task");
 
-    if task != None {
-        for taskenum in sharedtypes::Tasks::iter() {
-            let tasktype = taskenum.to_string();
-            let taskmatch = task.unwrap().subcommand_matches(&tasktype);
-            if let Some(_) = taskmatch {
-                match taskenum {
-                    sharedtypes::Tasks::Csv(test, csvdata) => {
-                        dbg!(taskmatch);
-                        let location: &String = taskmatch.unwrap().get_one(&tasktype).unwrap();
+    match task {
+        None => {}
+        Some(task_match) => {
+            //dbg!(task_match);
 
-                        for csvdata in sharedtypes::CsvCopyMvHard::iter() {
-                            if taskmatch.unwrap().contains_id(&csvdata.to_string()) {
-                                dbg!(&csvdata);
-                                match csvdata {
-                                    sharedtypes::CsvCopyMvHard::Copy => {
-                                        return sharedtypes::AllFields::Tasks(
-                                            sharedtypes::Tasks::Csv(location.to_string(), csvdata),
-                                        )
-                                    }
-                                    sharedtypes::CsvCopyMvHard::Move => {
-                                        return sharedtypes::AllFields::Tasks(
-                                            sharedtypes::Tasks::Csv(location.to_string(), csvdata),
-                                        )
-                                    }
-                                    sharedtypes::CsvCopyMvHard::Hardlink => {
-                                        return sharedtypes::AllFields::Tasks(
-                                            sharedtypes::Tasks::Csv(location.to_string(), csvdata),
-                                        )
-                                    }
-                                }
-                                //return sharedtypes::AllFields::ETasks(csvdata())
-                            }
+            match task_match.subcommand_name() {
+                Some("csv") => {
+                    dbg!("csv");
+                }
+                Some("remove") => {
+                    //dbg!(&task_match);
+                    let remove_matches = task_match.subcommand_matches("remove").unwrap();
+
+                     dbg!(&remove_matches);
+
+                     //let temp = remove_matches["valid_args"];
+                     //dbg!(temp);
+
+                     for searchprog in sharedtypes::TasksRemove::iter() {
+
+                        let searchenumtype = searchprog.to_string();
+
+
+
+
+                        if remove_matches.contains_id(&searchenumtype) {
+                            dbg!(searchenumtype);
+
+                            return sharedtypes::AllFields::Tasks()
                         }
 
-                        dbg!(test, csvdata);
+                     }
 
-                        let mv = taskmatch.unwrap().contains_id(&"move");
-                        let cp = taskmatch.unwrap().contains_id(&"copy");
-                        let hard = taskmatch.unwrap().contains_id(&"hardlink");
 
-                        if mv {
-                        } else if cp {
-                        } else if hard {
+                     /*match remove_matches {
+                        Some("Remove_Namespace_String") => {
+                            dbg!("Remove_Namespace_String");
                         }
-                        dbg!(location, mv, cp);
+                        Some("Remove_Namespace_Id") => {
+                            dbg!("Remove_Namespace_Id");
+                        }
+                        _ => {
+                            panic!("Unknown was passed in task: {:?}", remove_matches);
+                        }
                     }
+                   dbg!(remove_matches);*/
+                }
+                _ => {
+                    panic!("Unknown was passed in task: {:?}", task_match);
                 }
             }
         }
-        panic!();
     }
+
+    /*match task {
+        None => {}
+        Some(task_arg) => {
+            let remove = task_arg.subcommand_matches(&"remove").expect("Non here");
+            dbg!(&remove);
+            if remove.contains_id("Remove_Namespace_String") {
+                dbg!("Remove_Namespace_String");
+                return sharedtypes::AllFields::Tasks(())
+            } else if remove.contains_id("Remove_Namespace_Id") {
+                dbg!("Remove_Namespace_Id");
+            } else {
+                panic!("Hit end with task remove matching : CLI")
+            };
+        }
+    }*/
+
+    /*if task != None {
+            for taskenum in sharedtypes::Tasks::iter() {
+                let tasktype = taskenum.to_string();
+                dbg!(&tasktype);
+                let taskmatch = task.unwrap().subcommand_matches(&tasktype);
+                if let Some(task_arg) = taskmatch {
+                    match taskenum {
+
+                        sharedtypes::Tasks::Remove(sharedtypes::TasksRemove::None) => {
+                            panic!("Got none for tasks panicing.");
+                        }
+
+                        sharedtypes::Tasks::Remove(sharedtypes::TasksRemove::NamespaceString(ns_string)) => {
+
+                     return sharedtypes::AllFields::Tasks(
+                                                sharedtypes::Tasks::Remove(sharedtypes::TasksRemove::NamespaceString(ns_string)));
+
+
+
+
+                        }
+
+                        sharedtypes::Tasks::Remove(sharedtypes::TasksRemove::NamespaceId(ns_id)) => {
+    return sharedtypes::AllFields::Tasks(
+                                                sharedtypes::Tasks::Remove(sharedtypes::TasksRemove::NamespaceId(ns_id)));
+
+                        }
+
+                        sharedtypes::Tasks::Csv(test, csvdata) => {
+                            dbg!(taskmatch);
+                            let location: &String = taskmatch.unwrap().get_one(&tasktype).unwrap();
+
+                            for csvdata in sharedtypes::CsvCopyMvHard::iter() {
+                                if taskmatch.unwrap().contains_id(&csvdata.to_string()) {
+                                    dbg!(&csvdata);
+                                    match csvdata {
+                                        sharedtypes::CsvCopyMvHard::Copy => {
+                                            return sharedtypes::AllFields::Tasks(
+                                                sharedtypes::Tasks::Csv(location.to_string(), csvdata),
+                                            )
+                                        }
+                                        sharedtypes::CsvCopyMvHard::Move => {
+                                            return sharedtypes::AllFields::Tasks(
+                                                sharedtypes::Tasks::Csv(location.to_string(), csvdata),
+                                            )
+                                        }
+                                        sharedtypes::CsvCopyMvHard::Hardlink => {
+                                            return sharedtypes::AllFields::Tasks(
+                                                sharedtypes::Tasks::Csv(location.to_string(), csvdata),
+                                            )
+                                        }
+                                    }
+                                    //return sharedtypes::AllFields::ETasks(csvdata())
+                                }
+                            }
+
+                            dbg!(test, csvdata);
+
+                            let mv = taskmatch.unwrap().contains_id(&"move");
+                            let cp = taskmatch.unwrap().contains_id(&"copy");
+                            let hard = taskmatch.unwrap().contains_id(&"hardlink");
+
+                            if mv {
+                            } else if cp {
+                            } else if hard {
+                            }
+                            dbg!(location, mv, cp);
+                        }
+                    }
+                }
+            }
+            panic!();
+        }*/
 
     if search != None {
         for searchprog in sharedtypes::Search::iter() {
@@ -370,3 +543,4 @@ pub fn main() -> sharedtypes::AllFields {
 
     //        println!("Hello, {}!", name);
 }
+*/
