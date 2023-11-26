@@ -4,10 +4,9 @@ use std::hash::BuildHasherDefault;
 
 use crate::jobs;
 use crate::logging;
-///
-/// New in memory database.
-/// Should be cleaner
-///
+use crate::pause;
+use ahash::{AHashMap, AHashSet, AHasher};
+
 use crate::sharedtypes;
 use crate::sharedtypes::DbFileObj;
 use crate::sharedtypes::DbJobsObj;
@@ -23,30 +22,30 @@ pub enum TagRelateConjoin {
 }
 
 pub struct NewinMemDB {
-    //_tag_id_data: HashMap<usize, sharedtypes::DbTagObjNNS>,
-    //_tag_name_id: HashMap<String, usize>,
-    _tag_nns_id_data: HashMap<usize, sharedtypes::DbTagNNS>,
-    _tag_nns_data_id: HashMap<sharedtypes::DbTagNNS, usize>,
+    _tag_nns_id_data: AHashMap<usize, sharedtypes::DbTagNNS>,
+    _tag_nns_data_id: AHashMap<sharedtypes::DbTagNNS, usize>,
 
-    _settings_id_data: HashMap<usize, sharedtypes::DbSettingObj>,
-    _settings_name_id: HashMap<String, usize>,
+    _settings_id_data: AHashMap<usize, sharedtypes::DbSettingObj>,
+    _settings_name_id: AHashMap<String, usize>,
 
-    _parents_id_data: HashMap<usize, sharedtypes::DbParentsObj>,
-    _parents_name_id: HashMap<sharedtypes::DbParentsObj, usize>,
+    _parents_dual: AHashSet<usize>,
 
-    _jobs_id_data: HashMap<usize, sharedtypes::DbJobsObj>,
+    _parents_tag_rel: AHashMap<usize, AHashSet<usize>>,
+    _parents_rel_tag: AHashMap<usize, AHashSet<usize>>,
+
+    _jobs_id_data: AHashMap<usize, sharedtypes::DbJobsObj>,
     //_jobs_name_id: HashMap<String, usize>,
-    _namespace_id_data: HashMap<usize, sharedtypes::DbNamespaceObj>,
-    _namespace_name_id: HashMap<String, usize>,
-    _namespace_id_tag: HashMap<usize, HashSet<usize>>,
+    _namespace_id_data: AHashMap<usize, sharedtypes::DbNamespaceObj>,
+    _namespace_name_id: AHashMap<String, usize>,
+    _namespace_id_tag: AHashMap<usize, AHashSet<usize>>,
 
-    _file_id_data: HashMap<usize, sharedtypes::DbFileObj>,
-    _file_name_id: HashMap<String, usize>,
+    _file_id_data: AHashMap<usize, sharedtypes::DbFileObj>,
+    _file_name_id: AHashMap<String, usize>,
 
-    _relationship_file_tag: HashMap<usize, HashSet<usize>>,
-    _relationship_tag_file: HashMap<usize, HashSet<usize>>,
-    _relationship_dual: HashSet<usize>,
-    //_relationship_dual_f: IntMap<usize, usize>,
+    _relationship_file_tag: AHashMap<usize, AHashSet<usize>>,
+    _relationship_tag_file: AHashMap<usize, AHashSet<usize>>,
+    _relationship_dual: AHashSet<usize>,
+
     _tag_max: usize,
     _relationship_max: usize,
     _settings_max: usize,
@@ -59,29 +58,29 @@ pub struct NewinMemDB {
 impl NewinMemDB {
     pub fn new() -> NewinMemDB {
         let inst = NewinMemDB {
-            //_tag_name_id: HashMap::new(),
-            //_tag_id_data: HashMap::default(),
-            _tag_nns_id_data: HashMap::default(),
-            _tag_nns_data_id: HashMap::new(),
+            _tag_nns_id_data: AHashMap::default(),
+            _tag_nns_data_id: AHashMap::new(),
 
-            _jobs_id_data: HashMap::default(),
-            _file_id_data: HashMap::default(),
+            _jobs_id_data: AHashMap::default(),
+            _file_id_data: AHashMap::default(),
             //_jobs_name_id: HashMap::new(),
-            _file_name_id: HashMap::new(),
-            _parents_id_data: HashMap::default(),
-            _parents_name_id: HashMap::new(),
+            _file_name_id: AHashMap::new(),
+            _parents_dual: AHashSet::default(),
 
-            _settings_name_id: HashMap::new(),
-            _settings_id_data: HashMap::default(),
+            _parents_rel_tag: AHashMap::new(),
+            _parents_tag_rel: AHashMap::new(),
 
-            _namespace_name_id: HashMap::new(),
-            _namespace_id_data: HashMap::default(),
-            _namespace_id_tag: HashMap::default(),
+            _settings_name_id: AHashMap::new(),
+            _settings_id_data: AHashMap::default(),
 
-            _relationship_tag_file: HashMap::default(),
-            _relationship_file_tag: HashMap::default(),
-            _relationship_dual: HashSet::default(),
-            //_relationship_dual_t: HashMap::with_hasher(BuildNoHashHasher::default()),
+            _namespace_name_id: AHashMap::new(),
+            _namespace_id_data: AHashMap::default(),
+            _namespace_id_tag: AHashMap::default(),
+
+            _relationship_tag_file: AHashMap::default(),
+            _relationship_file_tag: AHashMap::default(),
+            _relationship_dual: AHashSet::default(),
+
             _tag_max: 0,
             _settings_max: 0,
             _parents_max: 0,
@@ -106,9 +105,6 @@ impl NewinMemDB {
         dbg!(&self._file_name_id, &self._file_id_data);
         pause();
         dbg!(&self._relationship_tag_file);
-        pause();
-        dbg!(&self._parents_name_id);
-        dbg!(&self._parents_id_data);
         pause();
         dbg!(&self._namespace_id_data);
         pause();
@@ -196,14 +192,14 @@ impl NewinMemDB {
     ///
     /// Returns tag id's based on namespace id.
     ///
-    pub fn namespace_get_tagids(&self, id: &usize) -> Option<&HashSet<usize>> {
+    pub fn namespace_get_tagids(&self, id: &usize) -> Option<&AHashSet<usize>> {
         self._namespace_id_tag.get(id)
     }
 
     ///
     /// Returns a list of file id's based on a tag id.
     ///
-    pub fn relationship_get_fileid(&self, tag: &usize) -> Option<&HashSet<usize>> {
+    pub fn relationship_get_fileid(&self, tag: &usize) -> Option<&AHashSet<usize>> {
         match self._relationship_tag_file.get(tag) {
             None => None,
             Some(relref) => return Some(relref),
@@ -213,7 +209,7 @@ impl NewinMemDB {
     ///
     /// Returns a list of tag id's based on a file id
     ///
-    pub fn relationship_get_tagid(&self, file: &usize) -> Option<&HashSet<usize>> {
+    pub fn relationship_get_tagid(&self, file: &usize) -> Option<&AHashSet<usize>> {
         match self._relationship_file_tag.get(file) {
             None => None,
             Some(relref) => return Some(relref),
@@ -258,6 +254,17 @@ impl NewinMemDB {
     }
 
     ///
+    ///
+    ///
+    pub fn tags_get_list_id(&self) -> HashSet<usize> {
+        let mut temp: HashSet<usize> = HashSet::new();
+        for each in self._tag_nns_id_data.keys() {
+            temp.insert(each.to_owned());
+        }
+        temp
+    }
+
+    ///
     /// Removes tag from db.
     ///
     pub fn tag_remove(&mut self, id: &usize) -> Option<()> {
@@ -266,6 +273,13 @@ impl NewinMemDB {
             None => return None,
             Some(tag_data) => {
                 self._tag_nns_data_id.remove(&tag_data);
+                let ns_mgmnt = self._namespace_id_tag.get_mut(&tag_data.namespace);
+                match ns_mgmnt {
+                    None => {}
+                    Some(ns_data) => {
+                        ns_data.remove(id);
+                    }
+                }
                 return Some(());
             }
         }
@@ -289,6 +303,13 @@ impl NewinMemDB {
     ///
     pub fn tags_max_return(&self) -> &usize {
         &self._tag_max
+    }
+
+    ///
+    /// Resets the tag counter to 0.
+    ///
+    pub fn tags_max_reset(&mut self) {
+        self._tag_max = 0;
     }
 
     ///
@@ -324,6 +345,17 @@ impl NewinMemDB {
     ///
     pub fn file_get_hash(&self, hash: &String) -> Option<&usize> {
         self._file_name_id.get(hash)
+    }
+
+    ///
+    /// Returns the file id's in db
+    ///
+    pub fn file_get_list_id(&self) -> HashSet<usize> {
+        let mut temp: HashSet<usize> = HashSet::default();
+        for each in self._file_id_data.keys() {
+            temp.insert(each.to_owned());
+        }
+        temp
     }
 
     ///
@@ -368,12 +400,17 @@ impl NewinMemDB {
     ///
     /// Adds a tag into db
     ///
-    pub fn tags_put(&mut self, tag_info: sharedtypes::DbTagNNS) -> usize {
+    pub fn tags_put(&mut self, tag_info: sharedtypes::DbTagNNS, id: Option<usize>) -> usize {
         let temp = self._tag_nns_data_id.get(&tag_info).clone();
 
         match temp {
             None => {
-                let working_id = self._tag_max;
+                let working_id = match id {
+                    None => self._tag_max,
+                    Some(tid) => tid,
+                };
+
+                //let working_id = self._tag_max;
 
                 let nns_obj = sharedtypes::DbTagObjCompatability {
                     id: working_id.clone(),
@@ -391,7 +428,7 @@ impl NewinMemDB {
                             &tag_info.namespace
                         ));
                         // Gets called when the namespace id wasn't found as a key
-                        let mut idset = HashSet::new();
+                        let mut idset = AHashSet::new();
                         idset.insert(nns_obj.id);
                         self._namespace_id_tag.insert(tag_info.namespace, idset);
                     }
@@ -401,6 +438,14 @@ impl NewinMemDB {
                 };
                 self.insert_tag_nns(nns_obj);
                 self._tag_max += 1;
+                match id {
+                    None => {}
+                    Some(id) => {
+                        if self._tag_max < id {
+                            self._tag_max = id;
+                        }
+                    }
+                }
                 return working_id;
             }
             Some(id) => return id.clone(),
@@ -461,10 +506,50 @@ impl NewinMemDB {
     /// checks if parents exist
     ///
     pub fn parents_get(&self, parent: &sharedtypes::DbParentsObj) -> Option<&usize> {
-        match self._parents_name_id.get(parent) {
+        let cantor = &self.cantor_pair(&parent.tag_id, &parent.relate_tag_id);
+        match self._parents_dual.get(cantor) {
             None => None,
             Some(id) => Some(id),
         }
+    }
+
+    ///
+    /// Returns the list of relationships assicated with tag
+    ///
+    pub fn parents_rel_get(&self, relate_tag_id: &usize) -> Option<&AHashSet<usize>> {
+        self._parents_tag_rel.get(relate_tag_id)
+    }
+
+    ///
+    /// Returns the list of tags assicated with relationship
+    ///
+    pub fn parents_tag_get(&self, tag_id: &usize) -> Option<&AHashSet<usize>> {
+        self._parents_rel_tag.get(tag_id)
+    }
+
+    ///
+    /// Removes parent's from internal db based on tag id
+    ///
+    #[inline(never)]
+    pub fn parents_remove(&mut self, tag_id: &usize) -> HashSet<(usize, usize)> {
+        let mut ret: HashSet<(usize, usize)> = HashSet::new();
+        let rel_op = self.parents_rel_get(tag_id).cloned();
+
+        match rel_op {
+            None => return ret,
+            Some(rel_hs) => {
+                for rel in rel_hs {
+                    logging::info_log(&format!("Parents_Remove: {} {}", &rel, tag_id));
+                    println!("Parents_Remove: {} {}", &rel, tag_id);
+                    self._parents_rel_tag.remove(&rel);
+                    self._parents_tag_rel.remove(tag_id);
+                    let cantor = self.cantor_pair(tag_id, &rel);
+                    self._parents_dual.remove(&cantor);
+                    ret.insert((tag_id.clone(), rel));
+                }
+            }
+        }
+        return ret;
     }
 
     ///
@@ -484,20 +569,46 @@ impl NewinMemDB {
             relate_namespace_id: relate_namespace_id,
         };
 
-        match self._parents_name_id.get(&parentdbojb) {
+        // Catch to prevent further processing.
+        match self.parents_get(&parentdbojb) {
             None => {}
             Some(id) => return id.to_owned(),
         }
 
-        //println!("Adding parents: {:?}", &parentdbojb);
-        self._parents_id_data.insert(self._parents_max, parentdbojb);
-        let parent = self._parents_name_id.insert(parentdbojb, self._parents_max);
-        match parent {
+        let cantor = self.cantor_pair(&parentdbojb.tag_id, &parentdbojb.relate_tag_id);
+        self._parents_dual.insert(cantor);
+        let rel = self._parents_rel_tag.get_mut(&parentdbojb.relate_tag_id);
+        match rel {
             None => {
-                self._parents_max += 1;
-                return self._parents_max - 1;
+                let mut temp: AHashSet<usize> = AHashSet::new();
+                temp.insert(parentdbojb.tag_id);
+                self._parents_rel_tag
+                    .insert(parentdbojb.relate_tag_id, temp);
             }
-            Some(par_id) => return par_id,
+            Some(rel_id) => {
+                rel_id.insert(parentdbojb.tag_id);
+            }
+        }
+
+        let tag = self._parents_tag_rel.get_mut(&parentdbojb.tag_id);
+        match tag {
+            None => {
+                let mut temp: AHashSet<usize> = AHashSet::new();
+                temp.insert(parentdbojb.relate_tag_id);
+                self._parents_tag_rel.insert(parentdbojb.tag_id, temp);
+            }
+            Some(tag_id) => {
+                tag_id.insert(parentdbojb.relate_tag_id);
+            }
+        }
+
+        match self.parents_get(&parentdbojb) {
+            None => {
+                let par = self._parents_max;
+                self._parents_max += 1;
+                return par;
+            }
+            Some(id) => return id.to_owned(),
         }
     }
 
@@ -543,7 +654,7 @@ impl NewinMemDB {
 
         match self._relationship_tag_file.get_mut(&tag) {
             None => {
-                let mut temp = HashSet::default();
+                let mut temp = AHashSet::default();
                 temp.insert(file);
                 self._relationship_tag_file.insert(tag, temp);
             }
@@ -555,7 +666,7 @@ impl NewinMemDB {
 
         match self._relationship_file_tag.get_mut(&file) {
             None => {
-                let mut temp = HashSet::default();
+                let mut temp = AHashSet::default();
                 temp.insert(tag);
                 self._relationship_file_tag.insert(file, temp);
             }
@@ -580,7 +691,7 @@ impl NewinMemDB {
     ///
     /// Get all jobs
     ///
-    pub fn jobs_get_all(&self) -> &HashMap<usize, sharedtypes::DbJobsObj> {
+    pub fn jobs_get_all(&self) -> &AHashMap<usize, sharedtypes::DbJobsObj> {
         &self._jobs_id_data
     }
 }

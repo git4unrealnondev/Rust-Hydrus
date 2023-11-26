@@ -34,3 +34,10 @@ pub fn info_log(info: &String) {
     info!("{}", info);
     println!("{}", info);
 }
+
+///
+/// Dumps info to log and prints it.
+///
+pub fn log(info: &String) {
+    info!("{}", info);
+}

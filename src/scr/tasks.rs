@@ -111,13 +111,7 @@ pub fn import_files(
         // Adds into DB
         let file_id = db.file_add(None, &hash, &file_ext, &location, true);
         let namespace_id = db.namespace_add(row.namespace, None, true);
-        let tag_id = db.tag_add(
-            row.tag.to_string(),
-            "".to_string(),
-            namespace_id,
-            true,
-            Some(row.id),
-        );
+        let tag_id = db.tag_add(row.tag.to_string(), namespace_id, true, Some(row.id));
 
         db.relationship_add(file_id.to_owned(), tag_id.to_owned(), true);
     }

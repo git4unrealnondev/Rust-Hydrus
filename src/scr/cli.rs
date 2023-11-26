@@ -25,6 +25,9 @@ pub fn main(data: &mut database::Main) {
         return;
     }
 
+    // Loads settings into DB.
+    data.load_table(&sharedtypes::LoadDBTable::Settings);
+
     match &args.a.as_ref().unwrap() {
         cli_structs::test::Job(jobstruct) => match jobstruct {
             cli_structs::JobStruct::Add(addstruct) => {
@@ -68,6 +71,10 @@ pub fn main(data: &mut database::Main) {
         cli_structs::test::Tasks(taskstruct) => match taskstruct {
             cli_structs::TasksStruct::Database(db) => {
                 match db {
+                    cli_structs::Database::CompressDatabase => {
+                        data.condese_relationships_tags();
+                    }
+
                     cli_structs::Database::RemoveWhereNot(db_n_rmv) => {
                         let ns_id = match db_n_rmv {
                             cli_structs::NamespaceInfo::NamespaceString(ns) => {
@@ -93,8 +100,6 @@ pub fn main(data: &mut database::Main) {
                         ));
                         data.load_table(&sharedtypes::LoadDBTable::Tags);
                         data.load_table(&sharedtypes::LoadDBTable::Relationship);
-                        dbg!("finished loading");
-                        pause();
                         //data.namespace_get(inp)
 
                         let mut key = data.namespace_keys();
@@ -104,7 +109,6 @@ pub fn main(data: &mut database::Main) {
                             println!("Found key to remove: {}", &each);
                             data.namespace_delete_id(&each);
                         }
-                        pause();
 
                         //data.namespace_delete_id(&ns_id);
                     }

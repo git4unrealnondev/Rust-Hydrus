@@ -6,7 +6,7 @@ use crate::pause;
 use crate::sharedtypes;
 use crate::sharedtypes::DbJobsObj;
 use crate::time_func;
-use ahash::AHashMap;
+use ahash::{AHashMap, AHashSet, AHasher};
 use log::{error, info};
 pub use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, ValueRef};
 pub use rusqlite::{params, types::Null, Connection, Result, Transaction};
@@ -246,7 +246,7 @@ impl Main {
     ///
     /// Wrapper
     ///
-    pub fn jobs_get_all(&self) -> &HashMap<usize, sharedtypes::DbJobsObj> {
+    pub fn jobs_get_all(&self) -> &AHashMap<usize, sharedtypes::DbJobsObj> {
         self._inmemdb.jobs_get_all()
     }
 
@@ -272,7 +272,7 @@ impl Main {
     ///
     ///
     ///
-    pub fn relationship_get_fileid(&self, tag: &usize) -> Option<&HashSet<usize>> {
+    pub fn relationship_get_fileid(&self, tag: &usize) -> Option<&AHashSet<usize>> {
         self._inmemdb.relationship_get_fileid(tag)
     }
 
@@ -280,7 +280,7 @@ impl Main {
         self._inmemdb.relationship_get_one_fileid(tag)
     }
 
-    pub fn relationship_get_tagid(&self, tag: &usize) -> Option<&HashSet<usize>> {
+    pub fn relationship_get_tagid(&self, tag: &usize) -> Option<&AHashSet<usize>> {
         self._inmemdb.relationship_get_tagid(tag)
     }
 
@@ -298,10 +298,14 @@ impl Main {
     ///
     /// Vacuums database. cleans everything.
     ///
-    pub fn vacuum(&mut self) {
-        info!("Starting Vacuum db!");
+    fn vacuum(&mut self) {
+        logging::info_log(&"Starting Vacuum db!".to_string());
+        self.transaction_flush();
+        self.transaction_close();
         self.execute("VACUUM;".to_string());
-        info!("Finishing Vacuum db!");
+        self.transaction_start();
+
+        logging::info_log(&"Finishing Vacuum db!".to_string());
     }
 
     ///
@@ -652,10 +656,8 @@ impl Main {
         self.transaction_flush();
         println!("Vacuuming DB");
         info!("Vacuuming DB");
-        self.transaction_flush();
-        self.transaction_close();
-        //self.vacuum();
-        self.transaction_start();
+
+        self.vacuum();
 
         self.setting_add(
             "VERSION".to_string(),
@@ -1055,13 +1057,7 @@ impl Main {
                     Ok(tags) => {
                         for each in tags {
                             if let Ok(res) = each {
-                                self.tag_add(
-                                    res.name,
-                                    "".to_string(),
-                                    res.namespace,
-                                    false,
-                                    Some(res.id),
-                                );
+                                self.tag_add(res.name, res.namespace, false, Some(res.id));
                             } else {
                                 error!("Bad Tag cant load {:?}", each);
                             }
@@ -1584,27 +1580,21 @@ impl Main {
     ///
     /// Adds tag into inmemdb
     ///
-    fn tag_add_db(&mut self, tag: String, namespace: &usize) -> usize {
+    fn tag_add_db(&mut self, tag: String, namespace: &usize, id: Option<usize>) -> usize {
         match self._inmemdb.tags_get_id(&sharedtypes::DbTagNNS {
             name: tag.to_string(),
             namespace: namespace.to_owned(),
         }) {
             None => {
-                let tag_id_max = self._inmemdb.tags_max_return().to_owned();
                 let tag_info = sharedtypes::DbTagNNS {
                     name: tag,
                     namespace: namespace.clone(),
                 };
-                self._inmemdb.tags_put(tag_info);
-                return tag_id_max;
+                let idz = self._inmemdb.tags_put(tag_info, id);
+                return idz;
             }
             Some(tag_id_max) => return tag_id_max.to_owned(),
         }
-
-        //let choose_id = match id {
-        //    None => self._inmemdb.tags_max_return().clone(),
-        //    Some(matchid) => matchid
-        //};
     }
 
     ///
@@ -1637,7 +1627,6 @@ impl Main {
     pub fn tag_add(
         &mut self,
         tags: String,
-        parents: String,
         namespace: usize,
         addtodb: bool,
         id: Option<usize>,
@@ -1653,7 +1642,7 @@ impl Main {
                 let tags_grab = self._inmemdb.tags_get_id(&tagnns).copied();
                 match tags_grab {
                     None => {
-                        let tag_id = self.tag_add_db(tagnns.name.clone(), &tagnns.namespace);
+                        let tag_id = self.tag_add_db(tagnns.name.clone(), &tagnns.namespace, None);
                         if addtodb {
                             self.tag_add_sql(
                                 tag_id.clone(),
@@ -1670,7 +1659,7 @@ impl Main {
             }
             Some(_) => {
                 // We've got an ID coming in will check if it exists.
-                let tag_id = self.tag_add_db(tagnns.name.clone(), &tagnns.namespace);
+                let tag_id = self.tag_add_db(tagnns.name.clone(), &tagnns.namespace, id);
                 if addtodb {
                     self.tag_add_sql(
                         tag_id.clone(),
@@ -1864,7 +1853,6 @@ impl Main {
     pub fn transaction_close(&mut self) {
         self.execute("COMMIT".to_string());
         self._dbcommitnum = 0;
-        self._dbcommitnum_static = 0;
     }
 
     /// Returns db location as String refernce.
@@ -1991,13 +1979,25 @@ impl Main {
     ///
     fn delete_relationship_sql(&mut self, file_id: &usize, tag_id: &usize) {
         let inp = "DELETE FROM Relationship WHERE fileid = ? AND tagid = ?";
+        self
+            ._conn
+            .borrow_mut()
+            .lock()
+            .unwrap()
+            .execute(inp, params![file_id.to_string(), tag_id.to_string(),]).unwrap();
+    }
+
+    ///
+    /// Sqlite wrapper for deleteing a parent from table.
+    ///
+    fn delete_parent_sql(&mut self, tag_id: &usize, relate_tag_id: &usize) {
+        let inp = "DELETE FROM Parents WHERE tag_id = ? AND relate_tag_id = ?";
         let _out = self
             ._conn
             .borrow_mut()
             .lock()
             .unwrap()
-            .execute(inp, params![file_id.to_string(), tag_id.to_string(),]);
-        //self.db_commit_man();
+            .execute(inp, params![tag_id.to_string(), relate_tag_id.to_string(),]);
     }
 
     ///
@@ -2011,13 +2011,13 @@ impl Main {
             .lock()
             .unwrap()
             .execute(inp, params![tag_id.to_string(),]);
-        //self.db_commit_man();
     }
 
     ///
     /// Sqlite wrapper for deleteing a tag from table.
     ///
     fn delete_namespace_sql(&mut self, namespace_id: &usize) {
+        logging::info_log(&format!("Deleting namespace with id : {} from db", namespace_id));
         let inp = "DELETE FROM Namespace WHERE id = ?";
         let _out = self
             ._conn
@@ -2025,36 +2025,53 @@ impl Main {
             .lock()
             .unwrap()
             .execute(inp, params![namespace_id.to_string(),]);
-        //self.db_commit_man();
     }
 
     ///
     /// Removes tag & relationship from db.
     ///
     pub fn delete_tag_relationship(&mut self, tagid: &usize) {
+        self.transaction_flush();
         let relationships = self._inmemdb.relationship_get_fileid(tagid);
 
         // Gets list of fileids from internal db.
-        let fileids = match relationships {
+        match relationships {
             None => return,
-            Some(fileids) => fileids,
-        };
-        logging::info_log(&format!(
-            "Found {} relationships's effected for tagid: {}.",
-            fileids.len(),
-            tagid
-        ));
-
-        for file in &fileids.clone() {
-            self._inmemdb.relationship_remove(file, tagid);
-            if tagid == &2 {
-                println!("Removing fileid: {}, tagid {}", &file, tagid);
-                //pause();
+            Some(fileids) => {
+                logging::log(&format!(
+                    "Found {} relationships's effected for tagid: {}.",
+                    fileids.len(),
+                    tagid
+                ));
+                let mut sql = String::new();
+                
+                for file in fileids.clone() {
+                    self._inmemdb.relationship_remove(&file, tagid);
+                    sql += &format!("DELETE FROM Relationship WHERE fileid = {} AND tagid = {}; ", file, tagid);
+                    //println!("DELETE FROM Relationship WHERE fileid = {} AND tagid = {};", &file, &tagid);
+                    //self.delete_relationship_sql(&file, tagid);
+                }
+                self._conn.lock().unwrap().execute_batch(&sql).unwrap();
+                self.transaction_flush();
             }
-            self.delete_relationship_sql(file, tagid);
-        }
+        };
 
         //let ns_tagid = self._inmemdb.namespace_get_tagids(tagid).unwrap();
+    }
+
+    ///
+    /// Removes tag from inmemdb and sql database.
+    ///
+    pub fn tag_remove(&mut self, id: &usize) {
+        self._inmemdb.tag_remove(id);
+        //self.delete_tag_sql(id);
+
+        let rel = &self._inmemdb.parents_remove(id);
+        
+        for each in rel {
+            println!("Removing Parent: {} {}", each.0, each.1);
+            self.delete_parent_sql(&each.0, &each.1);
+        }
     }
 
     ///
@@ -2062,29 +2079,102 @@ impl Main {
     /// Removes tags & relationships assocated.
     ///
     pub fn namespace_delete_id(&mut self, id: &usize) {
+        logging::info_log(&format!("Starting deletion work on namespace id: {}", id));
+        self.transaction_flush();
         let tagids_unwrap = self._inmemdb.namespace_get_tagids(id);
         let tagids = match tagids_unwrap {
             None => return,
             Some(tagids) => tagids.clone(),
         };
 
+        let mut tag_sql = String::new();
         for each in tagids.iter() {
-            logging::info_log(&format!("Removing tagid: {}.", each));
-            self._inmemdb.tag_remove(each);
-            self.delete_tag_sql(each);
+            logging::log(&format!("Removing tagid: {}.", each));
+            self.tag_remove(each);
+            tag_sql += &format!("DELETE FROM Tags WHERE id = {}; ", each);
             self.delete_tag_relationship(each);
         }
 
+        self._conn.lock().unwrap().execute_batch(&tag_sql).unwrap();
+        self.transaction_flush();
+        
         self._inmemdb.namespace_delete(id);
         self.delete_namespace_sql(id);
-        self.transaction_flush();
-        self.transaction_close();
+
         self.vacuum();
-        self.transaction_start();
-        self.transaction_flush();
+
+        // Condenses the database. (removes gaps in id's)
+        self.condese_relationships_tags();
     }
 
+    ///
+    /// Retuns namespace id's
+    ///
     pub fn namespace_keys(&self) -> Vec<usize> {
         self._inmemdb.namespace_keys()
+    }
+
+    ///
+    /// Condesnes relationships between tags & files. Changes tag id's
+    /// removes spaces inbetween tag id's and their relationships.
+    ///
+    pub fn condese_relationships_tags(&mut self) {
+        self.load_table(&sharedtypes::LoadDBTable::Relationship);
+        self.load_table(&sharedtypes::LoadDBTable::Parents);
+        self.load_table(&sharedtypes::LoadDBTable::Tags);
+
+        logging::info_log(&format!("Starting compression of tags & relationships."));
+
+        let tag_max = self._inmemdb.tags_max_return().clone();
+        self._inmemdb.tags_max_reset();
+
+        let mut lastvalid: usize = 0;
+        for tid in 0..tag_max + 1 {
+            let exst = self._inmemdb.tags_get_data(&tid);
+
+            match exst {
+                None => {}
+                Some(nns) => {
+                    let nns_cln = sharedtypes::DbTagNNS {
+                        name: nns.name.to_string(),
+                        namespace: nns.namespace,
+                    };
+                    self.transaction_flush();
+                    let mut relat_str = String::new();
+                    let file_listop = self._inmemdb.relationship_get_fileid(&tid);
+
+                    let mut file_to_add: HashSet<usize> = HashSet::new();
+                    match file_listop {
+                        None => {
+                            continue;
+                        }
+                        Some(file_list) => {
+                            
+                            
+                            for file in file_list.clone() {
+                                self._inmemdb.relationship_remove(&file, &tid);
+                                relat_str += &format!("DELETE FROM Relationship WHERE fileid = {} AND tagid = {};", &file, &tid);
+                                //println!("DELETE FROM Relationship WHERE fileid = {} AND tagid = {};", &file, &tid);
+                                //self.delete_relationship_sql(&file, &tid);
+                                file_to_add.insert(file);
+                            }
+                            
+                            self._conn.lock().unwrap().execute_batch(&relat_str).unwrap();
+                            
+                            self.transaction_flush();
+                        }
+                    }
+                    self.tag_remove(&tid);
+                    self.tag_add(nns_cln.name, nns_cln.namespace, true, Some(lastvalid));
+                    for fid in file_to_add {
+                        self.relationship_add(fid, lastvalid, true);
+                        //self._inmemdb.relationship_add(fid, tid);
+                    }
+                    lastvalid += 1;
+                }
+            }
+        }
+
+        self.vacuum();
     }
 }

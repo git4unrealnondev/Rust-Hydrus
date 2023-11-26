@@ -307,7 +307,6 @@ impl PluginManager {
                                 if tags.parents.is_none() && namespace_id.is_some() {
                                     unwrappy.tag_add(
                                         tags.name,
-                                        "".to_string(),
                                         namespace_id.unwrap().clone(),
                                         true,
                                         None,
@@ -316,7 +315,6 @@ impl PluginManager {
                                     for parents_obj in tags.parents.unwrap() {
                                         unwrappy.tag_add(
                                             tags.name.to_string(),
-                                            parents_obj.relate_tag_id,
                                             namespace_id.unwrap().clone(),
                                             true,
                                             None,

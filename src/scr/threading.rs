@@ -517,7 +517,6 @@ impl Worker {
                                     unwrappydb.file_add(None, &hash, &file_ext, &location, true);
                                 let source_url_id = unwrappydb.tag_add(
                                     sourceurl.clone(),
-                                    "".to_string(),
                                     source_namespace_url_id.clone(),
                                     true,
                                     None,
@@ -536,7 +535,7 @@ impl Worker {
                                         sharedtypes::TagType::ParseUrl => {
                                             println!("Recieved Parseable tag will search it at end of loop.");
 
-                                            dnpjob.push(every.1.tag.to_string());
+                                            //dnpjob.push(every.1.tag.to_string());
                                             //eachy.1.push((every.1.tag.to_string(), jobcnt));
                                         }
                                         sharedtypes::TagType::Normal => {
@@ -552,7 +551,6 @@ impl Worker {
 
                                                     let tag_id = unwrappydb.tag_add(
                                                         every.1.tag.to_string(),
-                                                        "".to_string(),
                                                         tag_namespace_id,
                                                         true,
                                                         None,
@@ -578,7 +576,6 @@ impl Worker {
                                                         );
                                                     let tag_id = unwrappydb.tag_add(
                                                         every.1.tag.to_string(),
-                                                        "".to_string(),
                                                         tag_namespace_id,
                                                         true,
                                                         None,
@@ -588,7 +585,6 @@ impl Worker {
                                                         .namespace_add(relate_info.0, None, true);
                                                     let relate_tag_id = unwrappydb.tag_add(
                                                         every.1.tag.to_string(),
-                                                        "".to_string(),
                                                         relate_namespace_id,
                                                         true,
                                                         None,

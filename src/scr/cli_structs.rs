@@ -39,6 +39,8 @@ pub enum Database {
     Remove(NamespaceInfo),
     #[clap(subcommand)]
     RemoveWhereNot(NamespaceInfo),
+    /// Compresses the databases tag & relationships. Will add parent support soon.
+    CompressDatabase,
 }
 
 /// Removes a namespace, tags & relationships from db.
