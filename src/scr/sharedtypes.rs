@@ -176,15 +176,6 @@ pub struct DbSearchQuery {
 ///
 /// Database Tags Object
 ///
-#[derive(Debug)]
-pub struct DbTagObjNNS {
-    pub id: usize,
-    //pub parents: Option<usize>,
-}
-
-///
-/// Database Tags Object
-///
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize, Serialize)]
 pub struct DbTagNNS {
     pub name: String,

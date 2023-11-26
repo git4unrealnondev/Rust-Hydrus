@@ -128,7 +128,7 @@ fn main() {
     makelog("./log.txt");
 
     //TODO NEEDS MAIN INFO PULLER HERE. PULLS IN EVERYTHING INTO DB.
-    let all_field = cli::main();
+
     //if let scr::sharedtypes::AllFields::EJobsAdd(ref tempe) = all_field {
     //    dbg!(tempe);
     //    dbg!(&tempe.site);
@@ -138,20 +138,11 @@ fn main() {
 
     //Inits Database.
     let mut data = makedb(dbloc);
+    let all_field = cli::main(&mut data);
     let mut alt_connection = database::dbinit(&dbloc.to_string()); // NOTE ONLY USER FOR LOADING DB DYNAMICALLY
-    data.load_table(&sharedtypes::LoadDBTable::Settings, &mut alt_connection);
-    data.load_table(&sharedtypes::LoadDBTable::All, &mut alt_connection); // TODO REVERT ALL TO SETTINGS
-    
+    data.load_table(&sharedtypes::LoadDBTable::Settings);
     data.transaction_flush();
     data.check_version();
-
-    //dbg!(data.settings_get_name(&"pluginloadloc".to_string()));
-    //Inits ScraperManager
-    /*let plugin_loc = data
-    .settings_get_name(&"pluginloadloc".to_string())
-    .unwrap()
-    .param.as_ref()
-    .unwrap();*/
 
     let plugin_option = data.settings_get_name(&"pluginloadloc".to_string());
     let plugin_loc = match plugin_option {
@@ -177,11 +168,11 @@ fn main() {
         "so".to_string(),
     );
 
-    data.load_table(&sharedtypes::LoadDBTable::Jobs, &mut alt_connection);
+    data.load_table(&sharedtypes::LoadDBTable::Jobs);
     let mut jobmanager = jobs::Jobs::new(scraper_manager);
 
     data.transaction_flush();
-
+    /*
     match all_field {
         sharedtypes::AllFields::JobsAdd(jobs_add) => {
             data.jobs_add_new(
@@ -211,13 +202,11 @@ fn main() {
                         dbg!(tag.get(0));
                         dbg!(tag.get(1));
 
-                        data.load_table(&sharedtypes::LoadDBTable::Files, &mut alt_connection);
-                        data.load_table(&sharedtypes::LoadDBTable::Tags, &mut alt_connection);
+                        data.load_table(&sharedtypes::LoadDBTable::Files);
+                        data.load_table(&sharedtypes::LoadDBTable::Tags);
                         data.load_table(
-                            &sharedtypes::LoadDBTable::Relationship,
-                            &mut alt_connection,
-                        );
-                        data.load_table(&sharedtypes::LoadDBTable::Namespace, &mut alt_connection);
+                            &sharedtypes::LoadDBTable::Relationship);
+                        data.load_table(&sharedtypes::LoadDBTable::Namespace);
 
                         let tag_namespace = data.namespace_get(tag.get(1).unwrap());
 
@@ -262,10 +251,10 @@ fn main() {
                     }
                 }
                 sharedtypes::Search::Hash(hash) => {
-                    data.load_table(&sharedtypes::LoadDBTable::Files, &mut alt_connection);
-                    data.load_table(&sharedtypes::LoadDBTable::Tags, &mut alt_connection);
-                    data.load_table(&sharedtypes::LoadDBTable::Namespace, &mut alt_connection);
-                    data.load_table(&sharedtypes::LoadDBTable::Relationship, &mut alt_connection);
+                    data.load_table(&sharedtypes::LoadDBTable::Files);
+                    data.load_table(&sharedtypes::LoadDBTable::Tags);
+                    data.load_table(&sharedtypes::LoadDBTable::Namespace);
+                    data.load_table(&sharedtypes::LoadDBTable::Relationship);
 
                     for each in hash {
                         let file = data.file_get_hash(each);
@@ -325,12 +314,12 @@ fn main() {
         },
 
         sharedtypes::AllFields::Nothing => {}
-    }
+    }*/
 
     data.transaction_flush();
 
     jobmanager.jobs_get(&data);
-    
+
     // Converts db into Arc for multithreading
     let mut arc = Arc::new(Mutex::new(data));
 

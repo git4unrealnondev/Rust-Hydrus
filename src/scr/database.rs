@@ -2,6 +2,7 @@
 
 use crate::jobs;
 use crate::logging;
+use crate::pause;
 use crate::sharedtypes;
 use crate::sharedtypes::DbJobsObj;
 use crate::time_func;
@@ -745,16 +746,16 @@ impl Main {
     ///
     /// Checks if table is loaded in mem and if not then loads it.
     ///
-    pub fn check_and_load(&mut self, table: sharedtypes::LoadDBTable, conn: &mut Connection) {
+    pub fn check_and_load(&mut self, table: sharedtypes::LoadDBTable) {
         match &self._tables_loaded {
             None => {
-                self.load_table(&table, conn);
+                self.load_table(&table);
                 self._tables_loaded = Some(Vec::new());
                 self._tables_loaded.as_mut().unwrap().push(table)
             }
             Some(vec_table) => {
                 if !vec_table.contains(&table) {
-                    self.load_table(&table, conn);
+                    self.load_table(&table);
                     self._tables_loaded.as_mut().unwrap().push(table);
                 }
             }
@@ -785,234 +786,331 @@ impl Main {
     /// NOTE USES PASSED CONNECTION FROM FUNCTION NOT THE DB CONNECTION
     /// GETS ARROUND MEMROY SAFETY ISSUES WITH CLASSES IN RUST
     ///
-    fn load_files(&mut self, conn: &mut Connection) {
+    fn load_files(&mut self) {
         logging::info_log(&"Database is Loading: Files".to_string());
-        let mut fiex;
-        let files;
-        fiex = conn.prepare("SELECT * FROM File").unwrap();
-        files = fiex
-            .query_map([], |row| {
-                Ok(sharedtypes::DbFileObj {
-                    id: row.get(0).unwrap(),
-                    hash: row.get(1).unwrap(),
-                    ext: row.get(2).unwrap(),
-                    location: row.get(3).unwrap(),
-                })
-            })
-            .unwrap();
-        for each in files {
-            if let Ok(res) = each {
-                self.file_add_db(res.id, res.hash, res.ext, res.location);
-            } else {
-                error!("Bad File cant load {:?}", each);
+
+        let binding = self._conn.clone();
+
+        let temp_test = binding.lock().unwrap();
+        let temp = temp_test.prepare("SELECT * FROM File");
+
+        match temp {
+            Ok(mut con) => {
+                let files = con
+                    .query_map([], |row| {
+                        Ok(sharedtypes::DbFileObj {
+                            id: row.get(0).unwrap(),
+                            hash: row.get(1).unwrap(),
+                            ext: row.get(2).unwrap(),
+                            location: row.get(3).unwrap(),
+                        })
+                    })
+                    .unwrap();
+
+                for each in files {
+                    if let Ok(res) = each {
+                        self.file_add_db(res.id, res.hash, res.ext, res.location);
+                    } else {
+                        error!("Bad File cant load {:?}", each);
+                    }
+                }
             }
-        }
+            Err(_) => return,
+        };
+
+        //fiex = conn.prepare("SELECT * FROM File").unwrap();
+        /*files = fiex
+        .query_map([], |row| {
+            Ok(sharedtypes::DbFileObj {
+                id: row.get(0).unwrap(),
+                hash: row.get(1).unwrap(),
+                ext: row.get(2).unwrap(),
+                location: row.get(3).unwrap(),
+            })
+        })
+        .unwrap();*/
     }
 
     ///
     /// Same as above
     ///
-    fn load_namespace(&mut self, conn: &mut Connection) {
+    fn load_namespace(&mut self) {
         logging::info_log(&"Database is Loading: Namespace".to_string());
-        let mut naex = conn.prepare("SELECT * FROM Namespace").unwrap();
-        let namespaces = naex
-            .query_map([], |row| {
-                Ok(sharedtypes::DbNamespaceObj {
-                    id: row.get(0).unwrap(),
-                    name: row.get(1).unwrap(),
-                    description: row.get(2).unwrap(),
-                })
-            })
-            .unwrap();
-        for each in namespaces {
-            if let Ok(res) = each {
-                self.namespace_add_db(res);
-            } else {
-                error!("Bad Namespace cant load {:?}", each);
+
+        let binding = self._conn.clone();
+
+        let temp_test = binding.lock().unwrap();
+        let temp = temp_test.prepare("SELECT * FROM Namespace");
+
+        match temp {
+            Ok(mut con) => {
+                let namespaces = con
+                    .query_map([], |row| {
+                        Ok(sharedtypes::DbNamespaceObj {
+                            id: row.get(0).unwrap(),
+                            name: row.get(1).unwrap(),
+                            description: row.get(2).unwrap(),
+                        })
+                    })
+                    .unwrap();
+
+                for each in namespaces {
+                    if let Ok(res) = each {
+                        self.namespace_add_db(res);
+                    } else {
+                        error!("Bad Namespace cant load {:?}", each);
+                    }
+                }
             }
-        }
+            Err(_) => return,
+        };
     }
 
     ///
     /// Loads jobs in from DB Connection
     ///
-    fn load_jobs(&mut self, conn: &mut Connection) {
+    fn load_jobs(&mut self) {
         logging::info_log(&"Database is Loading: Jobs".to_string());
-        let mut jobex = conn.prepare("SELECT * FROM Jobs").unwrap();
-        let jobs = jobex
-            .query_map([], |row| {
-                Ok(sharedtypes::DbJobsObj {
-                    time: row.get(0).unwrap(),
-                    reptime: row.get(1).unwrap(),
-                    site: row.get(2).unwrap(),
-                    param: row.get(3).unwrap(),
-                    committype: Some(sharedtypes::stringto_commit_type(&row.get(4).unwrap())),
-                })
-            })
-            .unwrap();
+        let binding = self._conn.clone();
 
-        for each in jobs {
-            if let Ok(res) = each {
-                self.jobs_add_new_todb(res.site, res.param, res.reptime, res.time, res.committype);
-            } else {
-                error!("Bad Job cant load {:?}", each);
+        let temp_test = binding.lock().unwrap();
+        let temp = temp_test.prepare("SELECT * FROM Jobs");
+
+        match temp {
+            Ok(mut con) => {
+                let jobs = con
+                    .query_map([], |row| {
+                        Ok(sharedtypes::DbJobsObj {
+                            time: row.get(0).unwrap(),
+                            reptime: row.get(1).unwrap(),
+                            site: row.get(2).unwrap(),
+                            param: row.get(3).unwrap(),
+                            committype: Some(sharedtypes::stringto_commit_type(
+                                &row.get(4).unwrap(),
+                            )),
+                        })
+                    })
+                    .unwrap();
+
+                for each in jobs {
+                    if let Ok(res) = each {
+                        self.jobs_add_new_todb(
+                            res.site,
+                            res.param,
+                            res.reptime,
+                            res.time,
+                            res.committype,
+                        );
+                    } else {
+                        error!("Bad Job cant load {:?}", each);
+                    }
+                }
             }
-        }
+            Err(_) => return,
+        };
     }
 
     ///
     /// Loads Parents in from DB Connection
     ///
-    fn load_parents(&mut self, conn: &mut Connection) {
+    fn load_parents(&mut self) {
         logging::info_log(&"Database is Loading: Parents".to_string());
-        let mut paex = conn.prepare("SELECT * FROM Parents").unwrap();
-        let parents = paex
-            .query_map([], |row| {
-                Ok(sharedtypes::DbParentsObj {
-                    tag_namespace_id: row.get(0).unwrap(),
-                    tag_id: row.get(1).unwrap(),
-                    relate_namespace_id: row.get(2).unwrap(),
-                    relate_tag_id: row.get(3).unwrap(),
-                })
-            })
-            .unwrap();
-        for each in parents {
-            if let Ok(res) = each {
-                self.parents_add_db(
-                    res.tag_namespace_id,
-                    res.tag_id,
-                    res.relate_namespace_id,
-                    res.relate_tag_id,
-                );
-            } else {
-                error!("Bad Parent cant load {:?}", each);
+
+        let binding = self._conn.clone();
+
+        let temp_test = binding.lock().unwrap();
+        let temp = temp_test.prepare("SELECT * FROM Parents");
+
+        match temp {
+            Ok(mut con) => {
+                let parents = con
+                    .query_map([], |row| {
+                        Ok(sharedtypes::DbParentsObj {
+                            tag_namespace_id: row.get(0).unwrap(),
+                            tag_id: row.get(1).unwrap(),
+                            relate_namespace_id: row.get(2).unwrap(),
+                            relate_tag_id: row.get(3).unwrap(),
+                        })
+                    })
+                    .unwrap();
+
+                for each in parents {
+                    if let Ok(res) = each {
+                        self.parents_add_db(
+                            res.tag_namespace_id,
+                            res.tag_id,
+                            res.relate_namespace_id,
+                            res.relate_tag_id,
+                        );
+                    } else {
+                        error!("Bad Parent cant load {:?}", each);
+                    }
+                }
             }
-        }
+            Err(_) => return,
+        };
     }
 
     ///
     /// Loads Relationships in from DB connection
     ///
-    fn load_relationships(&mut self, conn: &mut Connection) {
+    fn load_relationships(&mut self) {
         logging::info_log(&"Database is Loading: Relationships".to_string());
-        let mut paex = conn.prepare("SELECT * FROM Relationship").unwrap();
-        let relationship = paex
-            .query_map([], |row| {
-                Ok(sharedtypes::DbRelationshipObj {
-                    fileid: row.get(0).unwrap(),
-                    tagid: row.get(1).unwrap(),
-                })
-            })
-            .unwrap();
-        for each in relationship {
-            match each {
-                Ok(res) => {
-                    self.relationship_add_db(res.fileid, res.tagid);
-                }
-                Err(err) => {
-                    error!("Bad relationship cant load {:?}", err);
-                    err.to_string().contains("database disk image is malformed");
 
-                    error!("DATABASE IMAGE IS MALFORMED PANICING");
-                    panic!("DATABASE IMAGE IS MALFORMED PANICING");
+        let binding = self._conn.clone();
+
+        let temp_test = binding.lock().unwrap();
+        let temp = temp_test.prepare("SELECT * FROM Relationship");
+
+        match temp {
+            Ok(mut con) => {
+                let relationship = con
+                    .query_map([], |row| {
+                        Ok(sharedtypes::DbRelationshipObj {
+                            fileid: row.get(0).unwrap(),
+                            tagid: row.get(1).unwrap(),
+                        })
+                    })
+                    .unwrap();
+
+                for each in relationship {
+                    match each {
+                        Ok(res) => {
+                            self.relationship_add_db(res.fileid, res.tagid);
+                        }
+                        Err(err) => {
+                            error!("Bad relationship cant load {:?}", err);
+                            err.to_string().contains("database disk image is malformed");
+
+                            error!("DATABASE IMAGE IS MALFORMED PANICING");
+                            panic!("DATABASE IMAGE IS MALFORMED PANICING");
+                        }
+                    }
                 }
             }
-        }
+            Err(_) => return,
+        };
     }
 
     ///
     /// Loads settings into db
     ///
-    fn load_settings(&mut self, conn: &mut Connection) {
+    fn load_settings(&mut self) {
         logging::info_log(&"Database is Loading: Settings".to_string());
-        let mut setex = conn.prepare("SELECT * FROM Settings").unwrap();
-        let settings = setex
-            .query_map([], |row| {
-                Ok(sharedtypes::DbSettingObj {
-                    name: row.get(0)?,
-                    pretty: row.get(1)?,
-                    num: row.get(2)?,
-                    param: row.get(3)?,
-                })
-            })
-            .unwrap();
 
-        for each in settings {
-            if let Ok(res) = each {
-                self.setting_add_db(res.name, res.pretty, res.num, res.param);
-            } else {
-                error!("Bad Setting cant load {:?}", each);
+        let binding = self._conn.clone();
+
+        let temp_test = binding.lock().unwrap();
+        let temp = temp_test.prepare("SELECT * FROM Settings");
+
+        match temp {
+            Ok(mut con) => {
+                let settings = con
+                    .query_map([], |row| {
+                        Ok(sharedtypes::DbSettingObj {
+                            name: row.get(0)?,
+                            pretty: row.get(1)?,
+                            num: row.get(2)?,
+                            param: row.get(3)?,
+                        })
+                    })
+                    .unwrap();
+
+                for each in settings {
+                    if let Ok(res) = each {
+                        self.setting_add_db(res.name, res.pretty, res.num, res.param);
+                    } else {
+                        error!("Bad Setting cant load {:?}", each);
+                    }
+                }
             }
-        }
+            Err(_) => return,
+        };
         self.db_commit_man_set();
     }
 
     ///
     /// Loads tags into db
     ///
-    fn load_tags(&mut self, conn: &mut Connection) {
+    fn load_tags(&mut self) {
         logging::info_log(&"Database is Loading: Tags".to_string());
-        let mut taex = conn.prepare("SELECT * FROM Tags").unwrap();
-        let tag = taex.query_map([], |row| {
-            Ok(sharedtypes::DbTagObjCompatability {
-                id: row.get(0).unwrap(),
-                name: row.get(1).unwrap(),
-                parents: None,
-                namespace: row.get(3).unwrap(),
-            })
-        });
 
-        match tag {
-            Ok(tags) => {
-                for each in tags {
-                    if let Ok(res) = each {
-                        self.tag_add(res.name, "".to_string(), res.namespace, false, Some(res.id));
-                    } else {
-                        error!("Bad Tag cant load {:?}", each);
+        let binding = self._conn.clone();
+
+        let temp_test = binding.lock().unwrap();
+        let temp = temp_test.prepare("SELECT * FROM Tags");
+
+        match temp {
+            Ok(mut con) => {
+                let tag = con.query_map([], |row| {
+                    Ok(sharedtypes::DbTagObjCompatability {
+                        id: row.get(0).unwrap(),
+                        name: row.get(1).unwrap(),
+                        parents: None,
+                        namespace: row.get(3).unwrap(),
+                    })
+                });
+
+                match tag {
+                    Ok(tags) => {
+                        for each in tags {
+                            if let Ok(res) = each {
+                                self.tag_add(
+                                    res.name,
+                                    "".to_string(),
+                                    res.namespace,
+                                    false,
+                                    Some(res.id),
+                                );
+                            } else {
+                                error!("Bad Tag cant load {:?}", each);
+                            }
+                        }
+                    }
+                    Err(errer) => {
+                        error!("WARNING COULD NOT LOAD TAG: {:?} DUE TO ERROR", errer);
+                        return;
                     }
                 }
             }
-            Err(errer) => {
-                error!("WARNING COULD NOT LOAD TAG: {:?} DUE TO ERROR", errer);
-                return;
-            }
-        }
+            Err(_) => return,
+        };
     }
 
     ///
     /// Calls funtions to load DB into memory
     ///
-    pub fn load_table(&mut self, table: &sharedtypes::LoadDBTable, conn: &mut Connection) {
+    pub fn load_table(&mut self, table: &sharedtypes::LoadDBTable) {
         match table {
             sharedtypes::LoadDBTable::Files => {
-                self.load_files(conn);
+                self.load_files();
             }
             sharedtypes::LoadDBTable::Jobs => {
-                self.load_jobs(conn);
+                self.load_jobs();
             }
             sharedtypes::LoadDBTable::Namespace => {
-                self.load_namespace(conn);
+                self.load_namespace();
             }
             sharedtypes::LoadDBTable::Parents => {
-                self.load_parents(conn);
+                self.load_parents();
             }
             sharedtypes::LoadDBTable::Relationship => {
-                self.load_relationships(conn);
+                self.load_relationships();
             }
             sharedtypes::LoadDBTable::Settings => {
-                self.load_settings(conn);
+                self.load_settings();
             }
             sharedtypes::LoadDBTable::Tags => {
-                self.load_tags(conn);
+                self.load_tags();
             }
             sharedtypes::LoadDBTable::All => {
-                self.check_and_load(sharedtypes::LoadDBTable::Files, conn);
-                self.check_and_load(sharedtypes::LoadDBTable::Jobs, conn);
-                self.check_and_load(sharedtypes::LoadDBTable::Namespace, conn);
-                self.check_and_load(sharedtypes::LoadDBTable::Parents, conn);
-                self.check_and_load(sharedtypes::LoadDBTable::Relationship, conn);
-                self.check_and_load(sharedtypes::LoadDBTable::Settings, conn);
-                self.check_and_load(sharedtypes::LoadDBTable::Tags, conn);
+                self.check_and_load(sharedtypes::LoadDBTable::Files);
+                self.check_and_load(sharedtypes::LoadDBTable::Jobs);
+                self.check_and_load(sharedtypes::LoadDBTable::Namespace);
+                self.check_and_load(sharedtypes::LoadDBTable::Parents);
+                self.check_and_load(sharedtypes::LoadDBTable::Relationship);
+                self.check_and_load(sharedtypes::LoadDBTable::Settings);
+                self.check_and_load(sharedtypes::LoadDBTable::Tags);
             }
         }
     }
@@ -1493,10 +1591,8 @@ impl Main {
         }) {
             None => {
                 let tag_id_max = self._inmemdb.tags_max_return().to_owned();
-                let tag_info = sharedtypes::DbTagObjCompatability {
-                    id: tag_id_max,
+                let tag_info = sharedtypes::DbTagNNS {
                     name: tag,
-                    parents: None,
                     namespace: namespace.clone(),
                 };
                 self._inmemdb.tags_put(tag_info);
@@ -1901,7 +1997,7 @@ impl Main {
             .lock()
             .unwrap()
             .execute(inp, params![file_id.to_string(), tag_id.to_string(),]);
-        self.db_commit_man();
+        //self.db_commit_man();
     }
 
     ///
@@ -1915,7 +2011,7 @@ impl Main {
             .lock()
             .unwrap()
             .execute(inp, params![tag_id.to_string(),]);
-        self.db_commit_man();
+        //self.db_commit_man();
     }
 
     ///
@@ -1929,7 +2025,7 @@ impl Main {
             .lock()
             .unwrap()
             .execute(inp, params![namespace_id.to_string(),]);
-        self.db_commit_man();
+        //self.db_commit_man();
     }
 
     ///
@@ -1943,14 +2039,22 @@ impl Main {
             None => return,
             Some(fileids) => fileids,
         };
+        logging::info_log(&format!(
+            "Found {} relationships's effected for tagid: {}.",
+            fileids.len(),
+            tagid
+        ));
 
         for file in &fileids.clone() {
             self._inmemdb.relationship_remove(file, tagid);
+            if tagid == &2 {
+                println!("Removing fileid: {}, tagid {}", &file, tagid);
+                //pause();
+            }
             self.delete_relationship_sql(file, tagid);
         }
 
-        self._inmemdb.tag_remove(tagid);
-        self.delete_tag_sql(tagid);
+        //let ns_tagid = self._inmemdb.namespace_get_tagids(tagid).unwrap();
     }
 
     ///
@@ -1958,17 +2062,29 @@ impl Main {
     /// Removes tags & relationships assocated.
     ///
     pub fn namespace_delete_id(&mut self, id: &usize) {
-        let tagids_unwrap = self._inmemdb.namespace_get_fileids(id);
+        let tagids_unwrap = self._inmemdb.namespace_get_tagids(id);
         let tagids = match tagids_unwrap {
             None => return,
             Some(tagids) => tagids.clone(),
         };
 
         for each in tagids.iter() {
+            logging::info_log(&format!("Removing tagid: {}.", each));
+            self._inmemdb.tag_remove(each);
+            self.delete_tag_sql(each);
             self.delete_tag_relationship(each);
         }
 
         self._inmemdb.namespace_delete(id);
         self.delete_namespace_sql(id);
+        self.transaction_flush();
+        self.transaction_close();
+        self.vacuum();
+        self.transaction_start();
+        self.transaction_flush();
+    }
+
+    pub fn namespace_keys(&self) -> Vec<usize> {
+        self._inmemdb.namespace_keys()
     }
 }

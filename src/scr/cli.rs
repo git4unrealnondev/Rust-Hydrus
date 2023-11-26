@@ -3,7 +3,10 @@ extern crate clap;
 
 use std::str::FromStr;
 
-use crate::sharedtypes::{self, AllFields, JobsAdd, JobsRemove};
+use crate::{
+    database, logging, pause,
+    sharedtypes::{self, AllFields, JobsAdd, JobsRemove},
+};
 use clap::{Arg, Parser};
 use log::{error, info};
 //use super::sharedtypes::;
@@ -15,11 +18,11 @@ mod cli_structs;
 ///
 /// Returns the main argument and parses data.
 ///
-pub fn main() -> sharedtypes::AllFields {
+pub fn main(data: &mut database::Main) {
     let args = cli_structs::MainWrapper::parse();
 
     if let None = &args.a {
-        return AllFields::Nothing;
+        return;
     }
 
     match &args.a.as_ref().unwrap() {
@@ -28,12 +31,20 @@ pub fn main() -> sharedtypes::AllFields {
                 let comtype = sharedtypes::CommitType::from_str(&addstruct.committype);
                 match comtype {
                     Ok(comfinal) => {
-                        return sharedtypes::AllFields::JobsAdd(sharedtypes::JobsAdd {
+                        let jobs_add = sharedtypes::JobsAdd {
                             site: addstruct.site.to_string(),
                             query: addstruct.query.to_string(),
                             time: addstruct.time.to_string(),
                             committype: comfinal,
-                        });
+                        };
+
+                        data.jobs_add_new(
+                            &jobs_add.site,
+                            &jobs_add.query,
+                            &jobs_add.time,
+                            Some(jobs_add.committype),
+                            true,
+                        );
                     }
                     Err(_) => {
                         let enum_vec = sharedtypes::CommitType::iter().collect::<Vec<_>>();
@@ -41,26 +52,94 @@ pub fn main() -> sharedtypes::AllFields {
                             "Could not parse commit type. Expected one of {:?}",
                             enum_vec
                         );
-                        return sharedtypes::AllFields::Nothing;
+                        //return sharedtypes::AllFields::Nothing;
                     }
                 }
             }
             cli_structs::JobStruct::Remove(remove) => {
-                return sharedtypes::AllFields::JobsRemove(sharedtypes::JobsRemove {
+                /*return sharedtypes::AllFields::JobsRemove(sharedtypes::JobsRemove {
                     site: remove.site.to_string(),
                     query: remove.query.to_string(),
                     time: remove.time.to_string(),
-                })
+                })*/
             }
         },
         cli_structs::test::Search(searchstruct) => {}
         cli_structs::test::Tasks(taskstruct) => match taskstruct {
+            cli_structs::TasksStruct::Database(db) => {
+                match db {
+                    cli_structs::Database::RemoveWhereNot(db_n_rmv) => {
+                        let ns_id = match db_n_rmv {
+                            cli_structs::NamespaceInfo::NamespaceString(ns) => {
+                                data.load_table(&sharedtypes::LoadDBTable::Namespace);
+                                let db_id = match data.namespace_get(&ns.namespace_string).cloned()
+                                {
+                                    None => {
+                                        logging::info_log(&format!(
+                                            "Cannot find the tasks remove string in namespace {}",
+                                            &ns.namespace_string
+                                        ));
+                                        return;
+                                    }
+                                    Some(id) => id,
+                                };
+                                db_id
+                            }
+                            cli_structs::NamespaceInfo::NamespaceId(ns) => ns.namespace_id,
+                        };
+                        logging::info_log(&format!(
+                            "Found Namespace: {} Removing all but id...",
+                            &ns_id
+                        ));
+                        data.load_table(&sharedtypes::LoadDBTable::Tags);
+                        data.load_table(&sharedtypes::LoadDBTable::Relationship);
+                        dbg!("finished loading");
+                        pause();
+                        //data.namespace_get(inp)
+
+                        let mut key = data.namespace_keys();
+                        key.retain(|x| *x != ns_id);
+
+                        for each in key {
+                            println!("Found key to remove: {}", &each);
+                            data.namespace_delete_id(&each);
+                        }
+                        pause();
+
+                        //data.namespace_delete_id(&ns_id);
+                    }
+
+                    // Removing db namespace. Will get id to remove then remove it.
+                    cli_structs::Database::Remove(db_rmv) => {
+                        let ns_id = match db_rmv {
+                            cli_structs::NamespaceInfo::NamespaceString(ns) => {
+                                data.load_table(&sharedtypes::LoadDBTable::Namespace);
+                                let db_id = match data.namespace_get(&ns.namespace_string).cloned()
+                                {
+                                    None => {
+                                        logging::info_log(&format!(
+                                            "Cannot find the tasks remove string in namespace {}",
+                                            &ns.namespace_string
+                                        ));
+                                        return;
+                                    }
+                                    Some(id) => id,
+                                };
+                                db_id
+                            }
+                            cli_structs::NamespaceInfo::NamespaceId(ns) => ns.namespace_id,
+                        };
+                        logging::info_log(&format!("Found Namespace: {} Removing...", &ns_id));
+                        data.load_table(&sharedtypes::LoadDBTable::Tags);
+                        data.load_table(&sharedtypes::LoadDBTable::Relationship);
+                        data.namespace_delete_id(&ns_id);
+                    }
+                }
+            }
             cli_structs::TasksStruct::Csv(csvstruct) => {}
         },
     }
-
-    dbg!(&args);
-    AllFields::Nothing
+    //AllFields::Nothing
 }
 
 //;

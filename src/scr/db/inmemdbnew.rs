@@ -23,7 +23,7 @@ pub enum TagRelateConjoin {
 }
 
 pub struct NewinMemDB {
-    _tag_id_data: HashMap<usize, sharedtypes::DbTagObjNNS>,
+    //_tag_id_data: HashMap<usize, sharedtypes::DbTagObjNNS>,
     //_tag_name_id: HashMap<String, usize>,
     _tag_nns_id_data: HashMap<usize, sharedtypes::DbTagNNS>,
     _tag_nns_data_id: HashMap<sharedtypes::DbTagNNS, usize>,
@@ -60,8 +60,7 @@ impl NewinMemDB {
     pub fn new() -> NewinMemDB {
         let inst = NewinMemDB {
             //_tag_name_id: HashMap::new(),
-            _tag_id_data: HashMap::default(),
-
+            //_tag_id_data: HashMap::default(),
             _tag_nns_id_data: HashMap::default(),
             _tag_nns_data_id: HashMap::new(),
 
@@ -100,11 +99,7 @@ impl NewinMemDB {
     pub fn dumpe_data(&self) {
         use crate::pause;
 
-        dbg!(
-            &self._tag_id_data,
-            &self._tag_nns_id_data,
-            &self._tag_nns_data_id
-        );
+        dbg!(&self._tag_nns_id_data, &self._tag_nns_data_id);
         pause();
 
         //&self. , &self. , &self. , &self. , &self. , &self.
@@ -187,9 +182,21 @@ impl NewinMemDB {
     }
 
     ///
+    /// Retuns raw namespace id's
+    ///
+    pub fn namespace_keys(&self) -> Vec<usize> {
+        //let test= self._namespace_id_data;
+        let mut temp: Vec<usize> = Vec::new();
+        for each in self._namespace_id_data.keys() {
+            temp.push(each.clone())
+        }
+        return temp;
+    }
+
+    ///
     /// Returns tag id's based on namespace id.
     ///
-    pub fn namespace_get_fileids(&self, id: &usize) -> Option<&HashSet<usize>> {
+    pub fn namespace_get_tagids(&self, id: &usize) -> Option<&HashSet<usize>> {
         self._namespace_id_tag.get(id)
     }
 
@@ -361,7 +368,44 @@ impl NewinMemDB {
     ///
     /// Adds a tag into db
     ///
-    pub fn tags_put(&mut self, tag_info: sharedtypes::DbTagObjCompatability) {
+    pub fn tags_put(&mut self, tag_info: sharedtypes::DbTagNNS) -> usize {
+        let temp = self._tag_nns_data_id.get(&tag_info).clone();
+
+        match temp {
+            None => {
+                let working_id = self._tag_max;
+
+                let nns_obj = sharedtypes::DbTagObjCompatability {
+                    id: working_id.clone(),
+                    name: tag_info.name,
+                    parents: None,
+                    namespace: tag_info.namespace,
+                };
+
+                // Inserts the tagid into namespace.
+                let namespace_opt = self._namespace_id_tag.get_mut(&nns_obj.namespace);
+                match namespace_opt {
+                    None => {
+                        logging::info_log(&format!(
+                            "Making namespace with id : {}",
+                            &tag_info.namespace
+                        ));
+                        // Gets called when the namespace id wasn't found as a key
+                        let mut idset = HashSet::new();
+                        idset.insert(nns_obj.id);
+                        self._namespace_id_tag.insert(tag_info.namespace, idset);
+                    }
+                    Some(namespace) => {
+                        namespace.insert(nns_obj.id);
+                    }
+                };
+                self.insert_tag_nns(nns_obj);
+                self._tag_max += 1;
+                return working_id;
+            }
+            Some(id) => return id.clone(),
+        }
+        /*
         //println!("Addig tag: {:?}", &tag_info);
         let nns_obj = sharedtypes::DbTagObjNNS {
             id: tag_info.id,
@@ -377,6 +421,7 @@ impl NewinMemDB {
         let namespace_opt = self._namespace_id_tag.get_mut(&tag_info.namespace);
         match namespace_opt {
             None => {
+                logging::info_log(&format!("Making namespace with id : {}", tag_info.namespace));
                 // Gets called when the namespace id wasn't found as a key
                 let mut idset = HashSet::new();
                 idset.insert(tag_info.id);
@@ -391,6 +436,8 @@ impl NewinMemDB {
 
         // Adds tag info to internal nns data.
         self.insert_tag_nns(tag_info);
+
+        */
     }
 
     fn insert_tag_nns(&mut self, tag_info: sharedtypes::DbTagObjCompatability) {

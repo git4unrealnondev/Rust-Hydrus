@@ -60,7 +60,6 @@ impl Jobs {
         self._secs = time_func::time_secs();
         let _ttl = db.jobs_get_max();
         let hashjobs = db.jobs_get_all();
-        dbg!(&hashjobs);
         let beans = self.scrapermanager.scraper_get();
         for each in hashjobs {
             dbg!(
@@ -116,7 +115,7 @@ impl Jobs {
             return;
         } else {
             // Loads DB into memory. Everything that hasn't been loaded already
-            db.load_table(&sharedtypes::LoadDBTable::All, alt_connection);
+            db.load_table(&sharedtypes::LoadDBTable::All);
         }
 
         // Appends ratelimited into hashmap for multithread scraper.

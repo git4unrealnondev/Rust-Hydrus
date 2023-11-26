@@ -28,7 +28,42 @@ pub enum TasksStruct {
     /// Manages a CSV file.
     #[clap(subcommand)]
     Csv(CsvStruct),
+    /// Database related tasks
+    #[clap(subcommand)]
+    Database(Database),
 }
+
+#[derive(Debug, Subcommand)]
+pub enum Database {
+    #[clap(subcommand)]
+    Remove(NamespaceInfo),
+    #[clap(subcommand)]
+    RemoveWhereNot(NamespaceInfo),
+}
+
+/// Removes a namespace, tags & relationships from db.
+#[derive(Debug, Subcommand)]
+pub enum NamespaceInfo {
+    /// A Namespace String to search for.
+    NamespaceString(NamespaceString),
+    /// A Namespace Id to search for.
+    NamespaceId(NamespaceId),
+}
+
+#[derive(Debug, Parser)]
+pub struct NamespaceString {
+    /// Namespace String to search to remove.
+    #[arg(exclusive = true, required = true)]
+    pub namespace_string: String,
+}
+
+#[derive(Debug, Parser)]
+pub struct NamespaceId {
+    /// Namespace Id to remove.
+    #[arg(exclusive = true, required = true)]
+    pub namespace_id: usize,
+}
+
 #[derive(Debug, Subcommand)]
 pub enum CsvStruct {
     /// Manages a CSV file.
