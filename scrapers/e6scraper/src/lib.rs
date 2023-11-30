@@ -1,7 +1,11 @@
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::io;
 use std::io::BufRead;
 use std::time::Duration;
+
+//use ahash::HashSet;
+//use ahash::HashSet;
 
 #[path = "../../../src/scr/sharedtypes.rs"]
 mod sharedtypes;
@@ -17,6 +21,178 @@ pub struct InternalScraper {
     _sites: Vec<String>,
     _ratelimit: (u64, Duration),
     _type: sharedtypes::ScraperType,
+}
+
+pub enum NsIdent {
+    PoolCreator,
+    PoolCreatorId,
+    PoolDescription,
+    PoolName,
+    PoolId,
+    PoolPosition,
+    FileId,
+    Sources,
+    Description,
+    Parent,
+    Children,
+    Rating,
+    Meta,
+    Lore,
+    Artist,
+    Copyright,
+    Character,
+    Species,
+    General,
+}
+
+fn subgen(name: &NsIdent, tag: String, ttype: sharedtypes::TagType) -> sharedtypes::SubTag {
+    sharedtypes::SubTag {
+        namespace: nsobjplg(name),
+        tag: tag,
+        tag_type: ttype,
+    }
+}
+
+fn nsobjplg(name: &NsIdent) -> sharedtypes::GenericNamespaceObj {
+    match name {
+        NsIdent::PoolId => {
+            return sharedtypes::GenericNamespaceObj {
+                //tag: tag,
+                name: "Pool_Id".to_string(),
+                description: Some("Pool identifier unique id.".to_string()),
+            };
+        }
+        NsIdent::PoolCreator => {
+            return sharedtypes::GenericNamespaceObj {
+                //tag: tag,
+                name: "Pool_Creator".to_string(),
+                description: Some("Person who made a pool.".to_string()),
+            };
+        }
+        NsIdent::PoolCreatorId => {
+            return sharedtypes::GenericNamespaceObj {
+                name: "Pool_Creator_Id".to_string(),
+                description: Some("Person's id for e6 who made a pool.".to_string()),
+            };
+        }
+        NsIdent::PoolName => {
+            return sharedtypes::GenericNamespaceObj {
+                name: "Pool_Name".to_string(),
+                description: Some("Name of a pool.".to_string()),
+            };
+        }
+
+        NsIdent::PoolDescription => {
+            return sharedtypes::GenericNamespaceObj {
+                name: "Pool_Description".to_string(),
+                description: Some("Description for a pool.".to_string()),
+            };
+        }
+        NsIdent::PoolPosition => {
+            return sharedtypes::GenericNamespaceObj {
+                name: "Pool_Position".to_string(),
+                description: Some("Position of an id in a pool.".to_string()),
+            };
+        }
+        NsIdent::General => {
+            return sharedtypes::GenericNamespaceObj {
+                name: "General".to_string(),
+                description: Some("General namespace for e621.".to_string()),
+            };
+        }
+
+        NsIdent::Species => {
+            return sharedtypes::GenericNamespaceObj {
+                name: "Species".to_string(),
+                description: Some("Species namespace for e621.".to_string()),
+            };
+        }
+
+        NsIdent::Character => {
+            return sharedtypes::GenericNamespaceObj {
+                name: "Character".to_string(),
+                description: Some("What character's are in an image.".to_string()),
+            };
+        }
+        NsIdent::Copyright => {
+            return sharedtypes::GenericNamespaceObj {
+                name: "Copyright".to_string(),
+                description: Some("Who holds the copyright info".to_string()),
+            };
+        }
+        NsIdent::Artist => {
+            return sharedtypes::GenericNamespaceObj {
+                name: "Artist".to_string(),
+                description: Some("Individual who drew the filth.".to_string()),
+            };
+        }
+
+        NsIdent::Lore => {
+            return sharedtypes::GenericNamespaceObj {
+                name: "Lore".to_string(),
+                description: Some("Youre obviously here for the plot. :X".to_string()),
+            };
+        }
+
+        NsIdent::Meta => {
+            return sharedtypes::GenericNamespaceObj {
+                name: "Meta".to_string(),
+                description: Some(
+                    "Additional information not relating directly to the file".to_string(),
+                ),
+            };
+        }
+        NsIdent::Sources => {
+            return sharedtypes::GenericNamespaceObj {
+                name: "Sources".to_string(),
+                description: Some("Additional sources for a file.".to_string()),
+            };
+        }
+
+        NsIdent::Children => {
+            return sharedtypes::GenericNamespaceObj {
+                name: "Children".to_string(),
+                description: Some(
+                    "Files that have a sub relationship to the current file.".to_string(),
+                ),
+            };
+        }
+        NsIdent::Parent => {
+            return sharedtypes::GenericNamespaceObj {
+                name: "Parent".to_string(),
+                description: Some("Files that are dom or above the current file.".to_string()),
+            };
+        }
+        NsIdent::Description => {
+            return sharedtypes::GenericNamespaceObj {
+                name: "Description".to_string(),
+                description: Some("The description of a file.".to_string()),
+            };
+        }
+
+        NsIdent::Rating => {
+            return sharedtypes::GenericNamespaceObj {
+                name: "Rating".to_string(),
+                description: Some("The rating of the file.".to_string()),
+            };
+        }
+        NsIdent::FileId => {
+            return sharedtypes::GenericNamespaceObj {
+                name: "Id".to_string(),
+                description: Some("File id used by e621 to uniquly identify a file.".to_string()),
+            }
+        } /*"pool_id" => {
+
+                  return sharedtypes::PluginRelatesObj {
+                      id: None,
+                      name: Some("pool_id".to_string()),
+                      description: Some("Pool identifier unique id.".to_string()),
+              }
+          }
+          _ => {
+              panic!();
+          }*/
+    }
 }
 
 impl InternalScraper {
@@ -103,7 +279,7 @@ fn build_url(params: &Vec<sharedtypes::ScraperParam>, pagenum: u64) -> String {
     for each in params_normal {
         param_tags_string += &(each + "+")
     }
-    
+
     // Adds on teh last string to the tags
     param_tags_string = param_tags_string + &params_last;
 
@@ -173,43 +349,37 @@ pub fn cookie_url() -> String {
 ///
 fn json_sub_tag(
     tag_count: &mut u64,
-    tags_list: &mut HashMap<u64, sharedtypes::TagObject>,
+    tags_list: &mut Vec<sharedtypes::TagObject>,
     jso: &json::JsonValue,
-    sub: &str,
-    relates: Option<(String, String)>,
+    ns: sharedtypes::GenericNamespaceObj,
+    relates: Option<sharedtypes::SubTag>,
     tagtype: sharedtypes::TagType,
 ) {
+    //println!("jsonsubtag {:?}, {}", jso, &ns.name);
+
     match relates {
         None => {
-            for each in jso[sub].members() {
-                tags_list.insert(
-                    *tag_count,
-                    sharedtypes::TagObject {
-                        namespace: sub.to_string(),
-                        relates_to: None,
-                        tag: each.to_string(),
-                        tag_type: tagtype,
-                    },
-                );
+            for each in jso[ns.name.clone().to_lowercase()].members() {
+                //println!("jsosub {}", &each);
+                tags_list.push(sharedtypes::TagObject {
+                    namespace: ns.clone(),
+                    relates_to: None,
+                    tag: each.to_string(),
+                    tag_type: tagtype,
+                });
                 //dbg!(&tag_count, sharedtypes::TagObject{namespace: sub.to_string(), relates_to: None, tag:each.to_string()});
-                *tag_count += 1;
             }
         }
-        Some(_) => {
+        Some(temp) => {
             //let temp = relates.unwrap().1;
-            for each in jso[sub].members() {
-                let temp = relates.as_ref().unwrap();
-                tags_list.insert(
-                    *tag_count,
-                    sharedtypes::TagObject {
-                        namespace: sub.to_string(),
-                        relates_to: Some(temp.clone()),
-                        tag: each.to_string(),
-                        tag_type: tagtype,
-                    },
-                );
+            for each in jso[ns.name.clone().to_lowercase()].members() {
+                tags_list.push(sharedtypes::TagObject {
+                    namespace: ns.clone(),
+                    relates_to: Some(temp.clone()),
+                    tag: each.to_string(),
+                    tag_type: tagtype,
+                });
                 //dbg!(&tag_count, &tags_list[&tag_count]);
-                *tag_count += 1;
             }
         }
     }
@@ -218,134 +388,136 @@ fn json_sub_tag(
 fn parse_pools(
     js: &json::JsonValue,
 ) -> Result<sharedtypes::ScraperObject, sharedtypes::ScraperReturn> {
-    let mut files: HashMap<u64, sharedtypes::FileObject> = HashMap::default();
-    let mut cnttotal = 0;    
-    
+    let mut files: HashSet<sharedtypes::FileObject> = HashSet::default();
+    let mut tag: HashSet<sharedtypes::TagObject> = HashSet::default();
+    let mut cnttotal = 0;
+
     // For each in tag pools pulled.
     for multpool in js.members() {
-        
         if multpool["id"].is_null() {
             continue;
         }
 
         let mut tag_count: u64 = 0;
-        let mut tags_list: HashMap<u64, sharedtypes::TagObject> = HashMap::default();
-        
+        let mut tags_list: Vec<sharedtypes::TagObject> = Vec::new();
+
         // Add poolid if not exist
-        tags_list.insert(
-            tag_count,
-            sharedtypes::TagObject {
-                namespace: "pool_id".to_string(),
-                relates_to: None,
-                tag: multpool["id"].to_string(),
-                tag_type: sharedtypes::TagType::Normal,
-            },
-        );
+        tags_list.push(sharedtypes::TagObject {
+            namespace: nsobjplg(&NsIdent::PoolId),
+            relates_to: None,
+            tag: multpool["id"].to_string(),
+            tag_type: sharedtypes::TagType::Normal,
+        });
         tag_count += 1;
 
         // Add pool creator
-        tags_list.insert(
-            tag_count,
-            sharedtypes::TagObject {
-                namespace: "pool_creator".to_string(),
-                relates_to: Some(("pool_id".to_string(), multpool["id"].to_string())),
-                tag: multpool["creator_name"].to_string(),
-                tag_type: sharedtypes::TagType::Normal,
-            },
-        );
+        tags_list.push(sharedtypes::TagObject {
+            namespace: nsobjplg(&NsIdent::PoolCreator),
+            relates_to: Some(subgen(
+                &NsIdent::PoolId,
+                multpool["id"].to_string(),
+                sharedtypes::TagType::Normal,
+            )),
+            tag: multpool["creator_name"].to_string(),
+            tag_type: sharedtypes::TagType::Normal,
+        });
         tag_count += 1;
 
         // Add pool creator id
-        tags_list.insert(
-            tag_count,
-            sharedtypes::TagObject {
-                namespace: "pool_creator_id".to_string(),
-                relates_to: Some((
-                    "pool_creator".to_string(),
-                    multpool["creator_name"].to_string(),
-                )),
-                tag: multpool["creator_id"].to_string(),
-                tag_type: sharedtypes::TagType::Normal,
-            },
-        );
+        tags_list.push(sharedtypes::TagObject {
+            namespace: nsobjplg(&NsIdent::PoolCreatorId),
+            relates_to: Some(subgen(
+                &NsIdent::PoolCreator,
+                multpool["creator_name"].to_string(),
+                sharedtypes::TagType::Normal,
+            )),
+            tag: multpool["creator_id"].to_string(),
+            tag_type: sharedtypes::TagType::Normal,
+        });
         tag_count += 1;
 
         // Add pool name
-        tags_list.insert(
-            tag_count,
-            sharedtypes::TagObject {
-                namespace: "pool_name".to_string(),
-                relates_to: Some(("pool_id".to_string(), multpool["id"].to_string())),
-                tag: multpool["name"].to_string(),
-                tag_type: sharedtypes::TagType::Normal,
-            },
-        );
+        tags_list.push(sharedtypes::TagObject {
+            namespace: nsobjplg(&NsIdent::PoolName),
+            relates_to: Some(subgen(
+                &NsIdent::PoolId,
+                multpool["id"].to_string(),
+                sharedtypes::TagType::Normal,
+            )),
+            tag: multpool["name"].to_string(),
+            tag_type: sharedtypes::TagType::Normal,
+        });
         tag_count += 1;
 
         // Add pool description
-        tags_list.insert(
-            tag_count,
-            sharedtypes::TagObject {
-                namespace: "pool_description".to_string(),
-                relates_to: Some(("pool_id".to_string(), multpool["id"].to_string())),
-                tag: multpool["description"].to_string(),
-                tag_type: sharedtypes::TagType::Normal,
-            },
-        );
+        tags_list.push(sharedtypes::TagObject {
+            namespace: nsobjplg(&NsIdent::Description),
+            relates_to: Some(subgen(
+                &NsIdent::PoolId,
+                multpool["id"].to_string(),
+                sharedtypes::TagType::Normal,
+            )),
+            tag: multpool["description"].to_string(),
+            tag_type: sharedtypes::TagType::Normal,
+        });
         tag_count += 1;
 
         let mut cnt = 0;
         //dbg!(&multpool);
-         //dbg!(&multpool.entries());
+        //dbg!(&multpool.entries());
         //dbg!(&multpool["pool_ids"]);
         for postids in multpool["post_ids"].members() {
             dbg!(&postids);
 
-            
-            
             // Relates the file id to pool
-            tags_list.insert(
-                tag_count,
-                sharedtypes::TagObject {
-                    namespace: "pool_id".to_string(),
-                    relates_to: Some(("id".to_string(), postids.to_string())),
-                    tag: multpool["id"].to_string(),
-                    tag_type: sharedtypes::TagType::Normal,
-                },
-            );
+            tag.insert(sharedtypes::TagObject {
+                namespace: nsobjplg(&NsIdent::PoolId),
+                relates_to: Some(subgen(
+                    &NsIdent::FileId,
+                    postids.to_string(),
+                    sharedtypes::TagType::Normal,
+                )),
+                tag: multpool["id"].to_string(),
+                tag_type: sharedtypes::TagType::Normal,
+            });
             tag_count += 1;
             // TODO need to fix the pool positing. Needs to relate the pool position with the ID better.
-            tags_list.insert(
-                tag_count,
-                sharedtypes::TagObject {
-                    namespace: "pool_position".to_string(),
-                    relates_to: Some(("id".to_string(), postids.to_string())),
-                    tag: cnt.to_string(),
-                    tag_type: sharedtypes::TagType::Normal,
-                },
-            );
+            tag.insert(sharedtypes::TagObject {
+                namespace: nsobjplg(&NsIdent::PoolPosition),
+                relates_to: Some(subgen(
+                    &NsIdent::FileId,
+                    postids.to_string(),
+                    sharedtypes::TagType::Normal,
+                )),
+                tag: cnt.to_string(),
+                tag_type: sharedtypes::TagType::Normal,
+            });
             tag_count += 1;
-            
-            tags_list.insert(
-                tag_count,
-                sharedtypes::TagObject {
-                    namespace: "pool_id".to_string(),
-                    relates_to: Some(("pool_position".to_string(), cnt.to_string())),
-                    tag: multpool["id"].to_string(),
-                    tag_type: sharedtypes::TagType::Normal,
-                },
-            );
-            tag_count += 1;
+
+            tag.insert(sharedtypes::TagObject {
+                namespace: nsobjplg(&NsIdent::PoolId),
+                relates_to: Some(subgen(
+                    &NsIdent::PoolPosition,
+                    multpool["id"].to_string(),
+                    sharedtypes::TagType::Normal,
+                )),
+                tag: multpool["id"].to_string(),
+                tag_type: sharedtypes::TagType::Normal,
+            });
 
             cnt += 1;
         }
-        files.insert(cnttotal, sharedtypes::FileObject{source_url: None, hash: None, tag_list: tags_list});
+        files.insert(sharedtypes::FileObject {
+            source_url: None,
+            hash: None,
+            tag_list: tags_list,
+        });
     }
-    
-    
-    
 
-    Ok(sharedtypes::ScraperObject { file: files })
+    Ok(sharedtypes::ScraperObject {
+        file: files,
+        tag: tag,
+    })
 }
 
 ///
@@ -355,7 +527,7 @@ fn parse_pools(
 pub fn parser(params: &String) -> Result<sharedtypes::ScraperObject, sharedtypes::ScraperReturn> {
     //let vecvecstr: AHashMap<String, AHashMap<String, Vec<String>>> = AHashMap::new();
 
-    let mut files: HashMap<u64, sharedtypes::FileObject> = HashMap::default();
+    let mut files: HashSet<sharedtypes::FileObject> = HashSet::default();
     if let Err(_) = json::parse(params) {
         if params.contains("Please confirm you are not a robot.") {
             return Err(sharedtypes::ScraperReturn::Timeout(20));
@@ -379,7 +551,7 @@ pub fn parser(params: &String) -> Result<sharedtypes::ScraperObject, sharedtypes
     //writeln!(&mut file, "{}", js.to_string()).unwrap();
     println!("Parsing");
     if js["posts"].is_empty() & !js["posts"].is_null() {
-        dbg!(js);
+        //dbg!(js);
         return Err(sharedtypes::ScraperReturn::Nothing);
     } else if js["posts"].is_null() {
         println!("{}", &js);
@@ -392,13 +564,13 @@ pub fn parser(params: &String) -> Result<sharedtypes::ScraperObject, sharedtypes
     for inc in 0..js["posts"].len() {
         let mut tag_count: u64 = 0;
 
-        let mut tags_list: HashMap<u64, sharedtypes::TagObject> = HashMap::default();
+        let mut tags_list: Vec<sharedtypes::TagObject> = Vec::new();
         //dbg!(&tag_count);
         json_sub_tag(
             &mut tag_count,
             &mut tags_list,
             &js["posts"][inc]["tags"],
-            "general",
+            nsobjplg(&NsIdent::General),
             None,
             sharedtypes::TagType::Normal,
         );
@@ -406,7 +578,7 @@ pub fn parser(params: &String) -> Result<sharedtypes::ScraperObject, sharedtypes
             &mut tag_count,
             &mut tags_list,
             &js["posts"][inc]["tags"],
-            "species",
+            nsobjplg(&NsIdent::Species),
             None,
             sharedtypes::TagType::Normal,
         );
@@ -414,7 +586,7 @@ pub fn parser(params: &String) -> Result<sharedtypes::ScraperObject, sharedtypes
             &mut tag_count,
             &mut tags_list,
             &js["posts"][inc]["tags"],
-            "character",
+            nsobjplg(&NsIdent::Character),
             None,
             sharedtypes::TagType::Normal,
         );
@@ -422,7 +594,7 @@ pub fn parser(params: &String) -> Result<sharedtypes::ScraperObject, sharedtypes
             &mut tag_count,
             &mut tags_list,
             &js["posts"][inc]["tags"],
-            "copyright",
+            nsobjplg(&NsIdent::Copyright),
             None,
             sharedtypes::TagType::Normal,
         );
@@ -430,7 +602,7 @@ pub fn parser(params: &String) -> Result<sharedtypes::ScraperObject, sharedtypes
             &mut tag_count,
             &mut tags_list,
             &js["posts"][inc]["tags"],
-            "artist",
+            nsobjplg(&NsIdent::Artist),
             None,
             sharedtypes::TagType::Normal,
         );
@@ -438,7 +610,7 @@ pub fn parser(params: &String) -> Result<sharedtypes::ScraperObject, sharedtypes
             &mut tag_count,
             &mut tags_list,
             &js["posts"][inc]["tags"],
-            "lore",
+            nsobjplg(&NsIdent::Lore),
             None,
             sharedtypes::TagType::Normal,
         );
@@ -446,7 +618,7 @@ pub fn parser(params: &String) -> Result<sharedtypes::ScraperObject, sharedtypes
             &mut tag_count,
             &mut tags_list,
             &js["posts"][inc]["tags"],
-            "meta",
+            nsobjplg(&NsIdent::Meta),
             None,
             sharedtypes::TagType::Normal,
         );
@@ -454,30 +626,30 @@ pub fn parser(params: &String) -> Result<sharedtypes::ScraperObject, sharedtypes
             &mut tag_count,
             &mut tags_list,
             &js["posts"][inc],
-            "sources",
+            nsobjplg(&NsIdent::Sources),
             None,
             sharedtypes::TagType::Normal,
         );
-        json_sub_tag(
+        /*json_sub_tag(
             &mut tag_count,
             &mut tags_list,
             &js["posts"][inc],
-            "pool_id",
-            Some(("id".to_string(), js["posts"][inc]["id"].to_string())),
+            nsobjplg(&NsIdent::PoolId),
+            Some(subgen(&NsIdent::FileId))
             sharedtypes::TagType::Normal,
-        );
+        );*/
 
         if !js["posts"][inc]["pools"].is_null() {
             for each in js["posts"][inc]["pools"].members() {
-                tags_list.insert(
-                    tag_count,
-                    sharedtypes::TagObject {
-                        namespace: "".to_string(),
-                        relates_to: None,
-                        tag: format!("https://e621.net/pools?format=json&search[id={}]", each),
-                        tag_type: sharedtypes::TagType::ParseUrl,
+                tags_list.push(sharedtypes::TagObject {
+                    namespace: sharedtypes::GenericNamespaceObj {
+                        name: "Do Not Add".to_string(),
+                        description: Some("DO NOT PARSE ME".to_string()),
                     },
-                );
+                    relates_to: None,
+                    tag: format!("https://e621.net/pools?format=json&search[id={}]", each),
+                    tag_type: sharedtypes::TagType::ParseUrl,
+                });
                 tag_count += 1;
             }
         }
@@ -486,51 +658,50 @@ pub fn parser(params: &String) -> Result<sharedtypes::ScraperObject, sharedtypes
             &mut tag_count,
             &mut tags_list,
             &js["posts"][inc]["relationships"],
-            "children",
-            Some(("id".to_string(), js["posts"][inc]["id"].to_string())),
+            nsobjplg(&NsIdent::Children),
+            Some(subgen(
+                &NsIdent::FileId,
+                js["posts"][inc]["id"].to_string(),
+                sharedtypes::TagType::Normal,
+            )),
             sharedtypes::TagType::Normal,
         );
         if !js["posts"][inc]["description"].is_empty() {
-            tags_list.insert(
-                tag_count,
-                sharedtypes::TagObject {
-                    namespace: "description".to_string(),
-                    relates_to: None,
-                    tag: js["posts"][inc]["description"].to_string(),
-                    tag_type: sharedtypes::TagType::Normal,
-                },
-            );
+            tags_list.push(sharedtypes::TagObject {
+                namespace: nsobjplg(&NsIdent::Description),
+                relates_to: None,
+                tag: js["posts"][inc]["description"].to_string(),
+                tag_type: sharedtypes::TagType::Normal,
+            });
             //dbg!(js["posts"][inc]["description"].to_string());
             tag_count += 1;
         }
         tag_count += 1;
-        tags_list.insert(
-            tag_count,
-            sharedtypes::TagObject {
-                namespace: "rating".to_string(),
-                relates_to: None,
-                tag: js["posts"][inc]["rating"].to_string(),
-                tag_type: sharedtypes::TagType::Normal,
-            },
-        );
+        tags_list.push(sharedtypes::TagObject {
+            namespace: nsobjplg(&NsIdent::Rating),
+            relates_to: None,
+            tag: js["posts"][inc]["rating"].to_string(),
+            tag_type: sharedtypes::TagType::Normal,
+        });
         tag_count += 1;
-        tags_list.insert(
-            tag_count,
-            sharedtypes::TagObject {
-                namespace: "id".to_string(),
-                relates_to: None,
-                tag: js["posts"][inc]["id"].to_string(),
-                tag_type: sharedtypes::TagType::Normal,
-            },
-        );
+        tags_list.push(sharedtypes::TagObject {
+            namespace: nsobjplg(&NsIdent::FileId),
+            relates_to: None,
+            tag: js["posts"][inc]["id"].to_string(),
+            tag_type: sharedtypes::TagType::Normal,
+        });
         tag_count += 1;
         if !js["posts"][inc]["relationships"]["parent_id"].is_null() {
             json_sub_tag(
                 &mut tag_count,
                 &mut tags_list,
                 &js["posts"][inc]["relationships"],
-                "parent_id",
-                Some(("id".to_string(), js["posts"][inc]["id"].to_string())),
+                nsobjplg(&NsIdent::Parent),
+                Some(subgen(
+                    &NsIdent::FileId,
+                    js["posts"][inc]["id"].to_string(),
+                    sharedtypes::TagType::Normal,
+                )),
                 sharedtypes::TagType::Normal,
             );
         }
@@ -560,9 +731,12 @@ pub fn parser(params: &String) -> Result<sharedtypes::ScraperObject, sharedtypes
             )),
             tag_list: tags_list,
         };
-        files.insert(inc.try_into().unwrap(), file);
+        files.insert(file);
     }
-    Ok(sharedtypes::ScraperObject { file: files })
+    Ok(sharedtypes::ScraperObject {
+        file: files,
+        tag: HashSet::new(),
+    })
     //return Ok(vecvecstr);
 }
 ///

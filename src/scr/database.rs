@@ -1979,12 +1979,12 @@ impl Main {
     ///
     fn delete_relationship_sql(&mut self, file_id: &usize, tag_id: &usize) {
         let inp = "DELETE FROM Relationship WHERE fileid = ? AND tagid = ?";
-        self
-            ._conn
+        self._conn
             .borrow_mut()
             .lock()
             .unwrap()
-            .execute(inp, params![file_id.to_string(), tag_id.to_string(),]).unwrap();
+            .execute(inp, params![file_id.to_string(), tag_id.to_string(),])
+            .unwrap();
     }
 
     ///
@@ -2016,8 +2016,11 @@ impl Main {
     ///
     /// Sqlite wrapper for deleteing a tag from table.
     ///
-    fn delete_namespace_sql(&mut self, namespace_id: &usize) {
-        logging::info_log(&format!("Deleting namespace with id : {} from db", namespace_id));
+    pub fn delete_namespace_sql(&mut self, namespace_id: &usize) {
+        logging::info_log(&format!(
+            "Deleting namespace with id : {} from db",
+            namespace_id
+        ));
         let inp = "DELETE FROM Namespace WHERE id = ?";
         let _out = self
             ._conn
@@ -2031,7 +2034,7 @@ impl Main {
     /// Removes tag & relationship from db.
     ///
     pub fn delete_tag_relationship(&mut self, tagid: &usize) {
-        self.transaction_flush();
+        // self.transaction_flush();
         let relationships = self._inmemdb.relationship_get_fileid(tagid);
 
         // Gets list of fileids from internal db.
@@ -2043,16 +2046,23 @@ impl Main {
                     fileids.len(),
                     tagid
                 ));
-                let mut sql = String::new();
-                
+                //let mut sql = String::new();
+
                 for file in fileids.clone() {
+                    logging::log(&format!(
+                        "Removing file: {} tagid: {} from db.",
+                        file, tagid
+                    ));
+                    logging::log(&"waiting on: relationship_remove".to_string());
                     self._inmemdb.relationship_remove(&file, tagid);
-                    sql += &format!("DELETE FROM Relationship WHERE fileid = {} AND tagid = {}; ", file, tagid);
+                    // sql += &format!("DELETE FROM Relationship WHERE fileid = {} AND tagid = {}; ", file, tagid);
+                    logging::log(&"Removing relationship sql".to_string());
                     //println!("DELETE FROM Relationship WHERE fileid = {} AND tagid = {};", &file, &tagid);
-                    //self.delete_relationship_sql(&file, tagid);
+                    self.delete_relationship_sql(&file, tagid);
                 }
-                self._conn.lock().unwrap().execute_batch(&sql).unwrap();
-                self.transaction_flush();
+                //self._conn.lock().unwrap().execute_batch(&sql).unwrap();
+                logging::log(&"Relationship Loop".to_string());
+                //  self.transaction_flush();
             }
         };
 
@@ -2064,10 +2074,10 @@ impl Main {
     ///
     pub fn tag_remove(&mut self, id: &usize) {
         self._inmemdb.tag_remove(id);
-        //self.delete_tag_sql(id);
+        self.delete_tag_sql(id);
 
         let rel = &self._inmemdb.parents_remove(id);
-        
+
         for each in rel {
             println!("Removing Parent: {} {}", each.0, each.1);
             self.delete_parent_sql(&each.0, &each.1);
@@ -2080,6 +2090,13 @@ impl Main {
     ///
     pub fn namespace_delete_id(&mut self, id: &usize) {
         logging::info_log(&format!("Starting deletion work on namespace id: {}", id));
+
+        logging::info_log(&format!("starting db vac & index."));
+
+        //self.vacuum();
+        //self._conn.lock().unwrap().execute("create index ffid on Relationship(fileid);", []);
+        logging::info_log(&format!("Stopping db vac & index."));
+
         self.transaction_flush();
         let tagids_unwrap = self._inmemdb.namespace_get_tagids(id);
         let tagids = match tagids_unwrap {
@@ -2091,17 +2108,17 @@ impl Main {
         for each in tagids.iter() {
             logging::log(&format!("Removing tagid: {}.", each));
             self.tag_remove(each);
-            tag_sql += &format!("DELETE FROM Tags WHERE id = {}; ", each);
+            //tag_sql += &format!("DELETE FROM Tags WHERE id = {}; ", each);
             self.delete_tag_relationship(each);
         }
 
-        self._conn.lock().unwrap().execute_batch(&tag_sql).unwrap();
-        self.transaction_flush();
-        
+        //elf._conn.lock().unwrap().execute_batch(&tag_sql).unwrap();
+        //self.transaction_flush();
+
         self._inmemdb.namespace_delete(id);
         self.delete_namespace_sql(id);
 
-        self.vacuum();
+        //self.vacuum();
 
         // Condenses the database. (removes gaps in id's)
         self.condese_relationships_tags();
@@ -2126,6 +2143,7 @@ impl Main {
         logging::info_log(&format!("Starting compression of tags & relationships."));
 
         let tag_max = self._inmemdb.tags_max_return().clone();
+        dbg!(&tag_max);
         self._inmemdb.tags_max_reset();
 
         let mut lastvalid: usize = 0;
@@ -2149,18 +2167,23 @@ impl Main {
                             continue;
                         }
                         Some(file_list) => {
-                            
-                            
                             for file in file_list.clone() {
                                 self._inmemdb.relationship_remove(&file, &tid);
-                                relat_str += &format!("DELETE FROM Relationship WHERE fileid = {} AND tagid = {};", &file, &tid);
+                                relat_str += &format!(
+                                    "DELETE FROM Relationship WHERE fileid = {} AND tagid = {};",
+                                    &file, &tid
+                                );
                                 //println!("DELETE FROM Relationship WHERE fileid = {} AND tagid = {};", &file, &tid);
                                 //self.delete_relationship_sql(&file, &tid);
                                 file_to_add.insert(file);
                             }
-                            
-                            self._conn.lock().unwrap().execute_batch(&relat_str).unwrap();
-                            
+
+                            self._conn
+                                .lock()
+                                .unwrap()
+                                .execute_batch(&relat_str)
+                                .unwrap();
+
                             self.transaction_flush();
                         }
                     }
@@ -2176,5 +2199,47 @@ impl Main {
         }
 
         self.vacuum();
+    }
+
+    ///
+    /// Recreates the db with only one ns in it.
+    ///
+    pub fn drop_recreate_ns(&mut self, id: &usize) {
+        //self.load_table(&sharedtypes::LoadDBTable::Relationship);
+        //self.load_table(&sharedtypes::LoadDBTable::Parents);
+        //self.load_table(&sharedtypes::LoadDBTable::Tags);
+        self.db_drop_table(&"Relationship".to_string());
+        self.db_drop_table(&"Tags".to_string());
+        self.db_drop_table(&"Parents".to_string());
+        self.first_db(); // Recreates tables with new defaults
+        self.transaction_flush();
+
+        //let tag_max = self._inmemdb.tags_max_return().clone();
+        self._inmemdb.tags_max_reset();
+
+        let tids = self._inmemdb.namespace_get_tagids(id).unwrap().clone();
+
+        let mut cnt: usize = 0;
+        for tid in tids {
+            let file_listop = self._inmemdb.relationship_get_fileid(&tid).unwrap().clone();
+            let tag = self._inmemdb.tags_get_data(&tid).unwrap();
+            self.tag_add_sql(cnt, tag.name.to_string(), "".to_string(), tag.namespace);
+            for file in file_listop {
+                self.relationship_add_sql(file, cnt);
+            }
+            cnt += 1;
+        }
+
+        self._inmemdb.tags_clear();
+        self._inmemdb.parents_clear();
+        self._inmemdb.relationships_clear();
+
+        self.vacuum();
+
+        self.transaction_flush();
+
+        //self.condese_relationships_tags();
+
+        self.transaction_flush();
     }
 }

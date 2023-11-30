@@ -17,6 +17,7 @@ pub enum test {
     #[clap(subcommand)]
     Job(JobStruct),
     /// Searches the DB.
+    #[clap(subcommand)]
     Search(SearchStruct),
     /// Db Tasks Structure
     #[clap(subcommand)]
@@ -115,18 +116,32 @@ pub struct JobRemovalStruct {
 }
 
 /// Search struct for parsing.
-#[derive(Debug, Parser)]
-pub struct SearchStruct {
+#[derive(Debug, Subcommand)]
+pub enum SearchStruct {
     /// Searches By File ID.
-    #[arg(exclusive = true, required = false, long)]
-    fid: usize,
+    //#[arg(exclusive = true, required = false, long)]
+    fid(Id),
     /// Searches By Tag Id.
-    #[arg(exclusive = true, required = false, long)]
-    tid: usize,
+    //#[arg(exclusive = true, required = false, long)]
+    tid(Id),
     /// Searches By Tag name needs namespace.
-    #[arg(exclusive = true, required = false, long)]
-    tag: String,
+    //#[arg(exclusive = true, required = false, long)]
+    tag(Tag),
     /// Searches By Hash.
-    #[arg(exclusive = true, required = false, long)]
-    hash: String,
+    hash(Hashy),
+}
+#[derive(Debug, Parser)]
+pub struct Tag {
+    #[arg(required = true, exclusive = true)]
+    tag: String,
+}
+#[derive(Debug, Parser)]
+pub struct Id {
+    #[arg(required = true, exclusive = true)]
+    id: usize,
+}
+#[derive(Parser, Debug)]
+pub struct Hashy {
+    #[arg(required = true, exclusive = true)]
+    pub hash: String,
 }

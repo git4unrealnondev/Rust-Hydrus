@@ -37,7 +37,6 @@ pub fn ratelimiter_create(number: u64, duration: Duration) -> Ratelimiter {
 
 pub fn ratelimiter_wait(ratelimit_object: &mut Ratelimiter) {
     let limit = ratelimit_object.try_wait();
-
     match limit {
         Ok(_) => {}
         Err(sleep) => {

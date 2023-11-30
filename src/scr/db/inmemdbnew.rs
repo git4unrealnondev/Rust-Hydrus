@@ -254,6 +254,35 @@ impl NewinMemDB {
     }
 
     ///
+    /// Clears inmemdb tags structures
+    ///
+    pub fn tags_clear(&mut self) {
+        self._tag_max = 0;
+        self._tag_nns_id_data.clear();
+        self._tag_nns_data_id.clear();
+    }
+
+    ///
+    /// Clears inmemdb parents structures
+    ///
+    pub fn parents_clear(&mut self) {
+        self._parents_max = 0;
+        self._parents_dual.clear();
+        self._parents_rel_tag.clear();
+        self._parents_tag_rel.clear();
+    }
+
+    ///
+    /// Clears inmemdb relationships structures
+    ///
+    pub fn relationships_clear(&mut self) {
+        self._relationship_max = 0;
+        self._relationship_file_tag.clear();
+        self._relationship_tag_file.clear();
+        self._relationship_dual.clear();
+    }
+
+    ///
     ///
     ///
     pub fn tags_get_list_id(&self) -> HashSet<usize> {
@@ -586,7 +615,7 @@ impl NewinMemDB {
                     .insert(parentdbojb.relate_tag_id, temp);
             }
             Some(rel_id) => {
-                rel_id.insert(parentdbojb.tag_id);
+                rel_id.insert(parentdbojb.tag_id); //parents_tag_get
             }
         }
 

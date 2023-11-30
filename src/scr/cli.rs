@@ -1,7 +1,7 @@
 extern crate clap;
 //use std::str::pattern::Searcher;
 
-use std::str::FromStr;
+use std::{str::FromStr, task::Wake};
 
 use crate::{
     database, logging, pause,
@@ -67,7 +67,53 @@ pub fn main(data: &mut database::Main) {
                 })*/
             }
         },
-        cli_structs::test::Search(searchstruct) => {}
+        cli_structs::test::Search(searchstruct) => match searchstruct {
+            cli_structs::SearchStruct::fid(id) => {}
+            cli_structs::SearchStruct::tid(id) => {}
+            cli_structs::SearchStruct::tag(tag) => {}
+            cli_structs::SearchStruct::hash(hash) => {
+                data.load_table(&sharedtypes::LoadDBTable::Files);
+                data.load_table(&sharedtypes::LoadDBTable::Relationship);
+                data.load_table(&sharedtypes::LoadDBTable::Tags);
+                let file_id = data.file_get_hash(&hash.hash);
+                match file_id {
+                    None => {
+                        println!("Cannot find hash in db: {}", &hash.hash);
+                    }
+                    Some(fid) => {
+                        let hstags = data.relationship_get_tagid(fid);
+                        match hstags {
+                            None => {
+                                println!(
+                                    "Cannot find any loaded relationships for fileid: {}",
+                                    &fid
+                                );
+                            }
+                            Some(tags) => {
+                                for tid in tags.iter() {
+                                    let tag = data.tag_id_get(tid);
+                                    match tag {
+                                        None => {
+                                            println!(
+                                                "WANRING CORRUPTION DETECTED for tagid: {}",
+                                                &tid
+                                            );
+                                        }
+                                        Some(tagnns) => {
+                                            println!(
+                                                "Tag: {} namespace: {}",
+                                                tagnns.name, tagnns.namespace
+                                            );
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                panic!();
+            }
+        },
         cli_structs::test::Tasks(taskstruct) => match taskstruct {
             cli_structs::TasksStruct::Database(db) => {
                 match db {
@@ -100,15 +146,23 @@ pub fn main(data: &mut database::Main) {
                         ));
                         data.load_table(&sharedtypes::LoadDBTable::Tags);
                         data.load_table(&sharedtypes::LoadDBTable::Relationship);
+                        data.load_table(&sharedtypes::LoadDBTable::Parents);
                         //data.namespace_get(inp)
 
                         let mut key = data.namespace_keys();
                         key.retain(|x| *x != ns_id);
-
                         for each in key {
-                            println!("Found key to remove: {}", &each);
-                            data.namespace_delete_id(&each);
+                            data.delete_namespace_sql(&each);
                         }
+
+                        data.drop_recreate_ns(&ns_id);
+
+                        panic!();
+
+                        //for each in key {
+                        //    println!("Found key to remove: {}", &each);
+                        //    data.namespace_delete_id(&each);
+                        //}
 
                         //data.namespace_delete_id(&ns_id);
                     }

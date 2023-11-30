@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 use std::{collections::HashMap, hash::BuildHasherDefault};
 use std::{default, fmt};
 use strum::IntoEnumIterator;
@@ -41,7 +42,8 @@ pub enum ScraperReturn {
 ///
 #[derive(Debug)]
 pub struct ScraperObject {
-    pub file: HashMap<u64, FileObject>,
+    pub file: HashSet<FileObject>,
+    pub tag: HashSet<TagObject>
 }
 
 ///
@@ -83,12 +85,13 @@ pub struct DbNamespaceObj {
 /// Namespace object
 /// should of done this sooner lol
 ///
-#[derive(Debug)]
-pub struct PluginNamespaceObj {
-    pub id: Option<usize>,
+/*#[derive(Debug)]
+#[derive(Eq, Hash, PartialEq)]
+pub struct PluginRelatesObj {
+    pub tag: Option<String>,
     pub name: Option<String>,
     pub description: Option<String>,
-}
+}*/
 
 ///
 /// Database Jobs object
@@ -226,7 +229,7 @@ pub struct DBPluginOutput {
     pub relationship: Option<Vec<DbPluginRelationshipObj>>, // Adds a relationship into the DB.
     pub parents: Option<Vec<DbParentsObj>>, // Adds a parent object in db
     pub jobs: Option<Vec<DbJobsObj>>,       // Adds a job
-    pub namespace: Option<Vec<PluginNamespaceObj>>, // Adds a namespace
+    pub namespace: Option<Vec<GenericNamespaceObj>>, // Adds a namespace
     pub file: Option<Vec<PluginFileObj>>,   // Adds a file into db
 }
 
@@ -234,22 +237,36 @@ pub struct DBPluginOutput {
 /// Represents one file
 ///
 #[derive(Debug)]
+#[derive(Eq, Hash, PartialEq)]
 pub struct FileObject {
     pub source_url: Option<String>,
     pub hash: Option<HashesSupported>, // Hash of file
-    pub tag_list: HashMap<u64, TagObject>,
+    pub tag_list: Vec<TagObject>,
 }
 
 ///
 /// Holder of Tag info.
 /// Keeps relationalship info into account.
 ///
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq, Hash)]
+
 pub struct TagObject {
-    pub namespace: String,
+    pub namespace: GenericNamespaceObj,
     pub tag: String,
     pub tag_type: TagType,
-    pub relates_to: Option<(String, String)>,
+    pub relates_to: Option<SubTag>,
+}
+
+#[derive(Debug, Eq, PartialEq, Hash, Clone)]
+pub struct SubTag {
+    pub namespace: GenericNamespaceObj,
+    pub tag: String,
+    pub tag_type: TagType
+}
+#[derive(Debug, Eq, PartialEq, Hash, Clone)]
+pub struct GenericNamespaceObj {
+    pub name: String,
+    pub description: Option<String>,
 }
 
 ///
@@ -257,6 +274,7 @@ pub struct TagObject {
 ///
 #[derive(Debug, Copy, Clone)]
 #[allow(dead_code)]
+#[derive(Eq, Hash, PartialEq)]
 pub enum TagType {
     Normal,   // Normal tag.
     ParseUrl, // Scraper to download and parse a new url.
@@ -268,6 +286,7 @@ pub enum TagType {
 ///
 #[derive(Debug, Clone, Display)]
 #[allow(dead_code)]
+#[derive(Eq, Hash, PartialEq)]
 pub enum HashesSupported {
     Md5(String),
     Sha1(String),
@@ -439,7 +458,7 @@ pub fn stringto_search_type(into: &String) -> Search {
 ///
 /// Straper type passed to params
 ///
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ScraperParamType {
     Normal,
     Database,
@@ -448,7 +467,7 @@ pub enum ScraperParamType {
 ///
 /// Used to hold Scraper Parameters in db.
 ///
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ScraperParam {
     pub param_data: String,
     pub param_type: ScraperParamType,

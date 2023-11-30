@@ -254,20 +254,11 @@ impl PluginManager {
                         if let Some(temp) = names.namespace {
                             for namespace in temp {
                                 // IF Valid ID && Name && Description info are valid then we have a valid namespace id to pull
-                                if namespace.id.is_none()
-                                    && namespace.name.is_some()
-                                    && namespace.description.is_some()
-                                    && namespace_id.is_some()
-                                {
-                                    namespace_id = Some(unwrappy.namespace_add(
-                                        namespace.name.unwrap(),
+                                namespace_id = Some(unwrappy.namespace_add(
+                                        namespace.name,
                                         namespace.description,
                                         true,
                                     ));
-                                } else {
-                                    namespace_id = None;
-                                    continue;
-                                }
                             }
                         }
                         if let Some(temp) = names.file {
