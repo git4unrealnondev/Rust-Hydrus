@@ -19,6 +19,7 @@ crate-type = ["dylib"]
 
 [dependencies]
 ahash = "0.8.3"
+chrono = "0.4.31"
 json = "0.12.4"
 nohash-hasher = "0.2.0"
 rayon = "1.7.0"

@@ -47,6 +47,7 @@ pub fn main(data: &mut database::Main) {
                             &jobs_add.time,
                             Some(jobs_add.committype),
                             true,
+                            sharedtypes::DbJobType::Params,
                         );
                     }
                     Err(_) => {

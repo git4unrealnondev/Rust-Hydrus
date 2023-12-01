@@ -130,6 +130,7 @@ impl Main {
         time_offset: Option<usize>,
         current_time: Option<usize>,
         committype: Option<sharedtypes::CommitType>,
+        jobtype: sharedtypes::DbJobType,
     ) {
         //let querya = query.split(' ').map(|s| s.to_string()).collect();
         let wrap = sharedtypes::DbJobsObj {
@@ -137,6 +138,7 @@ impl Main {
             param: query,
             time: current_time,
             reptime: time_offset,
+            jobtype: jobtype,
             committype: committype,
         };
         //let wrap = jobs::JobsRef{};
@@ -160,8 +162,9 @@ impl Main {
         committype: &sharedtypes::CommitType,
         current_time: usize,
         time_offset: usize,
+        jobtype: sharedtypes::DbJobType,
     ) {
-        let inp = "INSERT INTO Jobs VALUES(?, ?, ?, ?, ?)";
+        let inp = "INSERT INTO Jobs VALUES(?, ?, ?, ?, ?, ?)";
         let _out = self._conn.lock().unwrap().borrow_mut().execute(
             inp,
             params![
@@ -169,7 +172,8 @@ impl Main {
                 time_offset.to_string(),
                 site,
                 query,
-                committype.to_string()
+                committype.to_string(),
+                jobtype.to_string()
             ],
         );
         self.db_commit_man();
@@ -186,6 +190,7 @@ impl Main {
         time: &String,
         committype: Option<sharedtypes::CommitType>,
         addtodb: bool,
+        jobtype: sharedtypes::DbJobType,
     ) {
         //let a1: String = time.to_string();
         let current_time: usize = time_func::time_secs();
@@ -197,6 +202,7 @@ impl Main {
             Some(time_offset),
             Some(current_time),
             committype,
+            jobtype,
         );
         if addtodb {
             self.jobs_add_new_sql(
@@ -206,6 +212,7 @@ impl Main {
                 &committype.unwrap(),
                 current_time,
                 time_offset,
+                jobtype,
             );
         }
     }
@@ -223,6 +230,7 @@ impl Main {
         does_loop: bool,
         jobs_commit: String,
         jobs_todo: sharedtypes::CommitType,
+        jobtype: sharedtypes::DbJobType,
     ) {
         //let time_offset: usize = time::time_conv(jobs_rep);
 
@@ -237,9 +245,27 @@ impl Main {
         let com: bool = jobs_commit.parse::<bool>().unwrap();
         if &jobs_time != "now" && does_loop {
             let b: usize = jobs_rep.parse::<usize>().unwrap();
-            self.jobs_add(a, b, &jobs_site, &jobs_param, com, true, &jobs_todo);
+            self.jobs_add(
+                a,
+                b,
+                &jobs_site,
+                &jobs_param,
+                com,
+                true,
+                &jobs_todo,
+                jobtype,
+            );
         } else {
-            self.jobs_add(a, 0, &jobs_site, &jobs_param, com, false, &jobs_todo);
+            self.jobs_add(
+                a,
+                0,
+                &jobs_site,
+                &jobs_param,
+                com,
+                false,
+                &jobs_todo,
+                jobtype,
+            );
         }
     }
 
@@ -887,6 +913,7 @@ impl Main {
                             reptime: row.get(1).unwrap(),
                             site: row.get(2).unwrap(),
                             param: row.get(3).unwrap(),
+                            jobtype: sharedtypes::stringto_jobtype(&row.get(5).unwrap()),
                             committype: Some(sharedtypes::stringto_commit_type(
                                 &row.get(4).unwrap(),
                             )),
@@ -902,6 +929,7 @@ impl Main {
                             res.reptime,
                             res.time,
                             res.committype,
+                            res.jobtype,
                         );
                     } else {
                         error!("Bad Job cant load {:?}", each);
@@ -1273,6 +1301,7 @@ impl Main {
                 &each.3,
                 current_time,
                 time_offset,
+                sharedtypes::DbJobType::Params,
             );
             //self.jobs_add_new(, addtodb);
         }
@@ -1714,13 +1743,21 @@ impl Main {
         //println!("relationship complete : {} {}", file, tag);
     }
 
-    fn jobs_add_db(&mut self, time: usize, reptime: usize, site: String, param: String) {
+    fn jobs_add_db(
+        &mut self,
+        time: usize,
+        reptime: usize,
+        site: String,
+        param: String,
+        jobtype: sharedtypes::DbJobType,
+    ) {
         self._inmemdb.jobs_add(DbJobsObj {
             time: Some(time),
             reptime: Some(reptime),
             site: Some(site),
             param: Some(param),
             committype: None,
+            jobtype: jobtype,
         });
     }
 
@@ -1733,11 +1770,12 @@ impl Main {
         filler: bool,
         addtodb: bool,
         committype: &sharedtypes::CommitType,
+        jobtype: sharedtypes::DbJobType,
     ) {
-        self.jobs_add_db(time, reptime, site.to_string(), param.to_string());
+        self.jobs_add_db(time, reptime, site.to_string(), param.to_string(), jobtype);
 
         if addtodb {
-            let inp = "INSERT INTO Jobs VALUES(?, ?, ?, ?, ?)";
+            let inp = "INSERT INTO Jobs VALUES(?, ?, ?, ?, ?, ?)";
             let _out = self._conn.borrow_mut().lock().unwrap().execute(
                 inp,
                 params![
@@ -1745,7 +1783,8 @@ impl Main {
                     reptime.to_string(),
                     site,
                     param,
-                    committype.to_string()
+                    committype.to_string(),
+                    jobtype.to_string()
                 ],
             );
             self.db_commit_man();

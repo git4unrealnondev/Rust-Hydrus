@@ -254,11 +254,12 @@ impl PluginManager {
                         if let Some(temp) = names.namespace {
                             for namespace in temp {
                                 // IF Valid ID && Name && Description info are valid then we have a valid namespace id to pull
+                                // dbg!(&namespace);
                                 namespace_id = Some(unwrappy.namespace_add(
-                                        namespace.name,
-                                        namespace.description,
-                                        true,
-                                    ));
+                                    namespace.name,
+                                    namespace.description,
+                                    true,
+                                ));
                             }
                         }
                         if let Some(temp) = names.file {
@@ -295,6 +296,7 @@ impl PluginManager {
                             for tags in temp {
                                 let namespace_id = unwrappy.namespace_get(&tags.namespace).cloned();
                                 //match namespace_id {}
+                                //dbg!(&tags);
                                 if tags.parents.is_none() && namespace_id.is_some() {
                                     unwrappy.tag_add(
                                         tags.name,

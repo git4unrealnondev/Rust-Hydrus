@@ -9,15 +9,16 @@ use crate::plugins::PluginManager;
 use crate::scraper;
 
 use crate::sharedtypes;
+use crate::sharedtypes::JobScraper;
 use crate::sharedtypes::ScraperReturn;
 
 use ahash::AHashMap;
 use async_std::task;
-
 use futures;
+use ratelimit::Ratelimiter;
 
 //use log::{error, info};
-
+use std::collections::HashMap;
 use std::collections::HashSet;
 use std::ops::Index;
 use std::sync::Arc;
@@ -121,13 +122,6 @@ impl Drop for Worker {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-struct JobScraper {
-    pub site: String,
-    pub param: Vec<sharedtypes::ScraperParam>,
-    pub original_param: String,
-}
-
 impl Worker {
     fn new(
         id: usize,
@@ -145,71 +139,105 @@ impl Worker {
             &jobs.len()
         ));
         let mut db = dba.clone();
-        let jblist = jobs.clone();
+        let mut jblist = jobs.clone();
         let manageeplugin = pluginmanager;
         let scrap = scraper.clone();
 
+        let mut ratelimit_hash: HashMap<Vec<String>, Ratelimiter> = HashMap::new();
+
         let thread = thread::spawn(move || {
             let mut job_params: HashSet<JobScraper> = HashSet::new();
-
-            // Loops through jobs and adds them into the job_params
-            for job in jblist {
-                let mut par_vec: Vec<sharedtypes::ScraperParam> = Vec::new();
-                let parpms: Vec<String> = job
-                    .param
-                    .as_ref()
-                    .unwrap()
-                    .split_whitespace()
-                    .map(str::to_string)
-                    .collect();
-                for par in parpms {
-                    let temp = sharedtypes::ScraperParam {
-                        param_data: par,
-                        param_type: sharedtypes::ScraperParamType::Normal,
-                    };
-                    par_vec.push(temp)
-                }
-
-                {
-                    // Gets info from DB. If it exists then insert into params hashset.
-                    let unwrappydb = &mut db.lock().unwrap();
-                    let datafromdb = unwrappydb
-                        .settings_get_name(&format!("{}_{}", scrap._type, scrap._name.to_owned()))
-                        .unwrap()
-                        .param
-                        .clone();
-                    match datafromdb {
-                        None => {}
-                        Some(param) => {
-                            // Adds database tag if applicable.
-                            let scrap_data = sharedtypes::ScraperParam {
-                                param_data: param,
-                                param_type: sharedtypes::ScraperParamType::Database,
-                            };
-
-                            par_vec.push(scrap_data);
-                        }
-                    }
-                }
-
-                let sc = JobScraper {
-                    site: job.site.unwrap(),
-                    param: par_vec,
-                    original_param: job.param.unwrap(),
-                };
-
-                job_params.insert(sc);
-            }
-            dbg!(&job_params);
+            let mut job_ref_hash: HashMap<JobScraper, sharedtypes::DbJobsObj> = HashMap::new();
 
             // Main loop for processing
             // All queries have been deduplicated.
             let mut job_loop = true;
             while job_loop {
-                for job in &job_params.clone() {
-                    let urlload = scraper::url_dump(&libloading, &job.param);
+                for job in jblist.clone() {
+                    let mut par_vec: Vec<sharedtypes::ScraperParam> = Vec::new();
+                    let parpms: Vec<String> = job
+                        .param
+                        .as_ref()
+                        .unwrap()
+                        .split_whitespace()
+                        .map(str::to_string)
+                        .collect();
+                    for par in parpms {
+                        let temp = sharedtypes::ScraperParam {
+                            param_data: par,
+                            param_type: sharedtypes::ScraperParamType::Normal,
+                        };
+                        par_vec.push(temp)
+                    }
 
-                    dbg!(&urlload);
+                    {
+                        // Gets info from DB. If it exists then insert into params hashset.
+                        let unwrappydb = &mut db.lock().unwrap();
+                        let datafromdb = unwrappydb
+                            .settings_get_name(&format!(
+                                "{}_{}",
+                                scrap._type,
+                                scrap._name.to_owned()
+                            ))
+                            .unwrap()
+                            .param
+                            .clone();
+                        match datafromdb {
+                            None => {}
+                            Some(param) => {
+                                // Adds database tag if applicable.
+                                let scrap_data = sharedtypes::ScraperParam {
+                                    param_data: param,
+                                    param_type: sharedtypes::ScraperParamType::Database,
+                                };
+
+                                par_vec.push(scrap_data);
+                            }
+                        }
+                    }
+
+                    let sc = JobScraper {
+                        site: job.site.clone().unwrap(),
+                        param: par_vec,
+                        original_param: job.param.clone().unwrap(),
+                        job_type: job.jobtype,
+                        //job_ref: job.clone(),
+                    };
+                    job_ref_hash.insert(sc.clone(), job);
+                    job_params.insert(sc);
+                }
+                dbg!(&job_params);
+
+                for job in &job_params.clone() {
+                    //dbg!(&job);
+                    //dbg!("w"); // TODO need to fix the URL dumping logic
+                    //
+                    //// Loops through jobs and adds them into the job_params
+
+                    let urlload = match job.job_type {
+                        sharedtypes::DbJobType::Params => {
+                            scraper::url_dump(&libloading, &job.param)
+                        }
+                        sharedtypes::DbJobType::Plugin => {
+                            continue;
+                        }
+                        sharedtypes::DbJobType::FileUrl => {
+                            let parpms: Vec<String> = job
+                                .original_param
+                                .split_whitespace()
+                                .map(str::to_string)
+                                .collect();
+                            parpms
+                        }
+                        sharedtypes::DbJobType::Scraper => {
+                            vec![job.original_param.clone()]
+                        }
+                    };
+                    //let urlload = scraper::url_dump(&libloading, &job.param);
+
+                    //dbg!(&urlload);
+                    //dbg!(&job);
+
                     let mut ratelimit =
                         download::ratelimiter_create(scrap._ratelimit.0, scrap._ratelimit.1);
 
@@ -255,15 +283,23 @@ impl Worker {
                             };
 
                             // debug loop for dumping all the gubbins.
-                            for fi in out_st.file.iter() {
+                            /*for fi in out_st.file.iter() {
                                 for ta in fi.tag_list.iter() {
                                     //println!("dbgloop {:?}", ta);
                                 }
-                            }
-                            for fog in out_st.tag.iter() {
-                                println!("dbgtagloop {:?}", fog);
+                            }*/
+                            //for fog in out_st.tag.iter() {
+                            //println!("dbgtagloop {:?}", fog);
+                            //}
+                            // Handles any additional downloads we get from the previos call
+                            for tag in out_st.tag {
+                                let to_parse = parse_tags(&mut db, tag, None);
+                                for each in to_parse {
+                                    job_params.insert(each);
+                                }
                             }
 
+                            //dbg!(&out_st.tag);
                             // Represents our tag's to be associated with a file. per file
                             for file in out_st.file {
                                 //dbg!(&file.source_url);
@@ -377,19 +413,21 @@ impl Worker {
                                             let tag = taz;
 
                                             // Adds namespace if not exist
-                                            let namespace_id = {
+                                            /*let namespace_id = {
                                                 let unwrappydb = &mut db.lock().unwrap();
                                                 unwrappydb.namespace_add(
                                                     tag.namespace.name.clone(),
                                                     tag.namespace.description.clone(),
                                                     true,
                                                 )
-                                            };
-                                            let urls = parse_tags(&mut db, tag, Some(fileid));
-                                            if !urls.is_empty() {
+                                            };*/
+                                            let urls_scrap = parse_tags(&mut db, tag, Some(fileid));
+                                            for urlz in urls_scrap {
                                                 //let url_job = JobScraper {};
+                                                //dbg!(&urlz);
+                                                job_params.insert(urlz);
+                                                //      job_ref_hash.insert(urlz, job);
                                             }
-                                            dbg!(&urls);
                                         }
                                     }
                                 }
@@ -403,11 +441,17 @@ impl Worker {
                         //let unwrappydb = &mut db.lock().unwrap();
                         //unwrappydb.transaction_flush();
                     }
-                    dbg!("End of liip");
+                    println!("End of loop");
                     let unwrappydb = &mut db.lock().unwrap();
-                    dbg!(&job);
+                    //dbg!(&job);
                     unwrappydb.del_from_jobs_table(&"param".to_owned(), &job.original_param);
                     job_params.remove(&job);
+
+                    if let Some(jobscr) = job_ref_hash.get(job) {
+                        let index = jblist.iter().position(|r| r == jobscr).unwrap();
+                        jblist.remove(index);
+                    }
+
                     unwrappydb.transaction_flush();
                 }
 
@@ -433,19 +477,20 @@ fn parse_tags(
     db: &mut Arc<Mutex<database::Main>>,
     tag: sharedtypes::TagObject,
     file_id: Option<usize>,
-) -> HashSet<String> {
-    let mut url_return: HashSet<String> = HashSet::new();
+) -> HashSet<sharedtypes::JobScraper> {
+    let mut url_return: HashSet<sharedtypes::JobScraper> = HashSet::new();
 
     let unwrappy = &mut db.lock().unwrap();
 
     //dbg!(&tag);
 
-    let namespace_id = unwrappy.namespace_add(tag.namespace.name, tag.namespace.description, true);
-
     match tag.tag_type {
         sharedtypes::TagType::Normal => {
             //println!("Adding tag: {} {:?}", tag.tag, &file_id);
             // We've recieved a normal tag. Will parse.
+
+            let namespace_id =
+                unwrappy.namespace_add(tag.namespace.name, tag.namespace.description, true);
             let tag_id = unwrappy.tag_add(tag.tag, namespace_id, true, None);
             match tag.relates_to {
                 None => {
@@ -474,9 +519,9 @@ fn parse_tags(
             }
             url_return
         }
-        sharedtypes::TagType::ParseUrl => {
+        sharedtypes::TagType::ParseUrl(jobscraped) => {
             // Returns the url that we need to parse.
-            url_return.insert(tag.tag);
+            url_return.insert(jobscraped);
             url_return
         }
         sharedtypes::TagType::Special => {

@@ -43,7 +43,7 @@ pub enum ScraperReturn {
 #[derive(Debug)]
 pub struct ScraperObject {
     pub file: HashSet<FileObject>,
-    pub tag: HashSet<TagObject>
+    pub tag: HashSet<TagObject>,
 }
 
 ///
@@ -96,13 +96,26 @@ pub struct PluginRelatesObj {
 ///
 /// Database Jobs object
 ///
-#[derive(Debug, Clone)]
+#[derive(Debug, Hash, Eq, PartialEq, Clone)]
 pub struct DbJobsObj {
     pub time: Option<usize>,
     pub reptime: Option<usize>,
     pub site: Option<String>,
     pub param: Option<String>,
+    pub jobtype: DbJobType,
     pub committype: Option<CommitType>,
+}
+
+///
+/// Type of job in db.
+/// Will be used to confirm what the scraping logic should work.
+///
+#[derive(Debug, Copy, Hash, Eq, PartialEq, Clone, EnumIter, Display)]
+pub enum DbJobType {
+    Params,  // Default recognises this as a param query.
+    Plugin,  // Runs a plugin with the data inside it.
+    FileUrl, // This is a url containing files
+    Scraper, // Sends this to a scraper directly.
 }
 
 ///
@@ -220,6 +233,15 @@ pub struct DbPluginParentsObj {
 }
 
 ///
+/// Namespace for plugin objects
+///
+#[derive(Debug, PartialEq)]
+pub struct DbPluginNamespace {
+    pub name: String,
+    pub description: Option<String>,
+}
+
+///
 /// Plugin output for the passed object
 ///
 #[derive(Debug)]
@@ -229,15 +251,14 @@ pub struct DBPluginOutput {
     pub relationship: Option<Vec<DbPluginRelationshipObj>>, // Adds a relationship into the DB.
     pub parents: Option<Vec<DbParentsObj>>, // Adds a parent object in db
     pub jobs: Option<Vec<DbJobsObj>>,       // Adds a job
-    pub namespace: Option<Vec<GenericNamespaceObj>>, // Adds a namespace
+    pub namespace: Option<Vec<DbPluginNamespace>>, // Adds a namespace
     pub file: Option<Vec<PluginFileObj>>,   // Adds a file into db
 }
 
 ///
 /// Represents one file
 ///
-#[derive(Debug)]
-#[derive(Eq, Hash, PartialEq)]
+#[derive(Debug, Eq, Hash, PartialEq)]
 pub struct FileObject {
     pub source_url: Option<String>,
     pub hash: Option<HashesSupported>, // Hash of file
@@ -261,7 +282,7 @@ pub struct TagObject {
 pub struct SubTag {
     pub namespace: GenericNamespaceObj,
     pub tag: String,
-    pub tag_type: TagType
+    pub tag_type: TagType,
 }
 #[derive(Debug, Eq, PartialEq, Hash, Clone)]
 pub struct GenericNamespaceObj {
@@ -272,15 +293,24 @@ pub struct GenericNamespaceObj {
 ///
 /// Tag Type object. Represents metadata for parser.
 ///
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone)]
 #[allow(dead_code)]
 #[derive(Eq, Hash, PartialEq)]
 pub enum TagType {
-    Normal,   // Normal tag.
-    ParseUrl, // Scraper to download and parse a new url.
+    Normal,               // Normal tag.
+    ParseUrl(JobScraper), // Scraper to download and parse a new url.
     Special, // Probably will add support for something like file descriptors or plugin specific things.
+             //
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct JobScraper {
+    pub site: String,
+    pub param: Vec<ScraperParam>,
+    pub original_param: String,
+    pub job_type: DbJobType,
+    //pub job_ref: DbJobsObj,
+}
 ///
 /// Supported types of hashes in Rust Hydrus
 ///
@@ -451,6 +481,20 @@ pub fn stringto_search_type(into: &String) -> Search {
         panic += format!("{} ", each).as_str();
     }
 
+    panic!("{}", panic);
+}
+
+#[allow(dead_code)]
+pub fn stringto_jobtype(into: &String) -> DbJobType {
+    for each in DbJobType::iter() {
+        if into == &each.to_string() {
+            return each;
+        }
+    }
+    let mut panic = "Could not format DbJobType as one of:".to_string();
+    for each in DbJobType::iter() {
+        panic += format!("{} ", each).as_str();
+    }
     panic!("{}", panic);
 }
 // let temp = AllFields::JobsAdd(JobsAdd{Site: "yeet".to_owned(), Query: "yeet".to_owned(), Time: "Lo".to_owned(), Loop: "yes".to_owned(), ReCommit: "Test".
