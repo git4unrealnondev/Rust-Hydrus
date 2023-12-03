@@ -297,10 +297,26 @@ pub struct GenericNamespaceObj {
 #[allow(dead_code)]
 #[derive(Eq, Hash, PartialEq)]
 pub enum TagType {
-    Normal,               // Normal tag.
-    ParseUrl(JobScraper), // Scraper to download and parse a new url.
+    Normal,                         // Normal tag.
+    ParseUrl((JobScraper, SkipIf)), // Scraper to download and parse a new url.
     Special, // Probably will add support for something like file descriptors or plugin specific things.
              //
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Tag {
+    pub tag: String,
+    pub namespace: GenericNamespaceObj,
+    pub needsrelationship: bool, // If theirs a relationship then we will not add it to the checkers.
+}
+
+///
+/// Used for skipping a ParseUrl in TagType if a tag exists.
+///
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum SkipIf {
+    Tag(Tag),
+    None,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

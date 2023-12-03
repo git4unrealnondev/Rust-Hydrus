@@ -184,7 +184,7 @@ impl NewinMemDB {
         //let test= self._namespace_id_data;
         let mut temp: Vec<usize> = Vec::new();
         for each in self._namespace_id_data.keys() {
-            temp.push(each.clone())
+            temp.push(*each);
         }
         return temp;
     }
@@ -354,7 +354,12 @@ impl NewinMemDB {
             None => {
                 self._file_max += 1;
             }
-            Some(_) => {}
+            Some(file_id) => {
+                if file_id >= self._file_max {
+                    self._file_max = file_id;
+                    self._file_max += 1;
+                }
+            }
         }
 
         self._file_name_id.insert(file.hash.to_owned(), id);

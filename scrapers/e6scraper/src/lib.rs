@@ -218,7 +218,7 @@ impl InternalScraper {
             _version: 0,
             _name: "e6scraper".to_string(),
             _sites: vec_of_strings!("e6", "e621", "e621.net"),
-            _ratelimit: (1, Duration::from_secs(2)),
+            _ratelimit: (1, Duration::from_secs(1)),
             _type: sharedtypes::ScraperType::Automatic,
         }
     }
@@ -525,12 +525,19 @@ fn parse_pools(
                 namespace: nsobjplg(&NsIdent::PoolId),
                 relates_to: None,
                 tag: multpool["id"].to_string(),
-                tag_type: sharedtypes::TagType::ParseUrl(sharedtypes::JobScraper {
-                    site: "e6".to_string(),
-                    param: Vec::new(),
-                    original_param: format!("https://e621.net/posts.json?tags=id:{}", postids),
-                    job_type: sharedtypes::DbJobType::Scraper,
-                }),
+                tag_type: sharedtypes::TagType::ParseUrl((
+                    (sharedtypes::JobScraper {
+                        site: "e6".to_string(),
+                        param: Vec::new(),
+                        original_param: format!("https://e621.net/posts.json?tags=id:{}", postids),
+                        job_type: sharedtypes::DbJobType::Scraper,
+                    }),
+                    sharedtypes::SkipIf::Tag(sharedtypes::Tag {
+                        tag: postids.to_string(),
+                        namespace: nsobjplg(&NsIdent::FileId),
+                        needsrelationship: true,
+                    }),
+                )),
             }); // Relates the file id to pool
             tag.insert(sharedtypes::TagObject {
                 namespace: nsobjplg(&NsIdent::PoolId),
@@ -610,7 +617,7 @@ pub fn parser(params: &String) -> Result<sharedtypes::ScraperObject, sharedtypes
 
     // Write a &str in the file (ignoring the result).
     //writeln!(&mut file, "{}", js.to_string()).unwrap();
-    println!("Parsing");
+    //println!("Parsing");
     if js["posts"].is_empty() & !js["posts"].is_null() {
         //dbg!(js);
         return Err(sharedtypes::ScraperReturn::Nothing);
@@ -709,12 +716,15 @@ pub fn parser(params: &String) -> Result<sharedtypes::ScraperObject, sharedtypes
                     },
                     relates_to: None,
                     tag: parse_url.clone(),
-                    tag_type: sharedtypes::TagType::ParseUrl(sharedtypes::JobScraper {
-                        site: "e6".to_string(),
-                        param: Vec::new(),
-                        original_param: parse_url,
-                        job_type: sharedtypes::DbJobType::Scraper,
-                    }),
+                    tag_type: sharedtypes::TagType::ParseUrl((
+                        sharedtypes::JobScraper {
+                            site: "e6".to_string(),
+                            param: Vec::new(),
+                            original_param: parse_url,
+                            job_type: sharedtypes::DbJobType::Scraper,
+                        },
+                        sharedtypes::SkipIf::None,
+                    )),
                 });
             }
         }
@@ -777,14 +787,14 @@ pub fn parser(params: &String) -> Result<sharedtypes::ScraperObject, sharedtypes
                 let base = "https://static1.e621.net/data";
                 let md5 = js["posts"][inc]["file"]["md5"].to_string();
                 let ext = js["posts"][inc]["file"]["ext"].to_string();
-                dbg!(format!(
-                    "{}/{}/{}/{}.{}",
-                    base,
-                    &md5[0..2],
-                    &md5[2..4],
-                    &md5,
-                    &ext
-                ));
+                //dbg!(format!(
+                //    "{}/{}/{}/{}.{}",
+                //    base,
+                //    &md5[0..2],
+                //    &md5[2..4],
+                //    &md5,
+                //    &ext
+                //));
                 format!("{}/{}/{}/{}.{}", base, &md5[0..2], &md5[2..4], &md5, ext)
             }
         };

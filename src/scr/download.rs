@@ -32,7 +32,11 @@ pub fn ratelimiter_create(number: u64, duration: Duration) -> Ratelimiter {
     );
 
     // The wrapper that implements ratelimiting
-    Ratelimiter::builder(number, duration).build().unwrap()
+    Ratelimiter::builder(number, duration)
+        .max_tokens(number)
+        .initial_available(number)
+        .build()
+        .unwrap()
 }
 
 pub fn ratelimiter_wait(ratelimit_object: &mut Ratelimiter) {

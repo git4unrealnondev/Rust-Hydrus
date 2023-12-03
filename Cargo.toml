@@ -44,6 +44,6 @@ clap = { version = "4.4.8", features = ["derive", "color", "cargo"] }
 #opt-level = 3
 lto=true
 codegenunits=1
-strip = false
+strip = true
 panic = "abort"
-debug = true
+debug = false
