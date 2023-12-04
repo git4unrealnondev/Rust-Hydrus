@@ -8,7 +8,7 @@ edition = "2021"
 [dependencies]
 #axum = {version="0.6.20", optional=false }
 futures = "0.3.28"
-leptos = { version = "0.5.1" ,features = ["csr"] }
+leptos = { version = "0.5.1", features = ["ssr", "nightly"] }
 #leptos_axum = { version = "0.5.2", default-features = false, features = ["wasm"], optional=false}
 nohash-hasher = "0.2.0"
 pipe = { version = "0.4.0", features = ["bidirectional"] }
@@ -32,18 +32,6 @@ actix-files = {version="0.6.2", optional=false}
 actix-web = {version="4.4.0", optional=false}
 
 # Defines a size-optimized profile for the WASM bundle in release mode
-[features]
-#hydrate = ["leptos/hydrate", "leptos_meta/hydrate", "leptos_router/hydrate"]
-#ssr = [
-#    "dep:tokio",
-#    "dep:tower",
-#    "dep:tower-http",
-#    "leptos/ssr",
-#    "leptos_meta/ssr",
-#    "leptos_router/ssr",
-#]
-
-
 [lib]
 crate-type = ["dylib"]
 
@@ -105,12 +93,11 @@ browserquery = "defaults"
 watch = false
 
 # The environment Leptos will run in, usually either "DEV" or "PROD"
-env = "DEV"
+env = "PROD"
 
 # The features to use when compiling the bin target
 #
 # Optional. Can be over-ridden with the command line parameter --bin-features
-bin-features = ["ssr"]
 
 # If the --no-default-features flag should be used when compiling the bin target
 #
@@ -120,7 +107,7 @@ bin-default-features = false
 # The features to use when compiling the lib target
 #
 # Optional. Can be over-ridden with the command line parameter --lib-features
-#lib-features = ["hydrate"]
+lib-features = ["hydrate"]
 
 # If the --no-default-features flag should be used when compiling the lib target
 #

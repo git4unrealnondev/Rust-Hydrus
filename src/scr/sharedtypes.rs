@@ -47,6 +47,31 @@ pub struct ScraperObject {
 }
 
 ///
+/// Defines what we need to reimport a file to derive a source URL.
+/// Currently only support hash.
+///
+pub struct ScraperFileRegen {
+    pub hash: HashesSupported,
+}
+
+///
+/// Input for the scraper to parse the info from the system.
+///
+pub struct ScraperFileInput {
+    pub hash: Option<String>,
+    pub ext: Option<String>,
+}
+
+///
+/// Defines what data the scraper will return.
+/// Will likely be a source URL or if we can't parse from hash.
+///
+#[derive(Debug)]
+pub struct ScraperFileReturn {
+    pub tag: Option<GenericNamespaceObj>,
+}
+
+///
 /// File object
 /// should of done this sooner lol
 ///

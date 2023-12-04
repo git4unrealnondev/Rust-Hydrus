@@ -22,6 +22,8 @@ mod jobs;
 mod logging;
 #[path = "./scr/plugins.rs"]
 mod plugins;
+#[path = "./scr/reimport.rs"]
+mod reimport;
 #[path = "./scr/scraper.rs"]
 mod scraper;
 #[path = "./scr/sharedtypes.rs"]
@@ -138,7 +140,6 @@ fn main() {
 
     //Inits Database.
     let mut data = makedb(dbloc);
-    let all_field = cli::main(&mut data);
     let mut alt_connection = database::dbinit(&dbloc.to_string()); // NOTE ONLY USER FOR LOADING DB DYNAMICALLY
     data.load_table(&sharedtypes::LoadDBTable::Settings);
     data.transaction_flush();
@@ -168,6 +169,7 @@ fn main() {
         "so".to_string(),
     );
 
+    let all_field = cli::main(&mut data, &mut scraper_manager);
     data.load_table(&sharedtypes::LoadDBTable::Jobs);
     let mut jobmanager = jobs::Jobs::new(scraper_manager);
 
@@ -329,7 +331,7 @@ fn main() {
     )));
 
     // Creates a threadhandler that manages callable threads.
-    let mut threadhandler = threading::threads::new();
+    let mut threadhandler = threading::Threads::new();
 
     pluginmanager.lock().unwrap().plugin_on_start();
 

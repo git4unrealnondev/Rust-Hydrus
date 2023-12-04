@@ -1,6 +1,5 @@
 use super::plugins::PluginManager;
 //extern crate urlparse;
-use super::database;
 use super::sharedtypes;
 use crate::file;
 use bytes::Bytes;
@@ -11,14 +10,16 @@ use reqwest::Client;
 use sha1;
 use sha2::Digest as sha2Digest;
 use sha2::Sha512;
-use std::fs;
 use std::io;
+use std::io::BufReader;
 use std::io::Cursor;
+use std::io::Read;
 use std::time::Duration;
 use url::Url;
 extern crate reqwest;
 use async_std::task;
 use ratelimit::Ratelimiter;
+use std::fs::File;
 use std::sync::{Arc, Mutex};
 use std::thread;
 
@@ -251,14 +252,19 @@ pub async fn dlfile_new(
     (hash, file_ext)
 }
 
-pub fn hash_file(filename: &String) -> String {
-    let mut hasher = Sha512::new();
-    let mut file = fs::File::open(filename).unwrap();
+///
+/// Hashes file from location string with specified hash into the hash of the file.
+///
+pub fn hash_file(filename: &String, hash: &sharedtypes::HashesSupported) -> (String, Bytes) {
+    let f = File::open(filename).unwrap();
+    let mut reader = BufReader::new(f);
+    let mut buf = Vec::new();
 
-    let _bytes_written = io::copy(&mut file, &mut hasher).unwrap();
-    let hash_bytes = hasher.finalize();
+    reader.read_to_end(&mut buf).unwrap();
+    let b = Bytes::from(buf);
+    let hash_self = hash_bytes(&b, hash);
 
-    format!("{:X}", hash_bytes)
+    (hash_self.0, b)
 }
 
 pub fn getfinpath(location: &String, hash: &String) -> String {

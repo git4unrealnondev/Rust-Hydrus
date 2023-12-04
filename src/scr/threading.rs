@@ -23,27 +23,19 @@ use std::sync::Mutex;
 use std::thread;
 use std::time::Duration;
 
-//use tokio::runtime::Runtime;
-
-pub struct threads {
+pub struct Threads {
     _workers: Vec<Worker>,
-    //_runtime: Runtime,
 }
 
 ///
 /// Holder for workers.
 /// Workers manage their own threads.
 ///
-impl threads {
+impl Threads {
     pub fn new() -> Self {
         let workers = Vec::new();
 
-        //let rt = Runtime::new().unwrap();
-
-        threads {
-            _workers: workers,
-            //_runtime: rt,
-        }
+        Threads { _workers: workers }
     }
 
     ///
@@ -130,10 +122,6 @@ impl Worker {
         let mut jblist = jobs.clone();
         let manageeplugin = pluginmanager;
         let scrap = scraper.clone();
-
-        //let mut ratelimit_hash: HashMap<Vec<String>, Ratelimiter> = HashMap::new();
-
-        dbg!(&jobs);
 
         let thread = thread::spawn(move || {
             let mut job_params: HashSet<JobScraper> = HashSet::new();
@@ -302,11 +290,11 @@ impl Worker {
                                                 Some("Source URL for a file.".to_string()),
                                                 true,
                                             );
-                                            log::info!(
-                                                "Adding namespace {} with an id {} due to not existing.",
-                                                "source_url",
-                                                "0"
-                                            );
+                                            //log::info!(
+                                            //    "Adding namespace {} with an id {} due to not existing.",
+                                            //    "source_url",
+                                            //    "0"
+                                            //);
                                             source_url_id = unwrappydb
                                                 .namespace_get(&"source_url".to_string())
                                                 .cloned();
@@ -372,6 +360,7 @@ impl Worker {
                                                 let file_id = unwrappydb
                                                     .relationship_get_one_fileid(&url_id)
                                                     .unwrap();
+
                                                 // TODO nned to check if file exists by id incase something breaks.
                                                 unwrappydb.file_get_id(file_id).unwrap();
 

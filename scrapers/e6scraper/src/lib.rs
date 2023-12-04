@@ -48,6 +48,29 @@ pub enum NsIdent {
     General,
 }
 
+#[no_mangle]
+fn scraper_file_regen() -> sharedtypes::ScraperFileRegen {
+    sharedtypes::ScraperFileRegen {
+        hash: sharedtypes::HashesSupported::Md5("".to_string()),
+    }
+}
+
+#[no_mangle]
+fn scraper_file_return(inp: &sharedtypes::ScraperFileInput) -> sharedtypes::SubTag {
+    let base = "https://static1.e621.net/data";
+    let md5 = inp.hash.clone().unwrap();
+    let ext = inp.ext.clone().unwrap();
+    let url = format!("{}/{}/{}/{}.{}", base, &md5[0..2], &md5[2..4], &md5, ext);
+    sharedtypes::SubTag {
+        namespace: sharedtypes::GenericNamespaceObj {
+            name: "source_url".to_string(),
+            description: None,
+        },
+        tag: url,
+        tag_type: sharedtypes::TagType::Normal,
+    }
+}
+
 fn subgen(name: &NsIdent, tag: String, ttype: sharedtypes::TagType) -> sharedtypes::SubTag {
     sharedtypes::SubTag {
         namespace: nsobjplg(name),
@@ -787,14 +810,6 @@ pub fn parser(params: &String) -> Result<sharedtypes::ScraperObject, sharedtypes
                 let base = "https://static1.e621.net/data";
                 let md5 = js["posts"][inc]["file"]["md5"].to_string();
                 let ext = js["posts"][inc]["file"]["ext"].to_string();
-                //dbg!(format!(
-                //    "{}/{}/{}/{}.{}",
-                //    base,
-                //    &md5[0..2],
-                //    &md5[2..4],
-                //    &md5,
-                //    &ext
-                //));
                 format!("{}/{}/{}/{}.{}", base, &md5[0..2], &md5[2..4], &md5, ext)
             }
         };

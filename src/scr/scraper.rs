@@ -156,6 +156,31 @@ impl ScraperManager {
     pub fn returnlibloading(&self, scraper: &InternalScraper) -> &libloading::Library {
         &self._library[scraper]
     }
+
+    pub fn return_libloading_string(&self, input: &String) -> Option<&libloading::Library> {
+        for each in self._library.keys() {
+            if each._sites.contains(input) {
+                return Some(self._library.get(each).unwrap());
+            }
+        }
+        None
+    }
+}
+
+pub fn ScraperFileRegen(libloading: &libloading::Library) -> sharedtypes::ScraperFileRegen {
+    let temp: libloading::Symbol<unsafe extern "C" fn() -> sharedtypes::ScraperFileRegen> =
+        unsafe { libloading.get(b"scraper_file_regen\0").unwrap() };
+    unsafe { temp() }
+}
+
+pub fn ScraperFileRetrun(
+    libloading: &libloading::Library,
+    regen: &sharedtypes::ScraperFileInput,
+) -> sharedtypes::SubTag {
+    let temp: libloading::Symbol<
+        unsafe extern "C" fn(&sharedtypes::ScraperFileInput) -> sharedtypes::SubTag,
+    > = unsafe { libloading.get(b"scraper_file_return\0").unwrap() };
+    unsafe { temp(regen) }
 }
 
 pub fn cookie_need(libloading: &libloading::Library) -> (sharedtypes::ScraperType, String) {

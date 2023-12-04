@@ -32,8 +32,20 @@ pub enum TasksStruct {
     /// Database related tasks
     #[clap(subcommand)]
     Database(Database),
+    /// Reimports a directory based on scraper.
+    #[clap(subcommand)]
+    Reimport(Reimport),
+}
+#[derive(Debug, Parser)]
+pub struct DirectoryLocation {
+    pub location: String,
+    pub site: String,
 }
 
+#[derive(Debug, Subcommand)]
+pub enum Reimport {
+    DirectoryLocation(DirectoryLocation),
+}
 #[derive(Debug, Subcommand)]
 pub enum Database {
     #[clap(subcommand)]

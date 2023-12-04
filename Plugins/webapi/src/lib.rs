@@ -31,9 +31,8 @@ pub fn return_info() -> sharedtypes::PluginInfo {
         }),
     }
 }
-
-#[cfg(feature = "ssr")]
 #[no_mangle]
+#
 pub fn on_start(reader: &mut os_pipe::PipeReader, writer: &mut os_pipe::PipeWriter) {
     task::block_on(call());
 }
@@ -47,7 +46,6 @@ fn get_current_working_dir() -> std::io::Result<PathBuf> {
     use std::env;
     env::current_dir()
 }
-#[cfg(feature = "ssr")]
 #[actix_web::main]
 async fn call() -> Server {
     use actix_files::Files;

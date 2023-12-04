@@ -71,7 +71,10 @@ pub fn import_files(
             println!("Path: {} Doesn't exist. Exiting. Check logs", &row.path);
             continue;
         }
-        let hash = download::hash_file(&row.path);
+        let (hash, _b) = download::hash_file(
+            &row.path,
+            &sharedtypes::HashesSupported::Sha256("".to_string()),
+        );
 
         let hash_exists = db.file_get_hash(&hash);
 

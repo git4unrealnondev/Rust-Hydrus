@@ -1,10 +1,14 @@
 extern crate clap;
+use rayon::prelude::*;
+use std::collections::HashSet;
+use std::path::Path;
 //use std::str::pattern::Searcher;
 
 use std::{str::FromStr, task::Wake};
 
+use crate::download;
 use crate::{
-    database, logging, pause,
+    database, logging, pause, scraper,
     sharedtypes::{self, AllFields, JobsAdd, JobsRemove},
 };
 use clap::{Arg, Parser};
@@ -18,7 +22,7 @@ mod cli_structs;
 ///
 /// Returns the main argument and parses data.
 ///
-pub fn main(data: &mut database::Main) {
+pub fn main(data: &mut database::Main, scraper: &mut scraper::ScraperManager) {
     let args = cli_structs::MainWrapper::parse();
 
     if let None = &args.a {
@@ -117,6 +121,103 @@ pub fn main(data: &mut database::Main) {
             }
         },
         cli_structs::test::Tasks(taskstruct) => match taskstruct {
+            cli_structs::TasksStruct::Reimport(reimp) => match reimp {
+                cli_structs::Reimport::DirectoryLocation(loc) => {
+                    if !Path::new(&loc.location).exists() {
+                        println!("Couldn't find location: {}", &loc.location);
+                        return;
+                    }
+                    // Loads the scraper info for parsing.
+                    let scraperlibrary = scraper.return_libloading_string(&loc.site);
+                    let libload = match scraperlibrary {
+                        None => {
+                            println!("Cannot find a loaded scraper. {}", &loc.site);
+                            return;
+                        }
+                        Some(load) => load,
+                    };
+                    data.load_table(&sharedtypes::LoadDBTable::Tags);
+                    data.load_table(&sharedtypes::LoadDBTable::Files);
+                    data.load_table(&sharedtypes::LoadDBTable::Relationship);
+
+                    let mut failedtoparse: HashSet<String> = HashSet::new();
+
+                    let FileRegen = crate::scraper::ScraperFileRegen(libload);
+
+                    std::env::set_var("RAYON_NUM_THREADS", "50");
+
+                    println!("Found location: {} Starting to process.", &loc.location);
+                    //dbg!(&loc.site, &loc.location);
+                    let mut cnt = 0;
+                    'walkloop: for each in jwalk::WalkDir::new(&loc.location)
+                        .into_iter()
+                        .filter_map(|e| e.ok())
+                        .filter(|z| z.file_type().is_file())
+                    {
+                        //println!("{}", each.path().display());
+                        //println!("On file: {}", cnt);
+                        let (fhist, b) = download::hash_file(
+                            &each.path().display().to_string(),
+                            &FileRegen.hash,
+                        );
+
+                        println!("File Hash: {}", &fhist);
+                        // Tries to infer the type from the ext.
+                        let ext = infer::get(&b);
+
+                        // Error handling if we can't parse the filetyp
+                        let ext = match ext {
+                            None => {
+                                failedtoparse.insert(each.path().display().to_string());
+
+                                continue 'walkloop;
+                            }
+                            Some(ex) => ex,
+                        };
+                        // parses the info into something the we can use for the scraper
+                        let scraperinput = sharedtypes::ScraperFileInput {
+                            hash: Some(fhist),
+                            ext: Some(ext.extension().to_string()),
+                        };
+
+                        let tag = crate::scraper::ScraperFileRetrun(libload, &scraperinput);
+                        // gets sha 256 from the file.
+                        let (sha2, _a) = download::hash_bytes(
+                            &b,
+                            &sharedtypes::HashesSupported::Sha256("".to_string()),
+                        );
+                        let filesloc = data
+                            .settings_get_name(&"FilesLoc".to_string())
+                            .unwrap()
+                            .param
+                            .as_ref()
+                            .unwrap()
+                            .to_owned();
+                        // Adds data into db
+                        let fid = data.file_add(
+                            None,
+                            &sha2,
+                            &ext.extension().to_string(),
+                            &filesloc,
+                            true,
+                        );
+                        let nid =
+                            data.namespace_add(tag.namespace.name, tag.namespace.description, true);
+                        let tid = data.tag_add(tag.tag, nid, true, None);
+                        data.relationship_add(fid, tid, true);
+                        cnt += 1;
+                        //println!("FIle: {}", each.path().display());
+                    }
+                    data.transaction_flush();
+                    println!("done");
+                    if failedtoparse.len() >= 1 {
+                        println!("We've got failed items.: {}", failedtoparse.len());
+                        for ke in failedtoparse.iter() {
+                            println!("{}", ke);
+                        }
+                    }
+                }
+            },
             cli_structs::TasksStruct::Database(db) => {
                 match db {
                     cli_structs::Database::CompressDatabase => {

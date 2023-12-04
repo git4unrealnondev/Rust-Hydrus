@@ -97,7 +97,7 @@ impl Jobs {
     pub fn jobs_run_new(
         &mut self,
         adb: &mut Arc<Mutex<database::Main>>,
-        thread: &mut threading::threads,
+        thread: &mut threading::Threads,
         alt_connection: &mut Connection,
         pluginmanager: Arc<Mutex<PluginManager>>,
     ) {

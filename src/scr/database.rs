@@ -2203,6 +2203,9 @@ impl Main {
                     let mut file_to_add: HashSet<usize> = HashSet::new();
                     match file_listop {
                         None => {
+                            self.tag_remove(&tid);
+                            self.tag_add(nns_cln.name, nns_cln.namespace, true, Some(lastvalid));
+                            lastvalid += 1;
                             continue;
                         }
                         Some(file_list) => {
