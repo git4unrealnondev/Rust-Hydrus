@@ -913,7 +913,8 @@ impl Main {
                             reptime: row.get(1).unwrap(),
                             site: row.get(2).unwrap(),
                             param: row.get(3).unwrap(),
-                            jobtype: sharedtypes::stringto_jobtype(&row.get(5).unwrap()),
+                            jobtype: sharedtypes::DbJobType::Params,
+                            //jobtype: sharedtypes::stringto_jobtype(&row.get(5).unwrap()),
                             committype: Some(sharedtypes::stringto_commit_type(
                                 &row.get(4).unwrap(),
                             )),

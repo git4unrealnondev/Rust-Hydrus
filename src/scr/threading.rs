@@ -186,7 +186,7 @@ impl Worker {
                     job_ref_hash.insert(sc.clone(), job);
                     job_params.insert(sc);
                 }
-                dbg!(&job_params);
+                // dbg!(&job_params);
 
                 for job in &job_params.clone() {
                     let urlload = match job.job_type {
@@ -398,7 +398,7 @@ impl Worker {
                         //let unwrappydb = &mut db.lock().unwrap();
                         //unwrappydb.transaction_flush();
                     }
-                    println!("End of loop");
+                    //println!("End of loop");
                     let unwrappydb = &mut db.lock().unwrap();
                     //dbg!(&job);
                     unwrappydb.del_from_jobs_table(&"param".to_owned(), &job.original_param);
