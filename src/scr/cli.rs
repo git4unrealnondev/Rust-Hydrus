@@ -79,6 +79,7 @@ pub fn main(data: &mut database::Main, scraper: &mut scraper::ScraperManager) {
             cli_structs::SearchStruct::tag(tag) => {}
             cli_structs::SearchStruct::hash(hash) => {
                 data.load_table(&sharedtypes::LoadDBTable::Files);
+                data.load_table(&sharedtypes::LoadDBTable::Namespace);
                 data.load_table(&sharedtypes::LoadDBTable::Relationship);
                 data.load_table(&sharedtypes::LoadDBTable::Tags);
                 let file_id = data.file_get_hash(&hash.hash);
@@ -106,9 +107,12 @@ pub fn main(data: &mut database::Main, scraper: &mut scraper::ScraperManager) {
                                             );
                                         }
                                         Some(tagnns) => {
+                                            let ns = data
+                                                .namespace_get_string(&tagnns.namespace)
+                                                .unwrap();
                                             println!(
-                                                "Tag: {} namespace: {}",
-                                                tagnns.name, tagnns.namespace
+                                                "ID {} Tag: {} namespace: {}",
+                                                tid, tagnns.name, ns.name
                                             );
                                         }
                                     }
@@ -117,7 +121,6 @@ pub fn main(data: &mut database::Main, scraper: &mut scraper::ScraperManager) {
                         }
                     }
                 }
-                panic!();
             }
         },
         cli_structs::test::Tasks(taskstruct) => match taskstruct {
@@ -220,6 +223,11 @@ pub fn main(data: &mut database::Main, scraper: &mut scraper::ScraperManager) {
             },
             cli_structs::TasksStruct::Database(db) => {
                 match db {
+                    cli_structs::Database::CheckInMemdb => {
+                        data.load_table(&sharedtypes::LoadDBTable::Tags);
+                        pause();
+                    }
+
                     cli_structs::Database::CompressDatabase => {
                         data.condese_relationships_tags();
                     }

@@ -1,5 +1,4 @@
 #![forbid(unsafe_code)]
-
 use crate::jobs;
 use crate::logging;
 use crate::pause;
@@ -8,6 +7,7 @@ use crate::sharedtypes::DbJobsObj;
 use crate::time_func;
 use ahash::{AHashMap, AHashSet, AHasher};
 use log::{error, info};
+use nohash::{IntMap, IntSet};
 pub use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, ValueRef};
 pub use rusqlite::{params, types::Null, Connection, Result, Transaction};
 use std::borrow::BorrowMut;
@@ -272,7 +272,7 @@ impl Main {
     ///
     /// Wrapper
     ///
-    pub fn jobs_get_all(&self) -> &AHashMap<usize, sharedtypes::DbJobsObj> {
+    pub fn jobs_get_all(&self) -> &IntMap<usize, sharedtypes::DbJobsObj> {
         self._inmemdb.jobs_get_all()
     }
 
@@ -298,7 +298,7 @@ impl Main {
     ///
     ///
     ///
-    pub fn relationship_get_fileid(&self, tag: &usize) -> Option<&AHashSet<usize>> {
+    pub fn relationship_get_fileid(&self, tag: &usize) -> Option<&IntSet<usize>> {
         self._inmemdb.relationship_get_fileid(tag)
     }
 
@@ -306,7 +306,7 @@ impl Main {
         self._inmemdb.relationship_get_one_fileid(tag)
     }
 
-    pub fn relationship_get_tagid(&self, tag: &usize) -> Option<&AHashSet<usize>> {
+    pub fn relationship_get_tagid(&self, tag: &usize) -> Option<&IntSet<usize>> {
         self._inmemdb.relationship_get_tagid(tag)
     }
 
@@ -1690,6 +1690,13 @@ impl Main {
             Some(_) => {
                 // We've got an ID coming in will check if it exists.
                 let tag_id = self.tag_add_db(tagnns.name.clone(), &tagnns.namespace, id);
+                /* println!(
+                    "test: {} {} {:?} {}",
+                    &tag_id,
+                    tagnns.name.clone(),
+                    id.clone(),
+                    &tagnns.namespace
+                );*/
                 if addtodb {
                     self.tag_add_sql(
                         tag_id.clone(),

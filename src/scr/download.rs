@@ -142,10 +142,11 @@ pub async fn dlfile_new(
     file: &sharedtypes::FileObject,
     location: &String,
     pluginmanager: Arc<Mutex<PluginManager>>,
-) -> (String, String) {
+) -> Option<(String, String)> {
     let mut boolloop = true;
     let mut hash = String::new();
     let mut bytes: bytes::Bytes = Bytes::from(&b""[..]);
+    let mut cnt = 0;
     while boolloop {
         let mut hasher = Sha512::new();
 
@@ -197,6 +198,10 @@ pub async fn dlfile_new(
                     thread::sleep(time_dur);
                 }
             }
+            if cnt >= 3 {
+                return None;
+            }
+            cnt += 1;
         }
 
         hasher.update(&bytes.as_ref());
@@ -219,10 +224,14 @@ pub async fn dlfile_new(
             error!(
                 "Parser file: {} FAILED HASHCHECK: {} {}",
                 &parsedhash, status.0, status.1
-            )
+            );
+            cnt += 1;
         } else {
             info!("Parser returned: {} Got: {}", &parsedhash, status.0);
             //dbg!("Parser returned: {} Got: {}", &file.hash, status.0);
+        }
+        if cnt >= 3 {
+            return None;
         }
         boolloop = !status.1;
     }
@@ -249,7 +258,7 @@ pub async fn dlfile_new(
 
     println!("Downloaded hash: {}", &hash);
 
-    (hash, file_ext)
+    Some((hash, file_ext))
 }
 
 ///

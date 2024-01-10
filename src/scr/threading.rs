@@ -334,13 +334,19 @@ impl Worker {
                                                     &source, &location
                                                 ));
 
-                                                let (hash, file_ext) =
-                                                    task::block_on(download::dlfile_new(
-                                                        &client,
-                                                        &file,
-                                                        &location,
-                                                        manageeplugin.clone(),
-                                                    ));
+                                                let blopt = task::block_on(download::dlfile_new(
+                                                    &client,
+                                                    &file,
+                                                    &location,
+                                                    manageeplugin.clone(),
+                                                ));
+                                                let (hash, file_ext) = match blopt {
+                                                    None => {
+                                                        continue;
+                                                    }
+                                                    Some(blo) => blo,
+                                                };
+
                                                 let unwrappydb = &mut db.lock().unwrap();
                                                 let fileid = unwrappydb.file_add(
                                                     None, &hash, &file_ext, &location, true,

@@ -43,6 +43,8 @@ walkdir = "2.4.0"
 rayon = "1.8.0"
 jwalk = "0.8.1"
 infer = "0.15.0"
+nohash = "0.2.0"
+nohash-hasher = "0.2.0"
 
 [profile.release]
 #opt-level = 3

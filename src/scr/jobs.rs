@@ -62,19 +62,10 @@ impl Jobs {
         let hashjobs = db.jobs_get_all();
         let beans = self.scrapermanager.scraper_get();
         for each in hashjobs {
-            dbg!(
-                time_func::time_secs(),
-                each.1.time.unwrap(),
-                each.1.reptime.unwrap()
-            );
-            dbg!(time_func::time_secs());
             if time_func::time_secs() >= each.1.time.unwrap() + each.1.reptime.unwrap() {
-                dbg!("a");
                 for eacha in beans {
                     let dbsite = each.1.site.to_owned();
-                    dbg!(&dbsite, &eacha._sites);
                     if eacha._sites.contains(&dbsite.unwrap()) {
-                        dbg!("b");
                         self._jobref
                             .insert(*each.0, (each.1.to_owned(), eacha.to_owned()));
                     }

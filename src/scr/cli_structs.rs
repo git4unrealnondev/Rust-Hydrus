@@ -54,6 +54,7 @@ pub enum Database {
     RemoveWhereNot(NamespaceInfo),
     /// Compresses the databases tag & relationships. Will add parent support soon.
     CompressDatabase,
+    CheckInMemdb,
 }
 
 /// Removes a namespace, tags & relationships from db.

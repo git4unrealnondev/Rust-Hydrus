@@ -1,17 +1,10 @@
-use std::collections::HashMap;
-use std::collections::HashSet;
-use std::hash::BuildHasherDefault;
-
-use crate::jobs;
 use crate::logging;
-use crate::pause;
-use ahash::{AHashMap, AHashSet, AHasher};
-
 use crate::sharedtypes;
 use crate::sharedtypes::DbFileObj;
 use crate::sharedtypes::DbJobsObj;
-use crate::sharedtypes::DbTagObjCompatability;
-
+use std::collections::{HashMap, HashSet};
+//use hash::{HashMap, HashSet};
+use nohash::{IntMap, IntSet};
 pub enum TagRelateConjoin {
     Tag,
     Error,
@@ -20,31 +13,44 @@ pub enum TagRelateConjoin {
     TagAndRelate,
     None,
 }
+pub struct tes {
+    test: IntSet<usize>,
+}
+impl tes {
+    pub fn new() -> tes {
+        let mut te = IntSet::default();
+        let out = tes { test: te };
+        out
+    }
+    pub fn inc(&mut self, i: usize) {
+        self.test.insert(i);
+    }
+}
 
 pub struct NewinMemDB {
-    _tag_nns_id_data: AHashMap<usize, sharedtypes::DbTagNNS>,
-    _tag_nns_data_id: AHashMap<sharedtypes::DbTagNNS, usize>,
+    _tag_nns_id_data: IntMap<usize, sharedtypes::DbTagNNS>,
+    _tag_nns_data_id: HashMap<sharedtypes::DbTagNNS, usize>,
 
-    _settings_id_data: AHashMap<usize, sharedtypes::DbSettingObj>,
-    _settings_name_id: AHashMap<String, usize>,
+    _settings_id_data: IntMap<usize, sharedtypes::DbSettingObj>,
+    _settings_name_id: HashMap<String, usize>,
 
-    _parents_dual: AHashSet<usize>,
+    _parents_dual: HashSet<usize>,
 
-    _parents_tag_rel: AHashMap<usize, AHashSet<usize>>,
-    _parents_rel_tag: AHashMap<usize, AHashSet<usize>>,
+    _parents_tag_rel: IntMap<usize, IntSet<usize>>,
+    _parents_rel_tag: IntMap<usize, IntSet<usize>>,
 
-    _jobs_id_data: AHashMap<usize, sharedtypes::DbJobsObj>,
+    _jobs_id_data: IntMap<usize, sharedtypes::DbJobsObj>,
     //_jobs_name_id: HashMap<String, usize>,
-    _namespace_id_data: AHashMap<usize, sharedtypes::DbNamespaceObj>,
-    _namespace_name_id: AHashMap<String, usize>,
-    _namespace_id_tag: AHashMap<usize, AHashSet<usize>>,
+    _namespace_id_data: IntMap<usize, sharedtypes::DbNamespaceObj>,
+    _namespace_name_id: HashMap<String, usize>,
+    _namespace_id_tag: IntMap<usize, HashSet<usize>>,
 
-    _file_id_data: AHashMap<usize, sharedtypes::DbFileObj>,
-    _file_name_id: AHashMap<String, usize>,
+    _file_id_data: IntMap<usize, sharedtypes::DbFileObj>,
+    _file_name_id: HashMap<String, usize>,
 
-    _relationship_file_tag: AHashMap<usize, AHashSet<usize>>,
-    _relationship_tag_file: AHashMap<usize, AHashSet<usize>>,
-    _relationship_dual: AHashSet<usize>,
+    _relationship_file_tag: IntMap<usize, IntSet<usize>>,
+    _relationship_tag_file: IntMap<usize, IntSet<usize>>,
+    _relationship_dual: IntSet<usize>,
 
     _tag_max: usize,
     _relationship_max: usize,
@@ -57,29 +63,30 @@ pub struct NewinMemDB {
 
 impl NewinMemDB {
     pub fn new() -> NewinMemDB {
+        let intmp = IntSet::default();
         let inst = NewinMemDB {
-            _tag_nns_id_data: AHashMap::default(),
-            _tag_nns_data_id: AHashMap::new(),
+            _tag_nns_id_data: IntMap::default(),
+            _tag_nns_data_id: HashMap::new(),
 
-            _jobs_id_data: AHashMap::default(),
-            _file_id_data: AHashMap::default(),
+            _jobs_id_data: IntMap::default(),
+            _file_id_data: IntMap::default(),
             //_jobs_name_id: HashMap::new(),
-            _file_name_id: AHashMap::new(),
-            _parents_dual: AHashSet::default(),
+            _file_name_id: HashMap::new(),
+            _parents_dual: HashSet::default(),
 
-            _parents_rel_tag: AHashMap::new(),
-            _parents_tag_rel: AHashMap::new(),
+            _parents_rel_tag: IntMap::default(),
+            _parents_tag_rel: IntMap::default(),
 
-            _settings_name_id: AHashMap::new(),
-            _settings_id_data: AHashMap::default(),
+            _settings_name_id: HashMap::new(),
+            _settings_id_data: IntMap::default(),
 
-            _namespace_name_id: AHashMap::new(),
-            _namespace_id_data: AHashMap::default(),
-            _namespace_id_tag: AHashMap::default(),
+            _namespace_name_id: HashMap::new(),
+            _namespace_id_data: IntMap::default(),
+            _namespace_id_tag: IntMap::default(),
 
-            _relationship_tag_file: AHashMap::default(),
-            _relationship_file_tag: AHashMap::default(),
-            _relationship_dual: AHashSet::default(),
+            _relationship_tag_file: IntMap::default(),
+            _relationship_file_tag: IntMap::default(),
+            _relationship_dual: intmp,
 
             _tag_max: 0,
             _settings_max: 0,
@@ -192,14 +199,14 @@ impl NewinMemDB {
     ///
     /// Returns tag id's based on namespace id.
     ///
-    pub fn namespace_get_tagids(&self, id: &usize) -> Option<&AHashSet<usize>> {
+    pub fn namespace_get_tagids(&self, id: &usize) -> Option<&HashSet<usize>> {
         self._namespace_id_tag.get(id)
     }
 
     ///
     /// Returns a list of file id's based on a tag id.
     ///
-    pub fn relationship_get_fileid(&self, tag: &usize) -> Option<&AHashSet<usize>> {
+    pub fn relationship_get_fileid(&self, tag: &usize) -> Option<&IntSet<usize>> {
         match self._relationship_tag_file.get(tag) {
             None => None,
             Some(relref) => return Some(relref),
@@ -209,7 +216,7 @@ impl NewinMemDB {
     ///
     /// Returns a list of tag id's based on a file id
     ///
-    pub fn relationship_get_tagid(&self, file: &usize) -> Option<&AHashSet<usize>> {
+    pub fn relationship_get_tagid(&self, file: &usize) -> Option<&IntSet<usize>> {
         match self._relationship_file_tag.get(file) {
             None => None,
             Some(relref) => return Some(relref),
@@ -462,7 +469,7 @@ impl NewinMemDB {
                             &tag_info.namespace
                         ));
                         // Gets called when the namespace id wasn't found as a key
-                        let mut idset = AHashSet::new();
+                        let mut idset = HashSet::new();
                         idset.insert(nns_obj.id);
                         self._namespace_id_tag.insert(tag_info.namespace, idset);
                     }
@@ -550,14 +557,14 @@ impl NewinMemDB {
     ///
     /// Returns the list of relationships assicated with tag
     ///
-    pub fn parents_rel_get(&self, relate_tag_id: &usize) -> Option<&AHashSet<usize>> {
+    pub fn parents_rel_get(&self, relate_tag_id: &usize) -> Option<&IntSet<usize>> {
         self._parents_tag_rel.get(relate_tag_id)
     }
 
     ///
     /// Returns the list of tags assicated with relationship
     ///
-    pub fn parents_tag_get(&self, tag_id: &usize) -> Option<&AHashSet<usize>> {
+    pub fn parents_tag_get(&self, tag_id: &usize) -> Option<&IntSet<usize>> {
         self._parents_rel_tag.get(tag_id)
     }
 
@@ -614,7 +621,7 @@ impl NewinMemDB {
         let rel = self._parents_rel_tag.get_mut(&parentdbojb.relate_tag_id);
         match rel {
             None => {
-                let mut temp: AHashSet<usize> = AHashSet::new();
+                let mut temp: IntSet<usize> = IntSet::default();
                 temp.insert(parentdbojb.tag_id);
                 self._parents_rel_tag
                     .insert(parentdbojb.relate_tag_id, temp);
@@ -627,7 +634,7 @@ impl NewinMemDB {
         let tag = self._parents_tag_rel.get_mut(&parentdbojb.tag_id);
         match tag {
             None => {
-                let mut temp: AHashSet<usize> = AHashSet::new();
+                let mut temp: IntSet<usize> = IntSet::default();
                 temp.insert(parentdbojb.relate_tag_id);
                 self._parents_tag_rel.insert(parentdbojb.tag_id, temp);
             }
@@ -688,7 +695,7 @@ impl NewinMemDB {
 
         match self._relationship_tag_file.get_mut(&tag) {
             None => {
-                let mut temp = AHashSet::default();
+                let mut temp = IntSet::default();
                 temp.insert(file);
                 self._relationship_tag_file.insert(tag, temp);
             }
@@ -697,10 +704,9 @@ impl NewinMemDB {
                 rel_tag.insert(file);
             }
         }
-
         match self._relationship_file_tag.get_mut(&file) {
             None => {
-                let mut temp = AHashSet::default();
+                let mut temp = IntSet::default();
                 temp.insert(tag);
                 self._relationship_file_tag.insert(file, temp);
             }
@@ -725,7 +731,7 @@ impl NewinMemDB {
     ///
     /// Get all jobs
     ///
-    pub fn jobs_get_all(&self) -> &AHashMap<usize, sharedtypes::DbJobsObj> {
+    pub fn jobs_get_all(&self) -> &IntMap<usize, sharedtypes::DbJobsObj> {
         &self._jobs_id_data
     }
 }
