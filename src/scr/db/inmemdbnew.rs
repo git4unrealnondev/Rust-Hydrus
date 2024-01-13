@@ -3,8 +3,6 @@ use crate::sharedtypes;
 use crate::sharedtypes::DbFileObj;
 use crate::sharedtypes::DbJobsObj;
 use std::collections::{HashMap, HashSet};
-//use hash::{HashMap, HashSet};
-use nohash::{IntMap, IntSet};
 pub enum TagRelateConjoin {
     Tag,
     Error,
@@ -14,11 +12,11 @@ pub enum TagRelateConjoin {
     None,
 }
 pub struct tes {
-    test: IntSet<usize>,
+    test: HashSet<usize>,
 }
 impl tes {
     pub fn new() -> tes {
-        let mut te = IntSet::default();
+        let mut te = HashSet::default();
         let out = tes { test: te };
         out
     }
@@ -28,29 +26,29 @@ impl tes {
 }
 
 pub struct NewinMemDB {
-    _tag_nns_id_data: IntMap<usize, sharedtypes::DbTagNNS>,
+    _tag_nns_id_data: HashMap<usize, sharedtypes::DbTagNNS>,
     _tag_nns_data_id: HashMap<sharedtypes::DbTagNNS, usize>,
 
-    _settings_id_data: IntMap<usize, sharedtypes::DbSettingObj>,
+    _settings_id_data: HashMap<usize, sharedtypes::DbSettingObj>,
     _settings_name_id: HashMap<String, usize>,
 
     _parents_dual: HashSet<usize>,
 
-    _parents_tag_rel: IntMap<usize, IntSet<usize>>,
-    _parents_rel_tag: IntMap<usize, IntSet<usize>>,
+    _parents_tag_rel: HashMap<usize, HashSet<usize>>,
+    _parents_rel_tag: HashMap<usize, HashSet<usize>>,
 
-    _jobs_id_data: IntMap<usize, sharedtypes::DbJobsObj>,
+    _jobs_id_data: HashMap<usize, sharedtypes::DbJobsObj>,
     //_jobs_name_id: HashMap<String, usize>,
-    _namespace_id_data: IntMap<usize, sharedtypes::DbNamespaceObj>,
+    _namespace_id_data: HashMap<usize, sharedtypes::DbNamespaceObj>,
     _namespace_name_id: HashMap<String, usize>,
-    _namespace_id_tag: IntMap<usize, HashSet<usize>>,
+    _namespace_id_tag: HashMap<usize, HashSet<usize>>,
 
-    _file_id_data: IntMap<usize, sharedtypes::DbFileObj>,
+    _file_id_data: HashMap<usize, sharedtypes::DbFileObj>,
     _file_name_id: HashMap<String, usize>,
 
-    _relationship_file_tag: IntMap<usize, IntSet<usize>>,
-    _relationship_tag_file: IntMap<usize, IntSet<usize>>,
-    _relationship_dual: IntSet<usize>,
+    _relationship_file_tag: HashMap<usize, HashSet<usize>>,
+    _relationship_tag_file: HashMap<usize, HashSet<usize>>,
+    _relationship_dual: HashSet<usize>,
 
     _tag_max: usize,
     _relationship_max: usize,
@@ -63,29 +61,29 @@ pub struct NewinMemDB {
 
 impl NewinMemDB {
     pub fn new() -> NewinMemDB {
-        let intmp = IntSet::default();
+        let intmp = HashSet::default();
         let inst = NewinMemDB {
-            _tag_nns_id_data: IntMap::default(),
+            _tag_nns_id_data: HashMap::default(),
             _tag_nns_data_id: HashMap::new(),
 
-            _jobs_id_data: IntMap::default(),
-            _file_id_data: IntMap::default(),
+            _jobs_id_data: HashMap::default(),
+            _file_id_data: HashMap::default(),
             //_jobs_name_id: HashMap::new(),
             _file_name_id: HashMap::new(),
             _parents_dual: HashSet::default(),
 
-            _parents_rel_tag: IntMap::default(),
-            _parents_tag_rel: IntMap::default(),
+            _parents_rel_tag: HashMap::default(),
+            _parents_tag_rel: HashMap::default(),
 
             _settings_name_id: HashMap::new(),
-            _settings_id_data: IntMap::default(),
+            _settings_id_data: HashMap::default(),
 
             _namespace_name_id: HashMap::new(),
-            _namespace_id_data: IntMap::default(),
-            _namespace_id_tag: IntMap::default(),
+            _namespace_id_data: HashMap::default(),
+            _namespace_id_tag: HashMap::default(),
 
-            _relationship_tag_file: IntMap::default(),
-            _relationship_file_tag: IntMap::default(),
+            _relationship_tag_file: HashMap::default(),
+            _relationship_file_tag: HashMap::default(),
             _relationship_dual: intmp,
 
             _tag_max: 0,
@@ -206,7 +204,7 @@ impl NewinMemDB {
     ///
     /// Returns a list of file id's based on a tag id.
     ///
-    pub fn relationship_get_fileid(&self, tag: &usize) -> Option<&IntSet<usize>> {
+    pub fn relationship_get_fileid(&self, tag: &usize) -> Option<&HashSet<usize>> {
         match self._relationship_tag_file.get(tag) {
             None => None,
             Some(relref) => return Some(relref),
@@ -216,7 +214,7 @@ impl NewinMemDB {
     ///
     /// Returns a list of tag id's based on a file id
     ///
-    pub fn relationship_get_tagid(&self, file: &usize) -> Option<&IntSet<usize>> {
+    pub fn relationship_get_tagid(&self, file: &usize) -> Option<&HashSet<usize>> {
         match self._relationship_file_tag.get(file) {
             None => None,
             Some(relref) => return Some(relref),
@@ -557,14 +555,14 @@ impl NewinMemDB {
     ///
     /// Returns the list of relationships assicated with tag
     ///
-    pub fn parents_rel_get(&self, relate_tag_id: &usize) -> Option<&IntSet<usize>> {
+    pub fn parents_rel_get(&self, relate_tag_id: &usize) -> Option<&HashSet<usize>> {
         self._parents_tag_rel.get(relate_tag_id)
     }
 
     ///
     /// Returns the list of tags assicated with relationship
     ///
-    pub fn parents_tag_get(&self, tag_id: &usize) -> Option<&IntSet<usize>> {
+    pub fn parents_tag_get(&self, tag_id: &usize) -> Option<&HashSet<usize>> {
         self._parents_rel_tag.get(tag_id)
     }
 
@@ -621,7 +619,7 @@ impl NewinMemDB {
         let rel = self._parents_rel_tag.get_mut(&parentdbojb.relate_tag_id);
         match rel {
             None => {
-                let mut temp: IntSet<usize> = IntSet::default();
+                let mut temp: HashSet<usize> = HashSet::default();
                 temp.insert(parentdbojb.tag_id);
                 self._parents_rel_tag
                     .insert(parentdbojb.relate_tag_id, temp);
@@ -634,7 +632,7 @@ impl NewinMemDB {
         let tag = self._parents_tag_rel.get_mut(&parentdbojb.tag_id);
         match tag {
             None => {
-                let mut temp: IntSet<usize> = IntSet::default();
+                let mut temp: HashSet<usize> = HashSet::default();
                 temp.insert(parentdbojb.relate_tag_id);
                 self._parents_tag_rel.insert(parentdbojb.tag_id, temp);
             }
@@ -692,10 +690,9 @@ impl NewinMemDB {
     pub fn relationship_add(&mut self, file: usize, tag: usize) {
         let cantor = self.cantor_pair(&file, &tag);
         self._relationship_dual.insert(cantor);
-
         match self._relationship_tag_file.get_mut(&tag) {
             None => {
-                let mut temp = IntSet::default();
+                let mut temp = HashSet::default();
                 temp.insert(file);
                 self._relationship_tag_file.insert(tag, temp);
             }
@@ -706,7 +703,7 @@ impl NewinMemDB {
         }
         match self._relationship_file_tag.get_mut(&file) {
             None => {
-                let mut temp = IntSet::default();
+                let mut temp = HashSet::default();
                 temp.insert(tag);
                 self._relationship_file_tag.insert(file, temp);
             }
@@ -731,7 +728,7 @@ impl NewinMemDB {
     ///
     /// Get all jobs
     ///
-    pub fn jobs_get_all(&self) -> &IntMap<usize, sharedtypes::DbJobsObj> {
+    pub fn jobs_get_all(&self) -> &HashMap<usize, sharedtypes::DbJobsObj> {
         &self._jobs_id_data
     }
 }

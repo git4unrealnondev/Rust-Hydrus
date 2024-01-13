@@ -6,6 +6,130 @@ use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
 use strum_macros::{Display, EnumString};
 
+///
+/// Database Tags Object
+///
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize, Serialize)]
+pub struct DbTagNNS {
+    pub name: String,
+    pub namespace: usize,
+}
+///
+/// Database Tags Object
+///
+#[derive(Debug, Deserialize, Serialize)]
+pub struct DbTagObjCompatability {
+    pub id: usize,
+    pub name: String,
+    pub parents: Option<usize>,
+    pub namespace: usize,
+}
+
+#[derive(Debug, EnumIter, Display)]
+// Manages what the search can do.
+pub enum Search {
+    Fid(Vec<String>),
+    Tid(Vec<String>),
+    Tag(Vec<String>),
+    Hash(Vec<String>),
+}
+#[derive(Debug, EnumIter, Display)]
+pub enum Tasks {
+    Csv(String, CsvCopyMvHard), // CSV importation. cp mv hardlink
+    Remove(TasksRemove),
+}
+
+#[derive(Debug, EnumIter, Display)]
+pub enum TasksRemove {
+    Remove_Namespace_Id(usize),
+    Remove_Namespace_String(String),
+    None,
+}
+impl Default for TasksRemove {
+    fn default() -> Self {
+        TasksRemove::None
+    }
+}
+///
+/// Determines how to run a function
+///
+#[derive(Debug, EnumIter, Display)]
+pub enum PluginThreadType {
+    Inline,        // Run plugin inside of the calling function. DEFAULT
+    Spawn,         // Spawns a new thread, Runs concurrently to the calling function.
+    SpawnBlocking, // Spawns a new thread, Blocks the main thread until the plugin finishes work.
+    Daemon, // Spawns a thread as a daemon all calls to the plugin will be routed to the daemon thread.
+}
+
+///
+/// Information about CSV what we should do with the files.
+///
+#[derive(Debug, EnumIter, Display, Default)]
+pub enum CsvCopyMvHard {
+    #[default]
+    Copy,
+    Move,
+    Hardlink,
+}
+
+///
+/// Tells DB which table to load.
+///
+#[derive(EnumIter, PartialEq, Debug)]
+pub enum LoadDBTable {
+    Files,        // Files table
+    Jobs,         // Jobs table
+    Namespace,    // Namespace mapping
+    Parents,      // Parents mapping table
+    Relationship, // Relationships table
+    Settings,     // Settings table
+    Tags,         // Tags storage table
+    All,          // Loads all unloaded tables.
+}
+
+#[allow(dead_code)]
+pub fn stringto_commit_type(into: &String) -> CommitType {
+    for each in CommitType::iter() {
+        if into == &each.to_string() {
+            return each;
+        }
+    }
+    let mut panic = "Could Not format CommitType as one of: ".to_string();
+    for each in CommitType::iter() {
+        panic += format!("{} ", each).as_str();
+    }
+
+    panic!("{}", panic);
+}
+
+#[allow(dead_code)]
+pub fn stringto_search_type(into: &String) -> Search {
+    for each in Search::iter() {
+        if into == &each.to_string() {
+            return each;
+        }
+    }
+    let mut panic = "Could Not format CommitType as one of: ".to_string();
+    for each in Search::iter() {
+        panic += format!("{} ", each).as_str();
+    }
+
+    panic!("{}", panic);
+}
+
+#[allow(dead_code)]
+pub fn stringto_jobtype(into: &String) -> DbJobType {
+    for each in DbJobType::iter() {
+        if into == &each.to_string() {
+            return each;
+        }
+    }
+    let mut panic = "Could not format DbJobType as one of:".to_string();
+    for each in DbJobType::iter() {
+        panic += format!("{} ", each).as_str();
+    }
+    panic!("{}", panic);
+}
 #[derive(Debug, EnumIter, Clone, Eq, Hash, PartialEq, Copy, EnumString)]
 pub enum CommitType {
     StopOnNothing, // Processes all files and data doesn't stop processing.
@@ -175,17 +299,6 @@ pub struct DbSettingObj {
 }
 
 ///
-/// Database Tags Object
-///
-#[derive(Debug, Deserialize, Serialize)]
-pub struct DbTagObjCompatability {
-    pub id: usize,
-    pub name: String,
-    pub parents: Option<usize>,
-    pub namespace: usize,
-}
-
-///
 /// Database search object
 ///
 #[derive(Debug)]
@@ -212,15 +325,6 @@ pub struct DbSearchQuery {
     pub tag_one: DbSearchObject,
     pub tag_two: DbSearchObject,
     pub search_enum: DbSearchTypeEnum,
-}
-
-///
-/// Database Tags Object
-///
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize, Serialize)]
-pub struct DbTagNNS {
-    pub name: String,
-    pub namespace: usize,
 }
 
 ///
@@ -380,15 +484,6 @@ pub struct JobsRemove {
     pub time: String,
 }
 
-#[derive(Debug, EnumIter, Display)]
-// Manages what the search can do.
-pub enum Search {
-    Fid(Vec<String>),
-    Tid(Vec<String>),
-    Tag(Vec<String>),
-    Hash(Vec<String>),
-}
-
 #[derive(Debug)]
 #[allow(dead_code)]
 pub enum AllFields {
@@ -397,62 +492,6 @@ pub enum AllFields {
     Search(Search),
     Nothing,
     Tasks(Tasks),
-}
-
-#[derive(Debug, EnumIter, Display)]
-pub enum Tasks {
-    Csv(String, CsvCopyMvHard), // CSV importation. cp mv hardlink
-    Remove(TasksRemove),
-}
-
-#[derive(Debug, EnumIter, Display)]
-pub enum TasksRemove {
-    Remove_Namespace_Id(usize),
-    Remove_Namespace_String(String),
-    None,
-}
-
-impl Default for TasksRemove {
-    fn default() -> Self {
-        TasksRemove::None
-    }
-}
-
-///
-/// Determines how to run a function
-///
-#[derive(Debug, EnumIter, Display)]
-pub enum PluginThreadType {
-    Inline,        // Run plugin inside of the calling function. DEFAULT
-    Spawn,         // Spawns a new thread, Runs concurrently to the calling function.
-    SpawnBlocking, // Spawns a new thread, Blocks the main thread until the plugin finishes work.
-    Daemon, // Spawns a thread as a daemon all calls to the plugin will be routed to the daemon thread.
-}
-
-///
-/// Information about CSV what we should do with the files.
-///
-#[derive(Debug, EnumIter, Display, Default)]
-pub enum CsvCopyMvHard {
-    #[default]
-    Copy,
-    Move,
-    Hardlink,
-}
-
-///
-/// Tells DB which table to load.
-///
-#[derive(EnumIter, PartialEq, Debug)]
-pub enum LoadDBTable {
-    Files,        // Files table
-    Jobs,         // Jobs table
-    Namespace,    // Namespace mapping
-    Parents,      // Parents mapping table
-    Relationship, // Relationships table
-    Settings,     // Settings table
-    Tags,         // Tags storage table
-    All,          // Loads all unloaded tables.
 }
 
 ///
@@ -495,49 +534,6 @@ pub enum PluginCommunicationChannel {
     None,
 }
 
-#[allow(dead_code)]
-pub fn stringto_commit_type(into: &String) -> CommitType {
-    for each in CommitType::iter() {
-        if into == &each.to_string() {
-            return each;
-        }
-    }
-    let mut panic = "Could Not format CommitType as one of: ".to_string();
-    for each in CommitType::iter() {
-        panic += format!("{} ", each).as_str();
-    }
-
-    panic!("{}", panic);
-}
-
-#[allow(dead_code)]
-pub fn stringto_search_type(into: &String) -> Search {
-    for each in Search::iter() {
-        if into == &each.to_string() {
-            return each;
-        }
-    }
-    let mut panic = "Could Not format CommitType as one of: ".to_string();
-    for each in Search::iter() {
-        panic += format!("{} ", each).as_str();
-    }
-
-    panic!("{}", panic);
-}
-
-#[allow(dead_code)]
-pub fn stringto_jobtype(into: &String) -> DbJobType {
-    for each in DbJobType::iter() {
-        if into == &each.to_string() {
-            return each;
-        }
-    }
-    let mut panic = "Could not format DbJobType as one of:".to_string();
-    for each in DbJobType::iter() {
-        panic += format!("{} ", each).as_str();
-    }
-    panic!("{}", panic);
-}
 // let temp = AllFields::JobsAdd(JobsAdd{Site: "yeet".to_owned(), Query: "yeet".to_owned(), Time: "Lo".to_owned(), Loop: "yes".to_owned(), ReCommit: "Test".
 
 ///

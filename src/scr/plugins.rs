@@ -42,24 +42,48 @@ impl PluginManager {
 
         reftoself.load_plugins(&pluginsloc);
 
-        /*let (snd, rcv) = mpsc::channel();
+        let (snd, rcv) = mpsc::channel();
+        let srv = std::thread::spawn(move || {
+            let mut ipc_coms = server::PluginIpcInteract::new(main_db.clone());
+            //let _ = rcv.recv();
+            let out = ipc_coms.spawn_listener(snd);
 
-        let mut ipc_coms = server::plugin_ipc_interact::new(main_db);
-        let srv = std::thread::spawn(move || ipc_coms.spawn_listener(snd));
+            println!("v");
+            out
+        });
+        /* if let Err(e) = srv.join().expect("server thread panicked") {
+            eprintln!("Server exited early with error: {:#}", e);
+        }
 
         //let srv = std::thread::spawn(move || server::main(snd));
-        let _ = rcv.recv();
         if let Err(e) = client::main() {
             eprintln!("Client exited early with error: {:#}", e);
-        }
-        if let Err(e) = srv.join().expect("server thread panicked") {
-            eprintln!("Server exited early with error: {:#}", e);
         }*/
         reftoself
     }
-
+    ///
+    /// Returns if the thread manager have finished.
+    /// Doesn't check if the threads have actually finished.
+    ///
     pub fn return_thread(&self) -> bool {
         self._thread.is_empty()
+    }
+
+    ///
+    /// Closes any threads in self._threads that have finished.
+    ///
+    pub fn thread_finish_closed(&mut self) {
+        let mut finished_threads: Vec<String> = Vec::new();
+        let thlist = self._thread.keys();
+        for thread in thlist {
+            if self._thread.get(thread).unwrap().is_finished() {
+                finished_threads.push(thread.to_string());
+            }
+        }
+        for thread in finished_threads {
+            let th = self._thread.remove(&thread).unwrap();
+            th.join();
+        }
     }
 
     pub fn read_thread_data(&mut self) {
@@ -100,11 +124,13 @@ impl PluginManager {
             let name = root.split('/');
             let vec: Vec<&str> = name.collect();
 
+            let formatted_name = vec[vec.len() - 1].replace('-', "_");
+
             let plugin_loading_path = format!(
                 "{}{}/target/release/lib{}",
                 &pluginsloc,
                 vec[vec.len() - 1],
-                vec[vec.len() - 1]
+                formatted_name
             );
 
             let mut finalpath: Option<String> = None;
@@ -178,9 +204,9 @@ impl PluginManager {
         {
             return;
         }
-
         // Gets all callbacks related to a callback and checks if the plugin
         for plugin in self._callback[&sharedtypes::PluginCallback::OnStart].clone() {
+            info!("Starting to run plugin: {}", &plugin);
             if !self._plugin.contains_key(&plugin) {
                 error!("Could not call Plugin-OnStart");
                 continue;
@@ -188,11 +214,18 @@ impl PluginManager {
 
             // Does a check to see if we need to determine how to pass data to and fro
             match &self._plugin_coms[&plugin] {
-                None => {}
+                None => {
+                    let runloc = self._thread_path[&plugin].to_string();
+
+                    c_run_onstart(&runloc);
+                }
                 Some(plugincoms) => {
                     match &plugincoms.com_channel {
                         None => {
-                            continue;
+                            // Starts plugin inline while will wait for it to finish.
+                            let runloc = self._thread_path[&plugin].to_string();
+
+                            c_run_onstart(&runloc);
                         }
                         Some(pluginchannel) => {
                             match pluginchannel {
@@ -202,31 +235,14 @@ impl PluginManager {
 
                                     // Have to do this wanky ness to allow me to spawn a thread that outlives the &mut self
                                     // Spawns the function in a seperate thread.
-                                    let liba;
-                                    let (reader, writer) = os_pipe::pipe().unwrap();
-                                    let reader_clone = reader.try_clone().unwrap();
-                                    let writer_clone = writer.try_clone().unwrap();
+                                    // Have to get this outside of the thread spawn for
+                                    // compatibility reasons with the calling funciton.
+                                    let runloc = self._thread_path[&plugin].to_string();
 
-                                    unsafe {
-                                        liba = Library::new(self._thread_path[&plugin].to_string())
-                                            .unwrap();
-                                    }
-                                    let thread = thread::spawn(move || unsafe {
-                                        let plugindatafunc: libloading::Symbol<
-                                            unsafe extern "C" fn(
-                                                &mut os_pipe::PipeReader,
-                                                &mut os_pipe::PipeWriter,
-                                            ),
-                                        > = liba.get(b"on_start").unwrap();
-                                        plugindatafunc(
-                                            &mut reader.try_clone().unwrap(),
-                                            &mut writer.try_clone().unwrap(),
-                                        );
+                                    let thread = thread::spawn(move || {
+                                        c_run_onstart(&runloc);
                                     });
-
                                     self._thread.insert(plugin.to_string(), thread);
-                                    self._thread_data_share
-                                        .insert(plugin, (reader_clone, writer_clone));
                                 }
                             }
                         }
@@ -387,4 +403,21 @@ impl PluginManager {
             self.parse_plugin_output(output);
         }
     }
+}
+
+///
+/// Starts running the onstart plugin.
+/// Should only be called from a pluginmanager instance.
+/// I'm lazy so this is the easiest way to make it worky.
+///
+fn c_run_onstart(path: &String) {
+    let liba;
+    unsafe {
+        liba = Library::new(path).unwrap();
+    }
+    unsafe {
+        let plugindatafunc: libloading::Symbol<unsafe extern "C" fn()> =
+            liba.get(b"on_start").unwrap();
+        plugindatafunc();
+    };
 }

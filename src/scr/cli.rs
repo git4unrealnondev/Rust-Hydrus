@@ -3,7 +3,7 @@ use rayon::prelude::*;
 use std::collections::HashSet;
 use std::path::Path;
 //use std::str::pattern::Searcher;
-
+use file_format::FileFormat;
 use std::{str::FromStr, task::Wake};
 
 use crate::download;
@@ -166,21 +166,13 @@ pub fn main(data: &mut database::Main, scraper: &mut scraper::ScraperManager) {
 
                         println!("File Hash: {}", &fhist);
                         // Tries to infer the type from the ext.
-                        let ext = infer::get(&b);
 
+                        let ext = FileFormat::from_bytes(&b).extension().to_string();
                         // Error handling if we can't parse the filetyp
-                        let ext = match ext {
-                            None => {
-                                failedtoparse.insert(each.path().display().to_string());
-
-                                continue 'walkloop;
-                            }
-                            Some(ex) => ex,
-                        };
                         // parses the info into something the we can use for the scraper
                         let scraperinput = sharedtypes::ScraperFileInput {
                             hash: Some(fhist),
-                            ext: Some(ext.extension().to_string()),
+                            ext: Some(ext.clone()),
                         };
 
                         let tag = crate::scraper::ScraperFileRetrun(libload, &scraperinput);
@@ -197,13 +189,7 @@ pub fn main(data: &mut database::Main, scraper: &mut scraper::ScraperManager) {
                             .unwrap()
                             .to_owned();
                         // Adds data into db
-                        let fid = data.file_add(
-                            None,
-                            &sha2,
-                            &ext.extension().to_string(),
-                            &filesloc,
-                            true,
-                        );
+                        let fid = data.file_add(None, &sha2, &ext, &filesloc, true);
                         let nid =
                             data.namespace_add(tag.namespace.name, tag.namespace.description, true);
                         let tid = data.tag_add(tag.tag, nid, true, None);

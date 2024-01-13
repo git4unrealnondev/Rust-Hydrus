@@ -7,7 +7,6 @@ use crate::sharedtypes::DbJobsObj;
 use crate::time_func;
 use ahash::{AHashMap, AHashSet, AHasher};
 use log::{error, info};
-use nohash::{IntMap, IntSet};
 pub use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, ValueRef};
 pub use rusqlite::{params, types::Null, Connection, Result, Transaction};
 use std::borrow::BorrowMut;
@@ -20,6 +19,7 @@ use std::{collections::HashMap, hash::BuildHasherDefault};
 
 //mod db;
 mod db;
+use crate::database::db::dbtraits::DBTraits;
 use crate::database::db::inmemdbnew::NewinMemDB;
 
 ///
@@ -46,6 +46,12 @@ pub fn dbinit(dbpath: &String) -> Connection {
     //Engaging Transaction Handling
     Connection::open(&dbpath).unwrap()
 }
+#[derive(Clone)]
+pub enum CacheType {
+    InMemdb,      // Default option. Will use in memory DB to make store cached data.
+    InMemory,     // Not yet implmented will be used for using sqlite 3 inmemory db calls.
+    Bare(String), // Will be use to query the DB directly. No caching.
+}
 
 /// Holder of database self variables
 
@@ -58,6 +64,7 @@ pub struct Main {
     _dbcommitnum: usize,
     _dbcommitnum_static: usize,
     _tables_loaded: Option<Vec<sharedtypes::LoadDBTable>>,
+    _cache: CacheType,
 }
 
 /// Contains DB functions.
@@ -80,6 +87,7 @@ impl Main {
             _dbcommitnum: 0,
             _dbcommitnum_static: 3000,
             _tables_loaded: None,
+            _cache: CacheType::Bare(path.clone()),
         };
 
         let mut main = Main {
@@ -90,6 +98,7 @@ impl Main {
             _dbcommitnum: 0,
             _dbcommitnum_static: 3000,
             _tables_loaded: None,
+            _cache: CacheType::InMemdb,
         };
         main._conn = Arc::new(Mutex::new(connection));
 
@@ -272,16 +281,17 @@ impl Main {
     ///
     /// Wrapper
     ///
-    pub fn jobs_get_all(&self) -> &IntMap<usize, sharedtypes::DbJobsObj> {
-        self._inmemdb.jobs_get_all()
+    pub fn jobs_get_all(&self) -> &HashMap<usize, sharedtypes::DbJobsObj> {
+        match &self._cache {
+            CacheType::InMemdb => self._inmemdb.jobs_get_all(),
+            CacheType::InMemory => {
+                todo!();
+            }
+            CacheType::Bare(dbpath) => {
+                todo!();
+            }
+        }
     }
-
-    ///
-    /// Wrapper
-    ///
-    //pub fn jobs_get_new(&self, id: &usize) -> &jobs::JobsRef {
-    //    self._inmemdb.jobs_get_new(id)
-    //}
 
     ///
     /// Pull job by id
@@ -298,7 +308,7 @@ impl Main {
     ///
     ///
     ///
-    pub fn relationship_get_fileid(&self, tag: &usize) -> Option<&IntSet<usize>> {
+    pub fn relationship_get_fileid(&self, tag: &usize) -> Option<&HashSet<usize>> {
         self._inmemdb.relationship_get_fileid(tag)
     }
 
@@ -306,7 +316,7 @@ impl Main {
         self._inmemdb.relationship_get_one_fileid(tag)
     }
 
-    pub fn relationship_get_tagid(&self, tag: &usize) -> Option<&IntSet<usize>> {
+    pub fn relationship_get_tagid(&self, tag: &usize) -> Option<&HashSet<usize>> {
         self._inmemdb.relationship_get_tagid(tag)
     }
 

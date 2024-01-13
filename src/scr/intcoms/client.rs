@@ -4,7 +4,6 @@ use interprocess::local_socket::{LocalSocketStream, NameTypeSupport};
 use std::collections::HashSet;
 use std::io::{prelude::*, BufReader};
 
-use crate::database;
 use crate::sharedtypes;
 
 mod types;

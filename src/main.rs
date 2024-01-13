@@ -333,8 +333,6 @@ fn main() {
     // Creates a threadhandler that manages callable threads.
     let mut threadhandler = threading::Threads::new();
 
-    pluginmanager.lock().unwrap().plugin_on_start();
-
     jobmanager.jobs_run_new(
         &mut arc,
         &mut threadhandler,
@@ -342,6 +340,7 @@ fn main() {
         pluginmanager.clone(),
     );
 
+    pluginmanager.lock().unwrap().plugin_on_start();
     // Anything below here will run automagically.
     // Jobs run in OS threads
 
@@ -357,14 +356,20 @@ fn main() {
     //arc.lock().unwrap().transaction_close();
 
     // Waits until all threads have closed.
+    pluginmanager.lock().unwrap().thread_finish_closed();
     while !pluginmanager.lock().unwrap().return_thread() {
         let one_sec = time::Duration::from_secs(1);
-
+        dbg!('a');
+        pluginmanager.lock().unwrap().thread_finish_closed();
         thread::sleep(one_sec);
 
         // pluginmanager.lock().unwrap().read_thread_data();
     }
 
+    // This wait is done for allowing any thread to "complete"
+    // Shouldn't be nessisary but hey. :D
+    let mills_fifty = time::Duration::from_millis(50);
+    std::thread::sleep(mills_fifty);
     info!("UNLOADING");
     log::logger().flush();
 }
