@@ -128,26 +128,26 @@ pub fn init_data_request(requesttype: &types::SupportedRequests) {
 fn handle_supportedrequesttypes(data_buffer: &mut [u8], requesttype: &types::SupportedRequests) {
     match requesttype {
         types::SupportedRequests::Database(db_actions) => match db_actions {
-            types::SupportedDBRequests::TagIdGet(id) => {
-                let opjtag: Option<sharedtypes::DbTagObjCompatability> =
+            types::SupportedDBRequests::TagIdGet(_id) => {
+                let _opjtag: Option<sharedtypes::DbTagObjCompatability> =
                     bincode::deserialize(data_buffer).unwrap();
                 //dbg!(opjtag);
             }
-            types::SupportedDBRequests::RelationshipGetTagid(id) => {
+            types::SupportedDBRequests::RelationshipGetTagid(_id) => {
                 let opjtag: Vec<usize> = bincode::deserialize(data_buffer).unwrap();
                 dbg!(opjtag);
             }
-            types::SupportedDBRequests::RelationshipGetFileid(id) => {
+            types::SupportedDBRequests::RelationshipGetFileid(_id) => {
                 let opjtag: HashSet<usize> = bincode::deserialize(data_buffer).unwrap();
                 dbg!(opjtag);
             }
-            types::SupportedDBRequests::GetFile(id) => {
+            types::SupportedDBRequests::GetFile(_id) => {
                 let opjtag: Option<(String, String, String)> =
                     bincode::deserialize(data_buffer).unwrap();
                 dbg!(opjtag);
                 //return bincode::deserialize(&data_buffer[..]).unwrap()
             }
         },
-        types::SupportedRequests::PluginCross(plugindata) => {}
+        types::SupportedRequests::PluginCross(_plugindata) => {}
     }
 }
