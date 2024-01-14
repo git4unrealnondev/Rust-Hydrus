@@ -9,7 +9,7 @@ edition = "2021"
 strum = "0.25.0"
 os_pipe = "1.1.4"
 interprocess = "1.2.1"
-serde = { version = "1.0.192", features = ["serde_derive"] }
+serde = { version = "1.0.192", features = ["derive"] }
 strum_macros = "0.25.1"
 
 libc = { version = "0.2", default-features = false }

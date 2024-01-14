@@ -44,9 +44,9 @@ rayon = "1.8.0"
 jwalk = "0.8.1"
 
 [profile.release]
-#opt-level = 3
+opt-level = 3
 lto=true
 codegenunits=1
 strip = false
 panic = "abort"
-#debug = true
+debug = false

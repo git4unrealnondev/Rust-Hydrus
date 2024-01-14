@@ -9,7 +9,7 @@ use std::{
     sync::mpsc::Sender,
 };
 
-use crate::logging;
+use crate::{logging, sharedtypes};
 
 mod types;
 
@@ -295,7 +295,7 @@ impl PluginIpcInteract {
         &self,
         conn: &mut BufReader<LocalSocketStream>,
     ) -> types::SupportedRequests {
-        let buffer: &mut [u8; 16] = &mut [b'0'; 16];
+        let buffer: &mut [u8; 32] = &mut [b'0'; 32];
         let b_control = types::x_to_bytes(&types::EControlSigs::Send);
         conn.get_mut()
             .write_all(b_control)
@@ -337,27 +337,54 @@ impl DbInteract {
         let sze = byt.len();
         (sze, byt)
     }
-
+    ///
+    /// Packages functions from the DB into their self owned versions
+    /// before packaging them as bytes to get sent accross IPC to the other
+    /// software. So far things are pretty mint.
+    ///
     pub fn dbactions_to_function(
         &mut self,
         dbaction: types::SupportedDBRequests,
     ) -> (usize, Vec<u8>) {
         match dbaction {
-            types::SupportedDBRequests::TagIdGet(id) => {
+            types::SupportedDBRequests::GetTagId(id) => {
                 let unwrappy = self._database.lock().unwrap();
-                Self::data_size_to_b(&unwrappy.tag_id_get(&id))
+                let tmep = unwrappy.tag_id_get(&id);
+                Self::option_to_bytes(tmep)
             }
             types::SupportedDBRequests::RelationshipGetTagid(id) => {
                 let unwrappy = self._database.lock().unwrap();
-                Self::data_size_to_b(&unwrappy.relationship_get_tagid(&id))
+                let tmep = unwrappy.relationship_get_tagid(&id);
+                Self::option_to_bytes(tmep)
             }
             types::SupportedDBRequests::GetFile(id) => {
                 let unwrappy = self._database.lock().unwrap();
-                Self::data_size_to_b(&unwrappy.file_get_id(&id))
+                let tmep = unwrappy.file_get_id(&id);
+                Self::option_to_bytes(tmep)
             }
             types::SupportedDBRequests::RelationshipGetFileid(id) => {
                 let unwrappy = self._database.lock().unwrap();
-                Self::data_size_to_b(&unwrappy.relationship_get_fileid(&id))
+                let tmep = unwrappy.relationship_get_fileid(&id);
+                Self::option_to_bytes(tmep)
+            }
+
+            types::SupportedDBRequests::SettingsGetName(id) => {
+                let unwrappy = self._database.lock().unwrap();
+                let tmep = unwrappy.settings_get_name(&id);
+                Self::option_to_bytes(tmep)
+            }
+        }
+    }
+    ///
+    /// Turns an Option<&T> into a bytes object.
+    ///
+    fn option_to_bytes<T: serde::Serialize + Clone>(input: Option<&T>) -> (usize, Vec<u8>) {
+        match input {
+            None => Self::data_size_to_b(&input),
+            Some(item) => {
+                let i: Option<T> = Some(item.clone());
+
+                Self::data_size_to_b(&i)
             }
         }
     }

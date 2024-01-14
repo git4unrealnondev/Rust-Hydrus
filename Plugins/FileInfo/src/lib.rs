@@ -1,4 +1,3 @@
-
 use std::time::Duration;
 #[path = "../../../src/scr/sharedtypes.rs"]
 mod sharedtypes;
@@ -29,13 +28,49 @@ pub fn return_info() -> sharedtypes::PluginInfo {
 pub fn on_start() {
     println!("From FIleinfo plugin");
 
-    check_existing_db();
     fast_log::init(fast_log::Config::new().file("./log.txt")).unwrap();
-    log::info!("Commencing yak shaving{}", 0);
+    log::info!("FileInfo - Commencing yak shaving{}", 0);
     println!("Fileinfo waiting");
+    check_existing_db();
     let mills_fifty = Duration::from_secs(5);
     std::thread::sleep(mills_fifty);
-    log::info!("Commencing yak shaving{}", 1);
+    log::info!("FileInfo - Commencing yak shaving{}", 1);
 }
 
-fn check_existing_db() {}
+fn check_existing_db() {
+    use std::time::Instant;
+    let now = Instant::now();
+    let typerequets = client::types::SupportedRequests::Database(
+        client::types::SupportedDBRequests::RelationshipGetTagid(1),
+    );
+    client::init_data_request(&typerequets);
+    let typerequets =
+        client::types::SupportedRequests::Database(client::types::SupportedDBRequests::GetFile(1));
+    client::init_data_request(&typerequets);
+
+    let typerequets = client::types::SupportedRequests::Database(
+        client::types::SupportedDBRequests::RelationshipGetTagid(1),
+    );
+    client::init_data_request(&typerequets);
+    let typerequets =
+        client::types::SupportedRequests::Database(client::types::SupportedDBRequests::GetFile(1));
+    client::init_data_request(&typerequets);
+
+    let typerequets = client::types::SupportedRequests::Database(
+        client::types::SupportedDBRequests::RelationshipGetTagid(1),
+    );
+    client::init_data_request(&typerequets);
+    let typerequets =
+        client::types::SupportedRequests::Database(client::types::SupportedDBRequests::GetFile(1));
+    client::init_data_request(&typerequets);
+
+    let typerequets = client::types::SupportedRequests::Database(
+        client::types::SupportedDBRequests::RelationshipGetTagid(1),
+    );
+    client::init_data_request(&typerequets);
+    let typerequets =
+        client::types::SupportedRequests::Database(client::types::SupportedDBRequests::GetFile(1));
+    client::init_data_request(&typerequets);
+    let elapsed = now.elapsed();
+    println!("Elapsed: {:.2?}", elapsed);
+}

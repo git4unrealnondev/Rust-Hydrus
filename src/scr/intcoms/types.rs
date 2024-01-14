@@ -1,5 +1,5 @@
-
-
+use crate::sharedtypes;
+use std::collections::{HashMap, HashSet};
 #[derive(Debug)]
 pub enum EComType {
     SendOnly,
@@ -22,11 +22,6 @@ pub struct Coms {
     pub com_type: EComType,
     pub control: EControlSigs,
 }
-
-///
-/// Turns a ""x"" structure into bytes.
-/// Anything from X into bytes
-///
 pub fn x_to_bytes<T>(input_generic: &T) -> &[u8] {
     unsafe { any_as_u8_slice(input_generic) }
 }
@@ -62,7 +57,7 @@ pub fn con_usize(input: &mut [u8; 8]) -> usize {
 ///
 /// Turns bytes into a SupportedRequests structure.
 ///
-pub fn con_supportedrequests(input: &mut [u8; 16]) -> SupportedRequests {
+pub fn con_supportedrequests(input: &mut [u8; 32]) -> SupportedRequests {
     unsafe { std::mem::transmute(*input) }
 }
 
@@ -71,10 +66,33 @@ pub fn con_supportedrequests(input: &mut [u8; 16]) -> SupportedRequests {
 ///
 #[derive(Debug)]
 pub enum SupportedDBRequests {
-    TagIdGet(usize),
+    GetTagId(usize),
     RelationshipGetTagid(usize),
     GetFile(usize),
     RelationshipGetFileid(usize),
+    SettingsGetName(String),
+}
+
+///
+/// Returns all data, general structure.
+///
+#[derive(Debug)]
+pub enum AllReturns {
+    DB(DBReturns),
+    Plugin(SupportedPluginRequests),
+    Nune, // Placeholder don't actually use
+}
+
+///
+/// Returns the db data
+///
+#[derive(Debug)]
+pub enum DBReturns {
+    GetTagId(Option<sharedtypes::DbTagNNS>),
+    RelationshipGetTagid(Option<HashSet<usize>>),
+    GetFile(Option<sharedtypes::DbFileObj>),
+    RelationshipGetFileid(Option<HashSet<usize>>),
+    SettingsGetName(Option<sharedtypes::DbSettingObj>),
 }
 
 ///

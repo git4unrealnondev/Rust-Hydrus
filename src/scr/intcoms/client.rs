@@ -1,12 +1,13 @@
 use anyhow::Context;
 use bincode;
 use interprocess::local_socket::{LocalSocketStream, NameTypeSupport};
-use std::collections::HashSet;
 use std::io::{prelude::*, BufReader};
 
 use crate::sharedtypes;
 
-mod types;
+use self::types::AllReturns;
+
+pub mod types;
 
 pub fn main() -> anyhow::Result<()> {
     call_conn()
@@ -19,7 +20,7 @@ fn call_conn() -> anyhow::Result<()> {
     // This size should be enough and should be easy to find for the allocator.
     //let _buffer = String::with_capacity(size);
 
-    let typerequets = types::SupportedRequests::Database(types::SupportedDBRequests::TagIdGet(13));
+    let typerequets = types::SupportedRequests::Database(types::SupportedDBRequests::GetTagId(13));
 
     init_data_request(&typerequets);
 
@@ -117,37 +118,41 @@ pub fn init_data_request(requesttype: &types::SupportedRequests) {
     conn.read(data_buffer)
         .context("plugin failed 3nd step init")
         .unwrap();
-
     // Handle data from server.
-    //let vare = handle_supportedrequesttypes(data_buffer, requesttype);
+    let vare = handle_supportedrequesttypes(data_buffer, requesttype);
+    println!("{:?}", vare);
 }
 
 ///
 /// Converts vec into a supported data type.
 ///
-fn handle_supportedrequesttypes(data_buffer: &mut [u8], requesttype: &types::SupportedRequests) {
+fn handle_supportedrequesttypes(
+    data_buffer: &mut [u8],
+    requesttype: &types::SupportedRequests,
+) -> AllReturns {
     match requesttype {
         types::SupportedRequests::Database(db_actions) => match db_actions {
-            types::SupportedDBRequests::TagIdGet(_id) => {
-                let _opjtag: Option<sharedtypes::DbTagObjCompatability> =
-                    bincode::deserialize(data_buffer).unwrap();
-                //dbg!(opjtag);
+            types::SupportedDBRequests::GetTagId(_id) => {
+                let out = bincode::deserialize(data_buffer).unwrap();
+                AllReturns::DB(types::DBReturns::GetTagId(out))
             }
             types::SupportedDBRequests::RelationshipGetTagid(_id) => {
-                let opjtag: Vec<usize> = bincode::deserialize(data_buffer).unwrap();
-                dbg!(opjtag);
+                let out = bincode::deserialize(data_buffer).unwrap();
+                AllReturns::DB(types::DBReturns::RelationshipGetTagid(out))
             }
             types::SupportedDBRequests::RelationshipGetFileid(_id) => {
-                let opjtag: HashSet<usize> = bincode::deserialize(data_buffer).unwrap();
-                dbg!(opjtag);
+                let out = bincode::deserialize(data_buffer).unwrap();
+                AllReturns::DB(types::DBReturns::RelationshipGetFileid(out))
             }
             types::SupportedDBRequests::GetFile(_id) => {
-                let opjtag: Option<(String, String, String)> =
-                    bincode::deserialize(data_buffer).unwrap();
-                dbg!(opjtag);
-                //return bincode::deserialize(&data_buffer[..]).unwrap()
+                let out = bincode::deserialize(data_buffer).unwrap();
+                AllReturns::DB(types::DBReturns::GetFile(out))
+            }
+            types::SupportedDBRequests::SettingsGetName(_key) => {
+                let out = bincode::deserialize(data_buffer).unwrap();
+                AllReturns::DB(types::DBReturns::SettingsGetName(out))
             }
         },
-        types::SupportedRequests::PluginCross(_plugindata) => {}
+        types::SupportedRequests::PluginCross(_plugindata) => AllReturns::Nune,
     }
 }

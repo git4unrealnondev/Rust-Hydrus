@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
-use std::{fmt};
+use std::fmt;
 use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
 use strum_macros::{Display, EnumString};
@@ -9,7 +9,7 @@ use strum_macros::{Display, EnumString};
 ///
 /// Database Tags Object
 ///
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize, Serialize)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize, Serialize, Clone)]
 pub struct DbTagNNS {
     pub name: String,
     pub namespace: usize,
@@ -199,7 +199,7 @@ pub struct ScraperFileReturn {
 /// File object
 /// should of done this sooner lol
 ///
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct DbFileObj {
     pub id: Option<usize>,
     pub hash: String,
@@ -290,7 +290,7 @@ pub struct DbRelationshipObj {
 ///
 /// Database Settings Object
 ///
-#[derive(Debug)]
+#[derive(Debug, Deserialize, Clone, Serialize)]
 pub struct DbSettingObj {
     pub name: String,
     pub pretty: Option<String>,
