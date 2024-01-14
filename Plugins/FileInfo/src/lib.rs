@@ -39,6 +39,12 @@ pub fn on_start() {
 
 fn check_existing_db() {
     use std::time::Instant;
+    let table = sharedtypes::LoadDBTable::Namespace;
+    let typerequets = client::types::SupportedRequests::Database(
+        client::types::SupportedDBRequests::LoadTable(table),
+    );
+    client::init_data_request(&typerequets);
+
     let now = Instant::now();
     let typerequets = client::types::SupportedRequests::Database(
         client::types::SupportedDBRequests::RelationshipGetTagid(1),
@@ -68,9 +74,32 @@ fn check_existing_db() {
         client::types::SupportedDBRequests::RelationshipGetTagid(1),
     );
     client::init_data_request(&typerequets);
+    let typerequets = client::types::SupportedRequests::Database(
+        client::types::SupportedDBRequests::GetNamespaceString(1),
+    );
+    let ex = client::init_data_request(&typerequets);
+    dbg!(ex);
+    let typerequets = client::types::SupportedRequests::Database(
+        client::types::SupportedDBRequests::GetNamespaceString(1),
+    );
+    let ex = client::init_data_request(&typerequets);
+    dbg!(ex);
+
+    let typerequets = client::types::SupportedRequests::Database(
+        client::types::SupportedDBRequests::GetNamespaceString(1),
+    );
+    let ex = client::init_data_request(&typerequets);
+    dbg!(ex);
+    let typerequets = client::types::SupportedRequests::Database(
+        client::types::SupportedDBRequests::GetNamespaceString(1),
+    );
+    let ex = client::init_data_request(&typerequets);
+
+    dbg!(ex);
     let typerequets =
         client::types::SupportedRequests::Database(client::types::SupportedDBRequests::GetFile(1));
-    client::init_data_request(&typerequets);
+    let ex = client::init_data_request(&typerequets);
+    dbg!(ex);
     let elapsed = now.elapsed();
     println!("Elapsed: {:.2?}", elapsed);
 }

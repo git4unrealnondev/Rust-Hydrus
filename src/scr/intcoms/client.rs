@@ -3,7 +3,7 @@ use bincode;
 use interprocess::local_socket::{LocalSocketStream, NameTypeSupport};
 use std::io::{prelude::*, BufReader};
 
-use crate::sharedtypes;
+use crate::sharedtypes::{self, AllFields};
 
 use self::types::AllReturns;
 
@@ -53,7 +53,7 @@ fn call_conn() -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn init_data_request(requesttype: &types::SupportedRequests) {
+pub fn init_data_request(requesttype: &types::SupportedRequests) -> AllReturns {
     let coms_struct = types::Coms {
         com_type: types::EComType::BiDirectional,
         control: types::EControlSigs::Send,
@@ -95,7 +95,7 @@ pub fn init_data_request(requesttype: &types::SupportedRequests) {
     let econtrolsig = types::con_econtrolsigs(buffer);
 
     match econtrolsig {
-        types::EControlSigs::Halt => return,
+        types::EControlSigs::Halt => return AllReturns::Nune,
         types::EControlSigs::Send => {}
         types::EControlSigs::Break => {
             panic!("This plugin was called to break. Will break NOW.");
@@ -119,8 +119,8 @@ pub fn init_data_request(requesttype: &types::SupportedRequests) {
         .context("plugin failed 3nd step init")
         .unwrap();
     // Handle data from server.
-    let vare = handle_supportedrequesttypes(data_buffer, requesttype);
-    println!("{:?}", vare);
+    handle_supportedrequesttypes(data_buffer, requesttype)
+    //println!("{:?}", vare);
 }
 
 ///
@@ -151,6 +151,26 @@ fn handle_supportedrequesttypes(
             types::SupportedDBRequests::SettingsGetName(_key) => {
                 let out = bincode::deserialize(data_buffer).unwrap();
                 AllReturns::DB(types::DBReturns::SettingsGetName(out))
+            }
+            types::SupportedDBRequests::GetTagName(_key) => {
+                let out = bincode::deserialize(data_buffer).unwrap();
+                AllReturns::DB(types::DBReturns::GetTagName(out))
+            }
+            types::SupportedDBRequests::GetFileHash(_key) => {
+                let out = bincode::deserialize(data_buffer).unwrap();
+                AllReturns::DB(types::DBReturns::GetFileHash(out))
+            }
+            types::SupportedDBRequests::GetNamespace(_key) => {
+                let out = bincode::deserialize(data_buffer).unwrap();
+                AllReturns::DB(types::DBReturns::GetNamespace(out))
+            }
+            types::SupportedDBRequests::GetNamespaceString(_key) => {
+                let out = bincode::deserialize(data_buffer).unwrap();
+                AllReturns::DB(types::DBReturns::GetNamespaceString(out))
+            }
+            types::SupportedDBRequests::LoadTable(_key) => {
+                let out = bincode::deserialize(data_buffer).unwrap();
+                AllReturns::DB(types::DBReturns::LoadTable(out))
             }
         },
         types::SupportedRequests::PluginCross(_plugindata) => AllReturns::Nune,

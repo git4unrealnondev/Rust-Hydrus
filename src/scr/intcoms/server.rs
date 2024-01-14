@@ -247,8 +247,10 @@ impl PluginIpcInteract {
 
                     match plugin_supportedrequests {
                         types::SupportedRequests::Database(db_actions) => {
-                            let (size, data) = self.db_interface.dbactions_to_function(db_actions);
-                            self.send_processed_data(size, data, &mut conn);
+                            let tosend = self.db_interface.dbactions_to_function(db_actions);
+                            if let Some((size, data)) = tosend {
+                                self.send_processed_data(size, data, &mut conn);
+                            }
                         }
                         types::SupportedRequests::PluginCross(_plugindata) => {}
                     }
@@ -295,7 +297,7 @@ impl PluginIpcInteract {
         &self,
         conn: &mut BufReader<LocalSocketStream>,
     ) -> types::SupportedRequests {
-        let buffer: &mut [u8; 32] = &mut [b'0'; 32];
+        let buffer: &mut [u8; 40] = &mut [b'0'; 40];
         let b_control = types::x_to_bytes(&types::EControlSigs::Send);
         conn.get_mut()
             .write_all(b_control)
@@ -345,33 +347,58 @@ impl DbInteract {
     pub fn dbactions_to_function(
         &mut self,
         dbaction: types::SupportedDBRequests,
-    ) -> (usize, Vec<u8>) {
+    ) -> Option<(usize, Vec<u8>)> {
         match dbaction {
             types::SupportedDBRequests::GetTagId(id) => {
                 let unwrappy = self._database.lock().unwrap();
                 let tmep = unwrappy.tag_id_get(&id);
-                Self::option_to_bytes(tmep)
+                Some(Self::option_to_bytes(tmep))
             }
             types::SupportedDBRequests::RelationshipGetTagid(id) => {
                 let unwrappy = self._database.lock().unwrap();
                 let tmep = unwrappy.relationship_get_tagid(&id);
-                Self::option_to_bytes(tmep)
+                Some(Self::option_to_bytes(tmep))
             }
             types::SupportedDBRequests::GetFile(id) => {
                 let unwrappy = self._database.lock().unwrap();
                 let tmep = unwrappy.file_get_id(&id);
-                Self::option_to_bytes(tmep)
+                Some(Self::option_to_bytes(tmep))
             }
             types::SupportedDBRequests::RelationshipGetFileid(id) => {
                 let unwrappy = self._database.lock().unwrap();
                 let tmep = unwrappy.relationship_get_fileid(&id);
-                Self::option_to_bytes(tmep)
+                Some(Self::option_to_bytes(tmep))
             }
 
             types::SupportedDBRequests::SettingsGetName(id) => {
                 let unwrappy = self._database.lock().unwrap();
                 let tmep = unwrappy.settings_get_name(&id);
-                Self::option_to_bytes(tmep)
+                Some(Self::option_to_bytes(tmep))
+            }
+            types::SupportedDBRequests::GetTagName((name, namespace)) => {
+                let unwrappy = self._database.lock().unwrap();
+                let tmep = unwrappy.tag_get_name(name, namespace);
+                Some(Self::option_to_bytes(tmep))
+            }
+            types::SupportedDBRequests::GetFileHash(name) => {
+                let unwrappy = self._database.lock().unwrap();
+                let tmep = unwrappy.file_get_hash(&name);
+                Some(Self::option_to_bytes(tmep))
+            }
+            types::SupportedDBRequests::GetNamespace(name) => {
+                let unwrappy = self._database.lock().unwrap();
+                let tmep = unwrappy.namespace_get(&name);
+                Some(Self::option_to_bytes(tmep))
+            }
+            types::SupportedDBRequests::GetNamespaceString(id) => {
+                let unwrappy = self._database.lock().unwrap();
+                let tmep = unwrappy.namespace_get_string(&id);
+                Some(Self::option_to_bytes(tmep))
+            }
+            types::SupportedDBRequests::LoadTable(table) => {
+                let mut unwrappy = self._database.lock().unwrap();
+                let tmep = unwrappy.load_table(&table);
+                Some(Self::data_size_to_b(&true))
             }
         }
     }

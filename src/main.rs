@@ -40,6 +40,7 @@ mod client;
 #[path = "./scr/intcoms/server.rs"]
 mod server;
 
+pub const LOG_LOCATION: &str = "./log.txt";
 /*
 mod scr {
     pub mod cli;
@@ -116,18 +117,12 @@ fn db_file_sanity(dbloc: &str) {
     }
 }
 
-/// Makes logging happen
-fn makelog(logloc: &str) {
-    //Inits logging::main at log.txt
-    logging::main(logloc)
-}
-
 /// Main function.
 fn main() {
     let dbloc = "./main.db";
 
     // Makes Logging work
-    makelog("./log.txt");
+    logging::main();
 
     //TODO NEEDS MAIN INFO PULLER HERE. PULLS IN EVERYTHING INTO DB.
 
@@ -340,12 +335,12 @@ fn main() {
         pluginmanager.clone(),
     );
 
-    arc.lock()
+    /* arc.lock()
         .unwrap()
         .load_table(&sharedtypes::LoadDBTable::Relationship);
     arc.lock()
         .unwrap()
-        .load_table(&sharedtypes::LoadDBTable::Files);
+        .load_table(&sharedtypes::LoadDBTable::Files);*/
     pluginmanager.lock().unwrap().plugin_on_start();
     // Anything below here will run automagically.
     // Jobs run in OS threads

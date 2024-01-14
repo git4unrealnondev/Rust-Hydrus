@@ -57,7 +57,7 @@ pub fn con_usize(input: &mut [u8; 8]) -> usize {
 ///
 /// Turns bytes into a SupportedRequests structure.
 ///
-pub fn con_supportedrequests(input: &mut [u8; 32]) -> SupportedRequests {
+pub fn con_supportedrequests(input: &mut [u8; 40]) -> SupportedRequests {
     unsafe { std::mem::transmute(*input) }
 }
 
@@ -67,11 +67,20 @@ pub fn con_supportedrequests(input: &mut [u8; 32]) -> SupportedRequests {
 #[derive(Debug)]
 pub enum SupportedDBRequests {
     GetTagId(usize),
+    GetTagName((String, usize)),
     RelationshipGetTagid(usize),
-    GetFile(usize),
     RelationshipGetFileid(usize),
+    GetFile(usize),
+    GetFileHash(String),
+    GetNamespace(String),
+    GetNamespaceString(usize),
     SettingsGetName(String),
+    LoadTable(sharedtypes::LoadDBTable),
 }
+
+///
+/// Actions for Database
+///
 
 ///
 /// Returns all data, general structure.
@@ -89,10 +98,15 @@ pub enum AllReturns {
 #[derive(Debug)]
 pub enum DBReturns {
     GetTagId(Option<sharedtypes::DbTagNNS>),
+    GetTagName(Option<usize>),
     RelationshipGetTagid(Option<HashSet<usize>>),
-    GetFile(Option<sharedtypes::DbFileObj>),
     RelationshipGetFileid(Option<HashSet<usize>>),
+    GetFile(Option<sharedtypes::DbFileObj>),
+    GetFileHash(Option<usize>),
+    GetNamespace(Option<usize>),
+    GetNamespaceString(Option<sharedtypes::DbNamespaceObj>),
     SettingsGetName(Option<sharedtypes::DbSettingObj>),
+    LoadTable(bool),
 }
 
 ///

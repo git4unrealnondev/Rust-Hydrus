@@ -223,7 +223,7 @@ pub struct PluginFileObj {
 /// Namespace object
 /// should of done this sooner lol
 ///
-#[derive(Debug)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DbNamespaceObj {
     pub id: usize,
     pub name: String,

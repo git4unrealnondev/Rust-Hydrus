@@ -1173,7 +1173,7 @@ impl Main {
     pub fn tag_get_name(&self, tag: String, namespace: usize) -> Option<&usize> {
         let tagobj = &sharedtypes::DbTagNNS {
             name: tag,
-            namespace: namespace,
+            namespace,
         };
 
         self._inmemdb.tags_get_id(tagobj)
@@ -2155,11 +2155,11 @@ impl Main {
         logging::info_log(&format!("Stopping db vac & index."));
 
         self.transaction_flush();
-        let tagids_unwrap = self._inmemdb.namespace_get_tagids(id);
-        let tagids = match tagids_unwrap {
-            None => return,
-            Some(tagids) => tagids.clone(),
-        };
+        if let None = self.namespace_get_string(id) {
+            return;
+        }
+
+        let tagids = self.namespage_get_tagids(id).clone();
 
         let mut tag_sql = String::new();
         for each in tagids.iter() {
@@ -2262,6 +2262,13 @@ impl Main {
     }
 
     ///
+    /// Gets all tag's assocated a singular namespace
+    ///
+    pub fn namespage_get_tagids(&self, id: &usize) -> &HashSet<usize> {
+        self._inmemdb.namespace_get_tagids(id).unwrap()
+    }
+
+    ///
     /// Recreates the db with only one ns in it.
     ///
     pub fn drop_recreate_ns(&mut self, id: &usize) {
@@ -2277,10 +2284,10 @@ impl Main {
         //let tag_max = self._inmemdb.tags_max_return().clone();
         self._inmemdb.tags_max_reset();
 
-        let tids = self._inmemdb.namespace_get_tagids(id).unwrap().clone();
+        let tids = self.namespage_get_tagids(id);
 
         let mut cnt: usize = 0;
-        for tid in tids {
+        for tid in tids.clone() {
             let file_listop = self._inmemdb.relationship_get_fileid(&tid).unwrap().clone();
             let tag = self._inmemdb.tags_get_data(&tid).unwrap();
             self.tag_add_sql(cnt, tag.name.to_string(), "".to_string(), tag.namespace);
