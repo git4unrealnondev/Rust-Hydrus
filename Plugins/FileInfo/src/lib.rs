@@ -44,6 +44,11 @@ fn check_existing_db() {
         client::types::SupportedDBRequests::LoadTable(table),
     );
     client::init_data_request(&typerequets);
+    let table = sharedtypes::LoadDBTable::Tags;
+    let typerequets = client::types::SupportedRequests::Database(
+        client::types::SupportedDBRequests::LoadTable(table),
+    );
+    client::init_data_request(&typerequets);
 
     let now = Instant::now();
     let typerequets = client::types::SupportedRequests::Database(
@@ -78,28 +83,53 @@ fn check_existing_db() {
         client::types::SupportedDBRequests::GetNamespaceString(1),
     );
     let ex = client::init_data_request(&typerequets);
-    dbg!(ex);
-    let typerequets = client::types::SupportedRequests::Database(
-        client::types::SupportedDBRequests::GetNamespaceString(1),
-    );
-    let ex = client::init_data_request(&typerequets);
-    dbg!(ex);
-
-    let typerequets = client::types::SupportedRequests::Database(
-        client::types::SupportedDBRequests::GetNamespaceString(1),
-    );
-    let ex = client::init_data_request(&typerequets);
-    dbg!(ex);
     let typerequets = client::types::SupportedRequests::Database(
         client::types::SupportedDBRequests::GetNamespaceString(1),
     );
     let ex = client::init_data_request(&typerequets);
 
-    dbg!(ex);
-    let typerequets =
+    let typerequets = client::types::SupportedRequests::Database(
+        client::types::SupportedDBRequests::GetNamespaceString(1),
+    );
+    let ex = client::init_data_request(&typerequets);
+    let typerequets = client::types::SupportedRequests::Database(
+        client::types::SupportedDBRequests::GetNamespaceString(1),
+    );
+    let ex = client::init_data_request(&typerequets);
+
+    /*let typerequets = client::types::SupportedRequests::Database(
+        client::types::SupportedDBRequests::GetNamespaceTagIDs(1),
+    );
+    let ex = client::init_data_request(&typerequets);
+
+    match ex {
+        client::types::AllReturns::DB(out) => match out {
+            client::types::DBReturns::GetNamespaceTagIDs(tag) => {
+                //println!("fileinfo:{}", tag.len());
+            }
+            _ => {}
+        },
+        _ => {}
+    }
+    let typerequets = client::types::SupportedRequests::Database(
+        client::types::SupportedDBRequests::GetNamespaceTagIDs(1),
+    );
+    let ex = client::init_data_request(&typerequets);
+
+    match ex {
+        client::types::AllReturns::DB(out) => match out {
+            client::types::DBReturns::GetNamespaceTagIDs(tag) => {
+                //println!("fileinfo:{}", tag.len());
+            }
+            _ => {}
+        },
+        _ => {}
+    }*/
+
+    /*let typerequets =
         client::types::SupportedRequests::Database(client::types::SupportedDBRequests::GetFile(1));
     let ex = client::init_data_request(&typerequets);
-    dbg!(ex);
+    dbg!(ex);*/
     let elapsed = now.elapsed();
     println!("Elapsed: {:.2?}", elapsed);
 }

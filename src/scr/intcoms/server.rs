@@ -1,6 +1,7 @@
 use crate::{database, sharedtypes::DbFileObj, sharedtypes::DbTagObjCompatability};
 use anyhow::Context;
 use interprocess::local_socket::{LocalSocketListener, LocalSocketStream, NameTypeSupport};
+use itertools::Itertools;
 use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
 use std::{
@@ -260,7 +261,15 @@ impl PluginIpcInteract {
         }
         Ok(())
     }
-
+    ///
+    /// Converts a vec of T into an array.
+    /// Stolen from: https://stackoverflow.com/questions/29570607/is-there-a-good-way-to-convert-a-vect-to-an-array
+    ///
+    fn demo<T, const N: usize>(v: Vec<T>) -> [T; N] {
+        v.try_into().unwrap_or_else(|v: Vec<T>| {
+            panic!("Expected a Vec of length {} but it was {}", N, v.len())
+        })
+    }
     ///
     /// Sends data over the IPC channel.
     /// Sends size first then data.
@@ -273,19 +282,28 @@ impl PluginIpcInteract {
     ) {
         //let arbdata = types::ArbitraryData{buffer_size: size, buffer_data:data};
         let b_size = types::x_to_bytes(&size);
+
+        // Having to implement this because of the local socket getting overloaded.
         //let b_arbdata = types::x_to_bytes(&data);
         //dbg!(&b_arbdata);
+
         conn.get_mut()
             .write_all(b_size)
             .context("Socket send failed")
             .unwrap();
-
         //let arraytest: &mut [u8; 72] = &mut types::demo(data.to_vec());
         //let mut objtag = types::con_dbtagobj(arraytest);
-        //dbg!(objtag);
+        //dbg!(objtag)
+        let size_buffer: &mut [u8; 8] = &mut [b'0'; 8];
 
+        conn.read(size_buffer)
+            .context("plugin failed 3nd step init")
+            .unwrap();
+
+        let binding = &mut data.clone();
+        //println!("server data: {:?}", &binding);
         conn.get_mut()
-            .write_all(&data)
+            .write_all(binding)
             .context("Socket send failed")
             .unwrap();
     }
@@ -299,13 +317,15 @@ impl PluginIpcInteract {
     ) -> types::SupportedRequests {
         let buffer: &mut [u8; 40] = &mut [b'0'; 40];
         let b_control = types::x_to_bytes(&types::EControlSigs::Send);
-        conn.get_mut()
-            .write_all(b_control)
+        let beans = conn
+            .get_mut()
+            .write(b_control)
             .context("Socket send failed")
             .unwrap();
-        conn.read(buffer)
+        conn.read_exact(buffer)
             .context("plugin failed 2nd step auth")
             .unwrap();
+
         types::con_supportedrequests(buffer)
     }
 
@@ -399,6 +419,11 @@ impl DbInteract {
                 let mut unwrappy = self._database.lock().unwrap();
                 let tmep = unwrappy.load_table(&table);
                 Some(Self::data_size_to_b(&true))
+            }
+            types::SupportedDBRequests::GetNamespaceTagIDs(id) => {
+                let unwrappy = self._database.lock().unwrap();
+                let tmep = unwrappy.namespage_get_tagids(&id);
+                Some(Self::data_size_to_b(tmep))
             }
         }
     }

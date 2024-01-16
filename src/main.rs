@@ -335,12 +335,6 @@ fn main() {
         pluginmanager.clone(),
     );
 
-    /* arc.lock()
-        .unwrap()
-        .load_table(&sharedtypes::LoadDBTable::Relationship);
-    arc.lock()
-        .unwrap()
-        .load_table(&sharedtypes::LoadDBTable::Files);*/
     pluginmanager.lock().unwrap().plugin_on_start();
     // Anything below here will run automagically.
     // Jobs run in OS threads

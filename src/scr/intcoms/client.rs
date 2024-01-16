@@ -1,6 +1,7 @@
 use anyhow::Context;
 use bincode;
 use interprocess::local_socket::{LocalSocketStream, NameTypeSupport};
+use itertools::Itertools;
 use std::io::{prelude::*, BufReader};
 
 use crate::sharedtypes::{self, AllFields};
@@ -87,7 +88,7 @@ pub fn init_data_request(requesttype: &types::SupportedRequests) -> AllReturns {
         .context("Socket send failed")
         .unwrap();
 
-    let buffer: &mut [u8; 1] = &mut [b'0'];
+    let buffer: &mut [u8; 1] = &mut [b'0'; 1];
     conn.read(buffer)
         .context("plugin failed 2nd step init")
         .unwrap();
@@ -111,13 +112,17 @@ pub fn init_data_request(requesttype: &types::SupportedRequests) -> AllReturns {
     conn.read(size_buffer)
         .context("plugin failed 3nd step init")
         .unwrap();
+    conn.get_mut().write_all(size_buffer).unwrap();
 
     // Receiving actual data from server
     let size: usize = types::con_usize(size_buffer);
     let data_buffer = &mut vec![b'0'; size];
-    conn.read(data_buffer)
+    conn.read_exact(data_buffer)
         .context("plugin failed 3nd step init")
         .unwrap();
+    //println!("client data: {:?} size {}", data_buffer, size);
+    // println!("slice: {:?}", &datavec[size..size * 2]);
+    //println!("{}", std::mem::size_of_val(b_struct));
     // Handle data from server.
     handle_supportedrequesttypes(data_buffer, requesttype)
     //println!("{:?}", vare);
@@ -171,6 +176,10 @@ fn handle_supportedrequesttypes(
             types::SupportedDBRequests::LoadTable(_key) => {
                 let out = bincode::deserialize(data_buffer).unwrap();
                 AllReturns::DB(types::DBReturns::LoadTable(out))
+            }
+            types::SupportedDBRequests::GetNamespaceTagIDs(_key) => {
+                let out = bincode::deserialize(data_buffer).unwrap();
+                AllReturns::DB(types::DBReturns::GetNamespaceTagIDs(out))
             }
         },
         types::SupportedRequests::PluginCross(_plugindata) => AllReturns::Nune,

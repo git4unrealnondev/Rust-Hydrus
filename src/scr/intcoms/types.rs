@@ -22,7 +22,7 @@ pub struct Coms {
     pub com_type: EComType,
     pub control: EControlSigs,
 }
-pub fn x_to_bytes<T>(input_generic: &T) -> &[u8] {
+pub fn x_to_bytes<T: Sized>(input_generic: &T) -> &[u8] {
     unsafe { any_as_u8_slice(input_generic) }
 }
 
@@ -73,6 +73,7 @@ pub enum SupportedDBRequests {
     GetFile(usize),
     GetFileHash(String),
     GetNamespace(String),
+    GetNamespaceTagIDs(usize),
     GetNamespaceString(usize),
     SettingsGetName(String),
     LoadTable(sharedtypes::LoadDBTable),
@@ -89,7 +90,8 @@ pub enum SupportedDBRequests {
 pub enum AllReturns {
     DB(DBReturns),
     Plugin(SupportedPluginRequests),
-    Nune, // Placeholder don't actually use
+    Nune, // Placeholder don't actually use. I'm using it lazizly because I'm a shitter. Keep it
+          // here for handling edge cases or nothing needs to get sent. lol
 }
 
 ///
@@ -103,6 +105,7 @@ pub enum DBReturns {
     RelationshipGetFileid(Option<HashSet<usize>>),
     GetFile(Option<sharedtypes::DbFileObj>),
     GetFileHash(Option<usize>),
+    GetNamespaceTagIDs(HashSet<usize>),
     GetNamespace(Option<usize>),
     GetNamespaceString(Option<sharedtypes::DbNamespaceObj>),
     SettingsGetName(Option<sharedtypes::DbSettingObj>),
