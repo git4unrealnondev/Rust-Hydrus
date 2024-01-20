@@ -1,7 +1,7 @@
 use crate::{database, sharedtypes::DbFileObj, sharedtypes::DbTagObjCompatability};
 use anyhow::Context;
 use interprocess::local_socket::{LocalSocketListener, LocalSocketStream, NameTypeSupport};
-use itertools::Itertools;
+use serde::Serialize;
 use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
 use std::{
@@ -77,7 +77,7 @@ another process and try again.",
             com_type: types::EComType::BiDirectional,
             control: types::EControlSigs::Send,
         };
-        let b_struct = types::x_to_bytes(&coms_struct);
+        let b_struct = bincode::serialize(&coms_struct).unwrap();
         // Wrap the connection into a buffered reader right away
         // so that we could read a single line out of it.
         let mut conn = BufReader::new(conn);
@@ -96,14 +96,8 @@ another process and try again.",
 
         // Print out the result, getting the newline for free!
 
-        let instruct: types::Coms = types::con_coms(buffer);
+        let instruct: types::Coms = bincode::deserialize(&buffer[..]).unwrap();
         //std::mem::forget(buffer.clone());
-        dbg!(&buffer);
-
-        println!(
-            "Client answered: {:?} {:?}",
-            instruct.com_type, instruct.control
-        );
 
         match instruct.control {
             types::EControlSigs::Send => {
@@ -111,16 +105,14 @@ another process and try again.",
                 conn.read_line(&mut bufstr)
                     .context("Socket receive failed")?;
 
-                dbg!(&bufstr);
                 //bufstr.clear();
 
                 conn.get_mut()
-                    .write_all(b_struct)
+                    .write_all(&b_struct)
                     .context("Socket send failed")?;
                 bufstr.clear();
                 conn.read_line(&mut bufstr)
                     .context("Socket receive failed")?;
-                dbg!(&bufstr);
             }
             types::EControlSigs::Halt => {}
             types::EControlSigs::Break => {}
@@ -151,7 +143,9 @@ pub struct PluginIpcInteract {
 impl PluginIpcInteract {
     pub fn new(main_db: Arc<Mutex<database::Main>>) -> Self {
         PluginIpcInteract {
-            db_interface: DbInteract { _database: main_db },
+            db_interface: DbInteract {
+                _database: main_db.clone(),
+            },
         }
     }
 
@@ -208,55 +202,18 @@ impl PluginIpcInteract {
 
         // Main Plugin interaction loop
         for conn in listener.incoming().filter_map(handle_error) {
-            let buffer = &mut [b'0', b'0'];
-
-            let mut plugin_com_type: types::EComType = types::EComType::None; // Default value for no data
-
             let mut conn = BufReader::new(conn);
-            //logging::info_log(&"Incoming connection from Plugin.".to_string());
 
-            // Since our client example writes first, the server should read a line and only then send a
-            // response. Otherwise, because reading and writing on a connection cannot be simultaneous
-            // without threads or async, we can deadlock the two processes by having both sides wait for
-            // the write buffer to be emptied by the other.
-            conn.read(buffer).context("Socket receive failed")?;
+            let plugin_supportedrequests = types::recieve(&mut conn);
 
-            let instruct = types::con_coms(buffer);
+            //Default
 
-            //Control flow for sending / receiving data from a plugin.
-            match instruct.control {
-                // If we get SEND then everything is good.
-                types::EControlSigs::Send => {}
-                // If we get HALT then stop connection. Natural stop.
-                types::EControlSigs::Halt => {
-                    break;
+            match plugin_supportedrequests {
+                types::SupportedRequests::Database(db_actions) => {
+                    let data = self.db_interface.dbactions_to_function(db_actions);
+                    types::send_preserialize(&data, &mut conn);
                 }
-                // HALT EVERYTHING WILL STOP ALL PLUGINS FROM COMUNICATING.
-                types::EControlSigs::Break => {
-                    self.halt_all_coms();
-                }
-            }
-
-            plugin_com_type = instruct.com_type;
-
-            match &plugin_com_type {
-                types::EComType::SendOnly => {}    //TBD
-                types::EComType::RecieveOnly => {} //TBD
-                types::EComType::BiDirectional => {
-                    //Default
-                    let plugin_supportedrequests = self.send_data_request(&mut conn);
-
-                    match plugin_supportedrequests {
-                        types::SupportedRequests::Database(db_actions) => {
-                            let tosend = self.db_interface.dbactions_to_function(db_actions);
-                            if let Some((size, data)) = tosend {
-                                self.send_processed_data(size, data, &mut conn);
-                            }
-                        }
-                        types::SupportedRequests::PluginCross(_plugindata) => {}
-                    }
-                }
-                types::EComType::None => {} // Do nothing.
+                types::SupportedRequests::PluginCross(_plugindata) => {}
             }
         }
         Ok(())
@@ -269,64 +226,6 @@ impl PluginIpcInteract {
         v.try_into().unwrap_or_else(|v: Vec<T>| {
             panic!("Expected a Vec of length {} but it was {}", N, v.len())
         })
-    }
-    ///
-    /// Sends data over the IPC channel.
-    /// Sends size first then data.
-    ///
-    fn send_processed_data(
-        &mut self,
-        size: usize,
-        data: Vec<u8>,
-        conn: &mut BufReader<LocalSocketStream>,
-    ) {
-        //let arbdata = types::ArbitraryData{buffer_size: size, buffer_data:data};
-        let b_size = types::x_to_bytes(&size);
-
-        // Having to implement this because of the local socket getting overloaded.
-        //let b_arbdata = types::x_to_bytes(&data);
-        //dbg!(&b_arbdata);
-
-        conn.get_mut()
-            .write_all(b_size)
-            .context("Socket send failed")
-            .unwrap();
-        //let arraytest: &mut [u8; 72] = &mut types::demo(data.to_vec());
-        //let mut objtag = types::con_dbtagobj(arraytest);
-        //dbg!(objtag)
-        let size_buffer: &mut [u8; 8] = &mut [b'0'; 8];
-
-        conn.read(size_buffer)
-            .context("plugin failed 3nd step init")
-            .unwrap();
-
-        let binding = &mut data.clone();
-        //println!("server data: {:?}", &binding);
-        conn.get_mut()
-            .write_all(binding)
-            .context("Socket send failed")
-            .unwrap();
-    }
-
-    ///
-    /// Sends request for data to the calling plugin.
-    ///
-    fn send_data_request(
-        &self,
-        conn: &mut BufReader<LocalSocketStream>,
-    ) -> types::SupportedRequests {
-        let buffer: &mut [u8; 40] = &mut [b'0'; 40];
-        let b_control = types::x_to_bytes(&types::EControlSigs::Send);
-        let beans = conn
-            .get_mut()
-            .write(b_control)
-            .context("Socket send failed")
-            .unwrap();
-        conn.read_exact(buffer)
-            .context("plugin failed 2nd step auth")
-            .unwrap();
-
-        types::con_supportedrequests(buffer)
     }
 
     ///
@@ -347,90 +246,101 @@ impl DbInteract {
     /// Stores database inside of self for DB interactions with plugin system
     ///
     pub fn new(main_db: Arc<Mutex<database::Main>>) -> Self {
-        DbInteract { _database: main_db }
+        DbInteract {
+            _database: main_db.clone(),
+        }
     }
     ///
     /// Helper function to return data about a passed object into size and bytes array.
     ///
-    fn data_size_to_b<T: serde::Serialize>(data_object: &T) -> (usize, Vec<u8>) {
+    fn data_size_to_b<T: serde::Serialize>(data_object: &T) -> Vec<u8> {
         let tmp = data_object;
         //let bytd = types::x_to_bytes(tmp).to_vec();
         let byt: Vec<u8> = bincode::serialize(&tmp).unwrap();
-        let sze = byt.len();
-        (sze, byt)
+        byt
     }
     ///
     /// Packages functions from the DB into their self owned versions
     /// before packaging them as bytes to get sent accross IPC to the other
     /// software. So far things are pretty mint.
     ///
-    pub fn dbactions_to_function(
-        &mut self,
-        dbaction: types::SupportedDBRequests,
-    ) -> Option<(usize, Vec<u8>)> {
+    pub fn dbactions_to_function(&mut self, dbaction: types::SupportedDBRequests) -> Vec<u8> {
         match dbaction {
             types::SupportedDBRequests::GetTagId(id) => {
                 let unwrappy = self._database.lock().unwrap();
                 let tmep = unwrappy.tag_id_get(&id);
-                Some(Self::option_to_bytes(tmep))
+                Self::option_to_bytes(tmep)
             }
             types::SupportedDBRequests::RelationshipGetTagid(id) => {
                 let unwrappy = self._database.lock().unwrap();
                 let tmep = unwrappy.relationship_get_tagid(&id);
-                Some(Self::option_to_bytes(tmep))
+                Self::option_to_bytes(tmep)
             }
             types::SupportedDBRequests::GetFile(id) => {
                 let unwrappy = self._database.lock().unwrap();
                 let tmep = unwrappy.file_get_id(&id);
-                Some(Self::option_to_bytes(tmep))
+                Self::option_to_bytes(tmep)
             }
             types::SupportedDBRequests::RelationshipGetFileid(id) => {
                 let unwrappy = self._database.lock().unwrap();
                 let tmep = unwrappy.relationship_get_fileid(&id);
-                Some(Self::option_to_bytes(tmep))
+                Self::option_to_bytes(tmep)
             }
 
             types::SupportedDBRequests::SettingsGetName(id) => {
                 let unwrappy = self._database.lock().unwrap();
                 let tmep = unwrappy.settings_get_name(&id);
-                Some(Self::option_to_bytes(tmep))
+                Self::option_to_bytes(tmep)
             }
             types::SupportedDBRequests::GetTagName((name, namespace)) => {
                 let unwrappy = self._database.lock().unwrap();
                 let tmep = unwrappy.tag_get_name(name, namespace);
-                Some(Self::option_to_bytes(tmep))
+                Self::option_to_bytes(tmep)
             }
             types::SupportedDBRequests::GetFileHash(name) => {
                 let unwrappy = self._database.lock().unwrap();
                 let tmep = unwrappy.file_get_hash(&name);
-                Some(Self::option_to_bytes(tmep))
+                Self::option_to_bytes(tmep)
             }
+            types::SupportedDBRequests::CreateNamespace(name, description, addtodb) => {
+                let mut unwrappy = self._database.lock().unwrap();
+                unwrappy.namespace_add(name, description, addtodb).clone();
+                unwrappy.transaction_flush();
+                let out: usize = 32;
+                Self::data_size_to_b(&out)
+            }
+
             types::SupportedDBRequests::GetNamespace(name) => {
                 let unwrappy = self._database.lock().unwrap();
                 let tmep = unwrappy.namespace_get(&name);
-                Some(Self::option_to_bytes(tmep))
+                Self::option_to_bytes(tmep)
             }
+            types::SupportedDBRequests::TestUsize() => {
+                let test: usize = 32;
+                Self::data_size_to_b(&test)
+            }
+
             types::SupportedDBRequests::GetNamespaceString(id) => {
                 let unwrappy = self._database.lock().unwrap();
                 let tmep = unwrappy.namespace_get_string(&id);
-                Some(Self::option_to_bytes(tmep))
+                Self::option_to_bytes(tmep)
             }
             types::SupportedDBRequests::LoadTable(table) => {
                 let mut unwrappy = self._database.lock().unwrap();
                 let tmep = unwrappy.load_table(&table);
-                Some(Self::data_size_to_b(&true))
+                Self::data_size_to_b(&true)
             }
             types::SupportedDBRequests::GetNamespaceTagIDs(id) => {
                 let unwrappy = self._database.lock().unwrap();
                 let tmep = unwrappy.namespage_get_tagids(&id);
-                Some(Self::data_size_to_b(tmep))
+                Self::data_size_to_b(tmep)
             }
         }
     }
     ///
     /// Turns an Option<&T> into a bytes object.
     ///
-    fn option_to_bytes<T: serde::Serialize + Clone>(input: Option<&T>) -> (usize, Vec<u8>) {
+    fn option_to_bytes<T: serde::Serialize + Clone>(input: Option<&T>) -> Vec<u8> {
         match input {
             None => Self::data_size_to_b(&input),
             Some(item) => {

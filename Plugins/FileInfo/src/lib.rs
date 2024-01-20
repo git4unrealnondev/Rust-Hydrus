@@ -1,4 +1,5 @@
 use std::time::Duration;
+use std::time::Instant;
 #[path = "../../../src/scr/sharedtypes.rs"]
 mod sharedtypes;
 
@@ -26,110 +27,26 @@ pub fn return_info() -> sharedtypes::PluginInfo {
 }
 #[no_mangle]
 pub fn on_start() {
-    println!("From FIleinfo plugin");
+    println!("From Fileinfo plugin");
 
     fast_log::init(fast_log::Config::new().file("./log.txt")).unwrap();
     log::info!("FileInfo - Commencing yak shaving{}", 0);
     println!("Fileinfo waiting");
     check_existing_db();
-    let mills_fifty = Duration::from_secs(5);
-    std::thread::sleep(mills_fifty);
     log::info!("FileInfo - Commencing yak shaving{}", 1);
 }
 
 fn check_existing_db() {
-    use std::time::Instant;
+    //std::thread::sleep(Duration::from_secs(1));
     let table = sharedtypes::LoadDBTable::Namespace;
-    let typerequets = client::types::SupportedRequests::Database(
-        client::types::SupportedDBRequests::LoadTable(table),
-    );
-    client::init_data_request(&typerequets);
+    client::load_table(table);
     let table = sharedtypes::LoadDBTable::Tags;
-    let typerequets = client::types::SupportedRequests::Database(
-        client::types::SupportedDBRequests::LoadTable(table),
-    );
-    client::init_data_request(&typerequets);
-
+    client::load_table(table);
     let now = Instant::now();
-    let typerequets = client::types::SupportedRequests::Database(
-        client::types::SupportedDBRequests::RelationshipGetTagid(1),
-    );
-    client::init_data_request(&typerequets);
-    let typerequets =
-        client::types::SupportedRequests::Database(client::types::SupportedDBRequests::GetFile(1));
-    client::init_data_request(&typerequets);
-
-    let typerequets = client::types::SupportedRequests::Database(
-        client::types::SupportedDBRequests::RelationshipGetTagid(1),
-    );
-    client::init_data_request(&typerequets);
-    let typerequets =
-        client::types::SupportedRequests::Database(client::types::SupportedDBRequests::GetFile(1));
-    client::init_data_request(&typerequets);
-
-    let typerequets = client::types::SupportedRequests::Database(
-        client::types::SupportedDBRequests::RelationshipGetTagid(1),
-    );
-    client::init_data_request(&typerequets);
-    let typerequets =
-        client::types::SupportedRequests::Database(client::types::SupportedDBRequests::GetFile(1));
-    client::init_data_request(&typerequets);
-
-    let typerequets = client::types::SupportedRequests::Database(
-        client::types::SupportedDBRequests::RelationshipGetTagid(1),
-    );
-    client::init_data_request(&typerequets);
-    let typerequets = client::types::SupportedRequests::Database(
-        client::types::SupportedDBRequests::GetNamespaceString(1),
-    );
-    let ex = client::init_data_request(&typerequets);
-    let typerequets = client::types::SupportedRequests::Database(
-        client::types::SupportedDBRequests::GetNamespaceString(1),
-    );
-    let ex = client::init_data_request(&typerequets);
-
-    let typerequets = client::types::SupportedRequests::Database(
-        client::types::SupportedDBRequests::GetNamespaceString(1),
-    );
-    let ex = client::init_data_request(&typerequets);
-    let typerequets = client::types::SupportedRequests::Database(
-        client::types::SupportedDBRequests::GetNamespaceString(1),
-    );
-    let ex = client::init_data_request(&typerequets);
-
-    /*let typerequets = client::types::SupportedRequests::Database(
-        client::types::SupportedDBRequests::GetNamespaceTagIDs(1),
-    );
-    let ex = client::init_data_request(&typerequets);
-
-    match ex {
-        client::types::AllReturns::DB(out) => match out {
-            client::types::DBReturns::GetNamespaceTagIDs(tag) => {
-                //println!("fileinfo:{}", tag.len());
-            }
-            _ => {}
-        },
-        _ => {}
+    for i in 0..30000 {
+        let test = client::tag_get_id(i);
+        //println!("{:?}", test);
     }
-    let typerequets = client::types::SupportedRequests::Database(
-        client::types::SupportedDBRequests::GetNamespaceTagIDs(1),
-    );
-    let ex = client::init_data_request(&typerequets);
-
-    match ex {
-        client::types::AllReturns::DB(out) => match out {
-            client::types::DBReturns::GetNamespaceTagIDs(tag) => {
-                //println!("fileinfo:{}", tag.len());
-            }
-            _ => {}
-        },
-        _ => {}
-    }*/
-
-    /*let typerequets =
-        client::types::SupportedRequests::Database(client::types::SupportedDBRequests::GetFile(1));
-    let ex = client::init_data_request(&typerequets);
-    dbg!(ex);*/
     let elapsed = now.elapsed();
     println!("Elapsed: {:.2?}", elapsed);
 }

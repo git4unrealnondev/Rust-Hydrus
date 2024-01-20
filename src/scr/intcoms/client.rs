@@ -1,60 +1,96 @@
+use crate::sharedtypes::{self, AllFields};
 use anyhow::Context;
 use bincode;
 use interprocess::local_socket::{LocalSocketStream, NameTypeSupport};
-use itertools::Itertools;
+use std::collections::{HashMap, HashSet};
 use std::io::{prelude::*, BufReader};
 
-use crate::sharedtypes::{self, AllFields};
-
-use self::types::AllReturns;
+use self::types::{AllReturns, EfficientDataReturn};
 
 pub mod types;
 
-pub fn main() -> anyhow::Result<()> {
-    call_conn()
+///
+/// See the database reference for this function.
+/// I'm a lazy turd just check it their
+///
+pub fn load_table(table: sharedtypes::LoadDBTable) -> bool {
+    init_data_request(&types::SupportedRequests::Database(
+        types::SupportedDBRequests::LoadTable(table),
+    ))
+}
+///
+/// See the database reference for this function.
+/// I'm a lazy turd just check it their
+///
+pub fn namespace_get_string(id: usize) -> Option<sharedtypes::DbNamespaceObj> {
+    init_data_request(&types::SupportedRequests::Database(
+        types::SupportedDBRequests::GetNamespaceString(id),
+    ))
 }
 
-fn call_conn() -> anyhow::Result<()> {
-    //let _buffers = &mut [b'0', b'0'];
-
-    // Preemptively allocate a sizeable buffer for reading.
-    // This size should be enough and should be easy to find for the allocator.
-    //let _buffer = String::with_capacity(size);
-
-    let typerequets = types::SupportedRequests::Database(types::SupportedDBRequests::GetTagId(13));
-
-    init_data_request(&typerequets);
-
-    let typerequets =
-        types::SupportedRequests::Database(types::SupportedDBRequests::RelationshipGetTagid(0));
-
-    init_data_request(&typerequets);
-
-    let typerequets = types::SupportedRequests::Database(types::SupportedDBRequests::GetFile(1));
-
-    init_data_request(&typerequets);
-
-    /*// We now employ the buffer we allocated prior and read until EOF, which the server will
-    // similarly invoke with `.shutdown()`, verifying validity of UTF-8 on the fly.
-    conn.read_line(&mut buffer)
-        .context("Socket receive failed")?;
-    dbg!(&buffer);
-    conn.get_mut()
-        .write_all(b"beans\n")
-        .context("Socket send failed")?;
-
-    conn.read(buffers).context("Socket receive failed")?;
-    dbg!(&buffer);
-    buffer.clear();
-    conn.get_mut()
-        .write_all(b"beans1\n")
-        .context("Socket send failed")?;
-    // Print out the result, getting the newline for free!
-    print!("Server answered: {}", buffer);*/
-    Ok(())
+///
+/// See the database reference for this function.
+/// I'm a lazy turd just check it their
+///
+pub fn namespace_get(name: String) -> Option<usize> {
+    init_data_request(&types::SupportedRequests::Database(
+        types::SupportedDBRequests::GetNamespace(name),
+    ))
+}
+///
+/// See the database reference for this function.
+/// I'm a lazy turd just check it their
+///
+pub fn namespace_put(name: String, description: Option<String>, addtodb: bool) -> usize {
+    init_data_request(&types::SupportedRequests::Database(
+        types::SupportedDBRequests::CreateNamespace(name, description, addtodb),
+    ))
+}
+///
+/// See the database reference for this function.
+/// I'm a lazy turd just check it their
+///
+pub fn testusize() -> usize {
+    init_data_request(&types::SupportedRequests::Database(
+        types::SupportedDBRequests::TestUsize(),
+    ))
 }
 
-pub fn init_data_request(requesttype: &types::SupportedRequests) -> AllReturns {
+///
+/// See the database reference for this function.
+/// I'm a lazy turd just check it their
+///
+pub fn settings_get_name(name: String) -> Option<sharedtypes::DbSettingObj> {
+    init_data_request(&types::SupportedRequests::Database(
+        types::SupportedDBRequests::SettingsGetName(name),
+    ))
+}
+
+///
+/// See the database reference for this function.
+/// I'm a lazy turd just check it their
+///
+pub fn tag_get_id(id: usize) -> Option<sharedtypes::DbTagNNS> {
+    init_data_request(&types::SupportedRequests::Database(
+        types::SupportedDBRequests::GetTagId(id),
+    ))
+}
+///
+/// See the database reference for this function.
+/// I'm a lazy turd just check it their
+///
+pub fn namespace_get_tagids(id: usize) -> HashSet<usize> {
+    init_data_request(&types::SupportedRequests::Database(
+        types::SupportedDBRequests::GetNamespaceTagIDs(id),
+    ))
+}
+
+///
+/// Going to make this public.
+/// This shouldn't come back to haunt me. :x
+/// Returns a Vec of bytes that represent the data structure sent from server.
+///
+fn init_data_request<T: serde::de::DeserializeOwned>(requesttype: &types::SupportedRequests) -> T {
     let coms_struct = types::Coms {
         com_type: types::EComType::BiDirectional,
         control: types::EControlSigs::Send,
@@ -81,54 +117,22 @@ pub fn init_data_request(requesttype: &types::SupportedRequests) -> AllReturns {
     // Wrap it into a buffered reader right away so that we could read a single line out of it.
     let mut conn = BufReader::new(conn);
 
-    let b_struct = types::x_to_bytes(&coms_struct);
-    // Sends the plugin com type.
-    conn.get_mut()
-        .write_all(b_struct)
-        .context("Socket send failed")
-        .unwrap();
-
-    let buffer: &mut [u8; 1] = &mut [b'0'; 1];
-    conn.read(buffer)
-        .context("plugin failed 2nd step init")
-        .unwrap();
-
-    let econtrolsig = types::con_econtrolsigs(buffer);
-
-    match econtrolsig {
-        types::EControlSigs::Halt => return AllReturns::Nune,
-        types::EControlSigs::Send => {}
-        types::EControlSigs::Break => {
-            panic!("This plugin was called to break. Will break NOW.");
-        }
-    }
-
     // Requesting data from server.
-    let b_requesttype = types::x_to_bytes(requesttype);
-    conn.get_mut().write_all(b_requesttype).unwrap();
+    types::send(requesttype, &mut conn);
 
     //Recieving size Data from server
-    let size_buffer: &mut [u8; 8] = &mut [b'0'; 8];
-    conn.read(size_buffer)
-        .context("plugin failed 3nd step init")
-        .unwrap();
-    conn.get_mut().write_all(size_buffer).unwrap();
+    //
+    types::recieve(&mut conn)
 
-    // Receiving actual data from server
-    let size: usize = types::con_usize(size_buffer);
-    let data_buffer = &mut vec![b'0'; size];
-    conn.read_exact(data_buffer)
-        .context("plugin failed 3nd step init")
-        .unwrap();
     //println!("client data: {:?} size {}", data_buffer, size);
     // println!("slice: {:?}", &datavec[size..size * 2]);
     //println!("{}", std::mem::size_of_val(b_struct));
     // Handle data from server.
-    handle_supportedrequesttypes(data_buffer, requesttype)
+    //handle_supportedrequesttypes(data_buffer, requesttype)
     //println!("{:?}", vare);
 }
 
-///
+/*///
 /// Converts vec into a supported data type.
 ///
 fn handle_supportedrequesttypes(
@@ -184,4 +188,4 @@ fn handle_supportedrequesttypes(
         },
         types::SupportedRequests::PluginCross(_plugindata) => AllReturns::Nune,
     }
-}
+}*/

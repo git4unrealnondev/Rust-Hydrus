@@ -354,11 +354,8 @@ fn main() {
     pluginmanager.lock().unwrap().thread_finish_closed();
     while !pluginmanager.lock().unwrap().return_thread() {
         let one_sec = time::Duration::from_secs(1);
-        dbg!('a');
         pluginmanager.lock().unwrap().thread_finish_closed();
         thread::sleep(one_sec);
-
-        // pluginmanager.lock().unwrap().read_thread_data();
     }
 
     // This wait is done for allowing any thread to "complete"

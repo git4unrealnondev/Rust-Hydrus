@@ -41,8 +41,6 @@ clap = { version = "4.4.8", features = ["derive", "color", "cargo"] }
 walkdir = "2.4.0"
 rayon = "1.8.0"
 jwalk = "0.8.1"
-iter-chunks = "0.2.2"
-itertools = "0.12.0"
 interprocess = "1.2.1"
 
 [profile.release]

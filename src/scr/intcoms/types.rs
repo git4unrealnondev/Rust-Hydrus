@@ -1,6 +1,11 @@
 use crate::sharedtypes;
+use anyhow::Context;
+use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
-#[derive(Debug)]
+use std::io::BufReader;
+use std::io::Read;
+use std::io::Write;
+#[derive(Debug, Serialize, Deserialize)]
 pub enum EComType {
     SendOnly,
     RecieveOnly,
@@ -8,7 +13,7 @@ pub enum EComType {
     None,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub enum EControlSigs {
     Send,  // Sending data to and fro
     Halt,  // Come to a stop naturally
@@ -18,11 +23,13 @@ pub enum EControlSigs {
 ///
 /// Main communication block structure.
 ///
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Coms {
     pub com_type: EComType,
     pub control: EControlSigs,
 }
-pub fn x_to_bytes<T: Sized>(input_generic: &T) -> &[u8] {
+/*pub fn x_to_bytes<T: Sized>(input_generic: &T) -> &[u8] {
     unsafe { any_as_u8_slice(input_generic) }
 }
 
@@ -57,14 +64,14 @@ pub fn con_usize(input: &mut [u8; 8]) -> usize {
 ///
 /// Turns bytes into a SupportedRequests structure.
 ///
-pub fn con_supportedrequests(input: &mut [u8; 40]) -> SupportedRequests {
-    unsafe { std::mem::transmute(*input) }
-}
-
+//pub fn con_supportedrequests(input: &mut [u8; 56]) -> SupportedRequests {
+//    unsafe { std::mem::transmute(*input) }
+//}
+*/
 ///
 /// Supported Database operations.
 ///
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub enum SupportedDBRequests {
     GetTagId(usize),
     GetTagName((String, usize)),
@@ -73,10 +80,12 @@ pub enum SupportedDBRequests {
     GetFile(usize),
     GetFileHash(String),
     GetNamespace(String),
+    CreateNamespace(String, Option<String>, bool),
     GetNamespaceTagIDs(usize),
     GetNamespaceString(usize),
     SettingsGetName(String),
     LoadTable(sharedtypes::LoadDBTable),
+    TestUsize(),
 }
 
 ///
@@ -112,31 +121,82 @@ pub enum DBReturns {
     LoadTable(bool),
 }
 
+pub enum EfficientDataReturn {
+    Data(Vec<u8>),
+    Nothing,
+}
+
 ///
 /// Supported cross talks between plugins.
 ///
-#[derive(Debug)]
+#[derive(Debug, Deserialize, Serialize)]
 pub enum SupportedPluginRequests {}
 
 ///
 /// Supported enum requests for the transaction.
 /// Will get sent over to sever / client to determine what data will be sent back and forth.
 ///
-#[derive(Debug)]
+#[derive(Debug, Deserialize, Serialize)]
 pub enum SupportedRequests {
     Database(SupportedDBRequests),
     PluginCross(SupportedPluginRequests),
 }
 
 ///
-/// Will send over arbitrary data
+/// Writes all data into buffer.
 ///
-pub struct ArbitraryData {
-    pub buffer_size: usize,
-    pub buffer_data: Vec<u8>,
+pub fn send<T: Sized + Serialize>(
+    inp: T,
+    conn: &mut BufReader<interprocess::local_socket::LocalSocketStream>,
+) {
+    let serialized = bincode::serialize(&inp).unwrap();
+    let size = &serialized.len();
+    conn.get_mut()
+        .write_all(&size.to_ne_bytes())
+        .context("Socket send failed")
+        .unwrap();
+    conn.get_mut()
+        .write_all(&serialized)
+        .context("Socket send failed")
+        .unwrap();
+}
+///
+/// Writes all data into buffer.
+/// Assumes data is preserialzied from data generic function.
+/// Can be hella dangerous. Types going in and recieved have to match EXACTLY.
+///
+pub fn send_preserialize(
+    inp: &Vec<u8>,
+    conn: &mut BufReader<interprocess::local_socket::LocalSocketStream>,
+) {
+    let mut temp = inp.len().to_ne_bytes().to_vec();
+    temp.extend(inp);
+    conn.get_mut()
+        .write_all(&temp)
+        .context("Socket send failed")
+        .unwrap();
+
+    return;
 }
 
-pub fn demo<T, const N: usize>(v: Vec<T>) -> [T; N] {
-    v.try_into()
-        .unwrap_or_else(|v: Vec<T>| panic!("Expected a Vec of length {} but it was {}", N, v.len()))
+///
+/// Returns a vec of bytes that represent an object
+///
+pub fn recieve<T: serde::de::DeserializeOwned>(
+    conn: &mut BufReader<interprocess::local_socket::LocalSocketStream>,
+) -> T {
+    let mut usize_b: [u8; std::mem::size_of::<usize>()] = [0; std::mem::size_of::<usize>()];
+    conn.get_mut()
+        .read_exact(&mut usize_b[..])
+        .context("Socket send failed")
+        .unwrap();
+
+    let size_of_data: usize = usize::from_ne_bytes(usize_b);
+
+    let mut data_b = vec![0; size_of_data];
+    conn.get_mut()
+        .read_exact(&mut data_b[..])
+        .context("Socket send failed")
+        .unwrap();
+    bincode::deserialize(&data_b).unwrap()
 }
