@@ -1,6 +1,7 @@
 use super::database;
 use super::download;
 use super::sharedtypes;
+use crate::helpers;
 use ahash::AHashMap;
 use csv;
 use file_format::FileFormat;
@@ -86,7 +87,7 @@ pub fn import_files(
             continue;
         }
 
-        let path = download::getfinpath(&location, &hash);
+        let path = helpers::getfinpath(&location, &hash);
 
         let final_path = format!("{}/{}", path, &hash);
 

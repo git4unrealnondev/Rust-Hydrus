@@ -398,6 +398,12 @@ impl NewinMemDB {
     }
 
     ///
+    /// Returns all file objects in db
+    ///
+    pub fn file_get_list_all(&self) -> &HashMap<usize, DbFileObj> {
+        &self._file_id_data
+    }
+    ///
     /// Inserts namespace into db
     ///
     pub fn namespace_put(&mut self, namespace_obj: sharedtypes::DbNamespaceObj) -> usize {

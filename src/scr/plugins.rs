@@ -315,11 +315,12 @@ impl PluginManager {
                                 //dbg!(&tags);
                                 if tags.parents.is_none() && namespace_id.is_some() {
                                     unwrappy.tag_add(
-                                        tags.name,
+                                        tags.name.clone(),
                                         namespace_id.unwrap().clone(),
                                         true,
                                         None,
                                     );
+                                    println!("plugins323 making tag: {}", tags.name);
                                 } else {
                                     for parents_obj in tags.parents.unwrap() {
                                         unwrappy.tag_add(
@@ -350,8 +351,15 @@ impl PluginManager {
                                 let file_id = unwrappy.file_get_hash(&relations.file_hash).cloned();
                                 let namespace_id = unwrappy.namespace_get(&relations.tag_namespace);
                                 let tag_id = unwrappy
-                                    .tag_get_name(relations.tag_name, namespace_id.unwrap().clone())
+                                    .tag_get_name(
+                                        relations.tag_name.clone(),
+                                        namespace_id.unwrap().clone(),
+                                    )
                                     .cloned();
+                                println!(
+                                    "plugins356 relating: file id {:?} to {:?}",
+                                    file_id, relations.tag_name
+                                );
                                 unwrappy.relationship_add(
                                     file_id.unwrap().clone(),
                                     tag_id.unwrap().clone(),

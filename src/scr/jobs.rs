@@ -4,7 +4,6 @@ use crate::plugins::PluginManager;
 use crate::scraper;
 use crate::scraper::InternalScraper;
 use crate::sharedtypes;
-use crate::sharedtypes::CommitType;
 use crate::sharedtypes::ScraperType;
 use crate::threading;
 use crate::time_func;

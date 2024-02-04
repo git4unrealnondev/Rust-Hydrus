@@ -314,13 +314,7 @@ impl Worker {
 
                                         let location = {
                                             let unwrappydb = &mut db.lock().unwrap();
-                                            unwrappydb
-                                                .settings_get_name(&"FilesLoc".to_string())
-                                                .unwrap()
-                                                .param
-                                                .as_ref()
-                                                .unwrap()
-                                                .to_owned()
+                                            unwrappydb.location_get()
                                         };
 
                                         // Get's the hash & file ext for the file.

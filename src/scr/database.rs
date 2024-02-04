@@ -1192,7 +1192,6 @@ impl Main {
             println!("Flushing {} Records into DB.", self._dbcommitnum_static);
             //dbg!(self._dbcommitnum, general);
             self.transaction_flush();
-            self._dbcommitnum = 0;
             //dbg!(self._dbcommitnum, general);
         }
     }
@@ -1883,8 +1882,6 @@ impl Main {
         param: Option<String>,
         addtodb: bool,
     ) {
-        let _temp: isize = -9999;
-
         if addtodb {
             self.setting_add_sql(name.to_string(), &pretty, num, &param);
         }
@@ -1902,6 +1899,7 @@ impl Main {
 
     /// Flushes to disk.
     pub fn transaction_flush(&mut self) {
+        self._dbcommitnum = 0;
         self.execute("COMMIT".to_string());
         self.execute("BEGIN".to_string());
     }
@@ -2159,26 +2157,26 @@ impl Main {
             return;
         }
 
-        let tagids = self.namespage_get_tagids(id).clone();
+        let tagida = self.namespage_get_tagids(id).clone();
+        if let Some(tagids) = tagida {
+            for each in tagids.clone().iter() {
+                logging::log(&format!("Removing tagid: {}.", each));
+                self.tag_remove(each);
+                //tag_sql += &format!("DELETE FROM Tags WHERE id = {}; ", each);
+                self.delete_tag_relationship(each);
+            }
 
-        let mut tag_sql = String::new();
-        for each in tagids.iter() {
-            logging::log(&format!("Removing tagid: {}.", each));
-            self.tag_remove(each);
-            //tag_sql += &format!("DELETE FROM Tags WHERE id = {}; ", each);
-            self.delete_tag_relationship(each);
+            //elf._conn.lock().unwrap().execute_batch(&tag_sql).unwrap();
+            //self.transaction_flush();
+
+            self._inmemdb.namespace_delete(id);
+            self.delete_namespace_sql(id);
+
+            //self.vacuum();
+
+            // Condenses the database. (removes gaps in id's)
+            self.condese_relationships_tags();
         }
-
-        //elf._conn.lock().unwrap().execute_batch(&tag_sql).unwrap();
-        //self.transaction_flush();
-
-        self._inmemdb.namespace_delete(id);
-        self.delete_namespace_sql(id);
-
-        //self.vacuum();
-
-        // Condenses the database. (removes gaps in id's)
-        self.condese_relationships_tags();
     }
 
     ///
@@ -2264,8 +2262,8 @@ impl Main {
     ///
     /// Gets all tag's assocated a singular namespace
     ///
-    pub fn namespage_get_tagids(&self, id: &usize) -> &HashSet<usize> {
-        self._inmemdb.namespace_get_tagids(id).unwrap()
+    pub fn namespage_get_tagids(&self, id: &usize) -> Option<&HashSet<usize>> {
+        self._inmemdb.namespace_get_tagids(id)
     }
 
     ///
@@ -2284,29 +2282,63 @@ impl Main {
         //let tag_max = self._inmemdb.tags_max_return().clone();
         self._inmemdb.tags_max_reset();
 
-        let tids = self.namespage_get_tagids(id);
-
-        let mut cnt: usize = 0;
-        for tid in tids.clone() {
-            let file_listop = self._inmemdb.relationship_get_fileid(&tid).unwrap().clone();
-            let tag = self._inmemdb.tags_get_data(&tid).unwrap();
-            self.tag_add_sql(cnt, tag.name.to_string(), "".to_string(), tag.namespace);
-            for file in file_listop {
-                self.relationship_add_sql(file, cnt);
+        let tida = self.namespage_get_tagids(id);
+        if let Some(tids) = tida {
+            let mut cnt: usize = 0;
+            for tid in tids.clone() {
+                let file_listop = self._inmemdb.relationship_get_fileid(&tid).unwrap().clone();
+                let tag = self._inmemdb.tags_get_data(&tid).unwrap();
+                self.tag_add_sql(cnt, tag.name.to_string(), "".to_string(), tag.namespace);
+                for file in file_listop {
+                    self.relationship_add_sql(file, cnt);
+                }
+                cnt += 1;
             }
-            cnt += 1;
+
+            self._inmemdb.tags_clear();
+            self._inmemdb.parents_clear();
+            self._inmemdb.relationships_clear();
+
+            self.vacuum();
+
+            self.transaction_flush();
+
+            //self.condese_relationships_tags();
+
+            self.transaction_flush();
         }
+    }
 
-        self._inmemdb.tags_clear();
-        self._inmemdb.parents_clear();
-        self._inmemdb.relationships_clear();
+    ///
+    /// Returns all file id's loaded in db
+    ///
+    pub fn file_get_list_id(&self) -> HashSet<usize> {
+        self._inmemdb.file_get_list_id()
+    }
 
-        self.vacuum();
+    ///
+    /// Returns all file objects in db.
+    ///
+    pub fn file_get_list_all(&self) -> &HashMap<usize, sharedtypes::DbFileObj> {
+        use std::time::Instant;
+        let now = Instant::now();
 
-        self.transaction_flush();
+        let out = self._inmemdb.file_get_list_all();
+        let elapsed = now.elapsed();
+        println!("DB Elapsed: {:.2?}", elapsed);
+        out
+    }
 
-        //self.condese_relationships_tags();
-
-        self.transaction_flush();
+    ///
+    /// Returns the location of the DB.
+    /// Helper function
+    ///
+    pub fn location_get(&self) -> String {
+        self.settings_get_name(&"FilesLoc".to_string())
+            .unwrap()
+            .param
+            .as_ref()
+            .unwrap()
+            .to_owned()
     }
 }

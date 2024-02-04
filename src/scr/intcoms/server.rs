@@ -1,4 +1,5 @@
 use crate::{database, sharedtypes::DbFileObj, sharedtypes::DbTagObjCompatability};
+use crate::{logging, sharedtypes};
 use anyhow::Context;
 use interprocess::local_socket::{LocalSocketListener, LocalSocketStream, NameTypeSupport};
 use serde::Serialize;
@@ -9,8 +10,6 @@ use std::{
     mem,
     sync::mpsc::Sender,
 };
-
-use crate::{logging, sharedtypes};
 
 mod types;
 
@@ -211,6 +210,7 @@ impl PluginIpcInteract {
             match plugin_supportedrequests {
                 types::SupportedRequests::Database(db_actions) => {
                     let data = self.db_interface.dbactions_to_function(db_actions);
+
                     types::send_preserialize(&data, &mut conn);
                 }
                 types::SupportedRequests::PluginCross(_plugindata) => {}
@@ -218,20 +218,6 @@ impl PluginIpcInteract {
         }
         Ok(())
     }
-    ///
-    /// Converts a vec of T into an array.
-    /// Stolen from: https://stackoverflow.com/questions/29570607/is-there-a-good-way-to-convert-a-vect-to-an-array
-    ///
-    fn demo<T, const N: usize>(v: Vec<T>) -> [T; N] {
-        v.try_into().unwrap_or_else(|v: Vec<T>| {
-            panic!("Expected a Vec of length {} but it was {}", N, v.len())
-        })
-    }
-
-    ///
-    /// Stops all coms from talking.
-    ///
-    fn halt_all_coms(&mut self) {}
 }
 
 struct DbInteract {
@@ -271,6 +257,32 @@ impl DbInteract {
                 let tmep = unwrappy.tag_id_get(&id);
                 Self::option_to_bytes(tmep)
             }
+            types::SupportedDBRequests::Logging(log) => {
+                logging::info_log(&log);
+                Self::data_size_to_b(&true)
+            }
+            types::SupportedDBRequests::RelationshipAdd(file, tag, addtodb) => {
+                let mut unwrappy = self._database.lock().unwrap();
+                let tmep = unwrappy.relationship_add(file, tag, addtodb);
+                Self::data_size_to_b(&true)
+            }
+
+            types::SupportedDBRequests::PutTag(tags, namespace_id, addtodb, id) => {
+                let mut unwrappy = self._database.lock().unwrap();
+                let tmep = unwrappy.tag_add(tags, namespace_id, addtodb, id);
+                Self::data_size_to_b(&tmep)
+            }
+            types::SupportedDBRequests::GetDBLocation() => {
+                let unwrappy = self._database.lock().unwrap();
+                let tmep = unwrappy.location_get();
+                Self::data_size_to_b(&tmep)
+            }
+            types::SupportedDBRequests::SettingsSet(name, pretty, num, param, addtodb) => {
+                let mut unwrappy = self._database.lock().unwrap();
+                unwrappy.setting_add(name, pretty, num, param, addtodb);
+                Self::data_size_to_b(&true)
+            }
+
             types::SupportedDBRequests::RelationshipGetTagid(id) => {
                 let unwrappy = self._database.lock().unwrap();
                 let tmep = unwrappy.relationship_get_tagid(&id);
@@ -304,9 +316,7 @@ impl DbInteract {
             }
             types::SupportedDBRequests::CreateNamespace(name, description, addtodb) => {
                 let mut unwrappy = self._database.lock().unwrap();
-                unwrappy.namespace_add(name, description, addtodb).clone();
-                unwrappy.transaction_flush();
-                let out: usize = 32;
+                let out = unwrappy.namespace_add(name, description, addtodb);
                 Self::data_size_to_b(&out)
             }
 
@@ -330,10 +340,31 @@ impl DbInteract {
                 let tmep = unwrappy.load_table(&table);
                 Self::data_size_to_b(&true)
             }
+            types::SupportedDBRequests::TransactionFlush() => {
+                let mut unwrappy = self._database.lock().unwrap();
+                unwrappy.transaction_flush();
+                Self::data_size_to_b(&true)
+            }
             types::SupportedDBRequests::GetNamespaceTagIDs(id) => {
                 let unwrappy = self._database.lock().unwrap();
                 let tmep = unwrappy.namespage_get_tagids(&id);
-                Self::data_size_to_b(tmep)
+                Self::data_size_to_b(&tmep)
+            }
+            types::SupportedDBRequests::GetFileListId() => {
+                let unwrappy = self._database.lock().unwrap();
+                let tmep = unwrappy.file_get_list_id();
+                Self::data_size_to_b(&tmep)
+            }
+            types::SupportedDBRequests::GetFileListAll() => {
+                use std::time::Instant;
+                let now = Instant::now();
+
+                let unwrappy = self._database.lock().unwrap();
+                let elapsed = now.elapsed();
+                println!("Lock Elapsed: {:.2?}", elapsed);
+
+                let tmep = unwrappy.file_get_list_all();
+                bincode::serialize(&tmep).unwrap()
             }
         }
     }

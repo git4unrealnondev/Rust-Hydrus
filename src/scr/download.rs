@@ -1,7 +1,6 @@
 use super::plugins::PluginManager;
 //extern crate urlparse;
 use super::sharedtypes;
-use crate::file;
 use bytes::Bytes;
 use file_format::FileFormat;
 use log::{error, info};
@@ -10,13 +9,13 @@ use reqwest::Client;
 use sha1;
 use sha2::Digest as sha2Digest;
 use sha2::Sha512;
-use std::io;
 use std::io::BufReader;
 use std::io::Cursor;
 use std::io::Read;
 use std::time::Duration;
 use url::Url;
 extern crate reqwest;
+use crate::helpers;
 use async_std::task;
 use ratelimit::Ratelimiter;
 use std::fs::File;
@@ -236,7 +235,7 @@ pub async fn dlfile_new(
         boolloop = !status.1;
     }
 
-    let final_loc = getfinpath(&location, &hash);
+    let final_loc = helpers::getfinpath(&location, &hash);
 
     // Gives file extension
     let file_ext = FileFormat::from_bytes(&bytes).extension().to_string();
@@ -274,20 +273,4 @@ pub fn hash_file(filename: &String, hash: &sharedtypes::HashesSupported) -> (Str
     let hash_self = hash_bytes(&b, hash);
 
     (hash_self.0, b)
-}
-
-pub fn getfinpath(location: &String, hash: &String) -> String {
-    // Gets and makes folderpath.
-    let final_loc = format!(
-        "{}/{}{}/{}{}/{}{}",
-        location,
-        hash.chars().next().unwrap(),
-        hash.chars().nth(1).unwrap(),
-        hash.chars().nth(2).unwrap(),
-        hash.chars().nth(3).unwrap(),
-        hash.chars().nth(4).unwrap(),
-        hash.chars().nth(5).unwrap()
-    );
-    file::folder_make(&final_loc);
-    return final_loc;
 }

@@ -208,7 +208,22 @@ pub fn main(data: &mut database::Main, scraper: &mut scraper::ScraperManager) {
                 }
             },
             cli_structs::TasksStruct::Database(db) => {
+                use crate::helpers;
                 match db {
+                    cli_structs::Database::CheckFiles => {
+                        let db_location = data.location_get();
+
+                        data.load_table(&sharedtypes::LoadDBTable::Files);
+                        let lis = data.file_get_list_all();
+                        println!("Files do not exist:");
+                        for each in lis.keys() {
+                            let loc = helpers::getfinpath(&db_location, &lis[each].hash);
+                            let lispa = format!("{}/{}", loc, lis[each].hash);
+                            if !Path::new(&lispa).exists() {
+                                println!("{}", &lis[each].hash);
+                            }
+                        }
+                    }
                     cli_structs::Database::CheckInMemdb => {
                         data.load_table(&sharedtypes::LoadDBTable::Tags);
                         pause();

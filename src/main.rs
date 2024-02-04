@@ -37,6 +37,8 @@ mod time_func;
 // Needed for the plugin coms system.
 #[path = "./scr/intcoms/client.rs"]
 mod client;
+#[path = "./scr/db/helpers.rs"]
+mod helpers;
 #[path = "./scr/intcoms/server.rs"]
 mod server;
 
@@ -152,7 +154,7 @@ fn main() {
         .param
         .as_ref()
         .unwrap();
-    file::folder_make(&format!("./{}", &location));
+    file::folder_make(&format!("{}", &location));
 
     //TODO Put code here
 

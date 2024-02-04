@@ -27,6 +27,31 @@ pub fn namespace_get_string(id: usize) -> Option<sharedtypes::DbNamespaceObj> {
         types::SupportedDBRequests::GetNamespaceString(id),
     ))
 }
+///
+/// See the database reference for this function.
+/// I'm a lazy turd just check it their
+///
+pub fn log(log: String) -> bool {
+    init_data_request(&types::SupportedRequests::Database(
+        types::SupportedDBRequests::Logging(log),
+    ))
+}
+
+///
+/// See the database reference for this function.
+/// I'm a lazy turd just check it their
+///
+pub fn setting_add(
+    name: String,
+    pretty: Option<String>,
+    num: Option<usize>,
+    param: Option<String>,
+    addtodb: bool,
+) -> bool {
+    init_data_request(&types::SupportedRequests::Database(
+        types::SupportedDBRequests::SettingsSet(name, pretty, num, param, addtodb),
+    ))
+}
 
 ///
 /// See the database reference for this function.
@@ -55,6 +80,52 @@ pub fn testusize() -> usize {
         types::SupportedDBRequests::TestUsize(),
     ))
 }
+///
+/// See the database reference for this function.
+/// I'm a lazy turd just check it their
+///
+pub fn transaction_flush() -> bool {
+    init_data_request(&types::SupportedRequests::Database(
+        types::SupportedDBRequests::TransactionFlush(),
+    ))
+}
+///
+/// See the database reference for this function.
+/// I'm a lazy turd just check it their
+///
+pub fn relationship_add_db(file: usize, tag: usize, addtodb: bool) -> bool {
+    init_data_request(&types::SupportedRequests::Database(
+        types::SupportedDBRequests::RelationshipAdd(file, tag, addtodb),
+    ))
+}
+///
+/// See the database reference for this function.
+/// I'm a lazy turd just check it their
+///
+pub fn file_get_list_id() -> HashSet<usize> {
+    init_data_request(&types::SupportedRequests::Database(
+        types::SupportedDBRequests::GetFileListId(),
+    ))
+}
+///
+/// See the database reference for this function.
+/// I'm a lazy turd just check it their
+///
+pub fn relationship_get_fileid(id: usize) -> Option<HashSet<usize>> {
+    init_data_request(&types::SupportedRequests::Database(
+        types::SupportedDBRequests::RelationshipGetFileid(id),
+    ))
+}
+
+///
+/// See the database reference for this function.
+/// I'm a lazy turd just check it their
+///
+pub fn file_get_list_all() -> HashMap<usize, sharedtypes::DbFileObj> {
+    init_data_request(&types::SupportedRequests::Database(
+        types::SupportedDBRequests::GetFileListAll(),
+    ))
+}
 
 ///
 /// See the database reference for this function.
@@ -79,14 +150,31 @@ pub fn tag_get_id(id: usize) -> Option<sharedtypes::DbTagNNS> {
 /// See the database reference for this function.
 /// I'm a lazy turd just check it their
 ///
-pub fn namespace_get_tagids(id: usize) -> HashSet<usize> {
+pub fn namespace_get_tagids(id: usize) -> Option<HashSet<usize>> {
     init_data_request(&types::SupportedRequests::Database(
         types::SupportedDBRequests::GetNamespaceTagIDs(id),
     ))
 }
+///
+/// See the database reference for this function.
+/// I'm a lazy turd just check it their
+///
+pub fn location_get() -> String {
+    init_data_request(&types::SupportedRequests::Database(
+        types::SupportedDBRequests::GetDBLocation(),
+    ))
+}
+///
+/// See the database reference for this function.
+/// I'm a lazy turd just check it their
+///
+pub fn tag_add(tag: String, namespace_id: usize, addtodb: bool, id: Option<usize>) -> usize {
+    init_data_request(&types::SupportedRequests::Database(
+        types::SupportedDBRequests::PutTag(tag, namespace_id, addtodb, id),
+    ))
+}
 
 ///
-/// Going to make this public.
 /// This shouldn't come back to haunt me. :x
 /// Returns a Vec of bytes that represent the data structure sent from server.
 ///
@@ -97,23 +185,22 @@ fn init_data_request<T: serde::de::DeserializeOwned>(requesttype: &types::Suppor
     };
 
     let name = {
-        // This scoping trick allows us to nicely contain the import inside the `match`, so that if
-        // any imports of variants named `Both` happen down the line, they won't collide with the
-        // enum we're working with here. Maybe someone should make a macro for this.
         use NameTypeSupport::*;
         match NameTypeSupport::query() {
             OnlyPaths => "/tmp/RustHydrus.sock",
             OnlyNamespaced | Both => "@RustHydrus.sock",
         }
     };
-
-    // Create our connection. This will block until the server accepts our connection, but will fail
-    // immediately if the server hasn't even started yet; somewhat similar to how happens with TCP,
-    // where connecting to a port that's not bound to any server will send a "connection refused"
-    // response, but that will take twice the ping, the roundtrip time, to reach the client.
-    let conn = LocalSocketStream::connect(name)
-        .context("Failed to connect to server")
-        .unwrap();
+    let conn;
+    loop {
+        // Wait indefinitely for this to get a connection. shit way of doing it will likely add
+        // a wait or something this will likely block the CPU or something.
+        let temp_conn = LocalSocketStream::connect(name).context("Failed to connect to server");
+        if let Ok(con_ok) = temp_conn {
+            conn = con_ok;
+            break;
+        }
+    }
     // Wrap it into a buffered reader right away so that we could read a single line out of it.
     let mut conn = BufReader::new(conn);
 
@@ -121,71 +208,5 @@ fn init_data_request<T: serde::de::DeserializeOwned>(requesttype: &types::Suppor
     types::send(requesttype, &mut conn);
 
     //Recieving size Data from server
-    //
     types::recieve(&mut conn)
-
-    //println!("client data: {:?} size {}", data_buffer, size);
-    // println!("slice: {:?}", &datavec[size..size * 2]);
-    //println!("{}", std::mem::size_of_val(b_struct));
-    // Handle data from server.
-    //handle_supportedrequesttypes(data_buffer, requesttype)
-    //println!("{:?}", vare);
 }
-
-/*///
-/// Converts vec into a supported data type.
-///
-fn handle_supportedrequesttypes(
-    data_buffer: &mut [u8],
-    requesttype: &types::SupportedRequests,
-) -> AllReturns {
-    match requesttype {
-        types::SupportedRequests::Database(db_actions) => match db_actions {
-            types::SupportedDBRequests::GetTagId(_id) => {
-                let out = bincode::deserialize(data_buffer).unwrap();
-                AllReturns::DB(types::DBReturns::GetTagId(out))
-            }
-            types::SupportedDBRequests::RelationshipGetTagid(_id) => {
-                let out = bincode::deserialize(data_buffer).unwrap();
-                AllReturns::DB(types::DBReturns::RelationshipGetTagid(out))
-            }
-            types::SupportedDBRequests::RelationshipGetFileid(_id) => {
-                let out = bincode::deserialize(data_buffer).unwrap();
-                AllReturns::DB(types::DBReturns::RelationshipGetFileid(out))
-            }
-            types::SupportedDBRequests::GetFile(_id) => {
-                let out = bincode::deserialize(data_buffer).unwrap();
-                AllReturns::DB(types::DBReturns::GetFile(out))
-            }
-            types::SupportedDBRequests::SettingsGetName(_key) => {
-                let out = bincode::deserialize(data_buffer).unwrap();
-                AllReturns::DB(types::DBReturns::SettingsGetName(out))
-            }
-            types::SupportedDBRequests::GetTagName(_key) => {
-                let out = bincode::deserialize(data_buffer).unwrap();
-                AllReturns::DB(types::DBReturns::GetTagName(out))
-            }
-            types::SupportedDBRequests::GetFileHash(_key) => {
-                let out = bincode::deserialize(data_buffer).unwrap();
-                AllReturns::DB(types::DBReturns::GetFileHash(out))
-            }
-            types::SupportedDBRequests::GetNamespace(_key) => {
-                let out = bincode::deserialize(data_buffer).unwrap();
-                AllReturns::DB(types::DBReturns::GetNamespace(out))
-            }
-            types::SupportedDBRequests::GetNamespaceString(_key) => {
-                let out = bincode::deserialize(data_buffer).unwrap();
-                AllReturns::DB(types::DBReturns::GetNamespaceString(out))
-            }
-            types::SupportedDBRequests::LoadTable(_key) => {
-                let out = bincode::deserialize(data_buffer).unwrap();
-                AllReturns::DB(types::DBReturns::LoadTable(out))
-            }
-            types::SupportedDBRequests::GetNamespaceTagIDs(_key) => {
-                let out = bincode::deserialize(data_buffer).unwrap();
-                AllReturns::DB(types::DBReturns::GetNamespaceTagIDs(out))
-            }
-        },
-        types::SupportedRequests::PluginCross(_plugindata) => AllReturns::Nune,
-    }
-}*/

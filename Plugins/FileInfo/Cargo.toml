@@ -6,7 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-strum = "0.25.0"
+strum = { version = "0.25.0", features = ["derive"] }
 os_pipe = "1.1.4"
 
 serde = { version = "1.0.192", features = ["derive"] }
@@ -18,6 +18,12 @@ log = "0.4.20"
 anyhow = "1.0.79"
 bincode = "1.3.3"
 interprocess = "1.2.1"
+serde_bytes = "0.11.14"
+image = { version = "0.24.8", features = ["avif", "libwebp"] }
+ffmpeg = {git = "https://github.com/meh/rust-ffmpeg"}
+chrono = "0.4.31"
+struct_iterable = "0.1.1"
+mp4parse = "0.17.0"
 [lib]
 crate-type = ["dylib"]
 
@@ -28,6 +34,6 @@ rustflags = ["-C", "prefer-dynamic", "-C", "rpath"]
 opt-level = "z"
 lto=true
 codegenunits=1
-strip = false
-debug = true
+strip = true
+debug = false
 panic = "abort"

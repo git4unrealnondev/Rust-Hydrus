@@ -55,6 +55,7 @@ pub enum Database {
     /// Compresses the databases tag & relationships. Will add parent support soon.
     CompressDatabase,
     CheckInMemdb,
+    CheckFiles,
 }
 
 /// Removes a namespace, tags & relationships from db.

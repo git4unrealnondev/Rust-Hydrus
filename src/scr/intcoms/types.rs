@@ -74,7 +74,9 @@ pub fn con_usize(input: &mut [u8; 8]) -> usize {
 #[derive(Debug, Serialize, Deserialize)]
 pub enum SupportedDBRequests {
     GetTagId(usize),
+    PutTag(String, usize, bool, Option<usize>),
     GetTagName((String, usize)),
+    RelationshipAdd(usize, usize, bool),
     RelationshipGetTagid(usize),
     RelationshipGetFileid(usize),
     GetFile(usize),
@@ -84,8 +86,14 @@ pub enum SupportedDBRequests {
     GetNamespaceTagIDs(usize),
     GetNamespaceString(usize),
     SettingsGetName(String),
+    SettingsSet(String, Option<String>, Option<usize>, Option<String>, bool),
     LoadTable(sharedtypes::LoadDBTable),
     TestUsize(),
+    GetFileListId(),
+    GetFileListAll(),
+    TransactionFlush(),
+    GetDBLocation(),
+    Logging(String),
 }
 
 ///
@@ -142,6 +150,12 @@ pub enum SupportedRequests {
     PluginCross(SupportedPluginRequests),
 }
 
+#[derive(Debug, Deserialize, Serialize)]
+struct Effdata {
+    #[serde(with = "serde_bytes")]
+    byte_buf: Vec<u8>,
+}
+
 ///
 /// Writes all data into buffer.
 ///
@@ -149,14 +163,14 @@ pub fn send<T: Sized + Serialize>(
     inp: T,
     conn: &mut BufReader<interprocess::local_socket::LocalSocketStream>,
 ) {
-    let serialized = bincode::serialize(&inp).unwrap();
-    let size = &serialized.len();
+    let byte_buf = bincode::serialize(&inp).unwrap();
+    let size = &byte_buf.len();
     conn.get_mut()
         .write_all(&size.to_ne_bytes())
         .context("Socket send failed")
         .unwrap();
     conn.get_mut()
-        .write_all(&serialized)
+        .write_all(&byte_buf)
         .context("Socket send failed")
         .unwrap();
 }
