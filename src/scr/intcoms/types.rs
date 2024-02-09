@@ -1,10 +1,13 @@
+#![allow(dead_code)]
+#![allow(unused_variables)]
 use crate::sharedtypes;
 use anyhow::Context;
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::io::BufReader;
 use std::io::Read;
 use std::io::Write;
+
 #[derive(Debug, Serialize, Deserialize)]
 pub enum EComType {
     SendOnly,

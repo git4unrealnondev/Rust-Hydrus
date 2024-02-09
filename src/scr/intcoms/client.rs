@@ -1,11 +1,12 @@
-use crate::sharedtypes::{self, AllFields};
+#![allow(dead_code)]
+#![allow(unused_variables)]
+
+use crate::sharedtypes::{self};
 use anyhow::Context;
-use bincode;
+
 use interprocess::local_socket::{LocalSocketStream, NameTypeSupport};
 use std::collections::{HashMap, HashSet};
-use std::io::{prelude::*, BufReader};
-
-use self::types::{AllReturns, EfficientDataReturn};
+use std::io::BufReader;
 
 pub mod types;
 
@@ -179,7 +180,7 @@ pub fn tag_add(tag: String, namespace_id: usize, addtodb: bool, id: Option<usize
 /// Returns a Vec of bytes that represent the data structure sent from server.
 ///
 fn init_data_request<T: serde::de::DeserializeOwned>(requesttype: &types::SupportedRequests) -> T {
-    let coms_struct = types::Coms {
+    let _coms_struct = types::Coms {
         com_type: types::EComType::BiDirectional,
         control: types::EControlSigs::Send,
     };

@@ -1,3 +1,6 @@
+#![allow(dead_code)]
+#![allow(unused_variables)]
+
 use super::database;
 use super::download;
 use super::sharedtypes;

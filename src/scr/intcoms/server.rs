@@ -1,13 +1,13 @@
-use crate::{database, sharedtypes::DbFileObj, sharedtypes::DbTagObjCompatability};
-use crate::{logging, sharedtypes};
+#![allow(dead_code)]
+#![allow(unused_variables)]
+use crate::database;
+use crate::logging;
 use anyhow::Context;
 use interprocess::local_socket::{LocalSocketListener, LocalSocketStream, NameTypeSupport};
-use serde::Serialize;
-use std::collections::HashSet;
+
 use std::sync::{Arc, Mutex};
 use std::{
     io::{self, prelude::*, BufReader},
-    mem,
     sync::mpsc::Sender,
 };
 
@@ -229,14 +229,6 @@ struct DbInteract {
 ///
 impl DbInteract {
     ///
-    /// Stores database inside of self for DB interactions with plugin system
-    ///
-    pub fn new(main_db: Arc<Mutex<database::Main>>) -> Self {
-        DbInteract {
-            _database: main_db.clone(),
-        }
-    }
-    ///
     /// Helper function to return data about a passed object into size and bytes array.
     ///
     fn data_size_to_b<T: serde::Serialize>(data_object: &T) -> Vec<u8> {
@@ -263,7 +255,7 @@ impl DbInteract {
             }
             types::SupportedDBRequests::RelationshipAdd(file, tag, addtodb) => {
                 let mut unwrappy = self._database.lock().unwrap();
-                let tmep = unwrappy.relationship_add(file, tag, addtodb);
+                let _tmep = unwrappy.relationship_add(file, tag, addtodb);
                 Self::data_size_to_b(&true)
             }
 
@@ -337,7 +329,7 @@ impl DbInteract {
             }
             types::SupportedDBRequests::LoadTable(table) => {
                 let mut unwrappy = self._database.lock().unwrap();
-                let tmep = unwrappy.load_table(&table);
+                let _tmep = unwrappy.load_table(&table);
                 Self::data_size_to_b(&true)
             }
             types::SupportedDBRequests::TransactionFlush() => {

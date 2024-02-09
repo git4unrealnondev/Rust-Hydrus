@@ -1,11 +1,11 @@
 #![forbid(unsafe_code)]
-use crate::jobs;
+
 use crate::logging;
-use crate::pause;
+
 use crate::sharedtypes;
 use crate::sharedtypes::DbJobsObj;
 use crate::time_func;
-use ahash::{AHashMap, AHashSet, AHasher};
+
 use log::{error, info};
 pub use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, ValueRef};
 pub use rusqlite::{params, types::Null, Connection, Result, Transaction};
@@ -15,7 +15,7 @@ use std::panic;
 use std::path::Path;
 use std::sync::Arc;
 use std::sync::Mutex;
-use std::{collections::HashMap, hash::BuildHasherDefault};
+use std::{collections::HashMap};
 
 //mod db;
 mod db;
@@ -287,7 +287,7 @@ impl Main {
             CacheType::InMemory => {
                 todo!();
             }
-            CacheType::Bare(dbpath) => {
+            CacheType::Bare(_dbpath) => {
                 todo!();
             }
         }
@@ -1929,7 +1929,7 @@ impl Main {
             ));
             return;
         }
-        let namespaceone = namespaceone_unwrap.unwrap();
+        let _namespaceone = namespaceone_unwrap.unwrap();
         //let tagtwo = namespacetwo_unwrap.unwrap();
     }
 

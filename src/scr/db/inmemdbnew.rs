@@ -16,7 +16,7 @@ pub struct tes {
 }
 impl tes {
     pub fn new() -> tes {
-        let mut te = HashSet::default();
+        let te = HashSet::default();
         let out = tes { test: te };
         out
     }

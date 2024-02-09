@@ -1,4 +1,3 @@
-use crate::database::db::dbtraits::DBTraits;
 use crate::database::CacheType;
 use log::error;
 pub use rusqlite::{params, types::Null, Connection, Result, Transaction};
@@ -13,7 +12,7 @@ pub struct SqliteSearchStructs {
 
 impl SqliteSearchStructs {
     pub fn new(db_type: CacheType) -> Self {
-        let mut hold = SqliteSearchStructs {
+        let hold = SqliteSearchStructs {
             conn: make_connection(db_type.clone()),
             conn_type: db_type,
         };
@@ -29,10 +28,6 @@ fn make_connection(conntype: CacheType) -> Arc<Mutex<Connection>> {
             error!("Should not use Inmemdb with SQLITE cache. paniking");
             panic!();
         }
-        _ => {
-            error!("I don't know what doofus did this sqlitedb unknown connection. panicking");
-            panic!();
-        }
     }
 }
 
@@ -40,12 +35,12 @@ fn make_connection(conntype: CacheType) -> Arc<Mutex<Connection>> {
 impl SqliteSearchStructs {
     fn parents_put(
         &mut self,
-        tag_namespace_id: usize,
-        tag_id: usize,
-        relate_tag_id: usize,
-        relate_namespace_id: usize,
+        _tag_namespace_id: usize,
+        _tag_id: usize,
+        _relate_tag_id: usize,
+        _relate_namespace_id: usize,
     ) -> usize {
-        let conn = self.conn.lock().unwrap();
+        let _conn = self.conn.lock().unwrap();
         0
     }
 }

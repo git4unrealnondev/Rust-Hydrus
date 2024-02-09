@@ -1,3 +1,6 @@
+#![allow(dead_code)]
+#![allow(unused_variables)]
+
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 

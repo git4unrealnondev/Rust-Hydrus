@@ -88,7 +88,7 @@ impl Jobs {
         &mut self,
         adb: &mut Arc<Mutex<database::Main>>,
         thread: &mut threading::Threads,
-        alt_connection: &mut Connection,
+        _alt_connection: &mut Connection,
         pluginmanager: Arc<Mutex<PluginManager>>,
     ) {
         let dba = adb.clone();
@@ -111,7 +111,7 @@ impl Jobs {
         // Appends ratelimited into hashmap for multithread scraper.
         for scrape in self.scrapermanager.scraper_get() {
             let name_result = db.settings_get_name(&format!("{:?}_{}", scrape._type, scrape._name));
-            let mut info = String::new();
+            let _info = String::new();
 
             // Handles loading of settings into DB.Either Manual or Automatic to describe the functionallity
             match name_result {

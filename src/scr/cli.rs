@@ -4,15 +4,15 @@ use std::collections::HashSet;
 use std::path::Path;
 //use std::str::pattern::Searcher;
 use file_format::FileFormat;
-use std::{str::FromStr, task::Wake};
+use std::str::FromStr;
 
 use crate::download;
 use crate::{
     database, logging, pause, scraper,
-    sharedtypes::{self, AllFields, JobsAdd, JobsRemove},
+    sharedtypes::{self},
 };
-use clap::{Arg, Parser};
-use log::{error, info};
+use clap::Parser;
+
 //use super::sharedtypes::;
 
 use strum::IntoEnumIterator;
@@ -65,7 +65,7 @@ pub fn main(data: &mut database::Main, scraper: &mut scraper::ScraperManager) {
                     }
                 }
             }
-            cli_structs::JobStruct::Remove(remove) => {
+            cli_structs::JobStruct::Remove(_remove) => {
                 /*return sharedtypes::AllFields::JobsRemove(sharedtypes::JobsRemove {
                     site: remove.site.to_string(),
                     query: remove.query.to_string(),
@@ -74,9 +74,9 @@ pub fn main(data: &mut database::Main, scraper: &mut scraper::ScraperManager) {
             }
         },
         cli_structs::test::Search(searchstruct) => match searchstruct {
-            cli_structs::SearchStruct::fid(id) => {}
-            cli_structs::SearchStruct::tid(id) => {}
-            cli_structs::SearchStruct::tag(tag) => {}
+            cli_structs::SearchStruct::fid(_id) => {}
+            cli_structs::SearchStruct::tid(_id) => {}
+            cli_structs::SearchStruct::tag(_tag) => {}
             cli_structs::SearchStruct::hash(hash) => {
                 data.load_table(&sharedtypes::LoadDBTable::Files);
                 data.load_table(&sharedtypes::LoadDBTable::Namespace);
@@ -143,16 +143,15 @@ pub fn main(data: &mut database::Main, scraper: &mut scraper::ScraperManager) {
                     data.load_table(&sharedtypes::LoadDBTable::Files);
                     data.load_table(&sharedtypes::LoadDBTable::Relationship);
 
-                    let mut failedtoparse: HashSet<String> = HashSet::new();
+                    let failedtoparse: HashSet<String> = HashSet::new();
 
-                    let FileRegen = crate::scraper::ScraperFileRegen(libload);
+                    let file_regen = crate::scraper::scraper_file_regen(libload);
 
                     std::env::set_var("RAYON_NUM_THREADS", "50");
 
                     println!("Found location: {} Starting to process.", &loc.location);
                     //dbg!(&loc.site, &loc.location);
-                    let mut cnt = 0;
-                    'walkloop: for each in jwalk::WalkDir::new(&loc.location)
+                    for each in jwalk::WalkDir::new(&loc.location)
                         .into_iter()
                         .filter_map(|e| e.ok())
                         .filter(|z| z.file_type().is_file())
@@ -161,7 +160,7 @@ pub fn main(data: &mut database::Main, scraper: &mut scraper::ScraperManager) {
                         //println!("On file: {}", cnt);
                         let (fhist, b) = download::hash_file(
                             &each.path().display().to_string(),
-                            &FileRegen.hash,
+                            &file_regen.hash,
                         );
 
                         println!("File Hash: {}", &fhist);
@@ -175,7 +174,7 @@ pub fn main(data: &mut database::Main, scraper: &mut scraper::ScraperManager) {
                             ext: Some(ext.clone()),
                         };
 
-                        let tag = crate::scraper::ScraperFileRetrun(libload, &scraperinput);
+                        let tag = crate::scraper::scraper_file_return(libload, &scraperinput);
                         // gets sha 256 from the file.
                         let (sha2, _a) = download::hash_bytes(
                             &b,
@@ -194,7 +193,6 @@ pub fn main(data: &mut database::Main, scraper: &mut scraper::ScraperManager) {
                             data.namespace_add(tag.namespace.name, tag.namespace.description, true);
                         let tid = data.tag_add(tag.tag, nid, true, None);
                         data.relationship_add(fid, tid, true);
-                        cnt += 1;
                         //println!("FIle: {}", each.path().display());
                     }
                     data.transaction_flush();
@@ -299,7 +297,7 @@ pub fn main(data: &mut database::Main, scraper: &mut scraper::ScraperManager) {
                     }
                 }
             }
-            cli_structs::TasksStruct::Csv(csvstruct) => {}
+            cli_structs::TasksStruct::Csv(_csvstruct) => {}
         },
     }
     //AllFields::Nothing

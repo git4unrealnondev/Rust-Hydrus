@@ -1,3 +1,6 @@
+#![allow(dead_code)]
+#![allow(unused_variables)]
+
 use crate::sharedtypes;
 use ahash::AHashMap;
 use libloading;
@@ -167,13 +170,13 @@ impl ScraperManager {
     }
 }
 
-pub fn ScraperFileRegen(libloading: &libloading::Library) -> sharedtypes::ScraperFileRegen {
+pub fn scraper_file_regen(libloading: &libloading::Library) -> sharedtypes::ScraperFileRegen {
     let temp: libloading::Symbol<unsafe extern "C" fn() -> sharedtypes::ScraperFileRegen> =
         unsafe { libloading.get(b"scraper_file_regen\0").unwrap() };
     unsafe { temp() }
 }
 
-pub fn ScraperFileRetrun(
+pub fn scraper_file_return(
     libloading: &libloading::Library,
     regen: &sharedtypes::ScraperFileInput,
 ) -> sharedtypes::SubTag {

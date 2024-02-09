@@ -12,7 +12,6 @@ use crate::sharedtypes;
 
 use std::io::Read;
 
-use crate::client;
 use crate::server;
 
 pub struct PluginManager {
@@ -42,8 +41,8 @@ impl PluginManager {
 
         reftoself.load_plugins(&pluginsloc);
 
-        let (snd, rcv) = mpsc::channel();
-        let srv = std::thread::spawn(move || {
+        let (snd, _rcv) = mpsc::channel();
+        let _srv = std::thread::spawn(move || {
             let mut ipc_coms = server::PluginIpcInteract::new(main_db.clone());
             //let _ = rcv.recv();
             let out = ipc_coms.spawn_listener(snd);
@@ -82,7 +81,7 @@ impl PluginManager {
         }
         for thread in finished_threads {
             let th = self._thread.remove(&thread).unwrap();
-            th.join();
+            let _ = th.join();
         }
     }
 
@@ -322,7 +321,7 @@ impl PluginManager {
                                     );
                                 //                                    println!("plugins323 making tag: {}", tags.name);
                                 } else {
-                                    for parents_obj in tags.parents.unwrap() {
+                                    for _parents_obj in tags.parents.unwrap() {
                                         unwrappy.tag_add(
                                             tags.name.to_string(),
                                             namespace_id.unwrap().clone(),

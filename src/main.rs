@@ -166,7 +166,7 @@ fn main() {
         "so".to_string(),
     );
 
-    let all_field = cli::main(&mut data, &mut scraper_manager);
+    let _all_field = cli::main(&mut data, &mut scraper_manager);
     data.load_table(&sharedtypes::LoadDBTable::Jobs);
     let mut jobmanager = jobs::Jobs::new(scraper_manager);
 
