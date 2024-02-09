@@ -48,7 +48,7 @@ impl PluginManager {
             //let _ = rcv.recv();
             let out = ipc_coms.spawn_listener(snd);
 
-            println!("v");
+            //println!("v");
             out
         });
         /* if let Err(e) = srv.join().expect("server thread panicked") {
@@ -320,7 +320,7 @@ impl PluginManager {
                                         true,
                                         None,
                                     );
-                                    println!("plugins323 making tag: {}", tags.name);
+                                //                                    println!("plugins323 making tag: {}", tags.name);
                                 } else {
                                     for parents_obj in tags.parents.unwrap() {
                                         unwrappy.tag_add(
@@ -356,10 +356,10 @@ impl PluginManager {
                                         namespace_id.unwrap().clone(),
                                     )
                                     .cloned();
-                                println!(
+                                /*println!(
                                     "plugins356 relating: file id {:?} to {:?}",
                                     file_id, relations.tag_name
-                                );
+                                );*/
                                 unwrappy.relationship_add(
                                     file_id.unwrap().clone(),
                                     tag_id.unwrap().clone(),

@@ -1507,7 +1507,7 @@ impl Main {
     }
 
     ///
-    ///
+    /// Adds namespace to the SQL database
     ///
     fn namespace_add_sql(&mut self, name: &String, description: &Option<String>, name_id: &usize) {
         let inp = "INSERT INTO Namespace VALUES(?, ?, ?)";
@@ -1539,8 +1539,8 @@ impl Main {
         let ns_id = self._inmemdb.namespace_get_max();
         let ns = sharedtypes::DbNamespaceObj {
             id: ns_id,
-            name: name,
-            description: description,
+            name,
+            description,
         };
 
         if addtodb && namespace_grab.is_none() {
@@ -1995,7 +1995,7 @@ impl Main {
     /// Doesn't support params nativly.
     /// Will not write changes to DB. Have to call write().
     /// Panics to help issues.
-    pub fn execute(&mut self, inp: String) -> usize {
+    fn execute(&mut self, inp: String) -> usize {
         let _out = self
             ._conn
             .borrow_mut()
