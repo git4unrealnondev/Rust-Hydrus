@@ -73,7 +73,6 @@ pub async fn dltext_new(
     url_string: String,
     ratelimit_object: &mut Ratelimiter,
     client: &mut Client,
-    _pluginmanager: Arc<Mutex<PluginManager>>,
 ) -> Result<String, reqwest::Error> {
     //let mut ret: Vec<AHashMap<String, AHashMap<String, Vec<String>>>> = Vec::new();
     //let ex = Executor::new();
@@ -140,7 +139,7 @@ pub async fn dlfile_new(
     client: &Client,
     file: &sharedtypes::FileObject,
     location: &String,
-    pluginmanager: Arc<Mutex<PluginManager>>,
+    pluginmanager: &mut PluginManager,
 ) -> Option<(String, String)> {
     let mut boolloop = true;
     let mut hash = String::new();
@@ -249,12 +248,10 @@ pub async fn dlfile_new(
     // Copies file from memory to disk
     std::io::copy(&mut content, &mut file_path).unwrap();
 
-    // Wouldove rather passed teh Cursor or Bytes Obj but it wouldn't work for some reason with the ABI
-    pluginmanager
-        .lock()
-        .unwrap()
-        .plugin_on_download(bytes.as_ref(), &hash, &file_ext);
-
+    {
+        // Wouldove rather passed teh Cursor or Bytes Obj but it wouldn't work for some reason with the ABI
+        pluginmanager.plugin_on_download(bytes.as_ref(), &hash, &file_ext);
+    }
     println!("Downloaded hash: {}", &hash);
 
     Some((hash, file_ext))

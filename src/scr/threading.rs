@@ -24,7 +24,8 @@ use std::thread;
 use std::time::Duration;
 
 pub struct Threads {
-    _workers: Vec<Worker>,
+    _workers: usize,
+    worker: Vec<Worker>,
 }
 
 ///
@@ -33,9 +34,13 @@ pub struct Threads {
 ///
 impl Threads {
     pub fn new() -> Self {
-        let workers = Vec::new();
+        let workers = 0;
+        let worker = Vec::new();
 
-        Threads { _workers: workers }
+        Threads {
+            _workers: workers,
+            worker,
+        }
     }
 
     ///
@@ -47,10 +52,10 @@ impl Threads {
         jobs: Vec<sharedtypes::DbJobsObj>,
         db: &mut Arc<Mutex<database::Main>>,
         scrapermanager: libloading::Library,
-        pluginmanager: Arc<Mutex<PluginManager>>,
+        pluginmanager: &mut Arc<Mutex<PluginManager>>,
     ) {
         let worker = Worker::new(
-            self._workers.len(),
+            self._workers,
             scraper,
             jobs,
             //&mut self._runtime,
@@ -58,8 +63,10 @@ impl Threads {
             scrapermanager,
             pluginmanager,
         );
+        self._workers += 1;
+        self.worker.push(worker);
 
-        self._workers.push(worker);
+        //self._workers.push(worker);
     }
 }
 ///
@@ -110,7 +117,7 @@ impl Worker {
         //rt: &mut Runtime,
         dba: &mut Arc<Mutex<database::Main>>,
         libloading: libloading::Library,
-        pluginmanager: Arc<Mutex<PluginManager>>,
+        pluginmanager: &mut Arc<Mutex<PluginManager>>,
     ) -> Worker {
         info_log(&format!(
             "Creating Worker for id: {} Scraper Name: {} With a jobs length of: {}",
@@ -120,7 +127,7 @@ impl Worker {
         ));
         let mut db = dba.clone();
         let mut jblist = jobs.clone();
-        let manageeplugin = pluginmanager;
+        let mut manageeplugin = pluginmanager.clone();
         let scrap = scraper.clone();
 
         let thread = thread::spawn(move || {
@@ -128,7 +135,6 @@ impl Worker {
             let mut job_ref_hash: HashMap<JobScraper, sharedtypes::DbJobsObj> = HashMap::new();
             let mut rate_limit_vec: Vec<Ratelimiter> = Vec::new();
             let mut rate_limit_key: HashMap<String, usize> = HashMap::new();
-
             // Main loop for processing
             // All queries have been deduplicated.
             let mut job_loop = true;
@@ -233,7 +239,6 @@ impl Worker {
                                 urll.to_string(),
                                 &mut ratelimit,
                                 &mut client,
-                                manageeplugin.clone(),
                             ));
                             let st = match resp {
                                 Ok(respstring) => scraper::parser_call(&libloading, &respstring),
@@ -327,31 +332,34 @@ impl Worker {
                                                     "Downloading: {} to: {}",
                                                     &source, &location
                                                 ));
-
-                                                let blopt = task::block_on(download::dlfile_new(
-                                                    &client,
-                                                    &file,
-                                                    &location,
-                                                    manageeplugin.clone(),
-                                                ));
+                                                let blopt;
+                                                {
+                                                    let mut pl = manageeplugin.lock().unwrap();
+                                                    blopt = task::block_on(download::dlfile_new(
+                                                        &client, &file, &location, &mut pl,
+                                                    ));
+                                                }
                                                 let (hash, file_ext) = match blopt {
                                                     None => {
                                                         continue;
                                                     }
                                                     Some(blo) => blo,
                                                 };
-
-                                                let unwrappydb = &mut db.lock().unwrap();
-                                                let fileid = unwrappydb.file_add(
-                                                    None, &hash, &file_ext, &location, true,
-                                                );
-                                                let tagid = unwrappydb.tag_add(
-                                                    source.to_string(),
-                                                    source_url_id.unwrap().clone(),
-                                                    true,
-                                                    None,
-                                                );
-                                                unwrappydb.relationship_add(fileid, tagid, true);
+                                                let fileid;
+                                                {
+                                                    let unwrappydb = &mut db.lock().unwrap();
+                                                    fileid = unwrappydb.file_add(
+                                                        None, &hash, &file_ext, &location, true,
+                                                    );
+                                                    let tagid = unwrappydb.tag_add(
+                                                        source.to_string(),
+                                                        source_url_id.unwrap().clone(),
+                                                        true,
+                                                        None,
+                                                    );
+                                                    unwrappydb
+                                                        .relationship_add(fileid, tagid, true);
+                                                }
                                                 fileid
                                             }
                                             Some(url_id) => {

@@ -93,7 +93,9 @@ impl PluginManager {
             dbg!(output);
         }
     }
-
+    pub fn test(&self) {
+        dbg!("test");
+    }
     ///
     /// Loads plugins into plugin manager
     ///
@@ -387,6 +389,7 @@ impl PluginManager {
         }
 
         for plugin in self._callback[&sharedtypes::PluginCallback::OnDownload].clone() {
+            dbg!("3");
             if !self._plugin.contains_key(&plugin) {
                 error!("Could not call Plugin-OnDownload");
                 continue;
@@ -406,7 +409,6 @@ impl PluginManager {
                 //unwrappy.
                 output = plugindatafunc(cursorpass, hashs, exts);
             }
-
             self.parse_plugin_output(output);
         }
     }

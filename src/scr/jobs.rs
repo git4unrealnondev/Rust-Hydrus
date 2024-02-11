@@ -89,7 +89,7 @@ impl Jobs {
         adb: &mut Arc<Mutex<database::Main>>,
         thread: &mut threading::Threads,
         _alt_connection: &mut Connection,
-        pluginmanager: Arc<Mutex<PluginManager>>,
+        pluginmanager: &mut Arc<Mutex<PluginManager>>,
     ) {
         let dba = adb.clone();
         let mut db = dba.lock().unwrap();
@@ -167,7 +167,7 @@ impl Jobs {
             let scrap = self.scrapermanager._library.remove(&scraper).unwrap();
             let jobs = each.1;
 
-            thread.startwork(scraper, jobs, adb, scrap, pluginmanager.clone());
+            thread.startwork(scraper, jobs, adb, scrap, &mut pluginmanager.clone());
         }
 
         /*for each in &self._jobref {

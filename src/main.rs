@@ -171,170 +171,24 @@ fn main() {
     let mut jobmanager = jobs::Jobs::new(scraper_manager);
 
     data.transaction_flush();
-    /*
-    match all_field {
-        sharedtypes::AllFields::JobsAdd(jobs_add) => {
-            data.jobs_add_new(
-                &jobs_add.site,
-                &jobs_add.query,
-                &jobs_add.time,
-                Some(jobs_add.committype),
-                true,
-            );
-
-            //let positive = AllField;
-        }
-
-        sharedtypes::AllFields::JobsRemove(_jobs_remove) => {}
-        sharedtypes::AllFields::Search(search) => {
-            match &search {
-                sharedtypes::Search::Fid(_file) => {}
-                sharedtypes::Search::Tid(_tagid) => {}
-                sharedtypes::Search::Tag(tag) => {
-                    if tag.len() == 1 {
-                        logging::info_log(
-                            &"One item was passed into tag search. Will search only based off tag."
-                                .to_string(),
-                        );
-                    } else if tag.len() == 2 {
-                        logging::info_log(&"Normal tag search was done. Searching for 2nd item in namespace to get tag id.".to_string());
-                        dbg!(tag.get(0));
-                        dbg!(tag.get(1));
-
-                        data.load_table(&sharedtypes::LoadDBTable::Files);
-                        data.load_table(&sharedtypes::LoadDBTable::Tags);
-                        data.load_table(
-                            &sharedtypes::LoadDBTable::Relationship);
-                        data.load_table(&sharedtypes::LoadDBTable::Namespace);
-
-                        let tag_namespace = data.namespace_get(tag.get(1).unwrap());
-
-                        match tag_namespace {
-                            None => {
-                                logging::info_log(
-                                    &"Couldn't fine namespace from search".to_string(),
-                                );
-                            }
-                            Some(namespace_id) => {
-                                let tag_option = data.tag_get_name(
-                                    tag.get(0).unwrap().clone(),
-                                    namespace_id.clone(),
-                                );
-                                match tag_option {
-                                    None => {
-                                        logging::info_log(&format!("Couldn't find any tag id's that use namespace_id: {} with tag: {}", namespace_id, tag.get(0).unwrap()));
-                                        logging::info_log(&"Will try a generic search".to_string());
-                                    }
-                                    Some(tag_id) => {
-                                        logging::info_log(&format!("Found a tag id's that use namespace_id: {} with tag: {} tagid {}", namespace_id, tag.get(0).unwrap(), tag_id));
-                                        let file_ids =
-                                            data.relationship_get_fileid(&tag_id).unwrap();
-                                        for each in file_ids {
-                                            //dbg!(each);
-                                            let file_info = data.file_get_id(&each).unwrap();
-                                            logging::info_log(&format!(
-                                                "Found File: {} {} {}",
-                                                file_info.id.unwrap(),
-                                                file_info.location,
-                                                file_info.hash
-                                            ));
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    } else if tag.len() >= 3 {
-                        logging::info_log(&"Three items were passed into the tag search using first and second only.".to_string());
-                    } else if tag.is_empty() {
-                        logging::info_log(&"Tag was passed into search but no info was provided. THIS SHOULDN'T HAPPEN.".to_string());
-                    }
-                }
-                sharedtypes::Search::Hash(hash) => {
-                    data.load_table(&sharedtypes::LoadDBTable::Files);
-                    data.load_table(&sharedtypes::LoadDBTable::Tags);
-                    data.load_table(&sharedtypes::LoadDBTable::Namespace);
-                    data.load_table(&sharedtypes::LoadDBTable::Relationship);
-
-                    for each in hash {
-                        let file = data.file_get_hash(each);
-
-                        match file {
-                            Some(fileone) => {
-                                let tag = data.relationship_get_tagid(fileone).unwrap();
-
-                                for tag_each in tag {
-                                    let tagdata = data.tag_id_get(&tag_each).unwrap();
-                                    println!(
-                                        "Id: {:?} Name: {:?} Namespace: {:?}",
-                                        &tag_each,
-                                        &tagdata.name,
-                                        //&tagdata.parents,
-                                        &data
-                                            .namespace_get_string(&tagdata.namespace)
-                                            .unwrap()
-                                            .name,
-                                    );
-                                }
-                            }
-                            None => {}
-                        }
-                    }
-                }
-            }
-
-            //dbg!(search);
-            //panic!();
-        }
-
-        sharedtypes::AllFields::Tasks(task) => match task {
-            sharedtypes::Tasks::Csv(location, csvdata) => {
-                tasks::import_files(&location, csvdata, &mut data);
-            }
-            sharedtypes::Tasks::Remove(sharedtypes::TasksRemove::Remove_Namespace_Id(id)) => {
-                data.delete_tag_relationship(&id);
-            }
-            sharedtypes::Tasks::Remove(sharedtypes::TasksRemove::Remove_Namespace_String(
-                id_string,
-            )) => {
-                let id = data.namespace_get(&id_string).cloned();
-                match id {
-                    None => {
-                        println!(
-                            "Cannot find the tasks remove string in namespace {}",
-                            id_string
-                        );
-                    }
-                    Some(id_usize) => {
-                        data.delete_tag_relationship(&id_usize);
-                    }
-                }
-            }
-            sharedtypes::Tasks::Remove(sharedtypes::TasksRemove::None) => {}
-        },
-
-        sharedtypes::AllFields::Nothing => {}
-    }*/
-
-    data.transaction_flush();
 
     jobmanager.jobs_get(&data);
 
     // Converts db into Arc for multithreading
     let mut arc = Arc::new(Mutex::new(data));
 
-    let pluginmanager = Arc::new(Mutex::new(plugins::PluginManager::new(
+    let mut pluginmanager = Arc::new(Mutex::new(plugins::PluginManager::new(
         plugin_loc.to_string(),
         arc.clone(),
     )));
 
     // Creates a threadhandler that manages callable threads.
     let mut threadhandler = threading::Threads::new();
-
     jobmanager.jobs_run_new(
         &mut arc,
         &mut threadhandler,
         &mut alt_connection,
-        pluginmanager.clone(),
+        &mut pluginmanager,
     );
 
     pluginmanager.lock().unwrap().plugin_on_start();

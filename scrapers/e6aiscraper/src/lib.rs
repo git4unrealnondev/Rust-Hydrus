@@ -98,33 +98,33 @@ fn nsobjplg(name: &NsIdent) -> sharedtypes::GenericNamespaceObj {
         NsIdent::PoolId => {
             return sharedtypes::GenericNamespaceObj {
                 //tag: tag,
-                name: "Pool_Id".to_string(),
+                name: "Pool_Id_e6ai".to_string(),
                 description: Some("Pool identifier unique id.".to_string()),
             };
         }
         NsIdent::PoolCreator => {
             return sharedtypes::GenericNamespaceObj {
                 //tag: tag,
-                name: "Pool_Creator".to_string(),
+                name: "Pool_Creator_e6ai".to_string(),
                 description: Some("Person who made a pool.".to_string()),
             };
         }
         NsIdent::PoolCreatorId => {
             return sharedtypes::GenericNamespaceObj {
-                name: "Pool_Creator_Id".to_string(),
+                name: "Pool_Creator_Id_e6ai".to_string(),
                 description: Some("Person's id for e6 who made a pool.".to_string()),
             };
         }
         NsIdent::PoolName => {
             return sharedtypes::GenericNamespaceObj {
-                name: "Pool_Name".to_string(),
+                name: "Pool_Name_e6ai".to_string(),
                 description: Some("Name of a pool.".to_string()),
             };
         }
 
         NsIdent::PoolDescription => {
             return sharedtypes::GenericNamespaceObj {
-                name: "Pool_Description".to_string(),
+                name: "Pool_Description_e6ai".to_string(),
                 description: Some("Description for a pool.".to_string()),
             };
         }
@@ -162,8 +162,8 @@ fn nsobjplg(name: &NsIdent) -> sharedtypes::GenericNamespaceObj {
         }
         NsIdent::Artist => {
             return sharedtypes::GenericNamespaceObj {
-                name: "Artist".to_string(),
-                description: Some("Individual who drew the filth.".to_string()),
+                name: "Director".to_string(),
+                description: Some("Individual who directed the ai filth.".to_string()),
             };
         }
 
@@ -218,7 +218,7 @@ fn nsobjplg(name: &NsIdent) -> sharedtypes::GenericNamespaceObj {
         }
         NsIdent::FileId => {
             return sharedtypes::GenericNamespaceObj {
-                name: "Id".to_string(),
+                name: "Id_e6ai".to_string(),
                 description: Some("File id used by e6ai to uniquly identify a file.".to_string()),
             }
         } /*"pool_id" => {
@@ -810,6 +810,7 @@ pub fn parser(params: &String) -> Result<sharedtypes::ScraperObject, sharedtypes
         };
         files.insert(file);
     }
+
     Ok(sharedtypes::ScraperObject {
         file: files,
         tag: HashSet::new(),
