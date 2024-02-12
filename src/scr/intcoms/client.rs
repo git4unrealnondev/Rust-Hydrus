@@ -117,6 +117,15 @@ pub fn relationship_get_fileid(id: usize) -> Option<HashSet<usize>> {
         types::SupportedDBRequests::RelationshipGetFileid(id),
     ))
 }
+///
+/// See the database reference for this function.
+/// I'm a lazy turd just check it their
+///
+pub fn tag_get_name(tag: String, namespaceid: usize) -> Option<usize> {
+    init_data_request(&types::SupportedRequests::Database(
+        types::SupportedDBRequests::GetTagName((tag, namespaceid)),
+    ))
+}
 
 ///
 /// See the database reference for this function.

@@ -389,7 +389,6 @@ impl PluginManager {
         }
 
         for plugin in self._callback[&sharedtypes::PluginCallback::OnDownload].clone() {
-            dbg!("3");
             if !self._plugin.contains_key(&plugin) {
                 error!("Could not call Plugin-OnDownload");
                 continue;
