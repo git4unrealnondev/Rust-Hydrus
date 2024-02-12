@@ -13,7 +13,12 @@ pub fn return_info() -> sharedtypes::PluginInfo {
         version: 1.00,
         api_version: 1.00,
         callbacks: callbackvec,
-        communication: None,
+        communication: Some(sharedtypes::PluginSharedData {
+            thread: sharedtypes::PluginThreadType::Spawn,
+            com_channel: Some(sharedtypes::PluginCommunicationChannel::pipe(
+                "".to_string(),
+            )),
+        }),
     }
 }
 

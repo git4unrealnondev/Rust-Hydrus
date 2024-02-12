@@ -129,12 +129,12 @@ impl Worker {
         let mut jblist = jobs.clone();
         let mut manageeplugin = pluginmanager.clone();
         let scrap = scraper.clone();
-
         let thread = thread::spawn(move || {
             let mut job_params: HashSet<JobScraper> = HashSet::new();
             let mut job_ref_hash: HashMap<JobScraper, sharedtypes::DbJobsObj> = HashMap::new();
             let mut rate_limit_vec: Vec<Ratelimiter> = Vec::new();
             let mut rate_limit_key: HashMap<String, usize> = HashMap::new();
+
             // Main loop for processing
             // All queries have been deduplicated.
             let mut job_loop = true;
@@ -334,9 +334,11 @@ impl Worker {
                                                 ));
                                                 let blopt;
                                                 {
-                                                    let mut pl = manageeplugin.lock().unwrap();
                                                     blopt = task::block_on(download::dlfile_new(
-                                                        &client, &file, &location, &mut pl,
+                                                        &client,
+                                                        &file,
+                                                        &location,
+                                                        &mut manageeplugin,
                                                     ));
                                                 }
                                                 let (hash, file_ext) = match blopt {

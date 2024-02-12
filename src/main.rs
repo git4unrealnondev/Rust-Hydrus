@@ -182,6 +182,8 @@ fn main() {
         arc.clone(),
     )));
 
+    dbg!("comple");
+    pluginmanager.lock().unwrap().plugin_on_start();
     // Creates a threadhandler that manages callable threads.
     let mut threadhandler = threading::Threads::new();
     jobmanager.jobs_run_new(
@@ -190,8 +192,6 @@ fn main() {
         &mut alt_connection,
         &mut pluginmanager,
     );
-
-    pluginmanager.lock().unwrap().plugin_on_start();
     // Anything below here will run automagically.
     // Jobs run in OS threads
 
@@ -207,12 +207,25 @@ fn main() {
     //arc.lock().unwrap().transaction_close();
 
     // Waits until all threads have closed.
-    pluginmanager.lock().unwrap().thread_finish_closed();
+    dbg!("comple1");
+    let one_sec = time::Duration::from_secs(1);
+    loop {
+        let brk;
+        {
+            pluginmanager.lock().unwrap().thread_finish_closed();
+            brk = pluginmanager.lock().unwrap().return_thread();
+        }
+        if brk {
+            break;
+        }
+        thread::sleep(one_sec);
+    }
+    /* pluginmanager.lock().unwrap().thread_finish_closed();
     while !pluginmanager.lock().unwrap().return_thread() {
         let one_sec = time::Duration::from_secs(1);
         pluginmanager.lock().unwrap().thread_finish_closed();
         thread::sleep(one_sec);
-    }
+    }*/
 
     // This wait is done for allowing any thread to "complete"
     // Shouldn't be nessisary but hey. :D

@@ -167,7 +167,7 @@ impl Jobs {
             let scrap = self.scrapermanager._library.remove(&scraper).unwrap();
             let jobs = each.1;
 
-            thread.startwork(scraper, jobs, adb, scrap, &mut pluginmanager.clone());
+            thread.startwork(scraper, jobs, adb, scrap, pluginmanager);
         }
 
         /*for each in &self._jobref {

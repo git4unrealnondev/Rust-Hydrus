@@ -139,7 +139,7 @@ pub async fn dlfile_new(
     client: &Client,
     file: &sharedtypes::FileObject,
     location: &String,
-    pluginmanager: &mut PluginManager,
+    pluginmanager: &mut Arc<Mutex<PluginManager>>,
 ) -> Option<(String, String)> {
     let mut boolloop = true;
     let mut hash = String::new();
@@ -250,7 +250,10 @@ pub async fn dlfile_new(
 
     {
         // Wouldove rather passed teh Cursor or Bytes Obj but it wouldn't work for some reason with the ABI
-        pluginmanager.plugin_on_download(bytes.as_ref(), &hash, &file_ext);
+        pluginmanager
+            .lock()
+            .unwrap()
+            .plugin_on_download(bytes.as_ref(), &hash, &file_ext);
     }
     println!("Downloaded hash: {}", &hash);
 
