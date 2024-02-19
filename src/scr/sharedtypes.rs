@@ -105,6 +105,32 @@ pub fn stringto_commit_type(into: &String) -> CommitType {
     panic!("{}", panic);
 }
 
+///
+/// Dummy Holder
+/// Dummy thick
+///
+#[allow(dead_code)]
+#[derive(Debug, EnumIter, PartialEq, Serialize, Deserialize)]
+pub enum SearchHolder {
+    AND((usize, usize)),
+    OR((usize, usize)),
+    NOT((usize, usize)),
+}
+
+///
+/// Allows searching inside the db.
+/// search_relate relates the item in the vec with eachother
+/// the IDs in search relate correspond to the id's in searches.
+/// IE: if 0 & 1 are an AND search then the 4 search items are AND searched in db in addition to
+/// the 4 terms in the searches
+///
+#[allow(dead_code)]
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+pub struct SearchObj {
+    pub search_relate: Option<Vec<SearchHolder>>,
+    pub searches: Vec<SearchHolder>,
+}
+
 #[allow(dead_code)]
 pub fn stringto_search_type(into: &String) -> Search {
     for each in Search::iter() {

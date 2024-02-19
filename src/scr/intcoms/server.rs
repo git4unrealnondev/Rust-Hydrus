@@ -244,6 +244,11 @@ impl DbInteract {
     ///
     pub fn dbactions_to_function(&mut self, dbaction: types::SupportedDBRequests) -> Vec<u8> {
         match dbaction {
+            types::SupportedDBRequests::Search((search, limit, offset)) => {
+                let unwrappy = self._database.lock().unwrap();
+                let tmep = unwrappy.search_db_files(search, limit, offset);
+                Self::option_to_bytes(tmep)
+            }
             types::SupportedDBRequests::GetTagId(id) => {
                 let unwrappy = self._database.lock().unwrap();
                 let tmep = unwrappy.tag_id_get(&id);

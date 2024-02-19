@@ -10,12 +10,12 @@ use log::{error, info};
 pub use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, ValueRef};
 pub use rusqlite::{params, types::Null, Connection, Result, Transaction};
 use std::borrow::BorrowMut;
+use std::collections::HashMap;
 use std::collections::HashSet;
 use std::panic;
 use std::path::Path;
 use std::sync::Arc;
 use std::sync::Mutex;
-use std::{collections::HashMap};
 
 //mod db;
 mod db;
@@ -276,6 +276,83 @@ impl Main {
                 jobtype,
             );
         }
+    }
+
+    ///
+    /// Handles the searching of the DB dynamically.
+    /// Returns the file id's associated with the search.
+    ///
+    pub fn search_db_files(
+        &self,
+        search: sharedtypes::SearchObj,
+        limit: Option<usize>,
+        offset: Option<usize>,
+    ) -> Option<&HashSet<usize>> {
+        let mut stor: Vec<sharedtypes::SearchHolder> = Vec::with_capacity(search.searches.len());
+        let mut fin: HashSet<usize> = HashSet::new();
+        let mut fin_temp: HashMap<usize, HashSet<&usize>> = HashMap::new();
+        let mut searched: Vec<(usize, usize)> = Vec::with_capacity(search.searches.len());
+        if let None = search.search_relate {
+            // Assume AND search
+            for each in 1..search.searches.len() {
+                stor.push(sharedtypes::SearchHolder::AND((each - 1, each)));
+            }
+        } else {
+            stor = search.search_relate.unwrap();
+        }
+        dbg!(&stor, &limit, &offset);
+        let mut cnt = 0;
+        for un in search.searches {
+            match un {
+                sharedtypes::SearchHolder::NOT((a, b)) => {
+                    let fa = self.relationship_get_fileid(&a);
+                    let fb = self.relationship_get_fileid(&b);
+                    if let Some(fa) = fa {
+                        if let Some(fb) = fb {
+                            fin_temp.insert(cnt, fa.difference(fb).collect());
+                        }
+                    }
+
+                    searched.push((cnt, a));
+                    searched.push((cnt, b));
+                }
+                sharedtypes::SearchHolder::AND((a, b)) => {
+                    let fa = self.relationship_get_fileid(&a);
+                    let fb = self.relationship_get_fileid(&b);
+                    if let Some(fa) = fa {
+                        if let Some(fb) = fb {
+                            fin_temp.insert(cnt, fa.intersection(fb).collect());
+                        }
+                    }
+
+                    searched.push((cnt, a));
+                    searched.push((cnt, b));
+                }
+                sharedtypes::SearchHolder::OR((a, b)) => {
+                    let fa = self.relationship_get_fileid(&a);
+                    let fb = self.relationship_get_fileid(&b);
+                    if let Some(fa) = fa {
+                        if let Some(fb) = fb {
+                            fin_temp.insert(cnt, fa.union(fb).collect());
+                        }
+                    }
+
+                    searched.push((cnt, a));
+                    searched.push((cnt, b));
+                }
+            }
+            cnt += 1
+        }
+
+        for each in stor {
+            match each {
+                sharedtypes::SearchHolder::OR((a, b)) => {}
+                sharedtypes::SearchHolder::AND((a, b)) => {}
+                sharedtypes::SearchHolder::NOT((a, b)) => {}
+            }
+        }
+
+        None
     }
 
     ///

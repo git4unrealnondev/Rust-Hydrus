@@ -97,6 +97,7 @@ pub enum SupportedDBRequests {
     TransactionFlush(),
     GetDBLocation(),
     Logging(String),
+    Search((sharedtypes::SearchObj, Option<usize>, Option<usize>)),
 }
 
 ///
@@ -188,10 +189,10 @@ pub fn send_preserialize(
 ) {
     let mut temp = inp.len().to_ne_bytes().to_vec();
     temp.extend(inp);
-    conn.get_mut()
+    let _ = conn
+        .get_mut()
         .write_all(&temp)
-        .context("Socket send failed")
-        .unwrap();
+        .context("Socket send failed");
 
     return;
 }

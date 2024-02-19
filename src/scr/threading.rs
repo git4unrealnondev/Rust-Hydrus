@@ -217,6 +217,7 @@ impl Worker {
                     // Only instants the ratelimit if we don't already have it.
                     let mut ratelimit = match rate_limit_key.get_mut(&job.site) {
                         None => {
+                            info_log(&format!("Creating ratelimiter for site: {}", &job.site));
                             let u_temp = rate_limit_vec.len();
                             rate_limit_key.insert(job.site.clone(), u_temp);
                             rate_limit_vec.push(download::ratelimiter_create(
@@ -227,8 +228,6 @@ impl Worker {
                         }
                         Some(u_temp) => rate_limit_vec.get_mut(*u_temp).unwrap(),
                     };
-                    //let mut ratelimit =
-                    //    download::ratelimiter_create(scrap._ratelimit.0, scrap._ratelimit.1);
 
                     let mut client = download::client_create();
 

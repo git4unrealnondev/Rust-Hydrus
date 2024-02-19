@@ -169,45 +169,20 @@ impl Jobs {
 
             thread.startwork(scraper, jobs, adb, scrap, pluginmanager);
         }
-
-        /*for each in &self._jobref {
-            for eacha in self.scrapermanager.scraper_get() {
-                dbg!(&eacha);
-                if &each.1 .1 == eacha && !name_ratelimited.contains_key(&each.1 .1._name) {
-                    let scrap = ScraperType::iter();
-                    for eachb in scrap {
-                        name_ratelimited.insert(each.1 .1._name.to_string(), each.1 .1._ratelimit);
-                        //let type = each.1.1.url_get() ;
-                        let name_result = db.settings_get_name(&format!(
-                            "{:?}_{}",
-                            eachb,
-                            each.1 .1._name.to_string()
-                        ));
-                        match name_result {
-                            Ok(_) => {
-                                dbg!(name_result);
-                            }
-                            Err(_) => {
-                                dbg!(eachb, name_result);
-
-                                let (scrapertype, data) = self.scrapermanager.cookie_needed(eacha);
-                                dbg!(scrapertype, data);
-                            }
-                        }
-                    }
-                } else {
-                    continue;
-                }
-            }
-        }*/
-        //dbg!(name_ratelimited);
     }
-
     ///
+    /// pub fn cookie_needed(&mut self, id: usize, params: String) -> (bool, String)
+    ///
+    pub fn library_cookie_needed(&self, memid: &InternalScraper) -> (ScraperType, String) {
+        let libloading = self.scrapermanager.returnlibloading(memid);
+        scraper::cookie_need(libloading)
+        //self.scrapermanager.cookie_needed(memid)
+    }
+    /*///
     /// Automatic job running.
     ///
     ///
-    /*pub fn automatic_job_run(
+    pub fn automatic_job_run(
         source_url: &String,
         ratelimiter_object: &mut ratelimit::Ratelimiter,
         client: &mut Client,
@@ -215,10 +190,10 @@ impl Jobs {
     ) {
     }*/
 
-    ///
+    /*///
     /// Runs jobs as they are needed to.
     ///
-    /*pub fn jobs_run(&mut self, db: &mut database::Main) {
+    pub fn jobs_run(&mut self, db: &mut database::Main) {
         // Sets up and checks scrapers
 
         let loaded_params: AHashMap<u128, Vec<String>> = AHashMap::new();
@@ -370,7 +345,7 @@ impl Jobs {
         }
     }*/
 
-    /// ALL of the lower functions are just wrappers for the scraper library.
+    /*/// ALL of the lower functions are just wrappers for the scraper library.
     /// This is nice because their's no unsafe code anywhere else inside code base.
 
     ///
@@ -427,5 +402,5 @@ impl Jobs {
         let libloading = self.scrapermanager.returnlibloading(memid);
         scraper::scraper_download_get(libloading)
         //self.scrapermanager.scraper_download_get(memid)
-    }
+    }*/
 }

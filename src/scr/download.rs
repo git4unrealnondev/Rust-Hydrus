@@ -99,11 +99,6 @@ pub async fn dltext_new(
     }
 }
 
-pub async fn test(url: String) -> String {
-    dbg!(url);
-    "hi".to_string()
-}
-
 ///
 /// Hashes the bytes and compares it to what the scraper should of recieved.
 ///

@@ -85,17 +85,6 @@ impl PluginManager {
         }
     }
 
-    pub fn read_thread_data(&mut self) {
-        for each in self._thread.keys() {
-            let mut output: String = String::new();
-            let th = self._thread_data_share.get_mut(each).unwrap();
-            th.0.read_to_string(&mut output).unwrap();
-            dbg!(output);
-        }
-    }
-    pub fn test(&self) {
-        dbg!("test");
-    }
     ///
     /// Loads plugins into plugin manager
     ///
