@@ -127,6 +127,9 @@ impl Main {
 
     ///
     /// Returns a files bytes if the file exists.
+    /// Note if called from intcom then this locks the DB while getting the file.
+    /// One workaround it to use get_file and read bytes in manually in seperate thread.
+    /// that way minimal locking happens.
     ///
     pub fn get_file_bytes(&self, file_id: &usize) -> Option<Vec<u8>> {
         let loc = self.get_file(file_id);

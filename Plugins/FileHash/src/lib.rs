@@ -1,4 +1,5 @@
-use std::collections::HashSet;
+use md5::digest::HashMarker;
+use std::collections::{HashMap, HashSet};
 use std::fs::metadata;
 use std::time::{Duration, UNIX_EPOCH};
 use struct_iterable::Iterable;
@@ -44,13 +45,10 @@ pub fn on_download(
     ext_in: &String,
 ) -> Vec<sharedtypes::DBPluginOutputEnum> {
     let mut output = Vec::new();
-    /*
-    let lmimg = image::load_from_memory(byte_c);
-    match lmimg {
-        Ok(img) => {
-            let width = img.width();
-            let height = img.height();
-            /*let width_output = sharedtypes::DBPluginOutput {
+    for hash in Supset::iter() {
+        let hastring = hash_file(hash, byte_c);
+        if let Some(st) = hastring {
+            let tag_output = sharedtypes::DBPluginOutput {
                 file: Some(vec![sharedtypes::PluginFileObj {
                     id: None,
                     hash: Some(hash_in.to_string()),
@@ -59,57 +57,25 @@ pub fn on_download(
                 }]),
                 jobs: None,
                 namespace: Some(vec![sharedtypes::DbPluginNamespace {
-                    name: get_set(Supset::Width).name,
-                    description: get_set(Supset::Width).description,
+                    name: get_set(hash).name,
+                    description: get_set(hash).description,
                 }]),
                 parents: None,
                 setting: None,
                 tag: Some(vec![sharedtypes::DBPluginTagOut {
-                    name: width.to_string(),
-                    namespace: get_set(Supset::Width).name,
+                    name: st.to_string(),
+                    namespace: get_set(hash).name,
                     parents: None,
                 }]),
                 relationship: Some(vec![sharedtypes::DbPluginRelationshipObj {
                     file_hash: hash_in.to_string(),
-                    tag_name: width.to_string(),
-                    tag_namespace: get_set(Supset::Width).name,
+                    tag_name: st.to_string(),
+                    tag_namespace: get_set(hash).name,
                 }]),
             };
-            let height_output = sharedtypes::DBPluginOutput {
-                file: Some(vec![sharedtypes::PluginFileObj {
-                    id: None,
-                    hash: Some(hash_in.to_string()),
-                    ext: Some(ext_in.to_string()),
-                    location: None,
-                }]),
-                jobs: None,
-                namespace: Some(vec![sharedtypes::DbPluginNamespace {
-                    name: get_set(Supset::Height).name,
-                    description: get_set(Supset::Height).description,
-                }]),
-                parents: None,
-                setting: None,
-                tag: Some(vec![sharedtypes::DBPluginTagOut {
-                    name: height.to_string(),
-                    namespace: get_set(Supset::Height).name,
-                    parents: None,
-                }]),
-                relationship: Some(vec![sharedtypes::DbPluginRelationshipObj {
-                    file_hash: hash_in.to_string(),
-                    tag_name: height.to_string(),
-                    tag_namespace: get_set(Supset::Height).name,
-                }]),
-            };
-
-            output.push(sharedtypes::DBPluginOutputEnum::Add(vec![
-                width_output,
-                height_output,
-            ]));*/
+            output.push(sharedtypes::DBPluginOutputEnum::Add(vec![tag_output]));
         }
-        Err(_) => {
-            client::log(format!("FileInfo - Couldn't parse size from: {}", hash_in));
-        }
-    }*/
+    }
 
     output
 }
@@ -126,7 +92,7 @@ struct SettingInfo {
     description: Option<String>,
 }
 
-#[derive(EnumIter, PartialEq, Clone, Copy, Debug)]
+#[derive(EnumIter, PartialEq, Clone, Copy, Debug, Eq, Hash)]
 enum Supset {
     MD5,
     SHA1,
@@ -196,7 +162,16 @@ fn check_existing_db() {
     client::load_table(table);
 
     let file_ids = client::file_get_list_all();
-    'mainloop: for table in Supset::iter() {
+
+    let mut utable_storage: HashMap<Supset, usize> = HashMap::new();
+    let mut utable_count: HashMap<Supset, usize> = HashMap::new();
+    let mut modernstorage: HashMap<sharedtypes::DbFileObj, Vec<Supset>> = HashMap::new();
+
+    for table in Supset::iter() {
+        utable_count.insert(table, 0);
+    }
+
+    for table in Supset::iter() {
         let mut name = client::settings_get_name(get_set(table).name);
         if let None = name {
             client::setting_add(
@@ -212,7 +187,7 @@ fn check_existing_db() {
         // Continues the loop if this has already been checked.
         if let Some(nam) = &name {
             if nam.param.clone().unwrap() == "False" {
-                continue 'mainloop;
+                continue;
             }
         }
         let mut total = file_ids.clone();
@@ -221,7 +196,8 @@ fn check_existing_db() {
             description: get_set(table).description,
         };
         let utable = check_existing_db_table(ctab);
-        let mut hutable = client::namespace_get_tagids(utable);
+        utable_storage.insert(table, utable);
+        let hutable = client::namespace_get_tagids(utable);
         let huetable = match hutable {
             None => HashSet::new(),
             Some(set) => set,
@@ -234,38 +210,109 @@ fn check_existing_db() {
             }
         }
 
+        for item in &total {
+            match modernstorage.get_mut(item.1) {
+                None => {
+                    modernstorage.insert(item.1.clone(), vec![table]);
+                    *utable_count.get_mut(&table).unwrap() += 1;
+                }
+                Some(intf) => {
+                    intf.push(table);
+                    *utable_count.get_mut(&table).unwrap() += 1;
+                }
+            }
+        }
+    }
+    for table in Supset::iter() {
+        let total = *utable_count.get(&table).unwrap();
         // Logs info. into system
-        if total.is_empty() {
+        if total == 0 {
             client::log_no_print(format!(
                 "FileHash - we've got {} files to parse for {}.",
-                total.len(),
+                total,
                 get_set(table).name
             ));
         } else {
             client::log(format!(
                 "FileHash - we've got {} files to parse for {}.",
-                total.len(),
+                total,
                 get_set(table).name
             ));
         }
+    }
 
-        // Puts file ids into a vec that will be parallely processed.
-        let fids: Vec<&usize> = Vec::from_iter(total.keys());
-        fids.par_iter().for_each(|each| {
-            if let Some(byte) = client::get_file_bytes(**each) {
-                let hash = hash_file(table, &byte);
-                if let Some(hash) = hash {
+    // Main loop paralel iterated for each file.
+    modernstorage.par_iter().for_each(|modern| {
+        if let Some(fbyte) = client::get_file(modern.0.id.unwrap()) {
+            let byte = std::fs::read(fbyte).unwrap();
+            for hashtype in modern.1 {
+                if let Some(hash) = hash_file(*hashtype, &byte) {
                     client::log_no_print(format!(
                         "FileHash - Hashtype: {:?} Hash: {} Fileid: {}",
-                        &table, &hash, **each
+                        &hashtype,
+                        &hash,
+                        modern.0.id.unwrap()
                     ));
-                    let tid = client::tag_add(hash, utable, true, None);
-                    client::relationship_add_db(**each, tid, true);
+                    let tid =
+                        client::tag_add(hash, *utable_storage.get(&hashtype).unwrap(), true, None);
+                    client::relationship_add_db(modern.0.id.unwrap(), tid, true);
                 }
             }
-        });
-        client::transaction_flush();
+        }
+    });
+
+    /*
+    let clon;
+    for table in total_storage.keys() {
+        let total = total_storage.get(&table).unwrap();
+        // Logs info. into system
+        if total.is_empty() {
+            client::log_no_print(format!(
+                "FileHash - we've got {} files to parse for {}.",
+                total.len(),
+                get_set(*table).name
+            ));
+        } else {
+            client::log(format!(
+                "FileHash - we've got {} files to parse for {}.",
+                total.len(),
+                get_set(*table).name
+            ));
+        }
+        clon = total;
     }
+
+    // Puts file ids into a vec that will be parallely processed.
+    let fids: Vec<&usize> = Vec::from_iter(clon.keys());
+    fids.par_iter().for_each(|each| {
+        if let Some(byte) = client::get_file_bytes(**each) {
+            for tots in total_storage.clone().keys() {
+                match total_storage.get_mut(tots) {
+                    None => {}
+                    Some(file) => match file.get_mut(each) {
+                        None => {}
+                        Some(fileitem) => {
+                            let hash = hash_file(*tots, &byte);
+                            if let Some(hash) = hash {
+                                client::log_no_print(format!(
+                                    "FileHash - Hashtype: {:?} Hash: {} Fileid: {}",
+                                    &tots, &hash, **each
+                                ));
+                                let tid = client::tag_add(
+                                    hash,
+                                    *utable_storage.get(&tots).unwrap(),
+                                    true,
+                                    None,
+                                );
+                                client::relationship_add_db(**each, tid, true);
+                            }
+                        }
+                    },
+                }
+            }
+        }
+    });*/
+    client::transaction_flush();
 }
 
 ///

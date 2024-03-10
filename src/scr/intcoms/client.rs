@@ -32,7 +32,7 @@ pub fn load_table(table: sharedtypes::LoadDBTable) -> bool {
         types::SupportedDBRequests::LoadTable(table),
     ))
 }
-pub fn get_file_location(fileid: usize) -> Option<String> {
+pub fn get_file(fileid: usize) -> Option<String> {
     init_data_request(&types::SupportedRequests::Database(
         types::SupportedDBRequests::GetFileLocation(fileid),
     ))

@@ -228,7 +228,7 @@ pub struct ScraperFileReturn {
 /// File object
 /// should of done this sooner lol
 ///
-#[derive(Debug, Deserialize, Serialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone, Eq, Hash, PartialEq)]
 pub struct DbFileObj {
     pub id: Option<usize>,
     pub hash: String,
