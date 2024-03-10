@@ -97,7 +97,10 @@ pub enum SupportedDBRequests {
     TransactionFlush(),
     GetDBLocation(),
     Logging(String),
+    LoggingNoPrint(String),
     Search((sharedtypes::SearchObj, Option<usize>, Option<usize>)),
+    GetFileByte(usize),
+    GetFileLocation(usize),
 }
 
 ///

@@ -6,21 +6,23 @@ use crate::sharedtypes;
 use crate::sharedtypes::DbJobsObj;
 use crate::time_func;
 
+use async_std::fs::File;
 use log::{error, info};
 pub use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, ValueRef};
 pub use rusqlite::{params, types::Null, Connection, Result, Transaction};
 use std::borrow::BorrowMut;
 use std::collections::HashMap;
 use std::collections::HashSet;
+use std::fs;
 use std::panic;
 use std::path::Path;
 use std::sync::Arc;
 use std::sync::Mutex;
 
-//mod db;
 mod db;
-use crate::database::db::dbtraits::DBTraits;
 use crate::database::db::inmemdbnew::NewinMemDB;
+
+use self::db::helpers;
 
 ///
 /// I dont want to keep writing .to_string on EVERY vector of strings.
@@ -63,7 +65,8 @@ pub struct Main {
     _inmemdb: NewinMemDB,
     _dbcommitnum: usize,
     _dbcommitnum_static: usize,
-    _tables_loaded: Option<Vec<sharedtypes::LoadDBTable>>,
+    _tables_loaded: Vec<sharedtypes::LoadDBTable>,
+    _tables_loading: Vec<sharedtypes::LoadDBTable>,
     _cache: CacheType,
 }
 
@@ -86,7 +89,8 @@ impl Main {
             _inmemdb: memdb,
             _dbcommitnum: 0,
             _dbcommitnum_static: 3000,
-            _tables_loaded: None,
+            _tables_loaded: vec![],
+            _tables_loading: vec![],
             _cache: CacheType::Bare(path.clone()),
         };
 
@@ -97,7 +101,8 @@ impl Main {
             _inmemdb: memdbmain._inmemdb,
             _dbcommitnum: 0,
             _dbcommitnum_static: 3000,
-            _tables_loaded: None,
+            _tables_loaded: vec![],
+            _tables_loading: vec![],
             _cache: CacheType::InMemdb,
         };
         main._conn = Arc::new(Mutex::new(connection));
@@ -118,6 +123,40 @@ impl Main {
         }
 
         main
+    }
+
+    ///
+    /// Returns a files bytes if the file exists.
+    ///
+    pub fn get_file_bytes(&self, file_id: &usize) -> Option<Vec<u8>> {
+        let loc = self.get_file(file_id);
+        if let Some(loc) = loc {
+            return Some(std::fs::read(loc).unwrap());
+        }
+        None
+    }
+
+    ///
+    /// Gets the location of a file in the file system.
+    ///
+    pub fn get_file(&self, file_id: &usize) -> Option<String> {
+        let file = self.file_get_id(file_id);
+        if let Some(file) = file {
+            // Cleans the file path if it contains a '/' in it
+            let loc = if file.location.ends_with('/') {
+                file.location[0..file.location.len() - 1].to_string()
+            } else {
+                format!("{}", file.location)
+            };
+
+            let folderloc = helpers::getfinpath(&loc, &file.hash);
+            let out = format!("{}/{}", folderloc, file.hash);
+
+            if Path::new(&out).exists() {
+                return Some(out);
+            }
+        }
+        None
     }
 
     ///
@@ -287,15 +326,19 @@ impl Main {
         search: sharedtypes::SearchObj,
         limit: Option<usize>,
         offset: Option<usize>,
-    ) -> Option<&HashSet<usize>> {
+    ) -> Option<HashSet<usize>> {
         let mut stor: Vec<sharedtypes::SearchHolder> = Vec::with_capacity(search.searches.len());
         let mut fin: HashSet<usize> = HashSet::new();
         let mut fin_temp: HashMap<usize, HashSet<&usize>> = HashMap::new();
         let mut searched: Vec<(usize, usize)> = Vec::with_capacity(search.searches.len());
         if let None = search.search_relate {
-            // Assume AND search
-            for each in 1..search.searches.len() {
-                stor.push(sharedtypes::SearchHolder::AND((each - 1, each)));
+            if search.searches.len() == 1 {
+                stor.push(sharedtypes::SearchHolder::AND((0, 0)));
+            } else {
+                // Assume AND search
+                for each in 0..search.searches.len() {
+                    stor.push(sharedtypes::SearchHolder::AND((each, each + 1)));
+                }
             }
         } else {
             stor = search.search_relate.unwrap();
@@ -343,13 +386,25 @@ impl Main {
             }
             cnt += 1
         }
+        dbg!(&fin_temp);
 
         for each in stor {
             match each {
                 sharedtypes::SearchHolder::OR((a, b)) => {}
-                sharedtypes::SearchHolder::AND((a, b)) => {}
+                sharedtypes::SearchHolder::AND((a, b)) => {
+                    dbg!(&a, &b, &fin_temp.keys());
+                    let fa = fin_temp.get(&a).unwrap();
+                    let fb = fin_temp.get(&b).unwrap();
+                    let tem = fa.intersection(&fb);
+                    for each in tem {
+                        fin.insert(**each);
+                    }
+                }
                 sharedtypes::SearchHolder::NOT((a, b)) => {}
             }
+        }
+        if !fin.is_empty() {
+            return Some(fin);
         }
 
         None
@@ -861,19 +916,50 @@ impl Main {
     ///
     /// Checks if table is loaded in mem and if not then loads it.
     ///
-    pub fn check_and_load(&mut self, table: sharedtypes::LoadDBTable) {
-        match &self._tables_loaded {
-            None => {
-                self.load_table(&table);
-                self._tables_loaded = Some(Vec::new());
-                self._tables_loaded.as_mut().unwrap().push(table)
-            }
-            Some(vec_table) => {
-                if !vec_table.contains(&table) {
-                    self.load_table(&table);
-                    self._tables_loaded.as_mut().unwrap().push(table);
+    pub fn load_table(&mut self, table: &sharedtypes::LoadDBTable) {
+        // Blocks the thread until another thread has finished loading the table.
+        while self._tables_loading.contains(&table) {
+            let dur = std::time::Duration::from_secs(1);
+            std::thread::sleep(dur);
+        }
+
+        if !self._tables_loaded.contains(&table) {
+            self._tables_loading.push(table.clone());
+            match &table {
+                sharedtypes::LoadDBTable::Files => {
+                    self.load_files();
+                }
+                sharedtypes::LoadDBTable::Jobs => {
+                    self.load_jobs();
+                }
+                sharedtypes::LoadDBTable::Namespace => {
+                    self.load_namespace();
+                }
+                sharedtypes::LoadDBTable::Parents => {
+                    self.load_parents();
+                }
+                sharedtypes::LoadDBTable::Relationship => {
+                    self.load_relationships();
+                }
+                sharedtypes::LoadDBTable::Settings => {
+                    self.load_settings();
+                }
+                sharedtypes::LoadDBTable::Tags => {
+                    self.load_tags();
+                }
+                sharedtypes::LoadDBTable::All => {
+                    self.load_table(&sharedtypes::LoadDBTable::Files);
+                    self.load_table(&sharedtypes::LoadDBTable::Jobs);
+                    self.load_table(&sharedtypes::LoadDBTable::Namespace);
+                    self.load_table(&sharedtypes::LoadDBTable::Parents);
+                    self.load_table(&sharedtypes::LoadDBTable::Relationship);
+                    self.load_table(&sharedtypes::LoadDBTable::Settings);
+                    self.load_table(&sharedtypes::LoadDBTable::Tags);
                 }
             }
+
+            self._tables_loaded.push(table.clone());
+            self._tables_loading.retain(|&x| x != *table);
         }
     }
 
@@ -1187,44 +1273,6 @@ impl Main {
             }
             Err(_) => return,
         };
-    }
-
-    ///
-    /// Calls funtions to load DB into memory
-    ///
-    pub fn load_table(&mut self, table: &sharedtypes::LoadDBTable) {
-        match table {
-            sharedtypes::LoadDBTable::Files => {
-                self.load_files();
-            }
-            sharedtypes::LoadDBTable::Jobs => {
-                self.load_jobs();
-            }
-            sharedtypes::LoadDBTable::Namespace => {
-                self.load_namespace();
-            }
-            sharedtypes::LoadDBTable::Parents => {
-                self.load_parents();
-            }
-            sharedtypes::LoadDBTable::Relationship => {
-                self.load_relationships();
-            }
-            sharedtypes::LoadDBTable::Settings => {
-                self.load_settings();
-            }
-            sharedtypes::LoadDBTable::Tags => {
-                self.load_tags();
-            }
-            sharedtypes::LoadDBTable::All => {
-                self.check_and_load(sharedtypes::LoadDBTable::Files);
-                self.check_and_load(sharedtypes::LoadDBTable::Jobs);
-                self.check_and_load(sharedtypes::LoadDBTable::Namespace);
-                self.check_and_load(sharedtypes::LoadDBTable::Parents);
-                self.check_and_load(sharedtypes::LoadDBTable::Relationship);
-                self.check_and_load(sharedtypes::LoadDBTable::Settings);
-                self.check_and_load(sharedtypes::LoadDBTable::Tags);
-            }
-        }
     }
 
     ///

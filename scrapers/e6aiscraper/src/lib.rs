@@ -363,9 +363,9 @@ pub fn url_dump(params: &Vec<sharedtypes::ScraperParam>) -> Vec<String> {
 ///
 #[no_mangle]
 pub fn cookie_needed() -> (sharedtypes::ScraperType, String) {
-    println!("Enter E6 Username");
+    println!("Enter E6AI Username");
     let user = io::stdin().lock().lines().next().unwrap().unwrap();
-    println!("Enter E6 API Key");
+    println!("Enter E6AI API Key");
     let api = io::stdin().lock().lines().next().unwrap().unwrap();
 
     return (

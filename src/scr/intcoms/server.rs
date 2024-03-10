@@ -237,6 +237,7 @@ impl DbInteract {
         let byt: Vec<u8> = bincode::serialize(&tmp).unwrap();
         byt
     }
+
     ///
     /// Packages functions from the DB into their self owned versions
     /// before packaging them as bytes to get sent accross IPC to the other
@@ -244,10 +245,22 @@ impl DbInteract {
     ///
     pub fn dbactions_to_function(&mut self, dbaction: types::SupportedDBRequests) -> Vec<u8> {
         match dbaction {
+            types::SupportedDBRequests::GetFileLocation(id) => {
+                let unwrappy = self._database.lock().unwrap();
+                let tmep = unwrappy.get_file(&id);
+
+                Self::option_to_bytes(tmep.as_ref())
+            }
+
+            types::SupportedDBRequests::GetFileByte(id) => {
+                let unwrappy = self._database.lock().unwrap();
+                let tmep = unwrappy.get_file_bytes(&id);
+                Self::option_to_bytes(tmep.as_ref())
+            }
             types::SupportedDBRequests::Search((search, limit, offset)) => {
                 let unwrappy = self._database.lock().unwrap();
                 let tmep = unwrappy.search_db_files(search, limit, offset);
-                Self::option_to_bytes(tmep)
+                Self::data_size_to_b(&tmep)
             }
             types::SupportedDBRequests::GetTagId(id) => {
                 let unwrappy = self._database.lock().unwrap();
@@ -258,6 +271,11 @@ impl DbInteract {
                 logging::info_log(&log);
                 Self::data_size_to_b(&true)
             }
+            types::SupportedDBRequests::LoggingNoPrint(log) => {
+                logging::log(&log);
+                Self::data_size_to_b(&true)
+            }
+
             types::SupportedDBRequests::RelationshipAdd(file, tag, addtodb) => {
                 let mut unwrappy = self._database.lock().unwrap();
                 let _tmep = unwrappy.relationship_add(file, tag, addtodb);

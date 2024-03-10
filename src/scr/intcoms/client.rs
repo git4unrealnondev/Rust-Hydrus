@@ -9,6 +9,19 @@ use std::collections::{HashMap, HashSet};
 use std::io::BufReader;
 
 pub mod types;
+///
+/// See the database reference for this function.
+/// I'm a lazy turd just check it their
+///
+pub fn search_db_files(
+    search: sharedtypes::SearchObj,
+    limit: Option<usize>,
+    offset: Option<usize>,
+) -> Option<HashSet<usize>> {
+    init_data_request(&types::SupportedRequests::Database(
+        types::SupportedDBRequests::Search((search, limit, offset)),
+    ))
+}
 
 ///
 /// See the database reference for this function.
@@ -19,6 +32,18 @@ pub fn load_table(table: sharedtypes::LoadDBTable) -> bool {
         types::SupportedDBRequests::LoadTable(table),
     ))
 }
+pub fn get_file_location(fileid: usize) -> Option<String> {
+    init_data_request(&types::SupportedRequests::Database(
+        types::SupportedDBRequests::GetFileLocation(fileid),
+    ))
+}
+
+pub fn get_file_bytes(fileid: usize) -> Option<Vec<u8>> {
+    init_data_request(&types::SupportedRequests::Database(
+        types::SupportedDBRequests::GetFileByte(fileid),
+    ))
+}
+
 ///
 /// See the database reference for this function.
 /// I'm a lazy turd just check it their
@@ -35,6 +60,11 @@ pub fn namespace_get_string(id: usize) -> Option<sharedtypes::DbNamespaceObj> {
 pub fn log(log: String) -> bool {
     init_data_request(&types::SupportedRequests::Database(
         types::SupportedDBRequests::Logging(log),
+    ))
+}
+pub fn log_no_print(log: String) -> bool {
+    init_data_request(&types::SupportedRequests::Database(
+        types::SupportedDBRequests::LoggingNoPrint(log),
     ))
 }
 
