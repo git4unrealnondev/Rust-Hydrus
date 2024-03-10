@@ -260,58 +260,6 @@ fn check_existing_db() {
             }
         }
     });
-
-    /*
-    let clon;
-    for table in total_storage.keys() {
-        let total = total_storage.get(&table).unwrap();
-        // Logs info. into system
-        if total.is_empty() {
-            client::log_no_print(format!(
-                "FileHash - we've got {} files to parse for {}.",
-                total.len(),
-                get_set(*table).name
-            ));
-        } else {
-            client::log(format!(
-                "FileHash - we've got {} files to parse for {}.",
-                total.len(),
-                get_set(*table).name
-            ));
-        }
-        clon = total;
-    }
-
-    // Puts file ids into a vec that will be parallely processed.
-    let fids: Vec<&usize> = Vec::from_iter(clon.keys());
-    fids.par_iter().for_each(|each| {
-        if let Some(byte) = client::get_file_bytes(**each) {
-            for tots in total_storage.clone().keys() {
-                match total_storage.get_mut(tots) {
-                    None => {}
-                    Some(file) => match file.get_mut(each) {
-                        None => {}
-                        Some(fileitem) => {
-                            let hash = hash_file(*tots, &byte);
-                            if let Some(hash) = hash {
-                                client::log_no_print(format!(
-                                    "FileHash - Hashtype: {:?} Hash: {} Fileid: {}",
-                                    &tots, &hash, **each
-                                ));
-                                let tid = client::tag_add(
-                                    hash,
-                                    *utable_storage.get(&tots).unwrap(),
-                                    true,
-                                    None,
-                                );
-                                client::relationship_add_db(**each, tid, true);
-                            }
-                        }
-                    },
-                }
-            }
-        }
-    });*/
     client::transaction_flush();
 }
 
