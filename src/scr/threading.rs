@@ -279,6 +279,8 @@ impl Worker {
                             for file in out_st.file {
                                 if let Some(ref source) = file.source_url {
                                     {
+                                        let mut should_download: bool = false;
+
                                         let mut source_url_id = {
                                             let unwrappydb = &mut db.lock().unwrap();
                                             unwrappydb
@@ -294,15 +296,9 @@ impl Worker {
                                                 Some("Source URL for a file.".to_string()),
                                                 true,
                                             );
-                                            //log::info!(
-                                            //    "Adding namespace {} with an id {} due to not existing.",
-                                            //    "source_url",
-                                            //    "0"
-                                            //);
                                             source_url_id = unwrappydb
                                                 .namespace_get(&"source_url".to_string())
                                                 .cloned();
-                                            // defaults to 0 due to unknown.
                                         }
 
                                         // If url exists in db then don't download
@@ -364,21 +360,68 @@ impl Worker {
                                                 fileid
                                             }
                                             Some(url_id) => {
-                                                // We've already got a valid relationship
-                                                let unwrappydb = &mut db.lock().unwrap();
-                                                let file_id = unwrappydb
-                                                    .relationship_get_one_fileid(&url_id)
-                                                    .unwrap();
-
-                                                // TODO nned to check if file exists by id incase something breaks.
-                                                unwrappydb.file_get_id(file_id).unwrap();
-
-                                                info_log(&format!(
+                                                let file_id;
+                                                {
+                                                    // We've already got a valid relationship
+                                                    let unwrappydb = &mut db.lock().unwrap();
+                                                    file_id = unwrappydb
+                                                        .relationship_get_one_fileid(&url_id)
+                                                        .copied();
+                                                    if let Some(fid) = file_id {
+                                                        unwrappydb.file_get_id(&fid).unwrap();
+                                                    }
+                                                }
+                                                // fixes busted links.
+                                                if let Some(file_id) = file_id {
+                                                    info_log(&format!(
                                                     "Skipping file: {} Due to already existing in Tags Table.",
                                                     &source
                                                 ));
 
-                                                file_id.clone()
+                                                    file_id.clone()
+                                                } else {
+                                                    // Fixes the link between file and url
+                                                    // tag.
+
+                                                    download::ratelimiter_wait(&mut ratelimit);
+                                                    // URL doesn't exist in DB Will download
+                                                    info_log(&format!(
+                                                        "Downloading: {} to: {}",
+                                                        &source, &location
+                                                    ));
+                                                    let blopt;
+                                                    {
+                                                        blopt =
+                                                            task::block_on(download::dlfile_new(
+                                                                &client,
+                                                                &file,
+                                                                &location,
+                                                                &mut manageeplugin,
+                                                            ));
+                                                    }
+                                                    let (hash, file_ext) = match blopt {
+                                                        None => {
+                                                            continue;
+                                                        }
+                                                        Some(blo) => blo,
+                                                    };
+                                                    let fileid;
+                                                    {
+                                                        let unwrappydb = &mut db.lock().unwrap();
+                                                        fileid = unwrappydb.file_add(
+                                                            None, &hash, &file_ext, &location, true,
+                                                        );
+                                                        let tagid = unwrappydb.tag_add(
+                                                            source.to_string(),
+                                                            source_url_id.unwrap().clone(),
+                                                            true,
+                                                            None,
+                                                        );
+                                                        unwrappydb
+                                                            .relationship_add(fileid, tagid, true);
+                                                    }
+                                                    fileid
+                                                }
                                             }
                                         };
 
