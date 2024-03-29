@@ -333,7 +333,7 @@ impl Worker {
                                                         &client,
                                                         &file,
                                                         &location,
-                                                        &mut manageeplugin,
+                                                        &mut Some(manageeplugin.clone()),
                                                     ));
                                                 }
                                                 let (hash, file_ext) = match blopt {
@@ -396,7 +396,7 @@ impl Worker {
                                                                 &client,
                                                                 &file,
                                                                 &location,
-                                                                &mut manageeplugin,
+                                                                &mut Some(manageeplugin.clone()),
                                                             ));
                                                     }
                                                     let (hash, file_ext) = match blopt {

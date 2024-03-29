@@ -207,20 +207,67 @@ pub fn main(data: &mut database::Main, scraper: &mut scraper::ScraperManager) {
             },
             cli_structs::TasksStruct::Database(db) => {
                 use crate::helpers;
+                use async_std::task;
                 match db {
                     cli_structs::Database::CheckFiles => {
                         let db_location = data.location_get();
 
-                        data.load_table(&sharedtypes::LoadDBTable::Files);
+                        data.load_table(&sharedtypes::LoadDBTable::All);
                         let lis = data.file_get_list_all();
+
                         println!("Files do not exist:");
-                        for each in lis.keys() {
-                            let loc = helpers::getfinpath(&db_location, &lis[each].hash);
-                            let lispa = format!("{}/{}", loc, lis[each].hash);
-                            if !Path::new(&lispa).exists() {
-                                println!("{}", &lis[each].hash);
-                            }
+                        let mut nsid: Option<&usize> = None;
+                        if let Some(ns) = data.namespace_get(&"source_url".to_owned()) {
+                            nsid = Some(ns);
                         }
+
+                        lis.par_iter().for_each(|each| {
+                            let loc = helpers::getfinpath(&db_location, &lis[each.0].hash);
+                            let lispa = format!("{}/{}", loc, lis[each.0].hash);
+                            if !Path::new(&lispa).exists() {
+                                println!("{}", &lis[each.0].hash);
+                            } else {
+                                let fil = std::fs::read(lispa).unwrap();
+                                let hinfo = download::hash_bytes(
+                                    &bytes::Bytes::from(fil),
+                                    &sharedtypes::HashesSupported::Sha256(lis[each.0].hash.clone()),
+                                );
+                                if !hinfo.1 {
+                                    logging::error_log(&format!(
+                                        "BAD HASH: ID: {}  HASH: {}   2ND HASH: {}",
+                                        &lis[each.0].id.unwrap(),
+                                        &lis[each.0].hash,
+                                        hinfo.0
+                                    ));
+                                    if nsid.is_some() {
+                                        if let Some(rel) = data.relationship_get_tagid(each.0) {
+                                            for eachs in rel {
+                                                let dat = data.tag_id_get(eachs).unwrap();
+                                                if &dat.namespace == nsid.unwrap() {
+                                                    let mut client = download::client_create();
+                                                    let file = &sharedtypes::FileObject {
+                                                        source_url: Some(dat.name.clone()),
+                                                        hash: Some(
+                                                            sharedtypes::HashesSupported::Sha256(
+                                                                lis[each.0].hash.clone(),
+                                                            ),
+                                                        ),
+                                                        tag_list: Vec::new(),
+                                                    };
+                                                    task::block_on(download::dlfile_new(
+                                                        &client,
+                                                        file,
+                                                        &data.location_get(),
+                                                        &mut None,
+                                                    ));
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        });
+                        return;
                     }
                     cli_structs::Database::CheckInMemdb => {
                         data.load_table(&sharedtypes::LoadDBTable::Tags);

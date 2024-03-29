@@ -134,7 +134,7 @@ pub async fn dlfile_new(
     client: &Client,
     file: &sharedtypes::FileObject,
     location: &String,
-    pluginmanager: &mut Arc<Mutex<PluginManager>>,
+    pluginmanager: &mut Option<Arc<Mutex<PluginManager>>>,
 ) -> Option<(String, String)> {
     let mut boolloop = true;
     let mut hash = String::new();
@@ -244,11 +244,15 @@ pub async fn dlfile_new(
     std::io::copy(&mut content, &mut file_path).unwrap();
 
     {
+        // If the plugin manager is None then don't do anything plugin wise.
+        // Useful for if doing something that we CANNOT allow plugins to run.
+        if let Some(pluginmanager) = pluginmanager {
+            pluginmanager
+                .lock()
+                .unwrap()
+                .plugin_on_download(bytes.as_ref(), &hash, &file_ext);
+        }
         // Wouldove rather passed teh Cursor or Bytes Obj but it wouldn't work for some reason with the ABI
-        pluginmanager
-            .lock()
-            .unwrap()
-            .plugin_on_download(bytes.as_ref(), &hash, &file_ext);
     }
     println!("Downloaded hash: {}", &hash);
 

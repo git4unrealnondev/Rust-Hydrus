@@ -24,9 +24,16 @@ pub fn main() {
 ///
 /// Dumps error to log and panics.
 ///
-pub fn error_log(error: &String) {
+pub fn panic_log(error: &String) {
     error!("{}", error);
     panic!("{}", error);
+}
+///
+/// Dumps error to log and panics.
+///
+pub fn error_log(error: &String) {
+    println!("{}", error);
+    error!("{}", error);
 }
 
 ///

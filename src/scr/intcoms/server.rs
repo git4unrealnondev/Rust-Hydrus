@@ -187,7 +187,7 @@ impl PluginIpcInteract {
                 // instance is actually running, and if not, delete the socket file. In this example,
                 // we leave this up to the user, but in a real application, you usually don't want to do
                 // that.
-                logging::error_log(&format!(
+                logging::panic_log(&format!(
                     "Error: could not start server because the socket file is occupied. Please check if {} is in use by another process and try again.",name,)
                 );
                 return Err(e.into());

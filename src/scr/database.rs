@@ -8,6 +8,7 @@ use crate::time_func;
 
 use async_std::fs::File;
 use log::{error, info};
+use rayon::prelude::*;
 pub use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, ValueRef};
 pub use rusqlite::{params, types::Null, Connection, Result, Transaction};
 use std::borrow::BorrowMut;
@@ -267,6 +268,46 @@ impl Main {
             );
         }
     }
+    ///
+    /// File Sanity Checker
+    /// This will check that the files by id will have a matching location & hash.
+    ///
+    pub fn db_sanity_check_file(&mut self) {
+        use crate::download;
+
+        let mut loc_vec: Mutex<Vec<String>> = Vec::new().into();
+
+        self.load_table(&sharedtypes::LoadDBTable::Files);
+
+        let flist = self.file_get_list_id();
+        flist.par_iter().for_each(|feach| {
+            if let Some(fileinfo) = self.file_get_id(feach) {
+                if !loc_vec.lock().unwrap().contains(&fileinfo.location) {
+                    loc_vec.lock().unwrap().push(fileinfo.location.clone());
+                }
+                loop {
+                    let temppath = &format!("{}/{}", fileinfo.location, fileinfo.hash);
+                    if Path::new(temppath).exists() {
+                        let fil = std::fs::read(temppath).unwrap();
+                        let hinfo = download::hash_bytes(
+                            &bytes::Bytes::from(fil),
+                            &sharedtypes::HashesSupported::Sha256(fileinfo.hash.clone()),
+                        );
+                        if !hinfo.1 {
+                            dbg!(format!(
+                                "BAD HASH: ID: {}  HASH: {}   2ND HASH: {}",
+                                fileinfo.id.unwrap(),
+                                fileinfo.hash,
+                                hinfo.0
+                            ));
+                        }
+                    }
+                }
+            } else {
+                dbg!(format!("File ID: {} Does not exist.", &feach));
+            }
+        });
+    }
 
     ///
     /// Adds job to system.
@@ -450,7 +491,9 @@ impl Main {
     pub fn relationship_get_one_fileid(&self, tag: &usize) -> Option<&usize> {
         self._inmemdb.relationship_get_one_fileid(tag)
     }
-
+    ///
+    /// Returns tagid's based on relationship with a fileid.
+    ///
     pub fn relationship_get_tagid(&self, tag: &usize) -> Option<&HashSet<usize>> {
         self._inmemdb.relationship_get_tagid(tag)
     }
