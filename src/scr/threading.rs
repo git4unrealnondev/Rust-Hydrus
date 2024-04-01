@@ -127,7 +127,7 @@ impl Worker {
         ));
         let mut db = dba.clone();
         let mut jblist = jobs.clone();
-        let mut manageeplugin = pluginmanager.clone();
+        let manageeplugin = pluginmanager.clone();
         let scrap = scraper.clone();
         let thread = thread::spawn(move || {
             let mut job_params: HashSet<JobScraper> = HashSet::new();

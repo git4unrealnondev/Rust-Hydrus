@@ -6,7 +6,7 @@ use crate::sharedtypes;
 use crate::sharedtypes::DbJobsObj;
 use crate::time_func;
 
-use async_std::fs::File;
+
 use log::{error, info};
 use rayon::prelude::*;
 pub use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, ValueRef};
@@ -14,7 +14,7 @@ pub use rusqlite::{params, types::Null, Connection, Result, Transaction};
 use std::borrow::BorrowMut;
 use std::collections::HashMap;
 use std::collections::HashSet;
-use std::fs;
+
 use std::panic;
 use std::path::Path;
 use std::sync::Arc;
@@ -346,7 +346,7 @@ impl Main {
     pub fn db_sanity_check_file(&mut self) {
         use crate::download;
 
-        let mut loc_vec: Mutex<Vec<String>> = Vec::new().into();
+        let loc_vec: Mutex<Vec<String>> = Vec::new().into();
 
         self.load_table(&sharedtypes::LoadDBTable::Files);
 
@@ -505,7 +505,7 @@ impl Main {
 
         for each in stor {
             match each {
-                sharedtypes::SearchHolder::OR((a, b)) => {}
+                sharedtypes::SearchHolder::OR((_a, _b)) => {}
                 sharedtypes::SearchHolder::AND((a, b)) => {
                     dbg!(&a, &b, &fin_temp.keys());
                     let fa = fin_temp.get(&a).unwrap();
@@ -515,7 +515,7 @@ impl Main {
                         fin.insert(**each);
                     }
                 }
-                sharedtypes::SearchHolder::NOT((a, b)) => {}
+                sharedtypes::SearchHolder::NOT((_a, _b)) => {}
             }
         }
         if !fin.is_empty() {
