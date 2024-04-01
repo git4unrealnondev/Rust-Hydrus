@@ -44,8 +44,8 @@ pub enum Tasks {
 
 #[derive(Debug, EnumIter, Display)]
 pub enum TasksRemove {
-    Remove_Namespace_Id(usize),
-    Remove_Namespace_String(String),
+    RemoveNamespaceId(usize),
+    RemoveNamespaceString(String),
     None,
 }
 impl Default for TasksRemove {
@@ -559,7 +559,7 @@ pub struct PluginSharedData {
 ///
 #[derive(Debug)]
 pub enum PluginCommunicationChannel {
-    pipe(String),
+    Pipe(String),
     None,
 }
 

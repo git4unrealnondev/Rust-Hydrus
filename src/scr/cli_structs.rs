@@ -54,8 +54,13 @@ pub enum Database {
     RemoveWhereNot(NamespaceInfo),
     /// Compresses the databases tag & relationships. Will add parent support soon.
     CompressDatabase,
+    /// Checks the in memory DB
     CheckInMemdb,
+    /// Checks the files on the filesystem.
+    /// Warning is hella slow uses multithreading to make this go faster but still...
     CheckFiles,
+    /// Backs up the database to a folder defined in settings.
+    BackupDB,
 }
 
 /// Removes a namespace, tags & relationships from db.

@@ -9,8 +9,7 @@ mod sharedtypes;
 
 #[path = "../../../src/scr/intcoms/client.rs"]
 mod client;
-#[path = "../../../src/scr/file.rs"]
-mod file;
+
 #[path = "../../../src/scr/db/helpers.rs"]
 mod helpers;
 static PLUGIN_NAME: &str = "File Info";
@@ -30,7 +29,7 @@ pub fn return_info() -> sharedtypes::PluginInfo {
         callbacks: callbackvec,
         communication: Some(sharedtypes::PluginSharedData {
             thread: sharedtypes::PluginThreadType::Inline,
-            com_channel: Some(sharedtypes::PluginCommunicationChannel::pipe(
+            com_channel: Some(sharedtypes::PluginCommunicationChannel::Pipe(
                 "beans".to_string(),
             )),
         }),
@@ -402,7 +401,6 @@ fn video_test() {
             match test.get("creation_time") {
                 None => {}
                 Some(ayy) => {
-                    use chrono;
                     let parsetime = chrono::DateTime::parse_from_rfc3339(&ayy).unwrap();
                     dbg!(&parsetime.timestamp_millis());
                 }

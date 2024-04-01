@@ -1,8 +1,4 @@
-use md5::digest::HashMarker;
 use std::collections::{HashMap, HashSet};
-use std::fs::metadata;
-use std::time::{Duration, UNIX_EPOCH};
-use struct_iterable::Iterable;
 use strum::{EnumIter, IntoEnumIterator};
 
 #[path = "../../../src/scr/sharedtypes.rs"]
@@ -10,10 +6,6 @@ mod sharedtypes;
 
 #[path = "../../../src/scr/intcoms/client.rs"]
 mod client;
-#[path = "../../../src/scr/file.rs"]
-mod file;
-#[path = "../../../src/scr/db/helpers.rs"]
-mod helpers;
 static PLUGIN_NAME: &str = "File Hash";
 static PLUGIN_DESCRIPTION: &str = "Gets hash information from a file.";
 
@@ -31,7 +23,7 @@ pub fn return_info() -> sharedtypes::PluginInfo {
         callbacks: callbackvec,
         communication: Some(sharedtypes::PluginSharedData {
             thread: sharedtypes::PluginThreadType::Inline,
-            com_channel: Some(sharedtypes::PluginCommunicationChannel::pipe(
+            com_channel: Some(sharedtypes::PluginCommunicationChannel::Pipe(
                 "beans".to_string(),
             )),
         }),

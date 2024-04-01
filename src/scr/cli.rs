@@ -1,7 +1,7 @@
 extern crate clap;
 use rayon::prelude::*;
-use std::collections::HashSet;
 use std::path::Path;
+use std::{collections::HashSet, io::Write};
 //use std::str::pattern::Searcher;
 use file_format::FileFormat;
 use std::str::FromStr;
@@ -209,23 +209,92 @@ pub fn main(data: &mut database::Main, scraper: &mut scraper::ScraperManager) {
                 use crate::helpers;
                 use async_std::task;
                 match db {
+                    cli_structs::Database::BackupDB => {
+                        // backs up the db. check the location in setting or code if I change
+                        // anything lol
+                        data.backup_db();
+                    }
+
                     cli_structs::Database::CheckFiles => {
+                        // This will check files in the database and will see if they even exist.
                         let db_location = data.location_get();
 
+                        let cnt: std::sync::Arc<std::sync::Mutex<usize>> =
+                            std::sync::Arc::new(std::sync::Mutex::new(0));
+
                         data.load_table(&sharedtypes::LoadDBTable::All);
+
+                        if !Path::new("fileexists.txt").exists() {
+                            let _ = std::fs::File::create("fileexists.txt");
+                        }
+                        let fiexist: std::sync::Arc<std::sync::Mutex<HashSet<usize>>> =
+                            std::sync::Arc::new(std::sync::Mutex::new(
+                                std::fs::read_to_string("fileexists.txt")
+                                    .unwrap() // panic on possible file-reading errors
+                                    .lines() // split the string into an iterator of string slices
+                                    .map(|x| x.parse::<usize>().unwrap()) // make each slice into a string
+                                    .collect(),
+                            ));
+                        let f = std::sync::Arc::new(std::sync::Mutex::new(
+                            std::fs::File::options()
+                                .append(true)
+                                .open("fileexists.txt")
+                                .unwrap(),
+                        ));
                         let lis = data.file_get_list_all();
 
                         println!("Files do not exist:");
-                        let mut nsid: Option<&usize> = None;
-                        if let Some(ns) = data.namespace_get(&"source_url".to_owned()) {
-                            nsid = Some(ns);
+                        let mut nsid: Option<usize> = None;
+                        {
+                            let nso = data.namespace_get(&"source_url".to_owned());
+                            if let Some(ns) = nso {
+                                nsid = Some(*ns);
+                            }
                         }
-
                         lis.par_iter().for_each(|each| {
+                            if fiexist.lock().unwrap().contains(&each.0) {
+                                return;
+                            }
                             let loc = helpers::getfinpath(&db_location, &lis[each.0].hash);
                             let lispa = format!("{}/{}", loc, lis[each.0].hash);
+                            *cnt.lock().unwrap() += 1;
+
+                            if *cnt.lock().unwrap() == 1000 {
+                                let _ = f.lock().unwrap().flush();
+                                *cnt.lock().unwrap() = 0;
+                            }
+
                             if !Path::new(&lispa).exists() {
                                 println!("{}", &lis[each.0].hash);
+                                if nsid.is_some() {
+                                    if let Some(rel) = data.relationship_get_tagid(&each.0) {
+                                        for eachs in rel {
+                                            let dat = data.tag_id_get(eachs).unwrap();
+                                            logging::info_log(&format!(
+                                                "Got Tag: {} for fileid: {}",
+                                                dat.name, each.0
+                                            ));
+                                            if dat.namespace == nsid.unwrap() {
+                                                let client = download::client_create();
+                                                let file = &sharedtypes::FileObject {
+                                                    source_url: Some(dat.name.clone()),
+                                                    hash: Some(
+                                                        sharedtypes::HashesSupported::Sha256(
+                                                            lis[each.0].hash.clone(),
+                                                        ),
+                                                    ),
+                                                    tag_list: Vec::new(),
+                                                };
+                                                task::block_on(download::dlfile_new(
+                                                    &client,
+                                                    file,
+                                                    &data.location_get(),
+                                                    &mut None,
+                                                ));
+                                            }
+                                        }
+                                    }
+                                }
                             } else {
                                 let fil = std::fs::read(lispa).unwrap();
                                 let hinfo = download::hash_bytes(
@@ -243,8 +312,12 @@ pub fn main(data: &mut database::Main, scraper: &mut scraper::ScraperManager) {
                                         if let Some(rel) = data.relationship_get_tagid(each.0) {
                                             for eachs in rel {
                                                 let dat = data.tag_id_get(eachs).unwrap();
-                                                if &dat.namespace == nsid.unwrap() {
-                                                    let mut client = download::client_create();
+                                                logging::info_log(&format!(
+                                                    "Got Tag: {} for fileid: {}",
+                                                    dat.name, each.0
+                                                ));
+                                                if dat.namespace == nsid.unwrap() {
+                                                    let client = download::client_create();
                                                     let file = &sharedtypes::FileObject {
                                                         source_url: Some(dat.name.clone()),
                                                         hash: Some(
@@ -266,7 +339,11 @@ pub fn main(data: &mut database::Main, scraper: &mut scraper::ScraperManager) {
                                     }
                                 }
                             }
+                            fiexist.lock().unwrap().insert(each.0.clone());
+                            let fout = format!("{}\n", &each.0).into_bytes();
+                            f.lock().unwrap().write_all(&fout).unwrap();
                         });
+                        let _ = std::fs::remove_file("fileexists.txt");
                         return;
                     }
                     cli_structs::Database::CheckInMemdb => {

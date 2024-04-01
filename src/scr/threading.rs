@@ -279,8 +279,6 @@ impl Worker {
                             for file in out_st.file {
                                 if let Some(ref source) = file.source_url {
                                     {
-                                        let mut should_download: bool = false;
-
                                         let mut source_url_id = {
                                             let unwrappydb = &mut db.lock().unwrap();
                                             unwrappydb
@@ -455,6 +453,7 @@ impl Worker {
                     //dbg!(&job);
                     unwrappydb.del_from_jobs_table(&"param".to_owned(), &job.original_param);
                     job_params.remove(&job);
+                    logging::info_log(&format!("Removing job {:?}", &job));
 
                     if let Some(jobscr) = job_ref_hash.get(job) {
                         let index = jblist.iter().position(|r| r == jobscr).unwrap();

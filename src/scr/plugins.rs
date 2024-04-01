@@ -220,7 +220,7 @@ impl PluginManager {
                         Some(pluginchannel) => {
                             match pluginchannel {
                                 sharedtypes::PluginCommunicationChannel::None => {}
-                                sharedtypes::PluginCommunicationChannel::pipe(pipe) => {
+                                sharedtypes::PluginCommunicationChannel::Pipe(pipe) => {
                                     dbg!(pipe);
 
                                     // Have to do this wanky ness to allow me to spawn a thread that outlives the &mut self

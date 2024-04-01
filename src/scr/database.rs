@@ -35,15 +35,6 @@ macro_rules! vec_of_strings {
     ($($x:expr),*) => (vec![$($x.to_string()),*]);
 }
 
-pub enum TagRelateConjoin {
-    Tag,
-    Error,
-    Relate,
-    Conjoin,
-    TagAndRelate,
-    None,
-}
-
 /// Returns an open connection to use.
 pub fn dbinit(dbpath: &String) -> Connection {
     //Engaging Transaction Handling
@@ -127,6 +118,95 @@ impl Main {
     }
 
     ///
+    /// Backs up the DB file.
+    ///
+    pub fn backup_db(&mut self) {
+        use chrono::prelude::*;
+
+        let current_date = Utc::now();
+        let year = current_date.year();
+        let month = current_date.month();
+        let day = current_date.day();
+
+        let dbbackuploc = self.settings_get_name(&"db_backup_location".to_string());
+
+        // Default location for the DB
+        let defaultloc = String::from("dbbackup");
+
+        // Gets the DB file location for copying.
+        let dbloc = self.get_db_loc();
+
+        let mut add_backup_location = None;
+
+        // Gets the db backup folder from DB or uses the "defaultloc" variable
+        let backupfolder = match dbbackuploc {
+            None => {
+                add_backup_location = Some(defaultloc.clone());
+                defaultloc
+            }
+            Some(dbsetting) => match &dbsetting.param {
+                None => {
+                    add_backup_location = Some(defaultloc.clone());
+                    defaultloc
+                }
+                Some(loc) => loc.to_string(),
+            },
+        };
+        let properbackuplocation;
+
+        // Starting to do localization.
+        // gets changed at compile time.
+        // Super lazy way to do it tho
+        if cfg!(target_os = "windows") {
+            let mut cnt = 0;
+            if Path::new(&format!(
+                "{}\\{}\\{}\\{}\\db{}.db",
+                backupfolder, year, month, day, cnt
+            ))
+            .exists()
+            {
+                cnt += 1;
+            }
+            properbackuplocation = format!(
+                "{}\\{}\\{}\\{}\\db{}.db",
+                backupfolder, year, month, day, cnt
+            );
+        } else {
+            let mut cnt = 0;
+            if Path::new(&format!(
+                "{}/{}/{}/{}/db{}.db",
+                backupfolder, year, month, day, cnt
+            ))
+            .exists()
+            {
+                cnt += 1;
+            }
+
+            properbackuplocation =
+                format!("{}/{}/{}/{}/db{}.db", backupfolder, year, month, day, cnt);
+        }
+
+        // Flushes anything pending to disk.
+        self.transaction_flush();
+        self.transaction_close();
+
+        // Creates and copies the DB into the backup folder.
+        std::fs::create_dir_all(properbackuplocation.clone()).unwrap();
+        std::fs::copy(dbloc, properbackuplocation).unwrap();
+        self.transaction_start();
+        if let Some(newbackupfolder) = add_backup_location {
+            self.setting_add(
+                "db_backup_location".to_string(),
+                Some("The location that the DB get's backed up to".to_string()),
+                None,
+                Some(newbackupfolder),
+                true,
+            )
+        }
+        self.transaction_flush();
+    }
+
+    ///
     /// Returns a files bytes if the file exists.
     /// Note if called from intcom then this locks the DB while getting the file.
     /// One workaround it to use get_file and read bytes in manually in seperate thread.
@@ -164,17 +244,8 @@ impl Main {
     }
 
     ///
-    /// Run this code after creating
+    /// Adds the job to the inmemdb
     ///
-    pub fn after_creation(&mut self) {}
-
-    ///
-    /// Shows internals in db
-    ///
-    //pub fn dbg_show_internals(&self) {
-    //    self._inmemdb.dbg_show_internals();
-    //}
-
     pub fn jobs_add_new_todb(
         &mut self,
         site: Option<String>,
@@ -186,12 +257,12 @@ impl Main {
     ) {
         //let querya = query.split(' ').map(|s| s.to_string()).collect();
         let wrap = sharedtypes::DbJobsObj {
-            site: site,
+            site,
             param: query,
             time: current_time,
             reptime: time_offset,
-            jobtype: jobtype,
-            committype: committype,
+            jobtype,
+            committype,
         };
         //let wrap = jobs::JobsRef{};
 
@@ -523,23 +594,6 @@ impl Main {
     }
 
     ///
-    /// Handles the namespace data insertion into the DB
-    /// ONLY ADDS NEW x IF NOT PRESENT IN NAMESPACE.
-    /// TODO
-    ///
-    pub fn namespace_manager(&mut self, key: String) {
-        let _name = self.pull_data(
-            "Namespace".to_string(),
-            "name".to_string(),
-            urlparse::quote(key, b"").unwrap(),
-        );
-
-        if !_name.len() >= 1 {
-            println!("NO NAMESPACE FOUND");
-        }
-    }
-
-    ///
     /// Pulls data of table into form.
     /// Parses Data
     ///
@@ -584,7 +638,7 @@ impl Main {
     /// Get table names
     /// Returns: Vec of strings
     ///
-    pub fn table_names(&mut self, _table: String) -> Vec<String> {
+    pub fn table_names(&mut self) -> Vec<String> {
         let conmut = self._conn.borrow_mut();
         let binding = conmut.lock().unwrap();
         let mut toexec = binding
@@ -604,27 +658,6 @@ impl Main {
 
         //println!("{:?}", outvec);
         outvec
-    }
-
-    pub fn pull_data<'a>(
-        &mut self,
-        table: String,
-        _collumn: String,
-        _search_term: String,
-    ) -> Vec<&'a str> {
-        let _name = "Tags".to_string();
-        let list = vec!["a", "b"];
-
-        //println!("PRAGMA table_info({});", &table);
-
-        let a = self.table_names(table);
-
-        for each in a {
-            //println!("{}", each);
-            self.table_collumns(each);
-        }
-
-        list
     }
 
     ///Sets up first database interaction.
