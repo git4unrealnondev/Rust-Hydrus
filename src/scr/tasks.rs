@@ -51,13 +51,7 @@ pub fn import_files(
         panic!("CSV ERROR, issue with csv file. No path header.");
     }
 
-    let location = db
-        .settings_get_name(&"FilesLoc".to_string())
-        .unwrap()
-        .param
-        .as_ref()
-        .unwrap()
-        .to_owned();
+    let location = db.location_get();
 
     println!("Importing Files to: {}", &location);
 

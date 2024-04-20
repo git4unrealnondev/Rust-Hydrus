@@ -237,13 +237,7 @@ pub fn main(data: &mut database::Main, scraper: &mut scraper::ScraperManager) {
                             &b,
                             &sharedtypes::HashesSupported::Sha256("".to_string()),
                         );
-                        let filesloc = data
-                            .settings_get_name(&"FilesLoc".to_string())
-                            .unwrap()
-                            .param
-                            .as_ref()
-                            .unwrap()
-                            .to_owned();
+                        let filesloc = data.location_get();
                         // Adds data into db
                         let fid = data.file_add(None, &sha2, &ext, &filesloc, true);
                         let nid =

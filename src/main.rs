@@ -152,12 +152,7 @@ fn main() {
         Some(pluginobj) => pluginobj.param.as_ref().unwrap().clone(),
     };
 
-    let location = data
-        .settings_get_name(&"FilesLoc".to_string())
-        .unwrap()
-        .param
-        .as_ref()
-        .unwrap();
+    let location = data.location_get();
     file::folder_make(&format!("{}", &location));
 
     //TODO Put code here

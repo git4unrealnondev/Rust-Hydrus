@@ -270,11 +270,7 @@ impl PluginManager {
                                 {
                                     if files.location.is_none() {
                                         //let string_dlpath = download::getfinpath(&loc, &files.hash.as_ref().unwrap());
-                                        let location = unwrappy
-                                            .settings_get_name(&"FilesLoc".to_string())
-                                            .unwrap()
-                                            .param
-                                            .to_owned();
+                                        let location = unwrappy.location_get();
                                         unwrappy.file_add(
                                             None,
                                             &files.hash.unwrap(),
