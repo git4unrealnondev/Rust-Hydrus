@@ -275,7 +275,7 @@ impl PluginManager {
                                             None,
                                             &files.hash.unwrap(),
                                             &files.ext.unwrap(),
-                                            &location.unwrap(),
+                                            &location,
                                             true,
                                         );
                                     } else {
