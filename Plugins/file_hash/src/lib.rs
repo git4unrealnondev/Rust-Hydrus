@@ -142,19 +142,6 @@ fn check_existing_db_table(table: TableData) -> usize {
 
 fn check_existing_db() {
     use rayon::prelude::*;
-    client::log(format!("Starting to load tables."));
-    let table = sharedtypes::LoadDBTable::Namespace;
-    client::load_table(table);
-    let table = sharedtypes::LoadDBTable::Files;
-    client::load_table(table);
-
-    let table = sharedtypes::LoadDBTable::Relationship;
-    client::load_table(table);
-    let table = sharedtypes::LoadDBTable::Tags;
-    client::load_table(table);
-
-    client::log(format!("Finished loading tables for filehash"));
-    let file_ids = client::file_get_list_all();
 
     let mut utable_storage: HashMap<Supset, usize> = HashMap::new();
     let mut utable_count: HashMap<Supset, usize> = HashMap::new();
@@ -163,7 +150,10 @@ fn check_existing_db() {
     for table in Supset::iter() {
         utable_count.insert(table, 0);
     }
+    let table_temp = sharedtypes::LoadDBTable::Files;
+    client::load_table(table_temp);
 
+    let file_ids = client::file_get_list_all();
     for table in Supset::iter() {
         let mut name = client::settings_get_name(get_set(table).name);
         if let None = name {
@@ -181,8 +171,19 @@ fn check_existing_db() {
         if let Some(nam) = &name {
             if nam.param.clone().unwrap() == "False" {
                 continue;
+            } else {
+                client::log(format!(
+                    "Missing table {} Set as something other then false.",
+                    nam.param.clone().unwrap()
+                ));
+                client::log(format!("Starting to load tables."));
+                let table_temp = sharedtypes::LoadDBTable::All;
+                client::load_table(table_temp);
+
+                client::log(format!("Finished loading tables for filehash"));
             }
         }
+
         client::log(format!("Starting to process table: {:?}", &table));
         let mut total = file_ids.clone();
         let ctab = TableData {

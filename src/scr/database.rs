@@ -2235,9 +2235,26 @@ impl Main {
     /// critera is the searchterm and collumn is the collumn to target.
     /// Doesn't remove from inmemory database
     ///
-    pub fn del_from_jobs_table(&mut self, collumn: &String, critera: &String) {
-        let delcommand = format!("DELETE FROM Jobs WHERE {} LIKE '{}'", collumn, critera);
-        self.execute(delcommand);
+    pub fn del_from_jobs_table(&mut self, job: &sharedtypes::JobScraper) {
+        let mut delcommand = format!("DELETE FROM Jobs");
+
+        // This is horribly shit code.
+        // Opens us up to SQL injection. I should change this later
+        // WARNING
+        delcommand += &format!(" WHERE {} LIKE {} AND", "site", job.site);
+        delcommand += &format!(
+            " WHERE {} LIKE {:?};",
+            "param",
+            job.original_param.replace("\"", "\'")
+        );
+        logging::info_log(&format!("Deleting job via: {}", &delcommand));
+        let inp = "DELETE FROM Jobs WHERE site LIKE ? AND param LIKE ?";
+        self._conn
+            .borrow_mut()
+            .lock()
+            .unwrap()
+            .execute(inp, params![job.site, job.original_param,])
+            .unwrap();
     }
 
     /// Handles transactional pushes.

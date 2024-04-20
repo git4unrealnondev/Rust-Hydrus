@@ -10,8 +10,6 @@ use crate::database;
 use crate::logging;
 use crate::sharedtypes;
 
-
-
 use crate::server;
 
 pub struct PluginManager {
@@ -221,8 +219,6 @@ impl PluginManager {
                             match pluginchannel {
                                 sharedtypes::PluginCommunicationChannel::None => {}
                                 sharedtypes::PluginCommunicationChannel::Pipe(pipe) => {
-                                    dbg!(pipe);
-
                                     // Have to do this wanky ness to allow me to spawn a thread that outlives the &mut self
                                     // Spawns the function in a seperate thread.
                                     // Have to get this outside of the thread spawn for

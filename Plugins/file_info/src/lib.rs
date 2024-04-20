@@ -120,7 +120,7 @@ pub fn on_start() {
     //fast_log::init(fast_log::Config::new().file("./log.txt")).unwrap();
     //log::info!("FileInfo - Commencing yak shaving{}", 0);
     println!("Fileinfo waiting");
-    //check_existing_db();
+    check_existing_db();
     //log::info!("FileInfo - Commencing yak shaving{}", 1);
 }
 
@@ -163,16 +163,10 @@ fn get_set(inp: Supset) -> SettingInfo {
 }
 
 fn check_existing_db() {
+    use rayon::prelude::*;
     //std::thread::sleep(Duration::from_secs(1));
     //log::info!("FileInfo - ");
     //log::info!("FileInfo - Loading Required tabels");
-    let table = sharedtypes::LoadDBTable::Tags;
-    client::load_table(table);
-    let table = sharedtypes::LoadDBTable::Relationship;
-    client::load_table(table);
-    let table = sharedtypes::LoadDBTable::Namespace;
-    client::load_table(table);
-
     let table = sharedtypes::LoadDBTable::Files;
     client::load_table(table);
     let file_ids = client::file_get_list_all();
@@ -196,6 +190,9 @@ fn check_existing_db() {
         if let Some(nam) = &name {
             if nam.param.clone().unwrap() == "False" {
                 continue 'mainloop;
+            } else {
+                let table_temp = sharedtypes::LoadDBTable::All;
+                client::load_table(table_temp);
             }
         }
         let ctab = TableData {
@@ -214,11 +211,11 @@ fn check_existing_db() {
             }
             println!("w None: {}", each);
         }
-        println!(
+        client::log(format!(
             "FileInfo - we've got {} files to parse for {}.",
             total.len(),
             get_set(table).name
-        );
+        ));
         client::transaction_flush();
         //let collionfreetable = total.symetric_difference(&huetable);
         //println!("FileInfo - Total files to process for this tag after dedup.");
@@ -237,31 +234,32 @@ fn check_existing_db() {
 
                 let uwidthtab = check_existing_db_table(tabwidth);
                 let uheighttab = check_existing_db_table(tabheight);
-                for file in file_ids.keys() {
+                file_ids.keys().for_each(|file| {
                     let fpath = helpers::getfinpath(&db_location, &file_ids[file].hash);
                     let file_path = format!("{}/{}", fpath, &file_ids[file].hash);
                     if !std::path::Path::new(&file_path).is_file() {
                         client::log(format!("File does not exist: {}", file_path));
-                        continue;
-                    }
-                    let img = image_dims(&file_path);
-                    if let Some(pic) = img {
-                        let uwidth = client::tag_add(pic.size.0.to_string(), uwidthtab, true, None);
-                        let uheight =
-                            client::tag_add(pic.size.1.to_string(), uheighttab, true, None);
-                        client::relationship_add_db(*file, uwidth, true);
-                        client::relationship_add_db(*file, uheight, true);
-                        println!(
-                            "FileID: {} Added Width: {} Height: {}",
-                            file, pic.size.0, pic.size.1
-                        );
-                        cnt += 4;
-                        if cnt >= commit {
-                            client::transaction_flush();
-                            cnt = 0;
+                    } else {
+                        let img = image_dims(&file_path);
+                        if let Some(pic) = img {
+                            let uwidth =
+                                client::tag_add(pic.size.0.to_string(), uwidthtab, true, None);
+                            let uheight =
+                                client::tag_add(pic.size.1.to_string(), uheighttab, true, None);
+                            client::relationship_add_db(*file, uwidth, true);
+                            client::relationship_add_db(*file, uheight, true);
+                            println!(
+                                "FileID: {} Added Width: {} Height: {}",
+                                file, pic.size.0, pic.size.1
+                            );
+                            cnt += 4;
+                            if cnt >= commit {
+                                client::transaction_flush();
+                                cnt = 0;
+                            }
                         }
                     }
-                }
+                });
                 // One last flush to ensure that everything gets written to db.
                 client::transaction_flush();
             }

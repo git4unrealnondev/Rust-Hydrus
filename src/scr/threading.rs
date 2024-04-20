@@ -451,7 +451,7 @@ impl Worker {
                     //println!("End of loop");
                     let unwrappydb = &mut db.lock().unwrap();
                     //dbg!(&job);
-                    unwrappydb.del_from_jobs_table(&"param".to_owned(), &job.original_param);
+                    unwrappydb.del_from_jobs_table(&job);
                     job_params.remove(&job);
                     logging::info_log(&format!("Removing job {:?}", &job));
 

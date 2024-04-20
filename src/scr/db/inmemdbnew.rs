@@ -1,3 +1,5 @@
+use nohash_hasher::BuildNoHashHasher;
+
 use crate::logging;
 use crate::sharedtypes;
 use crate::sharedtypes::DbFileObj;
@@ -46,8 +48,8 @@ pub struct NewinMemDB {
     _file_id_data: HashMap<usize, sharedtypes::DbFileObj>,
     _file_name_id: HashMap<String, usize>,
 
-    _relationship_file_tag: HashMap<usize, HashSet<usize>>,
-    _relationship_tag_file: HashMap<usize, HashSet<usize>>,
+    _relationship_file_tag: HashMap<usize, HashSet<usize>, BuildNoHashHasher<usize>>,
+    _relationship_tag_file: HashMap<usize, HashSet<usize>, BuildNoHashHasher<usize>>,
     _relationship_dual: HashSet<usize>,
 
     _tag_max: usize,
@@ -61,7 +63,6 @@ pub struct NewinMemDB {
 
 impl NewinMemDB {
     pub fn new() -> NewinMemDB {
-        let intmp = HashSet::default();
         let inst = NewinMemDB {
             _tag_nns_id_data: HashMap::default(),
             _tag_nns_data_id: HashMap::new(),
@@ -82,9 +83,9 @@ impl NewinMemDB {
             _namespace_id_data: HashMap::default(),
             _namespace_id_tag: HashMap::default(),
 
-            _relationship_tag_file: HashMap::default(),
-            _relationship_file_tag: HashMap::default(),
-            _relationship_dual: intmp,
+            _relationship_tag_file: HashMap::with_hasher(BuildNoHashHasher::default()),
+            _relationship_file_tag: HashMap::with_hasher(BuildNoHashHasher::default()),
+            _relationship_dual: HashSet::default(),
 
             _tag_max: 0,
             _settings_max: 0,
