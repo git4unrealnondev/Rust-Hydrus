@@ -240,15 +240,22 @@ impl Main {
         let file = self.file_get_id(file_id);
         if let Some(file) = file {
             // Cleans the file path if it contains a '/' in it
-            let loc = if file.location.ends_with('/') {
+            let loc = if file.location.ends_with('/') | file.location.ends_with('\\') {
                 file.location[0..file.location.len() - 1].to_string()
             } else {
                 format!("{}", file.location)
             };
 
             let folderloc = helpers::getfinpath(&loc, &file.hash);
-            let out = format!("{}/{}", folderloc, file.hash);
-
+            let out;
+            if cfg!(unix) {
+                out = format!("{}/{}", folderloc, file.hash);
+            } else if cfg!(windows) {
+                out = format!("{}\\{}", folderloc, file.hash);
+            } else {
+                logging::error_log(&format!("UNSUPPORTED OS FOR GETFILE CALLING."));
+                return None;
+            }
             if Path::new(&out).exists() {
                 return Some(out);
             }

@@ -39,6 +39,8 @@ mod time_func;
 mod client;
 #[path = "./scr/db/helpers.rs"]
 mod helpers;
+#[path = "./scr/os.rs"]
+mod os;
 #[path = "./scr/intcoms/server.rs"]
 mod server;
 
@@ -125,6 +127,8 @@ fn main() {
 
     // Makes Logging work
     logging::main();
+
+    os::check_os_compatibility();
 
     //TODO NEEDS MAIN INFO PULLER HERE. PULLS IN EVERYTHING INTO DB.
 
