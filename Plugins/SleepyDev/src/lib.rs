@@ -15,7 +15,7 @@ pub fn return_info() -> sharedtypes::PluginInfo {
         callbacks: callbackvec,
         communication: Some(sharedtypes::PluginSharedData {
             thread: sharedtypes::PluginThreadType::Spawn,
-            com_channel: Some(sharedtypes::PluginCommunicationChannel::pipe(
+            com_channel: Some(sharedtypes::PluginCommunicationChannel::Pipe(
                 "".to_string(),
             )),
         }),

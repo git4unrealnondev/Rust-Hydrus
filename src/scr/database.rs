@@ -6,7 +6,6 @@ use crate::sharedtypes;
 use crate::sharedtypes::DbJobsObj;
 use crate::time_func;
 
-
 use log::{error, info};
 use rayon::prelude::*;
 pub use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, ValueRef};
@@ -153,37 +152,45 @@ impl Main {
             },
         };
         let properbackuplocation;
+        let properbackupfile;
 
         // Starting to do localization.
         // gets changed at compile time.
         // Super lazy way to do it tho
-        if cfg!(target_os = "windows") {
-            let mut cnt = 0;
-            if Path::new(&format!(
-                "{}\\{}\\{}\\{}\\db{}.db",
-                backupfolder, year, month, day, cnt
-            ))
-            .exists()
-            {
-                cnt += 1;
+        let mut cnt = 0;
+        loop {
+            if cfg!(target_os = "windows") {
+                if Path::new(&format!(
+                    "{}\\{}\\{}\\{}\\db{}.db",
+                    backupfolder, year, month, day, cnt
+                ))
+                .exists()
+                {
+                    cnt += 1;
+                } else {
+                    properbackupfile = format!(
+                        "{}\\{}\\{}\\{}\\db{}.db",
+                        backupfolder, year, month, day, cnt
+                    );
+                    properbackuplocation =
+                        format!("{}\\{}\\{}\\{}\\", backupfolder, year, month, day);
+                    break;
+                }
+            } else {
+                if Path::new(&format!(
+                    "{}/{}/{}/{}/db{}.db",
+                    backupfolder, year, month, day, cnt
+                ))
+                .exists()
+                {
+                    cnt += 1;
+                } else {
+                    properbackupfile =
+                        format!("{}/{}/{}/{}/db{}.db", backupfolder, year, month, day, cnt);
+                    properbackuplocation = format!("{}/{}/{}/{}/", backupfolder, year, month, day);
+                    break;
+                }
             }
-            properbackuplocation = format!(
-                "{}\\{}\\{}\\{}\\db{}.db",
-                backupfolder, year, month, day, cnt
-            );
-        } else {
-            let mut cnt = 0;
-            if Path::new(&format!(
-                "{}/{}/{}/{}/db{}.db",
-                backupfolder, year, month, day, cnt
-            ))
-            .exists()
-            {
-                cnt += 1;
-            }
-
-            properbackuplocation =
-                format!("{}/{}/{}/{}/db{}.db", backupfolder, year, month, day, cnt);
         }
 
         // Flushes anything pending to disk.
@@ -192,7 +199,12 @@ impl Main {
 
         // Creates and copies the DB into the backup folder.
         std::fs::create_dir_all(properbackuplocation.clone()).unwrap();
-        std::fs::copy(dbloc, properbackuplocation).unwrap();
+
+        logging::info_log(&format!(
+            "Copying db from: {} to: {}",
+            &dbloc, &properbackupfile
+        ));
+        std::fs::copy(dbloc, properbackupfile).unwrap();
         self.transaction_start();
         if let Some(newbackupfolder) = add_backup_location {
             self.setting_add(
@@ -204,6 +216,7 @@ impl Main {
             )
         }
         self.transaction_flush();
+        logging::info_log(&format!("Finished backing up the DB."));
     }
 
     ///
@@ -507,7 +520,6 @@ impl Main {
             match each {
                 sharedtypes::SearchHolder::OR((_a, _b)) => {}
                 sharedtypes::SearchHolder::AND((a, b)) => {
-                    dbg!(&a, &b, &fin_temp.keys());
                     let fa = fin_temp.get(&a).unwrap();
                     let fb = fin_temp.get(&b).unwrap();
                     let tem = fa.intersection(&fb);

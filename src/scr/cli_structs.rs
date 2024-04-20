@@ -139,25 +139,27 @@ pub struct JobRemovalStruct {
 pub enum SearchStruct {
     /// Searches By File ID.
     //#[arg(exclusive = true, required = false, long)]
-    fid(Id),
+    Fid(Id),
     /// Searches By Tag Id.
     //#[arg(exclusive = true, required = false, long)]
-    tid(Id),
+    Tid(Id),
     /// Searches By Tag name needs namespace.
     //#[arg(exclusive = true, required = false, long)]
-    tag(Tag),
+    Tag(Tag),
     /// Searches By Hash.
-    hash(Hashy),
+    Hash(Hashy),
 }
 #[derive(Debug, Parser)]
 pub struct Tag {
     #[arg(required = true, exclusive = true)]
-    tag: String,
+    pub tag: String,
+    #[arg(required = true, exclusive = true)]
+    pub namespace: String,
 }
 #[derive(Debug, Parser)]
 pub struct Id {
     #[arg(required = true, exclusive = true)]
-    id: usize,
+    pub id: usize,
 }
 #[derive(Parser, Debug)]
 pub struct Hashy {

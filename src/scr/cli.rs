@@ -74,14 +74,71 @@ pub fn main(data: &mut database::Main, scraper: &mut scraper::ScraperManager) {
             }
         },
         cli_structs::test::Search(searchstruct) => match searchstruct {
-            cli_structs::SearchStruct::fid(_id) => {}
-            cli_structs::SearchStruct::tid(_id) => {}
-            cli_structs::SearchStruct::tag(_tag) => {}
-            cli_structs::SearchStruct::hash(hash) => {
-                data.load_table(&sharedtypes::LoadDBTable::Files);
-                data.load_table(&sharedtypes::LoadDBTable::Namespace);
-                data.load_table(&sharedtypes::LoadDBTable::Relationship);
-                data.load_table(&sharedtypes::LoadDBTable::Tags);
+            cli_structs::SearchStruct::Fid(id) => {
+                let hstags = data.relationship_get_tagid(&id.id);
+                match hstags {
+                    None => {
+                        println!(
+                            "Cannot find any loaded relationships for fileid: {}",
+                            &id.id
+                        );
+                    }
+                    Some(tags) => {
+                        for tid in tags.iter() {
+                            let tag = data.tag_id_get(tid);
+                            match tag {
+                                None => {
+                                    println!("WANRING CORRUPTION DETECTED for tagid: {}", &tid);
+                                }
+                                Some(tagnns) => {
+                                    let ns = data.namespace_get_string(&tagnns.namespace).unwrap();
+                                    println!(
+                                        "ID {} Tag: {} namespace: {}",
+                                        tid, tagnns.name, ns.name
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            cli_structs::SearchStruct::Tid(id) => {
+                data.load_table(&sharedtypes::LoadDBTable::All);
+                let fids = data.relationship_get_fileid(&id.id);
+                if let Some(goodfid) = fids {
+                    logging::info_log(&format!("Found Fids:"));
+                    for each in goodfid {
+                        logging::info_log(&format!("{}", &each));
+                    }
+                }
+            }
+            cli_structs::SearchStruct::Tag(tag) => {
+                data.load_table(&sharedtypes::LoadDBTable::All);
+                let nsid = data.namespace_get(&tag.namespace);
+                if let Some(nsid) = nsid {
+                    let tid = data.tag_get_name(tag.tag.clone(), *nsid);
+                    if let Some(tid) = tid {
+                        let fids = data.relationship_get_fileid(tid);
+                        if let Some(goodfid) = fids {
+                            logging::info_log(&format!("Found Fids:"));
+                            for each in goodfid {
+                                logging::info_log(&format!("{}", &each));
+                            }
+                        } else {
+                            logging::info_log(&format!(
+                                "Cannot find any relationships for tag id: {}",
+                                &tid
+                            ));
+                        }
+                    } else {
+                        logging::info_log(&format!("Cannot find tag :C"));
+                    }
+                } else {
+                    logging::info_log(&format!("Namespace isn't correct or cannot find it"));
+                }
+            }
+            cli_structs::SearchStruct::Hash(hash) => {
+                data.load_table(&sharedtypes::LoadDBTable::All);
                 let file_id = data.file_get_hash(&hash.hash);
                 match file_id {
                     None => {

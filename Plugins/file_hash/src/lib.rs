@@ -43,8 +43,8 @@ pub fn on_download(
             let tag_output = sharedtypes::DBPluginOutput {
                 file: Some(vec![sharedtypes::PluginFileObj {
                     id: None,
-                    hash: Some(hash_in.to_string()),
-                    ext: Some(ext_in.to_string()),
+                    hash: Some(hash_in.to_owned()),
+                    ext: Some(ext_in.to_owned()),
                     location: None,
                 }]),
                 jobs: None,
@@ -60,9 +60,9 @@ pub fn on_download(
                     parents: None,
                 }]),
                 relationship: Some(vec![sharedtypes::DbPluginRelationshipObj {
-                    file_hash: hash_in.to_string(),
-                    tag_name: st.to_string(),
-                    tag_namespace: get_set(hash).name,
+                    file_hash: hash_in.to_owned(),
+                    tag_name: st,
+                    tag_namespace: get_set(hash.to_owned()).name,
                 }]),
             };
             output.push(sharedtypes::DBPluginOutputEnum::Add(vec![tag_output]));
@@ -142,7 +142,7 @@ fn check_existing_db_table(table: TableData) -> usize {
 
 fn check_existing_db() {
     use rayon::prelude::*;
-
+    client::log(format!("Starting to load tables."));
     let table = sharedtypes::LoadDBTable::Namespace;
     client::load_table(table);
     let table = sharedtypes::LoadDBTable::Files;
@@ -153,6 +153,7 @@ fn check_existing_db() {
     let table = sharedtypes::LoadDBTable::Tags;
     client::load_table(table);
 
+    client::log(format!("Finished loading tables for filehash"));
     let file_ids = client::file_get_list_all();
 
     let mut utable_storage: HashMap<Supset, usize> = HashMap::new();
@@ -182,6 +183,7 @@ fn check_existing_db() {
                 continue;
             }
         }
+        client::log(format!("Starting to process table: {:?}", &table));
         let mut total = file_ids.clone();
         let ctab = TableData {
             name: get_set(table).name,
@@ -194,6 +196,7 @@ fn check_existing_db() {
             None => HashSet::new(),
             Some(set) => set,
         };
+
         for each in huetable {
             if let Some(tags) = client::relationship_get_fileid(each) {
                 for tag in tags {
@@ -214,6 +217,7 @@ fn check_existing_db() {
                 }
             }
         }
+        client::log(format!("Ended table loop for table: {:?}", &table));
     }
     for table in Supset::iter() {
         let total = *utable_count.get(&table).unwrap();

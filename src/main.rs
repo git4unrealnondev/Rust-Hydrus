@@ -182,7 +182,6 @@ fn main() {
         arc.clone(),
     )));
 
-    dbg!("comple");
     pluginmanager.lock().unwrap().plugin_on_start();
     // Creates a threadhandler that manages callable threads.
     let mut threadhandler = threading::Threads::new();
@@ -195,19 +194,7 @@ fn main() {
     // Anything below here will run automagically.
     // Jobs run in OS threads
 
-    //let test =
-
-    //Finalizing wrapup.
-
-    //jobmanager.jobs_cleanup();
-
-    // Not needed due to sqlite closing db on close.
-
-    //arc.lock().unwrap().transaction_flush();
-    //arc.lock().unwrap().transaction_close();
-
     // Waits until all threads have closed.
-    dbg!("comple1");
     let one_sec = time::Duration::from_secs(1);
     loop {
         let brk;
@@ -231,6 +218,6 @@ fn main() {
     // Shouldn't be nessisary but hey. :D
     let mills_fifty = time::Duration::from_millis(50);
     std::thread::sleep(mills_fifty);
-    info!("UNLOADING");
+    logging::info_log(&"UNLOADING".to_string());
     log::logger().flush();
 }
