@@ -52,3 +52,6 @@ codegenunits=1
 strip = false
 panic = "abort"
 debug = false
+
+[build-dependencies]
+walkdir = "2.4.0"
