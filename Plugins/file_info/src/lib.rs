@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 use std::fs::metadata;
+use std::fs::File;
 use std::time::{Duration, UNIX_EPOCH};
 use struct_iterable::Iterable;
 use strum::{EnumIter, IntoEnumIterator};
@@ -173,7 +174,7 @@ fn check_existing_db() {
     let db_location = client::location_get();
 
     'mainloop: for table in Supset::iter() {
-        let total = file_ids.clone();
+        let mut total = file_ids.clone();
         let mut name = client::settings_get_name(get_set(table).name);
         if let None = name {
             client::setting_add(
@@ -207,9 +208,10 @@ fn check_existing_db() {
         };
         for each in huetable {
             if let Some(tags) = client::relationship_get_fileid(each) {
-                println!("w {:?}", tags);
+                for tag in tags {
+                    total.remove(&tag);
+                }
             }
-            println!("w None: {}", each);
         }
         client::log(format!(
             "FileInfo - we've got {} files to parse for {}.",
@@ -234,28 +236,30 @@ fn check_existing_db() {
 
                 let uwidthtab = check_existing_db_table(tabwidth);
                 let uheighttab = check_existing_db_table(tabheight);
-                file_ids.keys().for_each(|file| {
-                    let fpath = helpers::getfinpath(&db_location, &file_ids[file].hash);
+                total.keys().for_each(|file| {
+                    let fpath = helpers::getfinpath(&db_location, &total[file].hash);
                     let file_path = format!("{}/{}", fpath, &file_ids[file].hash);
                     if !std::path::Path::new(&file_path).is_file() {
                         client::log(format!("File does not exist: {}", file_path));
                     } else {
                         let img = image_dims(&file_path);
                         if let Some(pic) = img {
-                            let uwidth =
-                                client::tag_add(pic.size.0.to_string(), uwidthtab, true, None);
-                            let uheight =
-                                client::tag_add(pic.size.1.to_string(), uheighttab, true, None);
-                            client::relationship_add_db(*file, uwidth, true);
-                            client::relationship_add_db(*file, uheight, true);
-                            println!(
-                                "FileID: {} Added Width: {} Height: {}",
-                                file, pic.size.0, pic.size.1
-                            );
-                            cnt += 4;
-                            if cnt >= commit {
-                                client::transaction_flush();
-                                cnt = 0;
+                            if let Some(pic_size) = pic.size {
+                                let uwidth =
+                                    client::tag_add(pic_size.0.to_string(), uwidthtab, true, None);
+                                let uheight =
+                                    client::tag_add(pic_size.1.to_string(), uheighttab, true, None);
+                                client::relationship_add_db(*file, uwidth, true);
+                                client::relationship_add_db(*file, uheight, true);
+                                println!(
+                                    "FileID: {} Added Width: {} Height: {}",
+                                    file, pic_size.0, pic_size.1
+                                );
+                                cnt += 4;
+                                if cnt >= commit {
+                                    client::transaction_flush();
+                                    cnt = 0;
+                                }
                             }
                         }
                     }
@@ -286,8 +290,6 @@ fn check_existing_db() {
             Supset::CreatorCreate => {}
         }
     }
-
-    video_test();
 }
 
 ///
@@ -362,7 +364,7 @@ fn get_file_data(location: &String, hash: &String) -> Meta {
 ///
 ///
 ///
-fn image_dims(path: &String) -> Option<Picture> {
+fn image_dims(path: &String) -> Option<ParseData> {
     use image::io::Reader;
     let reader = Reader::open(path)
         .unwrap()
@@ -370,21 +372,47 @@ fn image_dims(path: &String) -> Option<Picture> {
         .expect("Cursor io never fails")
         .into_dimensions();
     if let Ok(read_dec) = reader {
-        let pic = Picture {
-            size: read_dec,
-            metadata: Meta {
+        let pic = ParseData {
+            duration: None,
+            size: Some(read_dec),
+            metadata: Some(Meta {
                 create: None,
                 modified: None,
-            },
+            }),
         };
         return Some(pic);
     } else {
-        dbg!("nune");
+        // dbg!(path, "nune");
+        let file = std::path::Path::new(path);
+        match ffmpeg_next::format::input(&file) {
+            Ok(context) => {
+                let metadata = context.metadata();
+                //dbg!(metadata);
+                if let Some(stream) = context.streams().best(ffmpeg_next::media::Type::Video) {
+                    // println!("Best video stream index: {}", stream.index());
+                    let codec =
+                        ffmpeg_next::codec::context::Context::from_parameters(stream.parameters())
+                            .unwrap();
+                    if codec.medium() == ffmpeg_next::media::Type::Video {
+                        if let Ok(video) = codec.decoder().video() {
+                            return Some(ParseData {
+                                duration: None, // Duration from ffmpeg_next isn't accurate.
+                                size: Some((video.width(), video.height())),
+                                metadata: None,
+                            });
+                        }
+                    }
+                }
+            }
+            Err(err) => {
+                dbg!(err);
+            }
+        }
         return None;
     }
 }
 
-fn video_test() {
+/*fn video_test() {
     use std::fs::File;
     ffmpeg::init().unwrap();
 
@@ -484,7 +512,7 @@ fn video_test() {
 
         Err(error) => println!("error: {}", error),
     }
-}
+}*/
 
 #[derive(Debug, Iterable)]
 struct Picture {
@@ -503,6 +531,14 @@ enum Parseables {
     Picture(Picture),
     Video(Video),
 }
+
+#[derive(Debug, Iterable)]
+struct ParseData {
+    size: Option<(u32, u32)>,
+    duration: Option<f64>,
+    metadata: Option<Meta>,
+}
+
 #[derive(Debug, Iterable)]
 struct Meta {
     create: Option<usize>,
