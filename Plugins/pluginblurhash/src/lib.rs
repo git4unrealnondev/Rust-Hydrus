@@ -12,6 +12,7 @@ static ENCODE_IMG_X: u32 = 5;
 static ENCODE_IMG_Y: u32 = 5;
 
 static PLUGIN_NAME: &str = "blurhash";
+static DB_NAME: &str = "BlurHash-blurhash";
 static PLUGIN_DESCRIPTION: &str = "Introduces Blurhash imaging support.";
 
 #[path = "../../../src/scr/sharedtypes.rs"]
@@ -67,20 +68,20 @@ pub fn on_download(
                 }]),
                 jobs: None,
                 namespace: Some(vec![sharedtypes::DbPluginNamespace {
-                    name: PLUGIN_NAME.to_string(),
+                    name: DB_NAME.to_string(),
                     description: Some(PLUGIN_DESCRIPTION.to_string()),
                 }]),
                 parents: None,
                 setting: None,
                 tag: Some(vec![sharedtypes::DBPluginTagOut {
                     name: string_blurhash.to_string(),
-                    namespace: PLUGIN_NAME.to_string(),
+                    namespace: DB_NAME.to_string(),
                     parents: None,
                 }]),
                 relationship: Some(vec![sharedtypes::DbPluginRelationshipObj {
                     file_hash: hash_in.to_string(),
                     tag_name: string_blurhash,
-                    tag_namespace: PLUGIN_NAME.to_string(),
+                    tag_namespace: DB_NAME.to_string(),
                 }]),
             };
 

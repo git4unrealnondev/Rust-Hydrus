@@ -101,6 +101,7 @@ pub enum SupportedDBRequests {
     Search((sharedtypes::SearchObj, Option<usize>, Option<usize>)),
     GetFileByte(usize),
     GetFileLocation(usize),
+    NamespaceContainsId(usize, usize),
 }
 
 ///

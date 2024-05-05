@@ -478,7 +478,6 @@ impl Main {
         } else {
             stor = search.search_relate.unwrap();
         }
-        dbg!(&stor, &limit, &offset);
         let mut cnt = 0;
         for un in search.searches {
             match un {
@@ -521,7 +520,6 @@ impl Main {
             }
             cnt += 1
         }
-        dbg!(&fin_temp);
 
         for each in stor {
             match each {
@@ -572,7 +570,7 @@ impl Main {
     }
 
     ///
-    ///
+    /// returns file id's based on relationships with a tag
     ///
     pub fn relationship_get_fileid(&self, tag: &usize) -> Option<&HashSet<usize>> {
         self._inmemdb.relationship_get_fileid(tag)
@@ -2397,7 +2395,7 @@ impl Main {
             return;
         }
 
-        let tagida = self.namespage_get_tagids(id).clone();
+        let tagida = self.namespace_get_tagids(id).clone();
         if let Some(tagids) = tagida {
             for each in tagids.clone().iter() {
                 logging::log(&format!("Removing tagid: {}.", each));
@@ -2502,8 +2500,18 @@ impl Main {
     ///
     /// Gets all tag's assocated a singular namespace
     ///
-    pub fn namespage_get_tagids(&self, id: &usize) -> Option<&HashSet<usize>> {
+    pub fn namespace_get_tagids(&self, id: &usize) -> Option<&HashSet<usize>> {
         self._inmemdb.namespace_get_tagids(id)
+    }
+
+    ///
+    /// Checks if a tag exists in a namespace
+    ///
+    pub fn namespace_contains_id(&self, namespace_id: &usize, tag_id: &usize) -> bool {
+        if let Some(ns_data) = self.namespace_get_tagids(namespace_id) {
+            return ns_data.contains(tag_id);
+        }
+        false
     }
 
     ///
@@ -2522,7 +2530,7 @@ impl Main {
         //let tag_max = self._inmemdb.tags_max_return().clone();
         self._inmemdb.tags_max_reset();
 
-        let tida = self.namespage_get_tagids(id);
+        let tida = self.namespace_get_tagids(id);
         if let Some(tids) = tida {
             let mut cnt: usize = 0;
             for tid in tids.clone() {

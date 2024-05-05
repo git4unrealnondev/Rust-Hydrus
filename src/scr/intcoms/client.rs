@@ -53,6 +53,17 @@ pub fn namespace_get_string(id: usize) -> Option<sharedtypes::DbNamespaceObj> {
         types::SupportedDBRequests::GetNamespaceString(id),
     ))
 }
+
+///
+/// See the database reference for this function.
+/// I'm a lazy turd just check it their
+///
+pub fn namespace_contains_id(namespaceid: usize, tagid: usize) -> bool {
+    init_data_request(&types::SupportedRequests::Database(
+        types::SupportedDBRequests::NamespaceContainsId(namespaceid, tagid),
+    ))
+}
+
 ///
 /// See the database reference for this function.
 /// I'm a lazy turd just check it their
@@ -147,6 +158,16 @@ pub fn relationship_get_fileid(id: usize) -> Option<HashSet<usize>> {
         types::SupportedDBRequests::RelationshipGetFileid(id),
     ))
 }
+///
+/// See the database reference for this function.
+/// I'm a lazy turd just check it their
+///
+pub fn relationship_get_tagid(id: usize) -> Option<HashSet<usize>> {
+    init_data_request(&types::SupportedRequests::Database(
+        types::SupportedDBRequests::RelationshipGetTagid(id),
+    ))
+}
+
 ///
 /// See the database reference for this function.
 /// I'm a lazy turd just check it their

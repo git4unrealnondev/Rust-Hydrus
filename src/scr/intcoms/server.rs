@@ -248,8 +248,12 @@ impl DbInteract {
             types::SupportedDBRequests::GetFileLocation(id) => {
                 let unwrappy = self._database.lock().unwrap();
                 let tmep = unwrappy.get_file(&id);
-
                 Self::option_to_bytes(tmep.as_ref())
+            }
+            types::SupportedDBRequests::NamespaceContainsId(namespaceid, tagid) => {
+                let unwrappy = self._database.lock().unwrap();
+                let tmep = unwrappy.namespace_contains_id(&namespaceid, &tagid);
+                Self::data_size_to_b(&tmep)
             }
 
             types::SupportedDBRequests::GetFileByte(id) => {
@@ -362,7 +366,7 @@ impl DbInteract {
             }
             types::SupportedDBRequests::GetNamespaceTagIDs(id) => {
                 let unwrappy = self._database.lock().unwrap();
-                let tmep = unwrappy.namespage_get_tagids(&id);
+                let tmep = unwrappy.namespace_get_tagids(&id);
                 Self::data_size_to_b(&tmep)
             }
             types::SupportedDBRequests::GetFileListId() => {
