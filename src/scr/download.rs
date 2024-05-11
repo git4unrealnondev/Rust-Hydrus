@@ -236,15 +236,9 @@ pub async fn dlfile_new(
     // Gives file extension
     let file_ext = FileFormat::from_bytes(&bytes).extension().to_string();
 
-    let mut content = Cursor::new(bytes.clone());
-
     // Gets final path of file.
     let orig_path = format!("{}/{}", &final_loc, &hash);
     let mut file_path = std::fs::File::create(&orig_path).unwrap();
-
-    // Copies file from memory to disk
-    std::io::copy(&mut content, &mut file_path).unwrap();
-
     {
         // If the plugin manager is None then don't do anything plugin wise.
         // Useful for if doing something that we CANNOT allow plugins to run.
@@ -256,6 +250,11 @@ pub async fn dlfile_new(
         }
         // Wouldove rather passed teh Cursor or Bytes Obj but it wouldn't work for some reason with the ABI
     }
+
+    let mut content = Cursor::new(bytes);
+    // Copies file from memory to disk
+    std::io::copy(&mut content, &mut file_path).unwrap();
+
     println!("Downloaded hash: {}", &hash);
 
     Some((hash, file_ext))
