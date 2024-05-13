@@ -5,6 +5,7 @@ use crate::logging;
 use anyhow::Context;
 use interprocess::local_socket::{LocalSocketListener, LocalSocketStream, NameTypeSupport};
 
+use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
 use std::{
     io::{self, prelude::*, BufReader},
@@ -250,6 +251,16 @@ impl DbInteract {
                 let tmep = unwrappy.get_file(&id);
                 Self::option_to_bytes(tmep.as_ref())
             }
+            types::SupportedDBRequests::FilterNamespaceById((ids, namespace_id)) => {
+                let mut out: HashSet<usize> = HashSet::new();
+                let unwrappy = self._database.lock().unwrap();
+                for each in ids.iter() {
+                    if unwrappy.namespace_contains_id(&namespace_id, each) {
+                        out.insert(*each);
+                    }
+                }
+                Self::data_size_to_b(&out)
+            }
             types::SupportedDBRequests::NamespaceContainsId(namespaceid, tagid) => {
                 let unwrappy = self._database.lock().unwrap();
                 let tmep = unwrappy.namespace_contains_id(&namespaceid, &tagid);
@@ -288,7 +299,7 @@ impl DbInteract {
 
             types::SupportedDBRequests::PutTag(tags, namespace_id, addtodb, id) => {
                 let mut unwrappy = self._database.lock().unwrap();
-                let tmep = unwrappy.tag_add(tags, namespace_id, addtodb, id);
+                let tmep = unwrappy.tag_add(&tags, namespace_id, addtodb, id);
                 Self::data_size_to_b(&tmep)
             }
             types::SupportedDBRequests::GetDBLocation() => {

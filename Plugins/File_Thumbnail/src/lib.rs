@@ -1,16 +1,25 @@
 static PLUGIN_NAME: &str = "File Thumbnailer";
 static PLUGIN_DESCRIPTION: &str = "Generates thumbnails for image files";
 
+#[path = "../../../src/scr/intcoms/client.rs"]
+mod client;
 #[path = "../../../src/scr/sharedtypes.rs"]
 mod sharedtypes;
-
-use thumbnailer::{create_thumbnails, Thumbnail, ThumbnailSize};
+use thumbnailer::{
+    create_thumbnails, create_thumbnails_unknown_type, error::ThumbError, Thumbnail, ThumbnailSize,
+};
 
 #[no_mangle]
 pub fn return_info() -> sharedtypes::PluginInfo {
     let callbackvec = vec![
         sharedtypes::PluginCallback::OnDownload,
         sharedtypes::PluginCallback::OnStart,
+        sharedtypes::PluginCallback::OnCallback(sharedtypes::CallbackInfo {
+            name: format!("{}", PLUGIN_NAME),
+            func: format!("{}-GenerateThumbnail", PLUGIN_NAME),
+            data_name: [format!("image")].to_vec(),
+            data: [sharedtypes::CallbackCustomData::U8].to_vec(),
+        }),
     ];
     sharedtypes::PluginInfo {
         name: PLUGIN_NAME.to_string(),
@@ -18,8 +27,23 @@ pub fn return_info() -> sharedtypes::PluginInfo {
         version: 1.00,
         api_version: 1.00,
         callbacks: callbackvec,
-        communication: None,
+        communication: Some(sharedtypes::PluginSharedData {
+            thread: sharedtypes::PluginThreadType::Inline,
+            com_channel: Some(sharedtypes::PluginCommunicationChannel::Pipe(
+                "beans".to_string(),
+            )),
+        }),
     }
+}
+
+///
+/// Just wrapping this incase i mess something up later...
+///
+fn load_image(byte_c: &[u8]) -> Result<Vec<Thumbnail>, ThumbError> {
+    create_thumbnails_unknown_type(
+        std::io::BufReader::new(std::io::Cursor::new(byte_c)),
+        [ThumbnailSize::Icon],
+    )
 }
 
 #[no_mangle]
@@ -31,7 +55,7 @@ pub fn on_download(
 ) -> Vec<sharedtypes::DBPluginOutputEnum> {
     let mut output = Vec::new();
 
-    let lmimg = image::load_from_memory(byte_c);
+    let lmimg = load_image(byte_c);
     match lmimg {
         Ok(good_lmimg) => {
             /*let string_blurhash = downloadparse(good_lmimg);
@@ -65,7 +89,10 @@ pub fn on_download(
             output.push(sharedtypes::DBPluginOutputEnum::Add(vec![plugin_output]));*/
         }
         Err(err) => {
-            dbg!("Plugin: blurhash -- Failed to load: {}, {:?}", hash_in, err);
+            client::log(format!(
+                "Plugin: {} -- Failed to load: {}, {:?}",
+                PLUGIN_NAME, hash_in, err,
+            ));
         }
     }
     output

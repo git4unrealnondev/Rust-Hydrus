@@ -1,10 +1,11 @@
-use nohash_hasher::BuildNoHashHasher;
-
 use crate::logging;
 use crate::sharedtypes;
 use crate::sharedtypes::DbFileObj;
 use crate::sharedtypes::DbJobsObj;
+use nohash::BuildNoHashHasher;
+use nohash::NoHashHasher;
 use std::collections::{HashMap, HashSet};
+use std::hash::BuildHasherDefault;
 pub enum TagRelateConjoin {
     Tag,
     Error,
@@ -48,9 +49,19 @@ pub struct NewinMemDB {
     _file_id_data: HashMap<usize, sharedtypes::DbFileObj>,
     _file_name_id: HashMap<String, usize>,
 
-    _relationship_file_tag: HashMap<usize, HashSet<usize>, BuildNoHashHasher<usize>>,
-    _relationship_tag_file: HashMap<usize, HashSet<usize>, BuildNoHashHasher<usize>>,
-    _relationship_dual: HashSet<usize>,
+    //_relationship_file_tag: nohash::IntMap<usize, nohash::IntSet<usize>>,
+    //_relationship_tag_file: nohash::IntMap<usize, nohash::IntSet<usize>>,
+    _relationship_file_tag: HashMap<
+        usize,
+        HashSet<usize, BuildHasherDefault<NoHashHasher<usize>>>,
+        BuildHasherDefault<NoHashHasher<usize>>,
+    >,
+    _relationship_tag_file: HashMap<
+        usize,
+        HashSet<usize, BuildHasherDefault<NoHashHasher<usize>>>,
+        BuildHasherDefault<NoHashHasher<usize>>,
+    >,
+    _relationship_dual: nohash::IntSet<usize>,
 
     _tag_max: usize,
     _relationship_max: usize,
@@ -63,6 +74,17 @@ pub struct NewinMemDB {
 
 impl NewinMemDB {
     pub fn new() -> NewinMemDB {
+        let mut tf: HashMap<
+            usize,
+            HashSet<usize, BuildHasherDefault<NoHashHasher<usize>>>,
+            BuildHasherDefault<NoHashHasher<usize>>,
+        > = HashMap::with_capacity_and_hasher(2, BuildHasherDefault::default());
+        let mut ft: HashMap<
+            usize,
+            HashSet<usize, BuildHasherDefault<NoHashHasher<usize>>>,
+            BuildHasherDefault<NoHashHasher<usize>>,
+        > = HashMap::with_capacity_and_hasher(2, BuildHasherDefault::default());
+
         let inst = NewinMemDB {
             _tag_nns_id_data: HashMap::default(),
             _tag_nns_data_id: HashMap::new(),
@@ -83,9 +105,9 @@ impl NewinMemDB {
             _namespace_id_data: HashMap::default(),
             _namespace_id_tag: HashMap::default(),
 
-            _relationship_tag_file: HashMap::with_hasher(BuildNoHashHasher::default()),
-            _relationship_file_tag: HashMap::with_hasher(BuildNoHashHasher::default()),
-            _relationship_dual: HashSet::default(),
+            _relationship_tag_file: tf,
+            _relationship_file_tag: ft,
+            _relationship_dual: nohash::IntSet::default(),
 
             _tag_max: 0,
             _settings_max: 0,
@@ -134,10 +156,10 @@ impl NewinMemDB {
             self._settings_id_data.insert(
                 self._settings_max,
                 sharedtypes::DbSettingObj {
-                    name: name,
-                    pretty: pretty,
-                    num: num,
-                    param: param,
+                    name,
+                    pretty,
+                    num,
+                    param,
                 },
             );
             self._settings_max += 1;
@@ -205,7 +227,7 @@ impl NewinMemDB {
     ///
     /// Returns a list of file id's based on a tag id.
     ///
-    pub fn relationship_get_fileid(&self, tag: &usize) -> Option<&HashSet<usize>> {
+    pub fn relationship_get_fileid(&self, tag: &usize) -> Option<&nohash::IntSet<usize>> {
         match self._relationship_tag_file.get(tag) {
             None => None,
             Some(relref) => return Some(relref),
@@ -215,7 +237,7 @@ impl NewinMemDB {
     ///
     /// Returns a list of tag id's based on a file id
     ///
-    pub fn relationship_get_tagid(&self, file: &usize) -> Option<&HashSet<usize>> {
+    pub fn relationship_get_tagid(&self, file: &usize) -> Option<&nohash::IntSet<usize>> {
         match self._relationship_file_tag.get(file) {
             None => None,
             Some(relref) => return Some(relref),
@@ -336,8 +358,8 @@ impl NewinMemDB {
     ///
     /// Returns the max id in db
     ///
-    pub fn tags_max_return(&self) -> &usize {
-        &self._tag_max
+    pub fn tags_max_return(&self) -> usize {
+        self._tag_max
     }
 
     ///
@@ -446,8 +468,8 @@ impl NewinMemDB {
     ///
     /// Adds a tag into db
     ///
-    pub fn tags_put(&mut self, tag_info: sharedtypes::DbTagNNS, id: Option<usize>) -> usize {
-        let temp = self._tag_nns_data_id.get(&tag_info).clone();
+    pub fn tags_put(&mut self, tag_info: &sharedtypes::DbTagNNS, id: Option<usize>) -> usize {
+        let temp = self._tag_nns_data_id.get(tag_info).clone();
 
         match temp {
             None => {
@@ -458,15 +480,8 @@ impl NewinMemDB {
 
                 //let working_id = self._tag_max;
 
-                let nns_obj = sharedtypes::DbTagObjCompatability {
-                    id: working_id.clone(),
-                    name: tag_info.name,
-                    parents: None,
-                    namespace: tag_info.namespace,
-                };
-
                 // Inserts the tagid into namespace.
-                let namespace_opt = self._namespace_id_tag.get_mut(&nns_obj.namespace);
+                let namespace_opt = self._namespace_id_tag.get_mut(&tag_info.namespace);
                 match namespace_opt {
                     None => {
                         logging::info_log(&format!(
@@ -475,14 +490,20 @@ impl NewinMemDB {
                         ));
                         // Gets called when the namespace id wasn't found as a key
                         let mut idset = HashSet::new();
-                        idset.insert(nns_obj.id);
+                        idset.insert(working_id);
                         self._namespace_id_tag.insert(tag_info.namespace, idset);
                     }
                     Some(namespace) => {
-                        namespace.insert(nns_obj.id);
+                        namespace.insert(working_id);
                     }
                 };
-                self.insert_tag_nns(nns_obj);
+
+                self.insert_tag_nns(sharedtypes::DbTagObjCompatability {
+                    id: working_id.clone(),
+                    name: tag_info.name.clone(),
+                    parents: None,
+                    namespace: tag_info.namespace,
+                });
                 self._tag_max += 1;
                 match id {
                     None => {}
@@ -496,39 +517,6 @@ impl NewinMemDB {
             }
             Some(id) => return id.clone(),
         }
-        /*
-        //println!("Addig tag: {:?}", &tag_info);
-        let nns_obj = sharedtypes::DbTagObjNNS {
-            id: tag_info.id,
-            //parents: tag_info.parents,
-        };
-        self._tag_id_data.insert(tag_info.id, nns_obj);
-        self._tag_max += 1;
-        if tag_info.id > self._tag_max {
-            self._tag_max = tag_info.id;
-        }
-
-        // Inserts the tagid into namespace.
-        let namespace_opt = self._namespace_id_tag.get_mut(&tag_info.namespace);
-        match namespace_opt {
-            None => {
-                logging::info_log(&format!("Making namespace with id : {}", tag_info.namespace));
-                // Gets called when the namespace id wasn't found as a key
-                let mut idset = HashSet::new();
-                idset.insert(tag_info.id);
-                self._namespace_id_tag.insert(tag_info.namespace, idset);
-            }
-            Some(namespace) => {
-                namespace.insert(tag_info.id);
-            }
-        };
-
-        //namespace_inner.insert(tag_info.id);
-
-        // Adds tag info to internal nns data.
-        self.insert_tag_nns(tag_info);
-
-        */
     }
 
     fn insert_tag_nns(&mut self, tag_info: sharedtypes::DbTagObjCompatability) {
@@ -695,11 +683,12 @@ impl NewinMemDB {
     ///
     #[inline(always)]
     pub fn relationship_add(&mut self, file: usize, tag: usize) {
+        use nohash_hasher;
         let cantor = self.cantor_pair(&file, &tag);
         self._relationship_dual.insert(cantor);
         match self._relationship_tag_file.get_mut(&tag) {
             None => {
-                let mut temp = HashSet::default();
+                let mut temp = nohash::IntSet::default();
                 temp.insert(file);
                 self._relationship_tag_file.insert(tag, temp);
             }
@@ -710,7 +699,7 @@ impl NewinMemDB {
         }
         match self._relationship_file_tag.get_mut(&file) {
             None => {
-                let mut temp = HashSet::default();
+                let mut temp = nohash::IntSet::default();
                 temp.insert(tag);
                 self._relationship_file_tag.insert(file, temp);
             }

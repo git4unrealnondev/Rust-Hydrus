@@ -64,6 +64,12 @@ pub fn namespace_contains_id(namespaceid: usize, tagid: usize) -> bool {
     ))
 }
 
+pub fn filter_namespaces_by_id(tags: HashSet<usize>, namespaceid: usize) -> HashSet<usize> {
+    init_data_request(&types::SupportedRequests::Database(
+        types::SupportedDBRequests::FilterNamespaceById((tags, namespaceid)),
+    ))
+}
+
 ///
 /// See the database reference for this function.
 /// I'm a lazy turd just check it their

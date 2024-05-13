@@ -528,8 +528,45 @@ pub enum AllFields {
 ///
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub enum PluginCallback {
-    OnDownload, // Ran when a file is downloaded
-    OnStart,    // Starts when the software start
+    OnDownload,               // Ran when a file is downloaded
+    OnStart,                  // Starts when the software start
+    OnCallback(CallbackInfo), // Custom callback to be used for cross communication
+}
+
+///
+/// Callback info for live plugins
+///
+#[derive(Debug, PartialEq, Eq, Hash)]
+pub struct CallbackInfo {
+    pub name: String,                  // Name of registered plugin to call
+    pub func: String,                  // Name of plugin's function
+    pub data_name: Vec<String>,        // Name of variable
+    pub data: Vec<CallbackCustomData>, // Data for variable of data_name
+}
+///
+/// Data that's to be recieved to a plugin
+///
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
+pub enum CallbackCustomData {
+    String,
+    U8,
+    Usize,
+    VString,
+    VU8,
+    VUsize,
+}
+
+///
+/// Data that gets sent to a plugin
+///
+#[derive(Debug, PartialEq, Eq, Hash)]
+pub enum CallbackCustomDataReturning {
+    String(String),
+    U8(u8),
+    Usize(usize),
+    VString(Vec<String>),
+    VU8(Vec<u8>),
+    VUsize(Vec<usize>),
 }
 
 ///

@@ -48,15 +48,19 @@ impl PluginManager {
             //println!("v");
             out
         });
-        /* if let Err(e) = srv.join().expect("server thread panicked") {
-            eprintln!("Server exited early with error: {:#}", e);
-        }
-
-        //let srv = std::thread::spawn(move || server::main(snd));
-        if let Err(e) = client::main() {
-            eprintln!("Client exited early with error: {:#}", e);
-        }*/
         reftoself
+    }
+
+    ///
+    /// Debug info for plugins
+    ///
+    pub fn debug(&self) {
+        dbg!(&self._plugin);
+        dbg!(&self._callback);
+        dbg!(&self._plugin_coms);
+        dbg!(&self._thread);
+        dbg!(&self._thread_path);
+        dbg!(&self._thread_data_share);
     }
     ///
     /// Returns if the thread manager have finished.
@@ -297,7 +301,7 @@ impl PluginManager {
                                 //dbg!(&tags);
                                 if tags.parents.is_none() && namespace_id.is_some() {
                                     unwrappy.tag_add(
-                                        tags.name.clone(),
+                                        &tags.name,
                                         namespace_id.unwrap().clone(),
                                         true,
                                         None,
@@ -306,7 +310,7 @@ impl PluginManager {
                                 } else {
                                     for _parents_obj in tags.parents.unwrap() {
                                         unwrappy.tag_add(
-                                            tags.name.to_string(),
+                                            &tags.name,
                                             namespace_id.unwrap().clone(),
                                             true,
                                             None,
@@ -405,8 +409,16 @@ fn c_run_onstart(path: &String) {
         liba = Library::new(path).unwrap();
     }
     unsafe {
-        let plugindatafunc: libloading::Symbol<unsafe extern "C" fn()> =
-            liba.get(b"on_start").unwrap();
+        let plugindatafunc: libloading::Symbol<unsafe extern "C" fn()> = match liba.get(b"on_start")
+        {
+            Ok(good) => good,
+            Err(_) => {
+                logging::log(&format!("Cannot find on_start for path: {}", path));
+                return;
+            }
+        };
+        liba.get::<libloading::Symbol<unsafe extern "C" fn()>>(b"on_start")
+            .unwrap();
         plugindatafunc();
     };
 }

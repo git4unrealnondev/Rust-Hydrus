@@ -181,6 +181,8 @@ fn main() {
         arc.clone(),
     )));
 
+    pluginmanager.lock().unwrap().debug();
+
     pluginmanager.lock().unwrap().plugin_on_start();
     // Creates a threadhandler that manages callable threads.
     let mut threadhandler = threading::Threads::new();

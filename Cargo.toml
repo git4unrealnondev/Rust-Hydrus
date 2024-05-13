@@ -25,7 +25,7 @@ log = {version="0.4.2" }
 strum_macros = "0.25.1"
 strum = { default-features = false, version = "0.25.0" }
 csv = "1.2.2"
-file-format = { version = "0.23.0", features = ["reader"] }
+file-format = { version = "^0.23.0", features = ["reader"] }
 serde = {version = "1.0.171", features = ["derive"], default-features = false }
 md5 = { default-features = false, version = "0.7.0" }
 sha1 = { default-features = false, features=["std"],version = "0.10.5" }
@@ -44,6 +44,7 @@ jwalk = "0.8.1"
 interprocess = "1.2.1"
 serde_bytes = "0.11.14"
 nohash-hasher = "0.2.0"
+nohash = "0.2.0"
 
 [profile.release]
 opt-level = 3

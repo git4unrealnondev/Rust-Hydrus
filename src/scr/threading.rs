@@ -347,7 +347,7 @@ impl Worker {
                                                         None, &hash, &file_ext, &location, true,
                                                     );
                                                     let tagid = unwrappydb.tag_add(
-                                                        source.to_string(),
+                                                        source,
                                                         source_url_id.unwrap().clone(),
                                                         true,
                                                         None,
@@ -376,7 +376,7 @@ impl Worker {
                                                     &source
                                                 ));
 
-                                                    file_id.clone()
+                                                    file_id
                                                 } else {
                                                     // Fixes the link between file and url
                                                     // tag.
@@ -410,7 +410,7 @@ impl Worker {
                                                             None, &hash, &file_ext, &location, true,
                                                         );
                                                         let tagid = unwrappydb.tag_add(
-                                                            source.to_string(),
+                                                            source,
                                                             source_url_id.unwrap().clone(),
                                                             true,
                                                             None,
@@ -499,7 +499,7 @@ fn parse_tags(
 
             let namespace_id =
                 unwrappy.namespace_add(tag.namespace.name, tag.namespace.description, true);
-            let tag_id = unwrappy.tag_add(tag.tag, namespace_id, true, None);
+            let tag_id = unwrappy.tag_add(&tag.tag, namespace_id, true, None);
             match tag.relates_to {
                 None => {
                     /*let relate_ns_id = unwrappy.namespace_add(
@@ -514,7 +514,7 @@ fn parse_tags(
                         relate.namespace.description,
                         true,
                     );
-                    let relate_id = unwrappy.tag_add(relate.tag, relate_ns_id, true, None);
+                    let relate_id = unwrappy.tag_add(&relate.tag, relate_ns_id, true, None);
                     unwrappy.parents_add(namespace_id, tag_id, relate_ns_id, relate_id, true);
                 }
             }

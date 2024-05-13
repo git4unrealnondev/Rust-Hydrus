@@ -242,7 +242,7 @@ pub fn main(data: &mut database::Main, scraper: &mut scraper::ScraperManager) {
                         let fid = data.file_add(None, &sha2, &ext, &filesloc, true);
                         let nid =
                             data.namespace_add(tag.namespace.name, tag.namespace.description, true);
-                        let tid = data.tag_add(tag.tag, nid, true, None);
+                        let tid = data.tag_add(&tag.tag, nid, true, None);
                         data.relationship_add(fid, tid, true);
                         //println!("FIle: {}", each.path().display());
                     }

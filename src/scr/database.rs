@@ -19,6 +19,8 @@ use std::path::Path;
 use std::sync::Arc;
 use std::sync::Mutex;
 
+use nohash_hasher;
+
 mod db;
 use crate::database::db::inmemdbnew::NewinMemDB;
 
@@ -572,7 +574,7 @@ impl Main {
     ///
     /// returns file id's based on relationships with a tag
     ///
-    pub fn relationship_get_fileid(&self, tag: &usize) -> Option<&HashSet<usize>> {
+    pub fn relationship_get_fileid(&self, tag: &usize) -> Option<&nohash::IntSet<usize>> {
         self._inmemdb.relationship_get_fileid(tag)
     }
 
@@ -582,7 +584,7 @@ impl Main {
     ///
     /// Returns tagid's based on relationship with a fileid.
     ///
-    pub fn relationship_get_tagid(&self, tag: &usize) -> Option<&HashSet<usize>> {
+    pub fn relationship_get_tagid(&self, tag: &usize) -> Option<&nohash::IntSet<usize>> {
         self._inmemdb.relationship_get_tagid(tag)
     }
 
@@ -1355,7 +1357,7 @@ impl Main {
                     Ok(tags) => {
                         for each in tags {
                             if let Ok(res) = each {
-                                self.tag_add(res.name, res.namespace, false, Some(res.id));
+                                self.tag_add(&res.name, res.namespace, false, Some(res.id));
                             } else {
                                 error!("Bad Tag cant load {:?}", each);
                             }
@@ -1629,7 +1631,7 @@ impl Main {
             }
         }
         for each in hashmap_tags.keys() {
-            self.tag_add_sql(each.0, each.1.to_string(), each.2.to_string(), each.3);
+            self.tag_add_sql(&each.0, &each.1, &each.2, &each.3);
         }
 
         hashmap_tags.clear();
@@ -1840,37 +1842,34 @@ impl Main {
     ///
     /// Adds tag into inmemdb
     ///
-    fn tag_add_db(&mut self, tag: String, namespace: &usize, id: Option<usize>) -> usize {
+    fn tag_add_db(&mut self, tag: &String, namespace: &usize, id: Option<usize>) -> usize {
         match self._inmemdb.tags_get_id(&sharedtypes::DbTagNNS {
             name: tag.to_string(),
             namespace: namespace.to_owned(),
         }) {
             None => {
                 let tag_info = sharedtypes::DbTagNNS {
-                    name: tag,
+                    name: tag.to_string(),
                     namespace: namespace.clone(),
                 };
-                let idz = self._inmemdb.tags_put(tag_info, id);
+                let idz = self._inmemdb.tags_put(&tag_info, id);
                 return idz;
             }
-            Some(tag_id_max) => return tag_id_max.to_owned(),
+            Some(tag_id_max) => return *tag_id_max,
         }
     }
 
     ///
     /// Adds tags into sql database
     ///
-    fn tag_add_sql(&mut self, tag_id: usize, tags: String, parents: String, namespace: usize) {
+    fn tag_add_sql(&mut self, tag_id: &usize, tags: &String, parents: &String, namespace: &usize) {
         let inp = "INSERT INTO Tags VALUES(?, ?, ?, ?)";
-        let _out = self._conn.borrow_mut().lock().unwrap().execute(
-            inp,
-            params![
-                &tag_id.to_string(),
-                &tags.to_string(),
-                &parents,
-                &namespace.to_string()
-            ],
-        );
+        let _out = self
+            ._conn
+            .borrow_mut()
+            .lock()
+            .unwrap()
+            .execute(inp, params![tag_id, tags, parents, namespace]);
         self.db_commit_man();
     }
 
@@ -1886,30 +1885,25 @@ impl Main {
     ///
     pub fn tag_add(
         &mut self,
-        tags: String,
+        tags: &String,
         namespace: usize,
         addtodb: bool,
         id: Option<usize>,
     ) -> usize {
-        let tagnns = sharedtypes::DbTagNNS {
-            name: tags.to_string(),
-            namespace: namespace,
-        };
         match id {
             None => {
                 // Do we have an ID coming in to add manually?
+                let tagnns = sharedtypes::DbTagNNS {
+                    name: tags.to_string(),
+                    namespace,
+                };
 
                 let tags_grab = self._inmemdb.tags_get_id(&tagnns).copied();
                 match tags_grab {
                     None => {
-                        let tag_id = self.tag_add_db(tagnns.name.clone(), &tagnns.namespace, None);
+                        let tag_id = self.tag_add_db(tags, &namespace, None);
                         if addtodb {
-                            self.tag_add_sql(
-                                tag_id.clone(),
-                                tagnns.name,
-                                "".to_string(),
-                                tagnns.namespace,
-                            );
+                            self.tag_add_sql(&tag_id, tags, &"".to_string(), &namespace);
                             self.db_commit_man();
                         }
                         return tag_id;
@@ -1919,7 +1913,7 @@ impl Main {
             }
             Some(_) => {
                 // We've got an ID coming in will check if it exists.
-                let tag_id = self.tag_add_db(tagnns.name.clone(), &tagnns.namespace, id);
+                let tag_id = self.tag_add_db(tags, &namespace, id);
                 /* println!(
                     "test: {} {} {:?} {}",
                     &tag_id,
@@ -1928,12 +1922,7 @@ impl Main {
                     &tagnns.namespace
                 );*/
                 if addtodb {
-                    self.tag_add_sql(
-                        tag_id.clone(),
-                        tagnns.name,
-                        "".to_string(),
-                        tagnns.namespace,
-                    );
+                    self.tag_add_sql(&tag_id, tags, &"".to_string(), &namespace);
                     self.db_commit_man();
                 }
                 return tag_id;
@@ -2441,15 +2430,11 @@ impl Main {
 
         let mut lastvalid: usize = 0;
         for tid in 0..tag_max + 1 {
-            let exst = self._inmemdb.tags_get_data(&tid);
+            let exst = self._inmemdb.tags_get_data(&tid).cloned();
 
             match exst {
                 None => {}
                 Some(nns) => {
-                    let nns_cln = sharedtypes::DbTagNNS {
-                        name: nns.name.to_string(),
-                        namespace: nns.namespace,
-                    };
                     self.transaction_flush();
                     let mut relat_str = String::new();
                     let file_listop = self._inmemdb.relationship_get_fileid(&tid);
@@ -2458,7 +2443,7 @@ impl Main {
                     match file_listop {
                         None => {
                             self.tag_remove(&tid);
-                            self.tag_add(nns_cln.name, nns_cln.namespace, true, Some(lastvalid));
+                            self.tag_add(&nns.name, nns.namespace, true, Some(lastvalid));
                             lastvalid += 1;
                             continue;
                         }
@@ -2484,7 +2469,7 @@ impl Main {
                         }
                     }
                     self.tag_remove(&tid);
-                    self.tag_add(nns_cln.name, nns_cln.namespace, true, Some(lastvalid));
+                    self.tag_add(&nns.name, nns.namespace, true, Some(lastvalid));
                     for fid in file_to_add {
                         self.relationship_add(fid, lastvalid, true);
                         //self._inmemdb.relationship_add(fid, tid);
@@ -2535,8 +2520,8 @@ impl Main {
             let mut cnt: usize = 0;
             for tid in tids.clone() {
                 let file_listop = self._inmemdb.relationship_get_fileid(&tid).unwrap().clone();
-                let tag = self._inmemdb.tags_get_data(&tid).unwrap();
-                self.tag_add_sql(cnt, tag.name.to_string(), "".to_string(), tag.namespace);
+                let tag = self._inmemdb.tags_get_data(&tid).unwrap().clone();
+                self.tag_add_sql(&cnt, &tag.name, &"".to_string(), &tag.namespace);
                 for file in file_listop {
                     self.relationship_add_sql(file, cnt);
                 }

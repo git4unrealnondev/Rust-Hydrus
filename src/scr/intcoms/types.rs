@@ -102,6 +102,7 @@ pub enum SupportedDBRequests {
     GetFileByte(usize),
     GetFileLocation(usize),
     NamespaceContainsId(usize, usize),
+    FilterNamespaceById((HashSet<usize>, usize)),
 }
 
 ///
