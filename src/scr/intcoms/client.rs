@@ -242,6 +242,20 @@ pub fn tag_add(tag: String, namespace_id: usize, addtodb: bool, id: Option<usize
 }
 
 ///
+/// Calls an external plugin from inside the plugin manager if it exists
+/// Should work will test tomorrow
+///
+pub fn external_plugin_call(
+    func_name: String,
+    vers: usize,
+    input: sharedtypes::CallbackInfoInput,
+) -> Option<HashMap<String, sharedtypes::CallbackCustomDataReturning>> {
+    init_data_request(&types::SupportedRequests::Database(
+        types::SupportedDBRequests::PluginCallback(func_name, vers, input),
+    ))
+}
+
+///
 /// This shouldn't come back to haunt me. :x
 /// Returns a Vec of bytes that represent the data structure sent from server.
 ///

@@ -2,6 +2,7 @@
 #![allow(unused_variables)]
 use crate::database;
 use crate::logging;
+use crate::plugins::PluginManager;
 use anyhow::Context;
 use interprocess::local_socket::{LocalSocketListener, LocalSocketStream, NameTypeSupport};
 
@@ -141,10 +142,14 @@ pub struct PluginIpcInteract {
 /// This is going to be the main way to talk to the plugin system and stuffins.
 ///
 impl PluginIpcInteract {
-    pub fn new(main_db: Arc<Mutex<database::Main>>) -> Self {
+    pub fn new(
+        main_db: Arc<Mutex<database::Main>>,
+        pluginmanager: Arc<Mutex<PluginManager>>,
+    ) -> Self {
         PluginIpcInteract {
             db_interface: DbInteract {
                 _database: main_db.clone(),
+                pluginmanager,
             },
         }
     }
@@ -223,6 +228,7 @@ impl PluginIpcInteract {
 
 struct DbInteract {
     _database: Arc<Mutex<database::Main>>,
+    pluginmanager: Arc<Mutex<PluginManager>>,
 }
 
 ///
@@ -265,6 +271,11 @@ impl DbInteract {
                 let unwrappy = self._database.lock().unwrap();
                 let tmep = unwrappy.namespace_contains_id(&namespaceid, &tagid);
                 Self::data_size_to_b(&tmep)
+            }
+            types::SupportedDBRequests::PluginCallback(func_name, version, input_data) => {
+                let plugin = self.pluginmanager.lock().unwrap();
+                let out = plugin.external_plugin_call(&func_name, &version, &input_data);
+                Self::data_size_to_b(&out)
             }
 
             types::SupportedDBRequests::GetFileByte(id) => {

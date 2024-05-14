@@ -1,14 +1,14 @@
-static PLUGIN_NAME: &str = "File Thumbnailer";
+static PLUGIN_NAME: &str = "FileThumbnailer";
 static PLUGIN_DESCRIPTION: &str = "Generates thumbnails for image files";
 
 #[path = "../../../src/scr/intcoms/client.rs"]
 mod client;
 #[path = "../../../src/scr/sharedtypes.rs"]
 mod sharedtypes;
+use std::collections::HashMap;
 use thumbnailer::{
     create_thumbnails, create_thumbnails_unknown_type, error::ThumbError, Thumbnail, ThumbnailSize,
 };
-
 #[no_mangle]
 pub fn return_info() -> sharedtypes::PluginInfo {
     let callbackvec = vec![
@@ -16,9 +16,10 @@ pub fn return_info() -> sharedtypes::PluginInfo {
         sharedtypes::PluginCallback::OnStart,
         sharedtypes::PluginCallback::OnCallback(sharedtypes::CallbackInfo {
             name: format!("{}", PLUGIN_NAME),
-            func: format!("{}-GenerateThumbnail", PLUGIN_NAME),
+            func: format!("{}GenerateThumbnail", PLUGIN_NAME),
+            vers: 0,
             data_name: [format!("image")].to_vec(),
-            data: [sharedtypes::CallbackCustomData::U8].to_vec(),
+            data: Some([sharedtypes::CallbackCustomData::U8].to_vec()),
         }),
     ];
     sharedtypes::PluginInfo {
@@ -34,6 +35,17 @@ pub fn return_info() -> sharedtypes::PluginInfo {
             )),
         }),
     }
+}
+
+///
+/// Callback call to generate the thumbnail
+///
+#[no_mangle]
+pub fn FileThumbnailerGenerateThumbnail(
+    callback: &sharedtypes::CallbackInfoInput,
+) -> Option<HashMap<String, sharedtypes::CallbackCustomDataReturning>> {
+    dbg!(&callback);
+    None
 }
 
 ///

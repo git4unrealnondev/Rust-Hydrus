@@ -176,10 +176,7 @@ fn main() {
     // Converts db into Arc for multithreading
     let mut arc = Arc::new(Mutex::new(data));
 
-    let mut pluginmanager = Arc::new(Mutex::new(plugins::PluginManager::new(
-        plugin_loc.to_string(),
-        arc.clone(),
-    )));
+    let mut pluginmanager = plugins::PluginManager::new(plugin_loc.to_string(), arc.clone());
 
     pluginmanager.lock().unwrap().debug();
 

@@ -8,7 +8,7 @@ use std::{fs, thread};
 
 use crate::database;
 use crate::logging;
-use crate::sharedtypes;
+use crate::sharedtypes::{self, CallbackInfo};
 
 use crate::server;
 
@@ -20,14 +20,15 @@ pub struct PluginManager {
     _thread: HashMap<String, JoinHandle<()>>, // ONLY INSERT INTO ME FOR THE STARTING PLUGIN.
     _thread_path: HashMap<String, String>,    // Will be used for storing path of plugin name.
     _thread_data_share: HashMap<String, (os_pipe::PipeReader, os_pipe::PipeWriter)>,
+    callbackstorage: HashMap<String, Vec<CallbackInfo>>,
 }
 
 ///
 /// Plugin Manager Handler
 ///
 impl PluginManager {
-    pub fn new(pluginsloc: String, main_db: Arc<Mutex<database::Main>>) -> Self {
-        let mut reftoself = PluginManager {
+    pub fn new(pluginsloc: String, main_db: Arc<Mutex<database::Main>>) -> Arc<Mutex<Self>> {
+        let mut reftoself = Arc::new(Mutex::new(PluginManager {
             _plugin: HashMap::new(),
             _callback: HashMap::new(),
             _plugin_coms: HashMap::new(),
@@ -35,13 +36,17 @@ impl PluginManager {
             _thread: HashMap::new(),
             _thread_path: HashMap::new(),
             _thread_data_share: HashMap::new(),
-        };
+            callbackstorage: HashMap::new(),
+        }));
 
-        reftoself.load_plugins(&pluginsloc);
+        reftoself.lock().unwrap().load_plugins(&pluginsloc);
+
+        // Needed for thread move because it moves the value
+        let threa = reftoself.clone();
 
         let (snd, _rcv) = mpsc::channel();
         let _srv = std::thread::spawn(move || {
-            let mut ipc_coms = server::PluginIpcInteract::new(main_db.clone());
+            let mut ipc_coms = server::PluginIpcInteract::new(main_db.clone(), threa);
             //let _ = rcv.recv();
             let out = ipc_coms.spawn_listener(snd);
 
@@ -61,7 +66,45 @@ impl PluginManager {
         dbg!(&self._thread);
         dbg!(&self._thread_path);
         dbg!(&self._thread_data_share);
+        dbg!(&self.callbackstorage);
     }
+
+    ///
+    /// Manages callings to external plugins.
+    /// Allows cross communication between plugins.
+    ///
+    pub fn external_plugin_call(
+        &self,
+        func_name: &String,
+        vers: &usize,
+        input_data: &sharedtypes::CallbackInfoInput,
+    ) -> Option<HashMap<String, sharedtypes::CallbackCustomDataReturning>> {
+        if let Some(valid_func) = self.callbackstorage.get(func_name) {
+            for each in valid_func.iter() {
+                if *vers == each.vers {
+                    let plugin_lib = match self._plugin.get(&each.name) {
+                        Some(lib) => lib,
+                        None => return None,
+                    };
+                    let plugininfo;
+                    unsafe {
+                        let plugindatafunc: libloading::Symbol<
+                            unsafe extern "C" fn(
+                                &sharedtypes::CallbackInfoInput,
+                            ) -> Option<
+                                HashMap<String, sharedtypes::CallbackCustomDataReturning>,
+                            >,
+                        > = plugin_lib.get(each.func.as_bytes()).unwrap();
+                        plugininfo = plugindatafunc(input_data);
+                    }
+                    dbg!(&plugininfo);
+                    return plugininfo;
+                }
+            }
+        }
+        None
+    }
+
     ///
     /// Returns if the thread manager have finished.
     /// Doesn't check if the threads have actually finished.
@@ -176,9 +219,22 @@ impl PluginManager {
                         Some(vec_plugin) => {
                             vec_plugin.push(pluginname.clone());
                         }
-                        None => {
-                            self._callback.insert(each, vec![pluginname.clone()]);
-                        }
+                        None => match each {
+                            sharedtypes::PluginCallback::OnCallback(plugininfo) => {
+                                match self.callbackstorage.get_mut(&plugininfo.func) {
+                                    Some(callvec) => {
+                                        callvec.push(plugininfo);
+                                    }
+                                    None => {
+                                        self.callbackstorage
+                                            .insert(plugininfo.name.clone(), [plugininfo].to_vec());
+                                    }
+                                }
+                            }
+                            _ => {
+                                self._callback.insert(each, vec![pluginname.clone()]);
+                            }
+                        },
                     }
                 }
             }

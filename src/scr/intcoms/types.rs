@@ -103,6 +103,7 @@ pub enum SupportedDBRequests {
     GetFileLocation(usize),
     NamespaceContainsId(usize, usize),
     FilterNamespaceById((HashSet<usize>, usize)),
+    PluginCallback(String, usize, sharedtypes::CallbackInfoInput),
 }
 
 ///

@@ -532,21 +532,31 @@ pub enum PluginCallback {
     OnStart,                  // Starts when the software start
     OnCallback(CallbackInfo), // Custom callback to be used for cross communication
 }
+///
+/// Callback info for live plugins
+/// Gets sent to plugins
+///
+#[derive(Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct CallbackInfoInput {
+    pub data_name: Vec<String>,                         // Name of variable
+    pub data: Option<Vec<CallbackCustomDataReturning>>, // Data for variable of data_name
+}
 
 ///
 /// Callback info for live plugins
 ///
-#[derive(Debug, PartialEq, Eq, Hash)]
+#[derive(Debug, PartialEq, Clone, Eq, Hash)]
 pub struct CallbackInfo {
-    pub name: String,                  // Name of registered plugin to call
-    pub func: String,                  // Name of plugin's function
-    pub data_name: Vec<String>,        // Name of variable
-    pub data: Vec<CallbackCustomData>, // Data for variable of data_name
+    pub name: String,                          // Name of registered plugin to call
+    pub func: String,                          // Name of plugin's function
+    pub vers: usize,                           // Version of plugin
+    pub data_name: Vec<String>,                // Name of variable
+    pub data: Option<Vec<CallbackCustomData>>, // Data for variable of data_name
 }
 ///
 /// Data that's to be recieved to a plugin
 ///
-#[derive(Debug, PartialEq, Eq, Hash, Clone)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Serialize, Deserialize)]
 pub enum CallbackCustomData {
     String,
     U8,
@@ -559,7 +569,7 @@ pub enum CallbackCustomData {
 ///
 /// Data that gets sent to a plugin
 ///
-#[derive(Debug, PartialEq, Eq, Hash)]
+#[derive(Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum CallbackCustomDataReturning {
     String(String),
     U8(u8),
