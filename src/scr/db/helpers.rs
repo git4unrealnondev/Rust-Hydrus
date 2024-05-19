@@ -1,3 +1,5 @@
+use crate::logging;
+use crate::logging::error_log;
 ///
 /// Returns the location as a string that will store the string
 ///
@@ -13,6 +15,10 @@ pub fn getfinpath(location: &String, hash: &String) -> String {
         hash.chars().nth(4).unwrap(),
         hash.chars().nth(5).unwrap()
     );
-    std::fs::create_dir_all(&final_loc).unwrap();
+    match std::fs::create_dir_all(&final_loc) {
+
+	Ok(_) => {},
+	Err(err) => {error_log(&format!("{} {}", hash, err));}
+}
     return final_loc;
 }
