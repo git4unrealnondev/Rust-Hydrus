@@ -267,6 +267,11 @@ impl DbInteract {
                 }
                 Self::data_size_to_b(&out)
             }
+            types::SupportedDBRequests::ReloadLoadedPlugins() => {
+                let mut plugin = self.pluginmanager.lock().unwrap();
+                plugin.reload_loaded_plugins();
+                Self::data_size_to_b(&true)
+            }
             types::SupportedDBRequests::NamespaceContainsId(namespaceid, tagid) => {
                 let unwrappy = self._database.lock().unwrap();
                 let tmep = unwrappy.namespace_contains_id(&namespaceid, &tagid);

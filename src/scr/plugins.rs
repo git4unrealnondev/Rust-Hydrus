@@ -28,7 +28,7 @@ pub struct PluginManager {
 ///
 impl PluginManager {
     pub fn new(pluginsloc: String, main_db: Arc<Mutex<database::Main>>) -> Arc<Mutex<Self>> {
-        let mut reftoself = Arc::new(Mutex::new(PluginManager {
+        let reftoself = Arc::new(Mutex::new(PluginManager {
             _plugin: HashMap::new(),
             _callback: HashMap::new(),
             _plugin_coms: HashMap::new(),
@@ -294,6 +294,21 @@ impl PluginManager {
                         }
                     }
                     continue;
+                }
+            }
+        }
+    }
+
+    ///
+    /// Reloads the plugins that are currently loaded
+    ///
+    pub fn reload_loaded_plugins(&mut self) {
+        for (threadname, lib) in self._plugin.iter_mut() {
+            if let Some(threadpath) = self._thread_path.get(threadname) {
+                if Path::new(threadpath).exists() {
+                    unsafe {
+                        *lib = libloading::Library::new(threadpath).unwrap();
+                    }
                 }
             }
         }

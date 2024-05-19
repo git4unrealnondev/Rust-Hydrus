@@ -1,3 +1,7 @@
+use rayon::iter::IntoParallelRefIterator;
+use rayon::iter::ParallelIterator;
+use std::collections::HashSet;
+
 use blurhash::encode;
 use image::imageops::resize;
 use image::imageops::FilterType;
@@ -15,19 +19,28 @@ static PLUGIN_NAME: &str = "blurhash";
 static DB_NAME: &str = "BlurHash-blurhash";
 static PLUGIN_DESCRIPTION: &str = "Introduces Blurhash imaging support.";
 
+#[path = "../../../src/scr/intcoms/client.rs"]
+mod client;
 #[path = "../../../src/scr/sharedtypes.rs"]
 mod sharedtypes;
-
 #[no_mangle]
 pub fn return_info() -> sharedtypes::PluginInfo {
-    let callbackvec = vec![sharedtypes::PluginCallback::OnDownload];
+    let callbackvec = vec![
+        sharedtypes::PluginCallback::OnDownload,
+        sharedtypes::PluginCallback::OnStart,
+    ];
     sharedtypes::PluginInfo {
         name: PLUGIN_NAME.to_string(),
         description: PLUGIN_DESCRIPTION.to_string(),
         version: 1.00,
         api_version: 1.00,
         callbacks: callbackvec,
-        communication: None,
+        communication: Some(sharedtypes::PluginSharedData {
+            thread: sharedtypes::PluginThreadType::Inline,
+            com_channel: Some(sharedtypes::PluginCommunicationChannel::Pipe(
+                "beans".to_string(),
+            )),
+        }),
     }
 }
 ///
@@ -43,6 +56,67 @@ fn downloadparse(img: DynamicImage) -> String {
         &rescale_img.into_raw(),
     )
     .unwrap()
+}
+
+#[no_mangle]
+pub fn on_start() {
+    let table_temp = sharedtypes::LoadDBTable::Files;
+    client::load_table(table_temp);
+
+    let mut file_ids = client::file_get_list_all();
+    let table_temp = sharedtypes::LoadDBTable::All;
+    client::load_table(table_temp);
+
+    // Gets namespace id if it doesn't exist then recreate
+    let utable;
+    {
+        utable = match client::namespace_get(DB_NAME.to_string()) {
+            None => client::namespace_put(
+                DB_NAME.to_string(),
+                Some(PLUGIN_DESCRIPTION.to_string()),
+                true,
+            ),
+            Some(id) => id,
+        }
+    }
+
+    // Gets the tags inside a namespace
+    let nids = match client::namespace_get_tagids(utable) {
+        None => HashSet::new(),
+        Some(set) => set,
+    };
+
+    // Removes fileid if it contains our tag if it has the namespace for it.
+    for each in nids {
+        if let Some(tag_id) = client::relationship_get_fileid(each) {
+            for tag in tag_id {
+                file_ids.remove(&tag);
+            }
+        }
+    }
+
+    // Logs info to screen
+    client::log(format!(
+        "BlurHash - We've got {} files to parse.",
+        file_ids.len()
+    ));
+
+    file_ids.par_iter().for_each(|fid| {
+        if let Some(fbyte) = client::get_file(*fid.0) {
+            let byte = std::fs::read(fbyte).unwrap();
+
+            if let Ok(img) = image::load_from_memory(&byte[..]) {
+                let string_blurhash = downloadparse(img);
+                client::log(format!(
+                    "BlurHash - ID: {} HASH: {}",
+                    &fid.0, &string_blurhash
+                ));
+                let tagid = client::tag_add(string_blurhash, utable, true, None);
+                client::relationship_add_db(*fid.0, tagid, true);
+                client::transaction_flush();
+            }
+        }
+    });
 }
 
 #[no_mangle]

@@ -1,11 +1,13 @@
 static PLUGIN_NAME: &str = "FileThumbnailer";
 static PLUGIN_DESCRIPTION: &str = "Generates thumbnails for image files";
+static LOCATION_THUMBNAILS: &str = "thumbnails";
 
 #[path = "../../../src/scr/intcoms/client.rs"]
 mod client;
 #[path = "../../../src/scr/sharedtypes.rs"]
 mod sharedtypes;
 use std::collections::HashMap;
+use strum_macros::EnumIter;
 use thumbnailer::{
     create_thumbnails, create_thumbnails_unknown_type, error::ThumbError, Thumbnail, ThumbnailSize,
 };
@@ -56,6 +58,18 @@ fn load_image(byte_c: &[u8]) -> Result<Vec<Thumbnail>, ThumbError> {
         std::io::BufReader::new(std::io::Cursor::new(byte_c)),
         [ThumbnailSize::Icon],
     )
+}
+
+#[no_mangle]
+pub fn on_start() {
+    let table_temp = sharedtypes::LoadDBTable::Files;
+    client::load_table(table_temp);
+}
+
+#[derive(EnumIter, PartialEq, Clone, Copy, Debug, Eq, Hash)]
+enum Supset {
+    StaticImage,  // Used for thumbnails that don't move
+    DynamicImage, // Used for thumbnails that do move
 }
 
 #[no_mangle]
