@@ -12,4 +12,4 @@ updates:
      - dependency-name: "*"
        update-types:
          - "version-update:semver-patch"
-         - "version-update:semvir-minor"
+         - "version-update:semver-minor"
