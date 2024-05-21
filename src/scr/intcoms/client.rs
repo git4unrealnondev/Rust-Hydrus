@@ -3,11 +3,12 @@
 
 use crate::sharedtypes::{self};
 use anyhow::Context;
-
-use interprocess::local_socket::{LocalSocketStream, NameTypeSupport};
+use interprocess::local_socket::prelude::LocalSocketStream;
+use interprocess::local_socket::traits::Stream;
+use interprocess::local_socket::GenericNamespaced;
+use interprocess::local_socket::ToNsName;
 use std::collections::{HashMap, HashSet};
 use std::io::BufReader;
-
 pub mod types;
 ///
 /// See the database reference for this function.
@@ -265,18 +266,15 @@ fn init_data_request<T: serde::de::DeserializeOwned>(requesttype: &types::Suppor
         control: types::EControlSigs::Send,
     };
 
-    let name = {
-        use NameTypeSupport::*;
-        match NameTypeSupport::query() {
-            OnlyPaths => "/tmp/RustHydrus.sock",
-            OnlyNamespaced | Both => "@RustHydrus.sock",
-        }
-    };
+    let name = types::SOCKET_NAME
+        .to_ns_name::<GenericNamespaced>()
+        .unwrap();
     let conn;
     loop {
         // Wait indefinitely for this to get a connection. shit way of doing it will likely add
         // a wait or something this will likely block the CPU or something.
-        let temp_conn = LocalSocketStream::connect(name).context("Failed to connect to server");
+        let temp_conn =
+            LocalSocketStream::connect(name.clone()).context("Failed to connect to server");
         if let Ok(con_ok) = temp_conn {
             conn = con_ok;
             break;

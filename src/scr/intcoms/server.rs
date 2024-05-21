@@ -4,8 +4,7 @@ use crate::database;
 use crate::logging;
 use crate::plugins::PluginManager;
 use anyhow::Context;
-use interprocess::local_socket::{LocalSocketListener, LocalSocketStream, NameTypeSupport};
-
+use interprocess::local_socket::{prelude::*, GenericNamespaced, ListenerOptions, Stream};
 use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
 use std::{
@@ -30,19 +29,15 @@ pub fn main(notify: Sender<()>) -> anyhow::Result<()> {
 
     // Pick a name. There isn't a helper function for this, mostly because it's largely unnecessary:
     // in Rust, `match` is your concise, readable and expressive decision making construct.
-    let name = {
-        // This scoping trick allows us to nicely contain the import inside the `match`, so that if
-        // any imports of variants named `Both` happen down the line, they won't collide with the
-        // enum we're working with here. Maybe someone should make a macro for this.
-        use NameTypeSupport::*;
-        match NameTypeSupport::query() {
-            OnlyPaths => "/tmp/RustHydrus.sock",
-            OnlyNamespaced | Both => "@RustHydrus.sock",
-        }
-    };
+    let socketname = types::SOCKET_NAME;
+    let name = types::SOCKET_NAME
+        .to_ns_name::<GenericNamespaced>()
+        .unwrap();
 
+    // Configures the listener
+    let opt = ListenerOptions::new().name(name);
     // Bind our listener.
-    let listener = match LocalSocketListener::bind(name) {
+    let listener = match opt.create_sync() {
         Err(e) if e.kind() == io::ErrorKind::AddrInUse => {
             // One important problem that is easy to handle improperly (or not at all) is the
             // "corpse sockets" that are left when a program that uses a file-type socket name
@@ -56,14 +51,14 @@ pub fn main(notify: Sender<()>) -> anyhow::Result<()> {
                 "\
 Error: could not start server because the socket file is occupied. Please check if {} is in use by \
 another process and try again.",
-                name,
+                types::SOCKET_NAME,
             );
             return Err(e.into());
         }
         x => x?,
     };
 
-    println!("Server running at {}", name);
+    println!("Server running at {}", types::SOCKET_NAME);
     // Stand-in for the syncronization used, if any, between the client and the server.
     let _ = notify.send(());
 
@@ -172,18 +167,17 @@ impl PluginIpcInteract {
 
         // Pick a name. There isn't a helper function for this, mostly because it's largely unnecessary:
         // in Rust, `match` is your concise, readable and expressive decision making construct.
-        let name = {
-            // This scoping trick allows us to nicely contain the import inside the `match`, so that if
-            // any imports of variants named `Both` happen down the line, they won't collide with the
-            // enum we're working with here. Maybe someone should make a macro for this.
-            use NameTypeSupport::*;
-            match NameTypeSupport::query() {
-                OnlyPaths => "/tmp/RustHydrus.sock",
-                OnlyNamespaced | Both => "@RustHydrus.sock",
-            }
-        };
+        // Pick a name. There isn't a helper function for this, mostly because it's largely unnecessary:
+        // in Rust, `match` is your concise, readable and expressive decision making construct.
+        let socketname = types::SOCKET_NAME;
+        let name = types::SOCKET_NAME
+            .to_ns_name::<GenericNamespaced>()
+            .unwrap();
+
+        // Configures the listener
+        let opt = ListenerOptions::new().name(name);
         // Bind our listener.
-        let listener = match LocalSocketListener::bind(name) {
+        let listener = match opt.create_sync() {
             Err(e) if e.kind() == io::ErrorKind::AddrInUse => {
                 // One important problem that is easy to handle improperly (or not at all) is the
                 // "corpse sockets" that are left when a program that uses a file-type socket name
@@ -193,16 +187,18 @@ impl PluginIpcInteract {
                 // instance is actually running, and if not, delete the socket file. In this example,
                 // we leave this up to the user, but in a real application, you usually don't want to do
                 // that.
-                logging::panic_log(&format!(
-                    "Error: could not start server because the socket file is occupied. Please check if {} is in use by another process and try again.",name,)
+                eprintln!(
+                    "\
+Error: could not start server because the socket file is occupied. Please check if {} is in use by \
+another process and try again.",
+                    types::SOCKET_NAME,
                 );
                 return Err(e.into());
             }
             x => x?,
         };
 
-        println!("Server running at {}", name);
-        // Stand-in for the syncronization used, if any, between the client and the server.
+        println!("Server running at {}", types::SOCKET_NAME); // Stand-in for the syncronization used, if any, between the client and the server.
         let _ = notify.send(());
 
         // Main Plugin interaction loop

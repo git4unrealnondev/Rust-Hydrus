@@ -2,11 +2,14 @@
 #![allow(unused_variables)]
 use crate::sharedtypes;
 use anyhow::Context;
+use interprocess::local_socket::prelude::LocalSocketStream;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::io::BufReader;
 use std::io::Read;
 use std::io::Write;
+
+pub const SOCKET_NAME: &str = "RustHydrus.sock";
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum EComType {
@@ -170,10 +173,7 @@ struct Effdata {
 ///
 /// Writes all data into buffer.
 ///
-pub fn send<T: Sized + Serialize>(
-    inp: T,
-    conn: &mut BufReader<interprocess::local_socket::LocalSocketStream>,
-) {
+pub fn send<T: Sized + Serialize>(inp: T, conn: &mut BufReader<LocalSocketStream>) {
     let byte_buf = bincode::serialize(&inp).unwrap();
     let size = &byte_buf.len();
     conn.get_mut()
@@ -190,10 +190,7 @@ pub fn send<T: Sized + Serialize>(
 /// Assumes data is preserialzied from data generic function.
 /// Can be hella dangerous. Types going in and recieved have to match EXACTLY.
 ///
-pub fn send_preserialize(
-    inp: &Vec<u8>,
-    conn: &mut BufReader<interprocess::local_socket::LocalSocketStream>,
-) {
+pub fn send_preserialize(inp: &Vec<u8>, conn: &mut BufReader<LocalSocketStream>) {
     let mut temp = inp.len().to_ne_bytes().to_vec();
     temp.extend(inp);
     let _ = conn
@@ -207,9 +204,7 @@ pub fn send_preserialize(
 ///
 /// Returns a vec of bytes that represent an object
 ///
-pub fn recieve<T: serde::de::DeserializeOwned>(
-    conn: &mut BufReader<interprocess::local_socket::LocalSocketStream>,
-) -> T {
+pub fn recieve<T: serde::de::DeserializeOwned>(conn: &mut BufReader<LocalSocketStream>) -> T {
     let mut usize_b: [u8; std::mem::size_of::<usize>()] = [0; std::mem::size_of::<usize>()];
     conn.get_mut()
         .read_exact(&mut usize_b[..])

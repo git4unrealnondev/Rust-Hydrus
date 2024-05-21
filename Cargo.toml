@@ -7,8 +7,8 @@ edition = "2021"
 
 [dependencies]
 
-libloading = "0.7.3"
-reqwest = { version = "0.11.11", features = ["cookies", "gzip", "gzip","brotli", "default-tls", "cookie_store", "cookie_crate"], default-features = false }
+libloading = "0.8.3"
+reqwest = { version = "0.12.4", features = ["cookies", "gzip", "gzip","brotli", "default-tls"], default-features = false }
 #tokio = { version = "1", features = ["full"] }
 url = "2.3.1"
 http = "0.2.8"
@@ -22,10 +22,10 @@ sha2 = { default-features = false, version = "0.10.6" }
 futures = { features = ["executor"], default-features = false, version = "0.3.24" }
 urlparse = "0.7.3"
 log = {version="0.4.2" }
-strum_macros = "0.25.1"
-strum = { default-features = false, version = "0.25.0" }
+strum_macros = "0.26.2"
+strum = { default-features = false, version = "0.26.2" }
 csv = "1.2.2"
-file-format = { version = "^0.23.0", features = ["reader"] }
+file-format = { version = "0.25.0", features = ["reader"] }
 serde = {version = "1.0.171", features = ["derive"], default-features = false }
 md5 = { default-features = false, version = "0.7.0" }
 sha1 = { default-features = false, features=["std"],version = "0.10.5" }
@@ -41,7 +41,7 @@ clap = { version = "4.4.8", features = ["derive", "color", "cargo"] }
 walkdir = "2.4.0"
 rayon = "1.8.0"
 jwalk = "0.8.1"
-interprocess = "1.2.1"
+interprocess = "2.1.0"
 serde_bytes = "0.11.14"
 nohash-hasher = "0.2.0"
 nohash = "0.2.0"
