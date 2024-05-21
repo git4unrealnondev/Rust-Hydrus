@@ -572,7 +572,7 @@ pub enum CallbackCustomData {
 #[derive(Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum CallbackCustomDataReturning {
     String(String),
-    U8(u8),
+    U8(Vec<u8>),
     Usize(usize),
     VString(Vec<String>),
     VU8(Vec<u8>),

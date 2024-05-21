@@ -113,7 +113,6 @@ pub fn on_start() {
                 ));
                 let tagid = client::tag_add(string_blurhash, utable, true, None);
                 client::relationship_add_db(*fid.0, tagid, true);
-                client::transaction_flush();
             }
         }
     });
