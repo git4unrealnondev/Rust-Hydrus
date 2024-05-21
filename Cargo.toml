@@ -23,7 +23,7 @@ futures = { features = ["executor"], default-features = false, version = "0.3.24
 urlparse = "0.7.3"
 log = {version="0.4.2" }
 strum_macros = "0.25.1"
-strum = { default-features = false, version = "0.25.0" }
+strum = { default-features = false, version = "0.26.2" }
 csv = "1.2.2"
 file-format = { version = "^0.23.0", features = ["reader"] }
 serde = {version = "1.0.171", features = ["derive"], default-features = false }
