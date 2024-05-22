@@ -13,6 +13,8 @@ mod client;
 
 #[path = "../../../src/scr/db/helpers.rs"]
 mod helpers;
+#[path = "../../../src/scr/logging.rs"]
+mod logging;
 static PLUGIN_NAME: &str = "File Info";
 static PLUGIN_DESCRIPTION: &str = "Gets information from a file.";
 

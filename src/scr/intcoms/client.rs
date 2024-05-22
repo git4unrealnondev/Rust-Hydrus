@@ -142,7 +142,7 @@ pub fn transaction_flush() -> bool {
 /// See the database reference for this function.
 /// I'm a lazy turd just check it their
 ///
-pub fn relationship_add_db(file: usize, tag: usize, addtodb: bool) -> bool {
+pub fn relationship_add(file: usize, tag: usize, addtodb: bool) -> bool {
     init_data_request(&types::SupportedRequests::Database(
         types::SupportedDBRequests::RelationshipAdd(file, tag, addtodb),
     ))

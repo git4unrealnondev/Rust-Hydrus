@@ -6,17 +6,15 @@ use std::path::Path;
 use fast_log;
 use log::{error, info};
 
-use crate::LOG_LOCATION;
-
 /// TODO Needs to make check if I have access to folder before I write db.
-pub fn main() {
-    let log_bool = Path::new(LOG_LOCATION).exists();
+pub fn main(log_location: &String) {
+    let log_bool = Path::new(log_location).exists();
 
     if log_bool {
-        fs::remove_file(LOG_LOCATION).unwrap();
+        fs::remove_file(log_location).unwrap();
     }
 
-    fast_log::init(fast_log::Config::new().file(LOG_LOCATION)).unwrap();
+    fast_log::init(fast_log::Config::new().file(log_location)).unwrap();
     info!("Initing Logger.");
     log::logger().flush();
 }

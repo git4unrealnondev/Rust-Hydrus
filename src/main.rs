@@ -44,7 +44,6 @@ mod os;
 #[path = "./scr/intcoms/server.rs"]
 mod server;
 
-pub const LOG_LOCATION: &str = "./log.txt";
 /*
 mod scr {
     pub mod cli;
@@ -124,9 +123,10 @@ fn db_file_sanity(dbloc: &str) {
 /// Main function.
 fn main() {
     let dbloc = "./main.db";
+    let logloc = "log.txt";
 
     // Makes Logging work
-    logging::main();
+    logging::main(&logloc.to_string());
 
     os::check_os_compatibility();
 
