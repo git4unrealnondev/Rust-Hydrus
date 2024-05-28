@@ -252,7 +252,7 @@ fn check_existing_db() {
                     ));
                     let tid =
                         client::tag_add(hash, *utable_storage.get(&hashtype).unwrap(), true, None);
-                    client::relationship_add_db(modern.0.id.unwrap(), tid, true);
+                    client::relationship_add(modern.0.id.unwrap(), tid, true);
                 }
             }
         }

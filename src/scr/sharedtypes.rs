@@ -569,7 +569,7 @@ pub enum CallbackCustomData {
 ///
 /// Data that gets sent to a plugin
 ///
-#[derive(Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Hash, Serialize, Deserialize, Clone)]
 pub enum CallbackCustomDataReturning {
     String(String),
     U8(Vec<u8>),

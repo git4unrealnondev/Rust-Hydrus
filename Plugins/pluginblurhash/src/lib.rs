@@ -101,7 +101,7 @@ pub fn on_start() {
         file_ids.len()
     ));
 
-    file_ids.par_iter().for_each(|fid| {
+    /*file_ids.par_iter().for_each(|fid| {
         if let Some(fbyte) = client::get_file(*fid.0) {
             let byte = std::fs::read(fbyte).unwrap();
 
@@ -115,7 +115,7 @@ pub fn on_start() {
                 client::relationship_add_db(*fid.0, tagid, true);
             }
         }
-    });
+    });*/
 }
 
 #[no_mangle]

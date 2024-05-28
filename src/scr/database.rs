@@ -261,6 +261,10 @@ impl Main {
                     return None;
                 }
                 if Path::new(&out).exists() {
+                    let out = std::fs::canonicalize(out)
+                        .unwrap()
+                        .to_string_lossy()
+                        .to_string();
                     return Some(out);
                 }
             }

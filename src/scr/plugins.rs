@@ -1,12 +1,16 @@
+use bytes::BufMut;
 use libloading::{self, Library};
 use log::{error, info, warn};
 use std::collections::HashMap;
 use std::path::Path;
-use std::sync::{mpsc, Arc, Mutex};
+use std::sync::{mpsc, Arc};
+//use std::sync::{mpsc, Arc, Mutex};
 use std::thread::JoinHandle;
 use std::{fs, thread};
+use tracing_mutex::stdsync::Mutex;
 
-use crate::database;
+use crate::client::log;
+use crate::database::{self, Main};
 use crate::logging;
 use crate::sharedtypes::{self, CallbackInfo};
 
@@ -74,15 +78,15 @@ impl PluginManager {
     /// Allows cross communication between plugins.
     ///
     pub fn external_plugin_call(
-        &self,
+        &mut self,
         func_name: &String,
         vers: &usize,
         input_data: &sharedtypes::CallbackInfoInput,
     ) -> Option<HashMap<String, sharedtypes::CallbackCustomDataReturning>> {
-        if let Some(valid_func) = self.callbackstorage.get(func_name) {
+        if let Some(valid_func) = self.callbackstorage.get_mut(func_name) {
             for each in valid_func.iter() {
                 if *vers == each.vers {
-                    let plugin_lib = match self._plugin.get(&each.name) {
+                    let plugin_lib = match self._plugin.get_mut(&each.name) {
                         Some(lib) => lib,
                         None => return None,
                     };
@@ -94,10 +98,9 @@ impl PluginManager {
                             ) -> Option<
                                 HashMap<String, sharedtypes::CallbackCustomDataReturning>,
                             >,
-                        > = plugin_lib.get(each.func.as_bytes()).unwrap();
+                        > = plugin_lib.get(func_name.as_bytes()).unwrap();
                         plugininfo = plugindatafunc(input_data);
                     }
-                    dbg!(&plugininfo);
                     return plugininfo;
                 }
             }
@@ -186,57 +189,69 @@ impl PluginManager {
                 }
             }
             if let Some(pathe) = &finalpath {
-                let plugininfo: sharedtypes::PluginInfo;
-                let lib;
-                unsafe {
-                    lib = libloading::Library::new(pathe).unwrap();
-                    let plugindatafunc: libloading::Symbol<
-                        unsafe extern "C" fn() -> sharedtypes::PluginInfo,
-                    > = lib.get(b"return_info").unwrap();
-                    plugininfo = plugindatafunc();
+                self.load_plugin_from_path(Path::new(pathe));
+            }
+        }
+    }
+
+    ///
+    /// Manages loading the plugin
+    ///
+    fn load_plugin_from_path(&mut self, path: &Path) {
+        let plugininfo: sharedtypes::PluginInfo;
+        let lib;
+
+        if !path.exists() {
+            return;
+        }
+
+        unsafe {
+            lib = libloading::Library::new(path).unwrap();
+            let plugindatafunc: libloading::Symbol<
+                unsafe extern "C" fn() -> sharedtypes::PluginInfo,
+            > = lib.get(b"return_info").unwrap();
+            plugininfo = plugindatafunc();
+        }
+
+        let pluginname = plugininfo.name.clone();
+
+        logging::info_log(&format!(
+            "Loaded: {} With Description: {} Plugin Version: {} ABI: {} Comms: {:?}",
+            &pluginname,
+            &plugininfo.description,
+            &plugininfo.version,
+            &plugininfo.api_version,
+            &plugininfo.communication,
+        ));
+
+        self._plugin_coms
+            .insert(pluginname.clone(), plugininfo.communication);
+
+        self._plugin.insert(pluginname.clone(), lib);
+        self._thread_path
+            .insert(pluginname.clone(), path.to_string_lossy().to_string());
+
+        for each in plugininfo.callbacks {
+            match self._callback.get_mut(&each) {
+                Some(vec_plugin) => {
+                    vec_plugin.push(pluginname.clone());
                 }
-
-                let pluginname = plugininfo.name.clone();
-
-                logging::info_log(&format!(
-                    "Loaded: {} With Description: {} Plugin Version: {} ABI: {} Comms: {:?}",
-                    &pluginname,
-                    &plugininfo.description,
-                    &plugininfo.version,
-                    &plugininfo.api_version,
-                    &plugininfo.communication,
-                ));
-
-                self._plugin_coms
-                    .insert(pluginname.clone(), plugininfo.communication);
-
-                self._plugin.insert(pluginname.clone(), lib);
-                self._thread_path
-                    .insert(pluginname.clone(), pathe.to_string());
-
-                for each in plugininfo.callbacks {
-                    match self._callback.get_mut(&each) {
-                        Some(vec_plugin) => {
-                            vec_plugin.push(pluginname.clone());
+                None => match each {
+                    sharedtypes::PluginCallback::OnCallback(plugininfo) => {
+                        match self.callbackstorage.get_mut(&plugininfo.func) {
+                            Some(callvec) => {
+                                callvec.push(plugininfo);
+                            }
+                            None => {
+                                self.callbackstorage
+                                    .insert(plugininfo.func.clone(), [plugininfo].to_vec());
+                            }
                         }
-                        None => match each {
-                            sharedtypes::PluginCallback::OnCallback(plugininfo) => {
-                                match self.callbackstorage.get_mut(&plugininfo.func) {
-                                    Some(callvec) => {
-                                        callvec.push(plugininfo);
-                                    }
-                                    None => {
-                                        self.callbackstorage
-                                            .insert(plugininfo.name.clone(), [plugininfo].to_vec());
-                                    }
-                                }
-                            }
-                            _ => {
-                                self._callback.insert(each, vec![pluginname.clone()]);
-                            }
-                        },
                     }
-                }
+                    _ => {
+                        self._callback.insert(each, vec![pluginname.clone()]);
+                    }
+                },
             }
         }
     }
@@ -303,22 +318,44 @@ impl PluginManager {
     /// Reloads the plugins that are currently loaded
     ///
     pub fn reload_loaded_plugins(&mut self) {
-        for (threadname, lib) in self._plugin.iter_mut() {
+        dbg!("Reload Loaded Plugins");
+        let mut pluginlist = Vec::new();
+        for threadname in self._plugin.keys() {
             if let Some(threadpath) = self._thread_path.get(threadname) {
                 if Path::new(threadpath).exists() {
-                    unsafe {
-                        *lib = libloading::Library::new(threadpath).unwrap();
-                    }
+                    pluginlist.push((threadname.clone(), threadpath.clone()));
                 }
             }
         }
+
+        self._plugin_coms.clear();
+        self._plugin.clear();
+        self._thread_path.clear();
+        self._callback.clear();
+        self._thread_data_share.clear();
+        self.callbackstorage.clear();
+        self.debug();
+        for plugin in pluginlist {
+            logging::log(&format!(
+                "Reloading plugin: {} at path {}.",
+                plugin.0, plugin.1
+            ));
+
+            self.load_plugin_from_path(Path::new(&plugin.1));
+        }
+        self.debug();
     }
 
     ///
     /// Parses output from plugin.
     ///
-    fn parse_plugin_output(&mut self, plugin_data: Vec<sharedtypes::DBPluginOutputEnum>) {
-        let mut unwrappy = self._database.lock().unwrap();
+    fn parse_plugin_output(
+        &self,
+        plugin_data: Vec<sharedtypes::DBPluginOutputEnum>,
+        unwrappy_locked: Arc<Mutex<Main>>,
+    ) {
+        let mut unwrappy = unwrappy_locked.lock().unwrap();
+        //let mut unwrappy = self._database.lock().unwrap();
 
         for each in plugin_data {
             match each {
@@ -464,7 +501,7 @@ impl PluginManager {
                 //unwrappy.
                 output = plugindatafunc(cursorpass, hashs, exts);
             }
-            self.parse_plugin_output(output);
+            self.parse_plugin_output(output, self._database.clone());
         }
     }
 }

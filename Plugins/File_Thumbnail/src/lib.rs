@@ -5,7 +5,7 @@ static LOCATION_THUMBNAILS: &str = "thumbnails";
 static SIZE_THUMBNAIL_X: u32 = 100;
 static SIZE_THUMBNAIL_Y: u32 = 100;
 static DEFAULT_VIDEO_SETTINGS: VideoDefaults = VideoDefaults {
-    frames: 25,
+    frames: 50,
     duration: VideoSpacing::Duration(1000),
 };
 
@@ -39,6 +39,8 @@ use strum_macros::EnumIter;
 use thumbnailer::{
     create_thumbnails, create_thumbnails_unknown_type, error::ThumbError, Thumbnail, ThumbnailSize,
 };
+use webp_animation::EncodingConfig;
+use webp_animation::EncodingType;
 #[no_mangle]
 pub fn return_info() -> sharedtypes::PluginInfo {
     let callbackvec = vec![
@@ -46,10 +48,23 @@ pub fn return_info() -> sharedtypes::PluginInfo {
         sharedtypes::PluginCallback::OnStart,
         sharedtypes::PluginCallback::OnCallback(sharedtypes::CallbackInfo {
             name: format!("{}", PLUGIN_NAME),
-            func: format!("{}_generate_thumbnail", PLUGIN_NAME),
+            func: format!("{}_generate_thumbnail_u8", PLUGIN_NAME),
             vers: 0,
             data_name: [format!("image")].to_vec(),
             data: Some([sharedtypes::CallbackCustomData::U8].to_vec()),
+        }),
+        sharedtypes::PluginCallback::OnCallback(sharedtypes::CallbackInfo {
+            name: format!("{}", PLUGIN_NAME),
+            func: format!("{}_give_thumbnail_location", PLUGIN_NAME),
+            vers: 0,
+            data_name: [format!("image"), format!("db_location")].to_vec(),
+            data: Some(
+                [
+                    sharedtypes::CallbackCustomData::U8,
+                    sharedtypes::CallbackCustomData::String,
+                ]
+                .to_vec(),
+            ),
         }),
     ];
     sharedtypes::PluginInfo {
@@ -71,10 +86,104 @@ pub fn return_info() -> sharedtypes::PluginInfo {
 /// Callback call to generate the thumbnail
 ///
 #[no_mangle]
-pub fn file_thumbnailer_generate_thumbnail(
+pub fn file_thumbnailer_give_thumbnail_location(
     callback: &sharedtypes::CallbackInfoInput,
 ) -> Option<HashMap<String, sharedtypes::CallbackCustomDataReturning>> {
-    dbg!(&callback);
+    use crate::client;
+    use sha2::Digest;
+    use sha2::Sha256;
+    use std::fs::canonicalize;
+    use std::fs::create_dir_all;
+    use std::io::Cursor;
+    use std::path::Path;
+
+    // If we have both image and thumbnail location
+    if callback.data_name.contains(&"image".to_string())
+        && callback
+            .data_name
+            .contains(&"thumbnail_location".to_string())
+    {
+        // Gets position of data inside of vecs
+        let i = callback
+            .data_name
+            .iter()
+            .position(|r| *r == "image".to_string())
+            .unwrap();
+        let j = callback
+            .data_name
+            .iter()
+            .position(|r| *r == "thumbnail_location".to_string())
+            .unwrap();
+
+        if let Some(data) = &callback.data {
+            if let Some(cdreturning) = data.get(i) {
+                if let Some(dbloc) = data.get(j) {
+                    match cdreturning {
+                        sharedtypes::CallbackCustomDataReturning::U8(imgdata) => match dbloc {
+                            sharedtypes::CallbackCustomDataReturning::String(dbloc) => {
+                                let finpath = make_thumbnail_path(dbloc, imgdata);
+                                if let Some((finpath, outhash)) = finpath {
+                                    let mut out = HashMap::new();
+                                    out.insert(
+                                        "path".to_string(),
+                                        sharedtypes::CallbackCustomDataReturning::String(
+                                            finpath.join(outhash).to_string_lossy().to_string(),
+                                        ),
+                                    );
+                                    return Some(out);
+                                }
+                            }
+                            _ => {}
+                        },
+                        _ => {}
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
+///
+/// Generates and tries to create a folder path for thumbnail storage
+/// Returns the path of the thumbnail including the hash
+///
+fn make_thumbnail_path(dbloc: &String, imgdata: &Vec<u8>) -> Option<(PathBuf, String)> {
+    use sha2::Digest;
+    use sha2::Sha256;
+    use std::fs::canonicalize;
+    use std::fs::create_dir_all;
+    // We've passes sanity checks for the meme
+    let mut dbpath = if !Path::new(dbloc).exists() {
+        return None;
+    } else {
+        // Returns the whole path for accessing.
+        canonicalize(Path::new(dbloc)).unwrap()
+    };
+    let mut hasher = Sha256::new();
+    hasher.update(imgdata);
+    let hash = format!("{:X}", hasher.finalize());
+
+    // Final folder location path of db
+    let folderpath = dbpath
+        .join(hash[0..2].to_string())
+        .join(hash[2..4].to_string())
+        .join(hash[4..6].to_string());
+
+    create_dir_all(folderpath.clone()).unwrap();
+
+    Some((folderpath, hash))
+}
+
+///
+/// Callback call to generate the thumbnail
+///
+#[no_mangle]
+pub fn file_thumbnailer_generate_thumbnail_u8(
+    callback: &sharedtypes::CallbackInfoInput,
+) -> Option<HashMap<String, sharedtypes::CallbackCustomDataReturning>> {
+    use crate::client;
+    use std::io::Cursor;
     if callback.data_name.contains(&"image".to_string()) {
         let i = callback
             .data_name
@@ -85,7 +194,14 @@ pub fn file_thumbnailer_generate_thumbnail(
             if let Some(cdreturning) = data.get(i) {
                 match cdreturning {
                     sharedtypes::CallbackCustomDataReturning::U8(imgdata) => {
-                        if let Ok(thumbnail) = load_image(&imgdata) {}
+                        if let Ok(thumbnail) = generate_thumbnail_u8(imgdata.to_vec()) {
+                            let mut out = HashMap::new();
+                            out.insert(
+                                "image".to_string(),
+                                sharedtypes::CallbackCustomDataReturning::U8(thumbnail),
+                            );
+                            return Some(out);
+                        }
                     }
                     _ => {}
                 }
@@ -152,12 +268,29 @@ pub fn on_start() {
         file_ids.len()
     ));
     if let Some(location) = setup_thumbnail_location() {
-        dbg!(&location);
         file_ids.par_iter().for_each(|fid| {
-            if fid.1.ext == "gif".to_string() {
+            if fid.1.ext == "gif".to_string() || fid.1.ext == "webm".to_string() {
                 match generate_thumbnail(*fid.0) {
                     Ok(thumb_file) => {
-                        let _ = std::fs::write(format!("./test/out-{}.webp", fid.0), thumb_file);
+                        match make_thumbnail_path(
+                            &location.to_string_lossy().to_string(),
+                            &thumb_file,
+                        ) {
+                            None => {}
+                            Some((thumb_path, thumb_hash)) => {
+                                let thpath = thumb_path.join(thumb_hash.clone());
+                                let pa = thpath.to_string_lossy().to_string();
+                                client::log(format!(
+                                    "{}: Writing fileid: {} thumbnail to {}",
+                                    PLUGIN_NAME, fid.0, &pa
+                                ));
+                                let _ = std::fs::write(pa, thumb_file);
+                                let tid = client::tag_add(thumb_hash, utable, true, None);
+                                client::relationship_add(*fid.0, tid, true);
+                            }
+                        }
+                        //let wri = std::fs::write(format!("./test/out-{}.webp", fid.0), thumb_file);
+                        //dbg!(format!("Writing out: {:?}", thumb_path));
                     }
                     Err(st) => {
                         client::log(format!("FileThumbnailer ERR- {}", st));
@@ -166,6 +299,76 @@ pub fn on_start() {
             }
         });
     }
+    client::transaction_flush();
+    client::log(format!("File-Thumbnailer generation done"));
+}
+
+///
+/// Generate thumbnail function
+///
+fn generate_thumbnail_u8(inp: Vec<u8>) -> Result<Vec<u8>, std::io::Error> {
+    use file_format::{FileFormat, Kind};
+    use std::io::{Error, ErrorKind};
+    let thumbvec = match load_image(&inp) {
+        Ok(t) => t,
+        Err(err) => match err {
+            ThumbError::Unsupported(fformat) => {
+                return Err(Error::new(
+                    ErrorKind::Unsupported,
+                    format!("Cannot Parse file with format: {:?}.", fformat.kind()),
+                ))
+            }
+            _ => {
+                return Err(Error::new(
+                    ErrorKind::Other,
+                    format!("Failed to match err - 190 {:?}", err),
+                ))
+            }
+        },
+    };
+    let thumb = &thumbvec[0];
+    return match thumb.return_fileformat().kind() {
+        Kind::Image => match thumb.return_fileformat() {
+            FileFormat::GraphicsInterchangeFormat => {
+                match make_animated_img(
+                    inp,
+                    thumb.return_fileformat(),
+                    DEFAULT_VIDEO_SETTINGS.clone(),
+                ) {
+                    Some(vec) => Ok(vec),
+                    None => Err(Error::new(ErrorKind::Unsupported, "GIF Defuzzing failed")),
+                }
+            }
+            _ => Ok(make_img(thumb.clone())),
+        },
+        Kind::Video => {
+            match make_animated_img(
+                inp,
+                thumb.return_fileformat(),
+                DEFAULT_VIDEO_SETTINGS.clone(),
+            ) {
+                Some(vec) => Ok(vec),
+                None => Err(Error::new(ErrorKind::Unsupported, "")),
+            }
+        }
+        Kind::Other => match thumb.return_fileformat() {
+            FileFormat::Mpeg4Part14 => {
+                match make_animated_img(
+                    inp,
+                    thumb.return_fileformat(),
+                    DEFAULT_VIDEO_SETTINGS.clone(),
+                ) {
+                    Some(vec) => Ok(vec),
+                    None => Err(Error::new(ErrorKind::Unsupported, "gif is bad")),
+                }
+            }
+            _ => Err(Error::new(ErrorKind::Unsupported, "other bad")),
+        },
+        _ => Err(Error::new(
+            ErrorKind::Unsupported,
+            "Returning fileformat not valid",
+        )),
+    };
 }
 
 ///
@@ -176,66 +379,7 @@ pub fn generate_thumbnail(fid: usize) -> Result<Vec<u8>, std::io::Error> {
     use std::io::{Error, ErrorKind};
     if let Some(fbyte) = client::get_file(fid) {
         let byte = std::fs::read(fbyte)?;
-        let thumbvec = match load_image(&byte) {
-            Ok(t) => t,
-            Err(err) => match err {
-                ThumbError::Unsupported(fformat) => {
-                    return Err(Error::new(
-                        ErrorKind::Unsupported,
-                        format!("Cannot Parse file with format: {:?}.", fformat.kind()),
-                    ))
-                }
-                _ => {
-                    return Err(Error::new(
-                        ErrorKind::Other,
-                        format!("Failed to match err - 190 {:?}", err),
-                    ))
-                }
-            },
-        };
-        let thumb = &thumbvec[0];
-        return match thumb.return_fileformat().kind() {
-            Kind::Image => match thumb.return_fileformat() {
-                FileFormat::GraphicsInterchangeFormat => {
-                    match make_animated_img(
-                        byte,
-                        thumb.return_fileformat(),
-                        DEFAULT_VIDEO_SETTINGS.clone(),
-                    ) {
-                        Some(vec) => Ok(vec),
-                        None => Err(Error::new(ErrorKind::Unsupported, "GIF Defuzzing failed")),
-                    }
-                }
-                _ => Ok(make_img(thumb.clone())),
-            },
-            Kind::Video => {
-                match make_animated_img(
-                    byte,
-                    thumb.return_fileformat(),
-                    DEFAULT_VIDEO_SETTINGS.clone(),
-                ) {
-                    Some(vec) => Ok(vec),
-                    None => Err(Error::new(ErrorKind::Unsupported, "")),
-                }
-            }
-            Kind::Other => match thumb.return_fileformat() {
-                FileFormat::Mpeg4Part14 => {
-                    match make_animated_img(
-                        byte,
-                        thumb.return_fileformat(),
-                        DEFAULT_VIDEO_SETTINGS.clone(),
-                    ) {
-                        Some(vec) => Ok(vec),
-                        None => Err(Error::new(ErrorKind::Unsupported, "gif is bad")),
-                    }
-                }
-                _ => Err(Error::new(ErrorKind::Unsupported, "other bad")),
-            },
-            _ => Err(Error::new(
-                ErrorKind::Unsupported,
-                "Returning fileformat not valid",
-            )),
-        };
+        generate_thumbnail_u8(byte)
     } else {
         Err(Error::new(ErrorKind::Other, "Err  get_file is none"))
     }
@@ -261,7 +405,7 @@ fn make_animated_img(
 ) -> Option<Vec<u8>> {
     use image::Pixel;
     use std::io::Cursor;
-    let frate = 24;
+    let frate = 4;
     let res = thumbnailer::get_video_frame_multiple(
         Cursor::new(filebytes),
         fileformat,
@@ -269,10 +413,36 @@ fn make_animated_img(
         frate,
         Some((SIZE_THUMBNAIL_X, SIZE_THUMBNAIL_Y)),
     );
+    let webpconfig = EncodingConfig {
+        encoding_type: EncodingType::Lossy(webp_animation::LossyEncodingConfig {
+            alpha_quality: 50,
+            alpha_filtering: 2,
+            sns_strength: 70,
+            filter_strength: 100,
+            preprocessing: true,
+            filter_type: 1,
+            pass: 10,
+            ..Default::default()
+        }),
+        quality: 50.0,
+        method: 6,
+    };
     match res {
         Ok(ve) => {
+            use webp_animation::prelude::*;
             use webp_animation::Encoder;
-            let mut encoder = Encoder::new((SIZE_THUMBNAIL_X, SIZE_THUMBNAIL_Y)).unwrap();
+            use webp_animation::EncoderOptions;
+            let mut encoder = Encoder::new_with_options(
+                (SIZE_THUMBNAIL_X, SIZE_THUMBNAIL_Y),
+                EncoderOptions {
+                    kmin: 3,
+                    kmax: 5,
+                    encoding_config: Some(webpconfig),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+            //let mut encoder = Encoder::new((SIZE_THUMBNAIL_X, SIZE_THUMBNAIL_Y)).unwrap();
             let mut cnt = 0;
             for each in ve {
                 let mut pixelbuf =
@@ -286,12 +456,16 @@ fn make_animated_img(
                 let test = encoder.add_frame(&*pixelbuf, (cnt * frate).try_into().unwrap());
                 cnt += 1;
             }
-            let out = encoder
-                .finalize(((cnt + 1) * frate).try_into().unwrap())
-                .unwrap();
+            let out = match encoder.finalize(((cnt + 1) * frate).try_into().unwrap()) {
+                Ok(out) => out,
+                Err(_) => return None,
+            };
             Some(out.to_vec())
         }
-        Err(_) => return None,
+        Err(err) => {
+            dbg!("err", err);
+            return None;
+        }
     }
 }
 
@@ -312,8 +486,24 @@ fn hash_file(file: &[u8]) -> String {
 fn setup_thumbnail_location() -> Option<PathBuf> {
     let storage = client::location_get();
     let path = Path::new(&storage);
-    let final_location = append_dir(path, LOCATION_THUMBNAILS);
+
+    // If we don't have a setting setup for this then make one
+    let mut location = client::settings_get_name(format!("{}-location", PLUGIN_NAME));
+    if let None = location {
+        client::setting_add(
+            format!("{}-location", PLUGIN_NAME).into(),
+            format!("From plugin {} {}", PLUGIN_NAME, PLUGIN_DESCRIPTION).into(),
+            None,
+            Some(LOCATION_THUMBNAILS.to_string()),
+            true,
+        );
+        client::transaction_flush();
+        location = client::settings_get_name(format!("{}-location", PLUGIN_NAME));
+    }
+
+    let final_location = append_dir(path, &location.unwrap().param.unwrap());
     dbg!(&path, &final_location);
+
     match std::fs::metadata(&final_location) {
         Ok(metadata) => {
             // Checks if the folder exists if it doesn't exist then it tries to create it
@@ -334,7 +524,7 @@ fn setup_thumbnail_location() -> Option<PathBuf> {
                 Err(_) => None,
             };
         }
-    }
+    };
 }
 
 ///

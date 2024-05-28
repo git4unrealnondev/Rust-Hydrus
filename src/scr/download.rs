@@ -19,9 +19,10 @@ use crate::helpers;
 use async_std::task;
 use ratelimit::Ratelimiter;
 use std::fs::File;
-use std::sync::{Arc, Mutex};
+//use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::thread;
-
+use tracing_mutex::stdsync::Mutex;
 ///
 /// Makes ratelimiter and example
 ///
@@ -62,6 +63,8 @@ pub fn client_create() -> Client {
         //.brotli(true)
         //.deflate(true)
         .gzip(true)
+        .brotli(true)
+        .deflate(true)
         .build()
         .unwrap()
 }

@@ -238,7 +238,7 @@ fn check_existing_db() {
 
                 let uwidthtab = check_existing_db_table(tabwidth);
                 let uheighttab = check_existing_db_table(tabheight);
-                total.keys().for_each(|file| {
+                /*total.keys().for_each(|file| {
                     let fpath = helpers::getfinpath(&db_location, &total[file].hash);
                     let file_path = format!("{}/{}", fpath, &file_ids[file].hash);
                     if !std::path::Path::new(&file_path).is_file() {
@@ -265,7 +265,7 @@ fn check_existing_db() {
                             }
                         }
                     }
-                });
+                });*/
                 // One last flush to ensure that everything gets written to db.
                 client::transaction_flush();
             }

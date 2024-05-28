@@ -3,9 +3,10 @@
 //use crate::scr::tasks;
 use log::{error, info, warn};
 
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+//use std::sync::{Arc, Mutex};
 use std::{thread, time};
-
+use tracing_mutex::stdsync::Mutex;
 extern crate ratelimit;
 
 #[path = "./scr/cli.rs"]

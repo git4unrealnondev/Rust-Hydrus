@@ -19,10 +19,10 @@ use ratelimit::Ratelimiter;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::sync::Arc;
-use std::sync::Mutex;
+//use std::sync::Mutex;
 use std::thread;
 use std::time::Duration;
-
+use tracing_mutex::stdsync::Mutex;
 pub struct Threads {
     _workers: usize,
     worker: Vec<Worker>,
@@ -275,30 +275,29 @@ impl Worker {
                                     job_params.insert(each);
                                 }
                             }
+
+                            let mut source_url_id = {
+                                let unwrappydb = &mut db.lock().unwrap();
+                                unwrappydb.namespace_get(&"source_url".to_string()).cloned()
+                                // defaults to 0 due to unknown.
+                            };
+
+                            if source_url_id.is_none() {
+                                // Namespace doesn't exist. Will create
+                                let unwrappydb = &mut db.lock().unwrap();
+                                unwrappydb.namespace_add(
+                                    "source_url".to_string(),
+                                    Some("Source URL for a file.".to_string()),
+                                    true,
+                                );
+                                source_url_id =
+                                    unwrappydb.namespace_get(&"source_url".to_string()).cloned();
+                            }
+
                             // Parses files from urls
                             for file in out_st.file {
                                 if let Some(ref source) = file.source_url {
                                     {
-                                        let mut source_url_id = {
-                                            let unwrappydb = &mut db.lock().unwrap();
-                                            unwrappydb
-                                                .namespace_get(&"source_url".to_string())
-                                                .cloned() // defaults to 0 due to unknown.
-                                        };
-
-                                        if source_url_id.is_none() {
-                                            // Namespace doesn't exist. Will create
-                                            let unwrappydb = &mut db.lock().unwrap();
-                                            unwrappydb.namespace_add(
-                                                "source_url".to_string(),
-                                                Some("Source URL for a file.".to_string()),
-                                                true,
-                                            );
-                                            source_url_id = unwrappydb
-                                                .namespace_get(&"source_url".to_string())
-                                                .cloned();
-                                        }
-
                                         // If url exists in db then don't download
                                         let url_tag = {
                                             let unwrappydb = db.lock().unwrap();

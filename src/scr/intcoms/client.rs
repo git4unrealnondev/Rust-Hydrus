@@ -33,6 +33,10 @@ pub fn load_table(table: sharedtypes::LoadDBTable) -> bool {
         types::SupportedDBRequests::LoadTable(table),
     ))
 }
+
+///
+/// Gets file location from fileid
+///
 pub fn get_file(fileid: usize) -> Option<String> {
     init_data_request(&types::SupportedRequests::Database(
         types::SupportedDBRequests::GetFileLocation(fileid),
@@ -42,6 +46,15 @@ pub fn get_file(fileid: usize) -> Option<String> {
 pub fn get_file_bytes(fileid: usize) -> Option<Vec<u8>> {
     init_data_request(&types::SupportedRequests::Database(
         types::SupportedDBRequests::GetFileByte(fileid),
+    ))
+}
+
+///
+/// Reloads the loaded plugins
+///
+pub fn reload_loaded_plugins() -> bool {
+    init_data_request(&types::SupportedRequests::Database(
+        types::SupportedDBRequests::ReloadLoadedPlugins(),
     ))
 }
 

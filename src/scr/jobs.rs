@@ -13,8 +13,9 @@ use log::info;
 
 use rusqlite::Connection;
 use std::collections::hash_map::Entry;
-use std::sync::{Arc, Mutex};
-
+use std::sync::Arc;
+//use std::sync::{Arc, Mutex};
+use tracing_mutex::stdsync::Mutex;
 pub struct Jobs {
     _jobid: Vec<u128>,
     _secs: usize,

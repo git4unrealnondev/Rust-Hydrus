@@ -214,9 +214,9 @@ pub fn recieve<T: serde::de::DeserializeOwned>(conn: &mut BufReader<LocalSocketS
     let size_of_data: usize = usize::from_ne_bytes(usize_b);
 
     let mut data_b = vec![0; size_of_data];
-    conn.get_mut()
+    let _ = conn
+        .get_mut()
         .read_exact(&mut data_b[..])
-        .context("Socket send failed")
-        .unwrap();
+        .context("Socket send failed");
     bincode::deserialize(&data_b).unwrap()
 }

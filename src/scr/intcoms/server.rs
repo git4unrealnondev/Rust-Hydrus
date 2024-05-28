@@ -6,7 +6,9 @@ use crate::plugins::PluginManager;
 use anyhow::Context;
 use interprocess::local_socket::{prelude::*, GenericNamespaced, ListenerOptions, Stream};
 use std::collections::HashSet;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use tracing_mutex::stdsync::Mutex;
+//use std::sync::{Arc, Mutex};
 use std::{
     io::{self, prelude::*, BufReader},
     sync::mpsc::Sender,
@@ -274,7 +276,7 @@ impl DbInteract {
                 Self::data_size_to_b(&tmep)
             }
             types::SupportedDBRequests::PluginCallback(func_name, version, input_data) => {
-                let plugin = self.pluginmanager.lock().unwrap();
+                let mut plugin = self.pluginmanager.lock().unwrap();
                 let out = plugin.external_plugin_call(&func_name, &version, &input_data);
                 Self::data_size_to_b(&out)
             }
@@ -418,7 +420,6 @@ impl DbInteract {
             None => Self::data_size_to_b(&input),
             Some(item) => {
                 let i: Option<T> = Some(item.clone());
-
                 Self::data_size_to_b(&i)
             }
         }
