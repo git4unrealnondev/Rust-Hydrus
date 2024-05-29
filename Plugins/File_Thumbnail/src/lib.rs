@@ -267,6 +267,9 @@ pub fn on_start() {
         "FileThumbnailer - We've got {} files to parse.",
         file_ids.len()
     ));
+
+    // numa aware memes
+    sas::init();
     if let Some(location) = setup_thumbnail_location() {
         file_ids.par_iter().for_each(|fid| {
             if fid.1.ext == "gif".to_string() || fid.1.ext == "webm".to_string() {
