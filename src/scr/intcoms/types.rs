@@ -81,6 +81,7 @@ pub fn con_usize(input: &mut [u8; 8]) -> usize {
 pub enum SupportedDBRequests {
     GetTagId(usize),
     PutTag(String, usize, bool, Option<usize>),
+    PutTagRelationship(usize, String, usize, bool, Option<usize>),
     GetTagName((String, usize)),
     RelationshipAdd(usize, usize, bool),
     RelationshipGetTagid(usize),
@@ -204,12 +205,13 @@ pub fn send_preserialize(inp: &Vec<u8>, conn: &mut BufReader<LocalSocketStream>)
 ///
 /// Returns a vec of bytes that represent an object
 ///
-pub fn recieve<T: serde::de::DeserializeOwned>(conn: &mut BufReader<LocalSocketStream>) -> T {
+pub fn recieve<T: serde::de::DeserializeOwned>(
+    conn: &mut BufReader<LocalSocketStream>,
+) -> Result<T, anyhow::Error> {
     let mut usize_b: [u8; std::mem::size_of::<usize>()] = [0; std::mem::size_of::<usize>()];
     conn.get_mut()
         .read_exact(&mut usize_b[..])
-        .context("Socket send failed")
-        .unwrap();
+        .context("Socket send failed");
 
     let size_of_data: usize = usize::from_ne_bytes(usize_b);
 
@@ -218,5 +220,6 @@ pub fn recieve<T: serde::de::DeserializeOwned>(conn: &mut BufReader<LocalSocketS
         .get_mut()
         .read_exact(&mut data_b[..])
         .context("Socket send failed");
-    bincode::deserialize(&data_b).unwrap()
+    let out = bincode::deserialize(&data_b)?;
+    Ok(out)
 }

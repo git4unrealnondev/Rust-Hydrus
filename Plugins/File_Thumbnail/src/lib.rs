@@ -270,34 +270,33 @@ pub fn on_start() {
 
     // numa aware memes
     sas::init();
+
     if let Some(location) = setup_thumbnail_location() {
         file_ids.par_iter().for_each(|fid| {
-            if fid.1.ext == "gif".to_string() || fid.1.ext == "webm".to_string() {
-                match generate_thumbnail(*fid.0) {
-                    Ok(thumb_file) => {
-                        match make_thumbnail_path(
-                            &location.to_string_lossy().to_string(),
-                            &thumb_file,
-                        ) {
-                            None => {}
-                            Some((thumb_path, thumb_hash)) => {
-                                let thpath = thumb_path.join(thumb_hash.clone());
-                                let pa = thpath.to_string_lossy().to_string();
-                                client::log(format!(
-                                    "{}: Writing fileid: {} thumbnail to {}",
-                                    PLUGIN_NAME, fid.0, &pa
-                                ));
-                                let _ = std::fs::write(pa, thumb_file);
-                                let tid = client::tag_add(thumb_hash, utable, true, None);
-                                client::relationship_add(*fid.0, tid, true);
-                            }
+            match generate_thumbnail(*fid.0) {
+                Ok(thumb_file) => {
+                    client::log(format!("Starting work on fid: {}", fid.0));
+                    match make_thumbnail_path(&location.to_string_lossy().to_string(), &thumb_file)
+                    {
+                        None => {}
+                        Some((thumb_path, thumb_hash)) => {
+                            let thpath = thumb_path.join(thumb_hash.clone());
+                            let pa = thpath.to_string_lossy().to_string();
+                            /*client::log(format!(
+                                "{}: Writing fileid: {} thumbnail to {}",
+                                PLUGIN_NAME, fid.0, &pa
+                            ));*/
+                            let _ = std::fs::write(pa, thumb_file);
+                            let tid = client::relationship_file_tag_add(
+                                *fid.0, thumb_hash, utable, true, None,
+                            );
                         }
-                        //let wri = std::fs::write(format!("./test/out-{}.webp", fid.0), thumb_file);
-                        //dbg!(format!("Writing out: {:?}", thumb_path));
                     }
-                    Err(st) => {
-                        client::log(format!("FileThumbnailer ERR- {}", st));
-                    }
+                    //let wri = std::fs::write(format!("./test/out-{}.webp", fid.0), thumb_file);
+                    //dbg!(format!("Writing out: {:?}", thumb_path));
+                }
+                Err(st) => {
+                    client::log(format!("FileThumbnailer ERR- {}", st));
                 }
             }
         });
@@ -491,21 +490,25 @@ fn setup_thumbnail_location() -> Option<PathBuf> {
     let path = Path::new(&storage);
 
     // If we don't have a setting setup for this then make one
-    let mut location = client::settings_get_name(format!("{}-location", PLUGIN_NAME));
-    if let None = location {
-        client::setting_add(
-            format!("{}-location", PLUGIN_NAME).into(),
-            format!("From plugin {} {}", PLUGIN_NAME, PLUGIN_DESCRIPTION).into(),
-            None,
-            Some(LOCATION_THUMBNAILS.to_string()),
-            true,
-        );
-        client::transaction_flush();
-        location = client::settings_get_name(format!("{}-location", PLUGIN_NAME));
-    }
-
-    let final_location = append_dir(path, &location.unwrap().param.unwrap());
-    dbg!(&path, &final_location);
+    let location = match client::settings_get_name(format!("{}-location", PLUGIN_NAME)) {
+        None => {
+            let finpath = std::fs::canonicalize(path.join(LOCATION_THUMBNAILS.to_string()))
+                .unwrap()
+                .to_string_lossy()
+                .to_string();
+            client::setting_add(
+                format!("{}-location", PLUGIN_NAME).into(),
+                format!("From plugin {} {}", PLUGIN_NAME, PLUGIN_DESCRIPTION).into(),
+                None,
+                Some(finpath.clone()),
+                true,
+            );
+            client::transaction_flush();
+            finpath
+        }
+        Some(loc) => loc.param.unwrap(),
+    };
+    let final_location = Path::new(&location).to_path_buf();
 
     match std::fs::metadata(&final_location) {
         Ok(metadata) => {

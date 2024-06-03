@@ -75,6 +75,7 @@ pub fn main(data: &mut database::Main, scraper: &mut scraper::ScraperManager) {
         },
         cli_structs::test::Search(searchstruct) => match searchstruct {
             cli_structs::SearchStruct::Fid(id) => {
+                data.load_table(&sharedtypes::LoadDBTable::All);
                 let hstags = data.relationship_get_tagid(&id.id);
                 match hstags {
                     None => {

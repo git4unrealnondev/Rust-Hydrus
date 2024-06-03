@@ -207,7 +207,13 @@ another process and try again.",
         for conn in listener.incoming().filter_map(handle_error) {
             let mut conn = BufReader::new(conn);
 
-            let plugin_supportedrequests = types::recieve(&mut conn);
+            let plugin_supportedrequests = match types::recieve(&mut conn) {
+                Ok(out) => out,
+                Err(err) => {
+                    logging::error_log(&err.to_string());
+                    return Ok(());
+                }
+            };
 
             //Default
 
@@ -316,6 +322,19 @@ impl DbInteract {
                 let tmep = unwrappy.tag_add(&tags, namespace_id, addtodb, id);
                 Self::data_size_to_b(&tmep)
             }
+            types::SupportedDBRequests::PutTagRelationship(
+                fid,
+                tags,
+                namespace_id,
+                addtodb,
+                id,
+            ) => {
+                let mut unwrappy = self._database.lock().unwrap();
+                let tmep = unwrappy.tag_add(&tags, namespace_id, addtodb, id);
+                unwrappy.relationship_add(fid, tmep, addtodb);
+                Self::data_size_to_b(&true)
+            }
+
             types::SupportedDBRequests::GetDBLocation() => {
                 let unwrappy = self._database.lock().unwrap();
                 let tmep = unwrappy.location_get();

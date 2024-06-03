@@ -35,7 +35,7 @@ pub fn load_table(table: sharedtypes::LoadDBTable) -> bool {
 }
 
 ///
-/// Gets file location from fileid
+///
 ///
 pub fn get_file(fileid: usize) -> Option<String> {
     init_data_request(&types::SupportedRequests::Database(
@@ -256,6 +256,22 @@ pub fn tag_add(tag: String, namespace_id: usize, addtodb: bool, id: Option<usize
 }
 
 ///
+/// See the database reference for this function.
+/// I'm a lazy turd just check it their
+///
+pub fn relationship_file_tag_add(
+    fileid: usize,
+    tag: String,
+    namespace_id: usize,
+    addtodb: bool,
+    id: Option<usize>,
+) -> bool {
+    init_data_request(&types::SupportedRequests::Database(
+        types::SupportedDBRequests::PutTagRelationship(fileid, tag, namespace_id, addtodb, id),
+    ))
+}
+
+///
 /// Calls an external plugin from inside the plugin manager if it exists
 /// Should work will test tomorrow
 ///
@@ -300,5 +316,11 @@ fn init_data_request<T: serde::de::DeserializeOwned>(requesttype: &types::Suppor
     types::send(requesttype, &mut conn);
 
     //Recieving size Data from server
-    types::recieve(&mut conn)
+    match types::recieve(&mut conn) {
+        Ok(out) => return out,
+        Err(err) => {
+            dbg!(err);
+            panic!();
+        }
+    }
 }

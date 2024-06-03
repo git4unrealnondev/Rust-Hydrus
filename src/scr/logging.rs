@@ -27,7 +27,7 @@ pub fn panic_log(error: &String) {
     panic!("{}", error);
 }
 ///
-/// Dumps error to log and panics.
+/// Dumps error to log and doesn't panic.
 ///
 pub fn error_log(error: &String) {
     println!("{}", error);
