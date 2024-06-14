@@ -16,9 +16,10 @@ pub fn getfinpath(location: &String, hash: &String) -> String {
         hash.chars().nth(5).unwrap()
     );
     match std::fs::create_dir_all(&final_loc) {
-
-	Ok(_) => {},
-	Err(err) => {error_log(&format!("{} {}", hash, err));}
-}
+        Ok(_) => {}
+        Err(err) => {
+            error_log(&format!("{} {}", hash, err));
+        }
+    }
     return final_loc;
 }

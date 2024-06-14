@@ -4,9 +4,12 @@ use crate::database;
 use crate::logging;
 use crate::plugins::PluginManager;
 use anyhow::Context;
+//use interprocess::local_socket::traits::tokio::Listener;
+use interprocess::local_socket::traits::Listener;
 use interprocess::local_socket::{prelude::*, GenericNamespaced, ListenerOptions, Stream};
 use std::collections::HashSet;
 use std::sync::Arc;
+use std::thread;
 use tracing_mutex::stdsync::Mutex;
 //use std::sync::{Arc, Mutex};
 use std::{
@@ -85,7 +88,7 @@ another process and try again.",
         // response. Otherwise, because reading and writing on a connection cannot be simultaneous
         // without threads or async, we can deadlock the two processes by having both sides wait for
         // the write buffer to be emptied by the other.
-        conn.read(buffer).context("Socket receive failed")?;
+        conn.read(buffer).context("Socket receive failed").unwrap();
 
         // Now that the read has come through and the client is waiting on the server's write, do
         // it. (`.get_mut()` is to get the writer, `BufReader` doesn't implement a pass-through
@@ -101,16 +104,19 @@ another process and try again.",
             types::EControlSigs::Send => {
                 bufstr.clear();
                 conn.read_line(&mut bufstr)
-                    .context("Socket receive failed")?;
+                    .context("Socket receive failed")
+                    .unwrap();
 
                 //bufstr.clear();
 
                 conn.get_mut()
                     .write_all(&b_struct)
-                    .context("Socket send failed")?;
+                    .context("Socket send failed")
+                    .unwrap();
                 bufstr.clear();
                 conn.read_line(&mut bufstr)
-                    .context("Socket receive failed")?;
+                    .context("Socket receive failed")
+                    .unwrap();
             }
             types::EControlSigs::Halt => {}
             types::EControlSigs::Break => {}
@@ -125,6 +131,7 @@ another process and try again.",
         // stacking on top of one another.
         //buffer.clear();
     }
+
     Ok(())
 }
 

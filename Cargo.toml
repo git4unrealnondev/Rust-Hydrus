@@ -51,7 +51,7 @@ tokio = "1.37.0"
 opt-level = 3
 lto=true
 codegenunits=1
-strip = false
+strip = true
 panic = "abort"
 debug = false
 
