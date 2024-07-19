@@ -326,12 +326,12 @@ impl Worker {
                                                 ));
                                                 let blopt;
                                                 {
-                                                    blopt = task::block_on(download::dlfile_new(
+                                                    blopt = download::dlfile_new(
                                                         &client,
                                                         &file,
                                                         &location,
-                                                        &mut Some(manageeplugin.clone()),
-                                                    ));
+                                                        Some(manageeplugin.clone()),
+                                                    );
                                                 }
                                                 let (hash, file_ext) = match blopt {
                                                     None => {
@@ -388,13 +388,12 @@ impl Worker {
                                                     ));
                                                     let blopt;
                                                     {
-                                                        blopt =
-                                                            task::block_on(download::dlfile_new(
-                                                                &client,
-                                                                &file,
-                                                                &location,
-                                                                &mut Some(manageeplugin.clone()),
-                                                            ));
+                                                        blopt = download::dlfile_new(
+                                                            &client,
+                                                            &file,
+                                                            &location,
+                                                            Some(manageeplugin.clone()),
+                                                        );
                                                     }
                                                     let (hash, file_ext) = match blopt {
                                                         None => {

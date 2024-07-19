@@ -1288,11 +1288,11 @@ impl Main {
                             self.relationship_add_db(res.fileid, res.tagid);
                         }
                         Err(err) => {
-                            error!("Bad relationship cant load {:?}", err);
+                            error!("Bad relationship cant load");
                             err.to_string().contains("database disk image is malformed");
 
-                            error!("DATABASE IMAGE IS MALFORMED PANICING");
-                            panic!("DATABASE IMAGE IS MALFORMED PANICING");
+                            error!("DATABASE IMAGE IS MALFORMED PANICING rel {:?}", &err);
+                            panic!("DATABASE IMAGE IS MALFORMED PANICING rel {:?}", &err);
                         }
                     }
                 }

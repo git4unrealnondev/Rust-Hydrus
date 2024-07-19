@@ -136,11 +136,11 @@ pub fn hash_bytes(bytes: &Bytes, hash: &sharedtypes::HashesSupported) -> (String
 ///
 /// Downloads file to position
 ///
-pub async fn dlfile_new(
+pub fn dlfile_new(
     client: &Client,
     file: &sharedtypes::FileObject,
     location: &String,
-    pluginmanager: &mut Option<Arc<Mutex<PluginManager>>>,
+    pluginmanager: Option<Arc<Mutex<PluginManager>>>,
 ) -> Option<(String, String)> {
     let mut boolloop = true;
     let mut hash = String::new();
@@ -164,7 +164,7 @@ pub async fn dlfile_new(
 
             let url = Url::parse(fileurlmatch).unwrap();
 
-            let mut futureresult = client.get(url.as_ref()).send().await;
+            let mut futureresult = task::block_on(client.get(url.as_ref()).send());
             loop {
                 match futureresult {
                     Ok(_) => {
@@ -175,13 +175,14 @@ pub async fn dlfile_new(
                         dbg!("Repeating: {}", &url);
                         let time_dur = Duration::from_secs(10);
                         thread::sleep(time_dur);
-                        futureresult = client.get(url.as_ref()).send().await;
+                        futureresult = task::block_on(client.get(url.as_ref()).send());
                     }
                 }
             }
-
-            // Downloads file into byte memory buffer
-            let byte = futureresult.unwrap().bytes().await;
+            let byte = task::block_on(
+                // Downloads file into byte memory buffer
+                futureresult.unwrap().bytes(),
+            );
 
             // Error handling for dling a file.
             // Waits 10 secs to retry

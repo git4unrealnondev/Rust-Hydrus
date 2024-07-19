@@ -337,12 +337,12 @@ pub fn main(data: &mut database::Main, scraper: &mut scraper::ScraperManager) {
                                                     ),
                                                     tag_list: Vec::new(),
                                                 };
-                                                task::block_on(download::dlfile_new(
+                                                download::dlfile_new(
                                                     &client,
                                                     file,
                                                     &data.location_get(),
-                                                    &mut None,
-                                                ));
+                                                    None,
+                                                );
                                             }
                                         }
                                     }
@@ -379,12 +379,12 @@ pub fn main(data: &mut database::Main, scraper: &mut scraper::ScraperManager) {
                                                         ),
                                                         tag_list: Vec::new(),
                                                     };
-                                                    task::block_on(download::dlfile_new(
+                                                    download::dlfile_new(
                                                         &client,
                                                         file,
                                                         &data.location_get(),
-                                                        &mut None,
-                                                    ));
+                                                        None,
+                                                    );
                                                 }
                                             }
                                         }

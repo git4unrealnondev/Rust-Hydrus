@@ -642,21 +642,24 @@ pub fn parser(params: &String) -> Result<sharedtypes::ScraperObject, sharedtypes
     //let vecvecstr: AHashMap<String, AHashMap<String, Vec<String>>> = AHashMap::new();
 
     let mut files: HashSet<sharedtypes::FileObject> = HashSet::default();
-    if let Err(_) = json::parse(params) {
-        if params.contains("Please confirm you are not a robot.") {
-            return Err(sharedtypes::ScraperReturn::Timeout(20));
-        } else if params.contains("502: Bad gateway") {
-            return Err(sharedtypes::ScraperReturn::Timeout(10));
-        } else if params.contains("SSL handshake failed") {
-            return Err(sharedtypes::ScraperReturn::Timeout(10));
-        } else if params.contains("e621 Maintenance") {
-            return Err(sharedtypes::ScraperReturn::Timeout(240));
+    let js = match json::parse(params) {
+        Err(err) => {
+            if params.contains("Please confirm you are not a robot.") {
+                return Err(sharedtypes::ScraperReturn::Timeout(20));
+            } else if params.contains("502: Bad gateway") {
+                return Err(sharedtypes::ScraperReturn::Timeout(10));
+            } else if params.contains("SSL handshake failed") {
+                return Err(sharedtypes::ScraperReturn::Timeout(10));
+            } else if params.contains("e621 Maintenance") {
+                return Err(sharedtypes::ScraperReturn::Timeout(240));
+            }
+            return Err(sharedtypes::ScraperReturn::EMCStop(format!(
+                "Unknown Error: {}",
+                err
+            )));
         }
-        return Err(sharedtypes::ScraperReturn::EMCStop(
-            "Unknown Error".to_string(),
-        ));
-    }
-    let js = json::parse(params).unwrap();
+        Ok(out) => out,
+    };
 
     //let mut file = File::create("main1.json").unwrap();
 

@@ -178,6 +178,16 @@ pub fn relationship_get_fileid(id: usize) -> Option<HashSet<usize>> {
         types::SupportedDBRequests::RelationshipGetFileid(id),
     ))
 }
+
+///
+/// Gets a file based on their ID
+///
+pub fn file_get_id(fid: usize) -> Option<sharedtypes::DbFileObj> {
+    init_data_request(&types::SupportedRequests::Database(
+        types::SupportedDBRequests::GetFile(fid),
+    ))
+}
+
 ///
 /// See the database reference for this function.
 /// I'm a lazy turd just check it their
