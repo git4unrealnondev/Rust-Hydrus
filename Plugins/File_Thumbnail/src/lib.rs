@@ -268,37 +268,38 @@ pub fn on_start() {
         file_ids.len()
     ));
 
-    // numa aware memes
-    sas::init();
-
     if let Some(location) = setup_thumbnail_location() {
         file_ids.par_iter().for_each(|fid| {
-            match generate_thumbnail(*fid.0) {
-                Ok(thumb_file) => {
-                    client::log(format!("Starting work on fid: {}", fid.0));
-                    match make_thumbnail_path(&location.to_string_lossy().to_string(), &thumb_file)
-                    {
-                        None => {}
-                        Some((thumb_path, thumb_hash)) => {
-                            let thpath = thumb_path.join(thumb_hash.clone());
-                            let pa = thpath.to_string_lossy().to_string();
-                            /*client::log(format!(
-                                "{}: Writing fileid: {} thumbnail to {}",
-                                PLUGIN_NAME, fid.0, &pa
-                            ));*/
-                            let _ = std::fs::write(pa, thumb_file);
-                            let tid = client::relationship_file_tag_add(
-                                *fid.0, thumb_hash, utable, true, None,
-                            );
+            let _ = std::panic::catch_unwind(|| {
+                match generate_thumbnail(*fid.0) {
+                    Ok(thumb_file) => {
+                        client::log(format!("Starting work on fid: {}", fid.0));
+                        match make_thumbnail_path(
+                            &location.to_string_lossy().to_string(),
+                            &thumb_file,
+                        ) {
+                            None => {}
+                            Some((thumb_path, thumb_hash)) => {
+                                let thpath = thumb_path.join(thumb_hash.clone());
+                                let pa = thpath.to_string_lossy().to_string();
+                                /*client::log(format!(
+                                    "{}: Writing fileid: {} thumbnail to {}",
+                                    PLUGIN_NAME, fid.0, &pa
+                                ));*/
+                                let _ = std::fs::write(pa, thumb_file);
+                                let tid = client::relationship_file_tag_add(
+                                    *fid.0, thumb_hash, utable, true, None,
+                                );
+                            }
                         }
+                        //let wri = std::fs::write(format!("./test/out-{}.webp", fid.0), thumb_file);
+                        //dbg!(format!("Writing out: {:?}", thumb_path));
                     }
-                    //let wri = std::fs::write(format!("./test/out-{}.webp", fid.0), thumb_file);
-                    //dbg!(format!("Writing out: {:?}", thumb_path));
+                    Err(st) => {
+                        client::log(format!("FileThumbnailer Fid: {} ERR- {}", &fid.0, st));
+                    }
                 }
-                Err(st) => {
-                    client::log(format!("FileThumbnailer ERR- {}", st));
-                }
-            }
+            });
         });
     }
     client::transaction_flush();

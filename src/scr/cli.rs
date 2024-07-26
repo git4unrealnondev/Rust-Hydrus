@@ -320,7 +320,7 @@ pub fn main(data: &mut database::Main, scraper: &mut scraper::ScraperManager) {
                                 println!("{}", &lis[each.0].hash);
                                 if nsid.is_some() {
                                     if let Some(rel) = data.relationship_get_tagid(&each.0) {
-                                        for eachs in rel {
+                                        for eachs in rel.iter() {
                                             let dat = data.tag_id_get(eachs).unwrap();
                                             logging::info_log(&format!(
                                                 "Got Tag: {} for fileid: {}",
@@ -362,7 +362,7 @@ pub fn main(data: &mut database::Main, scraper: &mut scraper::ScraperManager) {
                                     ));
                                     if nsid.is_some() {
                                         if let Some(rel) = data.relationship_get_tagid(each.0) {
-                                            for eachs in rel {
+                                            for eachs in rel.iter() {
                                                 let dat = data.tag_id_get(eachs).unwrap();
                                                 logging::info_log(&format!(
                                                     "Got Tag: {} for fileid: {}",

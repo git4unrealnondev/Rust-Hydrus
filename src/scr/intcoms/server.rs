@@ -356,17 +356,17 @@ impl DbInteract {
             types::SupportedDBRequests::RelationshipGetTagid(id) => {
                 let unwrappy = self._database.lock().unwrap();
                 let tmep = unwrappy.relationship_get_tagid(&id);
-                Self::option_to_bytes(tmep)
+                Self::option_to_bytes(tmep.as_ref())
             }
             types::SupportedDBRequests::GetFile(id) => {
                 let unwrappy = self._database.lock().unwrap();
                 let tmep = unwrappy.file_get_id(&id);
-                Self::option_to_bytes(tmep)
+                Self::option_to_bytes(tmep.as_ref())
             }
             types::SupportedDBRequests::RelationshipGetFileid(id) => {
                 let unwrappy = self._database.lock().unwrap();
                 let tmep = unwrappy.relationship_get_fileid(&id);
-                Self::option_to_bytes(tmep)
+                Self::option_to_bytes(tmep.as_ref())
             }
 
             types::SupportedDBRequests::SettingsGetName(id) => {

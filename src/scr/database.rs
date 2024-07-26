@@ -7,6 +7,7 @@ use crate::sharedtypes::DbJobsObj;
 use crate::time_func;
 
 use log::{error, info};
+use nohash::IntSet;
 use rayon::prelude::*;
 pub use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, ValueRef};
 pub use rusqlite::{params, types::Null, Connection, Result, Transaction};
@@ -18,8 +19,6 @@ use std::panic;
 use std::path::Path;
 use std::sync::Arc;
 use std::sync::Mutex;
-
-use nohash_hasher;
 
 mod db;
 use crate::database::db::inmemdbnew::NewinMemDB;
@@ -473,7 +472,7 @@ impl Main {
     ) -> Option<HashSet<usize>> {
         let mut stor: Vec<sharedtypes::SearchHolder> = Vec::with_capacity(search.searches.len());
         let mut fin: HashSet<usize> = HashSet::new();
-        let mut fin_temp: HashMap<usize, HashSet<&usize>> = HashMap::new();
+        let mut fin_temp: HashMap<usize, HashSet<usize>> = HashMap::new();
         let mut searched: Vec<(usize, usize)> = Vec::with_capacity(search.searches.len());
         if let None = search.search_relate {
             if search.searches.len() == 1 {
@@ -495,7 +494,7 @@ impl Main {
                     let fb = self.relationship_get_fileid(&b);
                     if let Some(fa) = fa {
                         if let Some(fb) = fb {
-                            fin_temp.insert(cnt, fa.difference(fb).collect());
+                            fin_temp.insert(cnt, fa.difference(&fb).cloned().collect());
                         }
                     }
 
@@ -503,11 +502,9 @@ impl Main {
                     searched.push((cnt, b));
                 }
                 sharedtypes::SearchHolder::AND((a, b)) => {
-                    let fa = self.relationship_get_fileid(&a);
-                    let fb = self.relationship_get_fileid(&b);
-                    if let Some(fa) = fa {
-                        if let Some(fb) = fb {
-                            fin_temp.insert(cnt, fa.intersection(fb).collect());
+                    if let Some(fa) = self.relationship_get_fileid(&a) {
+                        if let Some(fb) = self.relationship_get_fileid(&b) {
+                            fin_temp.insert(cnt, fa.intersection(&fb).cloned().collect());
                         }
                     }
 
@@ -517,9 +514,9 @@ impl Main {
                 sharedtypes::SearchHolder::OR((a, b)) => {
                     let fa = self.relationship_get_fileid(&a);
                     let fb = self.relationship_get_fileid(&b);
-                    if let Some(fa) = fa {
-                        if let Some(fb) = fb {
-                            fin_temp.insert(cnt, fa.union(fb).collect());
+                    if let Some(fa) = &fa {
+                        if let Some(fb) = &fb {
+                            fin_temp.insert(cnt, fa.union(fb).cloned().collect());
                         }
                     }
 
@@ -538,7 +535,7 @@ impl Main {
                     let fb = fin_temp.get(&b).unwrap();
                     let tem = fa.intersection(&fb);
                     for each in tem {
-                        fin.insert(**each);
+                        fin.insert(*each);
                     }
                 }
                 sharedtypes::SearchHolder::NOT((_a, _b)) => {}
@@ -581,7 +578,7 @@ impl Main {
     ///
     /// returns file id's based on relationships with a tag
     ///
-    pub fn relationship_get_fileid(&self, tag: &usize) -> Option<&nohash::IntSet<usize>> {
+    pub fn relationship_get_fileid(&self, tag: &usize) -> Option<HashSet<usize>> {
         self._inmemdb.relationship_get_fileid(tag)
     }
 
@@ -591,7 +588,7 @@ impl Main {
     ///
     /// Returns tagid's based on relationship with a fileid.
     ///
-    pub fn relationship_get_tagid(&self, tag: &usize) -> Option<&nohash::IntSet<usize>> {
+    pub fn relationship_get_tagid(&self, tag: &usize) -> Option<HashSet<usize>> {
         self._inmemdb.relationship_get_tagid(tag)
     }
 
@@ -1018,6 +1015,13 @@ impl Main {
         }
     }
 
+    fn pause(&self) {
+        use std::io::{stdin, stdout, Read, Write};
+        let mut stdout = std::io::stdout();
+        stdout.write(b"Press Enter to continue...").unwrap();
+        stdout.flush().unwrap();
+        std::io::stdin().read(&mut [0]).unwrap();
+    }
     ///
     /// Checks if table is loaded in mem and if not then loads it.
     ///
@@ -1054,11 +1058,14 @@ impl Main {
                 }
                 sharedtypes::LoadDBTable::All => {
                     self.load_table(&sharedtypes::LoadDBTable::Files);
+
                     self.load_table(&sharedtypes::LoadDBTable::Jobs);
                     self.load_table(&sharedtypes::LoadDBTable::Namespace);
                     self.load_table(&sharedtypes::LoadDBTable::Parents);
+
                     self.load_table(&sharedtypes::LoadDBTable::Relationship);
                     self.load_table(&sharedtypes::LoadDBTable::Settings);
+
                     self.load_table(&sharedtypes::LoadDBTable::Tags);
                 }
             }
@@ -1911,7 +1918,6 @@ impl Main {
                         let tag_id = self.tag_add_db(tags, &namespace, None);
                         if addtodb {
                             self.tag_add_sql(&tag_id, tags, &"".to_string(), &namespace);
-                            self.db_commit_man();
                         }
                         return tag_id;
                     }
@@ -1930,7 +1936,6 @@ impl Main {
                 );*/
                 if addtodb {
                     self.tag_add_sql(&tag_id, tags, &"".to_string(), &namespace);
-                    self.db_commit_man();
                 }
                 return tag_id;
             }
@@ -1973,6 +1978,7 @@ impl Main {
         if !existcheck {
             //println!("relationship b ");
             self.relationship_add_db(file, tag);
+            self.db_commit_man();
         }
         //println!("relationship complete : {} {}", file, tag);
     }

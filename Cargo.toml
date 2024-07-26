@@ -46,6 +46,7 @@ nohash-hasher = "0.2.0"
 nohash = "0.2.0"
 tracing-mutex = "0.3.0"
 tokio = "1.37.0"
+fnv = "1.0.7"
 
 [profile.release]
 opt-level = 3

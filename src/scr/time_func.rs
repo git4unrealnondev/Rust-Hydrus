@@ -28,7 +28,7 @@ pub fn time_conv(inp: &String) -> usize {
     let minute = 60;
     let second = 1;
 
-    let strings = vec![
+    let strings = [
         "y".to_string(),
         "m".to_string(),
         "w".to_string(),
@@ -41,7 +41,7 @@ pub fn time_conv(inp: &String) -> usize {
     let nums = [year, month, week, day, hour, minute, second];
 
     let mut combine: usize = 0;
-    let mut st = inp.to_string();
+    let mut st = inp.clone();
 
     for each in 0..strings.len() {
         if !st.contains(&strings[each]) {

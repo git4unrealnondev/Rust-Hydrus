@@ -243,21 +243,19 @@ pub fn dlfile_new(
     // Gets final path of file.
     let orig_path = format!("{}/{}", &final_loc, &hash);
     let mut file_path = std::fs::File::create(&orig_path).unwrap();
-    {
-        // If the plugin manager is None then don't do anything plugin wise.
-        // Useful for if doing something that we CANNOT allow plugins to run.
-        if let Some(pluginmanager) = pluginmanager {
-            pluginmanager
-                .lock()
-                .unwrap()
-                .plugin_on_download(bytes.as_ref(), &hash, &file_ext);
-        }
-        // Wouldove rather passed teh Cursor or Bytes Obj but it wouldn't work for some reason with the ABI
-    }
 
-    let mut content = Cursor::new(bytes);
+    let mut content = Cursor::new(bytes.clone());
     // Copies file from memory to disk
     std::io::copy(&mut content, &mut file_path).unwrap();
+
+    // If the plugin manager is None then don't do anything plugin wise.
+    // Useful for if doing something that we CANNOT allow plugins to run.
+    if let Some(pluginmanager) = pluginmanager {
+        pluginmanager
+            .lock()
+            .unwrap()
+            .plugin_on_download(bytes.as_ref(), &hash, &file_ext);
+    }
 
     println!("Downloaded hash: {}", &hash);
 

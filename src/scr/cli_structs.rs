@@ -151,9 +151,9 @@ pub enum SearchStruct {
 }
 #[derive(Debug, Parser)]
 pub struct Tag {
-    #[arg(required = true, exclusive = true)]
+    #[arg(required = true, exclusive = false)]
     pub tag: String,
-    #[arg(required = true, exclusive = true)]
+    #[arg(required = true, exclusive = false)]
     pub namespace: String,
 }
 #[derive(Debug, Parser)]

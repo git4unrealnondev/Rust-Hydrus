@@ -2,8 +2,8 @@ use crate::logging;
 use crate::sharedtypes;
 use crate::sharedtypes::DbFileObj;
 use crate::sharedtypes::DbJobsObj;
-use nohash::BuildNoHashHasher;
-use nohash::NoHashHasher;
+use fnv::{FnvHashMap, FnvHashSet};
+use nohash::{IntMap, IntSet};
 use std::collections::{HashMap, HashSet};
 use std::hash::BuildHasherDefault;
 pub enum TagRelateConjoin {
@@ -29,7 +29,7 @@ impl tes {
 }
 
 pub struct NewinMemDB {
-    _tag_nns_id_data: HashMap<usize, sharedtypes::DbTagNNS>,
+    _tag_nns_id_data: FnvHashMap<usize, sharedtypes::DbTagNNS>,
     _tag_nns_data_id: HashMap<sharedtypes::DbTagNNS, usize>,
 
     _settings_id_data: HashMap<usize, sharedtypes::DbSettingObj>,
@@ -47,22 +47,15 @@ pub struct NewinMemDB {
     _namespace_id_tag: HashMap<usize, HashSet<usize>>,
 
     _file_id_data: HashMap<usize, sharedtypes::DbFileObj>,
+    _file_location_usize: FnvHashMap<usize, String>,
+    _file_location_string: FnvHashMap<String, usize>,
     _file_name_id: HashMap<String, usize>,
 
-    //_relationship_file_tag: nohash::IntMap<usize, nohash::IntSet<usize>>,
-    //_relationship_tag_file: nohash::IntMap<usize, nohash::IntSet<usize>>,
-    _relationship_file_tag: HashMap<
-        usize,
-        HashSet<usize, BuildHasherDefault<NoHashHasher<usize>>>,
-        BuildHasherDefault<NoHashHasher<usize>>,
-    >,
-    _relationship_tag_file: HashMap<
-        usize,
-        HashSet<usize, BuildHasherDefault<NoHashHasher<usize>>>,
-        BuildHasherDefault<NoHashHasher<usize>>,
-    >,
-    _relationship_dual: nohash::IntSet<usize>,
+    _relationship_file_tag: FnvHashMap<usize, FnvHashSet<usize>>,
+    _relationship_tag_file: FnvHashMap<usize, FnvHashSet<usize>>,
+    _relationship_dual: FnvHashSet<usize>,
 
+    _file_location_count: usize,
     _tag_max: usize,
     _relationship_max: usize,
     _settings_max: usize,
@@ -74,23 +67,14 @@ pub struct NewinMemDB {
 
 impl NewinMemDB {
     pub fn new() -> NewinMemDB {
-        let mut tf: HashMap<
-            usize,
-            HashSet<usize, BuildHasherDefault<NoHashHasher<usize>>>,
-            BuildHasherDefault<NoHashHasher<usize>>,
-        > = HashMap::with_capacity_and_hasher(2, BuildHasherDefault::default());
-        let mut ft: HashMap<
-            usize,
-            HashSet<usize, BuildHasherDefault<NoHashHasher<usize>>>,
-            BuildHasherDefault<NoHashHasher<usize>>,
-        > = HashMap::with_capacity_and_hasher(2, BuildHasherDefault::default());
-
         let inst = NewinMemDB {
             _tag_nns_id_data: HashMap::default(),
             _tag_nns_data_id: HashMap::new(),
 
             _jobs_id_data: HashMap::default(),
             _file_id_data: HashMap::default(),
+            _file_location_usize: HashMap::default(),
+            _file_location_string: HashMap::default(),
             //_jobs_name_id: HashMap::new(),
             _file_name_id: HashMap::new(),
             _parents_dual: HashSet::default(),
@@ -105,10 +89,11 @@ impl NewinMemDB {
             _namespace_id_data: HashMap::default(),
             _namespace_id_tag: HashMap::default(),
 
-            _relationship_tag_file: tf,
-            _relationship_file_tag: ft,
-            _relationship_dual: nohash::IntSet::default(),
+            _relationship_tag_file: HashMap::default(),
+            _relationship_file_tag: HashMap::default(),
+            _relationship_dual: HashSet::default(),
 
+            _file_location_count: 0,
             _tag_max: 0,
             _settings_max: 0,
             _parents_max: 0,
@@ -227,20 +212,28 @@ impl NewinMemDB {
     ///
     /// Returns a list of file id's based on a tag id.
     ///
-    pub fn relationship_get_fileid(&self, tag: &usize) -> Option<&nohash::IntSet<usize>> {
+    pub fn relationship_get_fileid(&self, tag: &usize) -> Option<HashSet<usize>> {
         match self._relationship_tag_file.get(tag) {
             None => None,
-            Some(relref) => return Some(relref),
+            Some(relref) => {
+                let mut out = HashSet::default();
+                for each in relref {
+                    out.insert(each.clone());
+                }
+                return Some(out);
+            }
         }
     }
 
     ///
     /// Returns a list of tag id's based on a file id
     ///
-    pub fn relationship_get_tagid(&self, file: &usize) -> Option<&nohash::IntSet<usize>> {
+    pub fn relationship_get_tagid(&self, file: &usize) -> Option<HashSet<usize>> {
         match self._relationship_file_tag.get(file) {
             None => None,
-            Some(relref) => return Some(relref),
+            Some(relref) => {
+                return Some(HashSet::from_iter(relref.clone()));
+            }
         }
     }
 
@@ -391,8 +384,44 @@ impl NewinMemDB {
         }
 
         self._file_name_id.insert(file.hash.to_owned(), id);
-        self._file_id_data.insert(id, file);
+        // let locid = self.file_location_get_id(file.location);
+        self._file_id_data.insert(
+            id,
+            sharedtypes::DbFileObj {
+                id: file.id,
+                hash: file.hash,
+                ext: file.ext,
+                location: file.location,
+            },
+        );
         id
+    }
+
+    ///
+    /// Gets location id from string
+    ///
+    fn file_location_get_id(&mut self, loc: String) -> usize {
+        match self._file_location_string.get(&loc) {
+            Some(num) => return num.clone(),
+            None => {
+                self._file_location_string
+                    .insert(loc.to_owned(), self._file_location_count);
+                self._file_location_usize
+                    .insert(self._file_location_count, loc);
+                self._file_location_count += 1;
+                self._file_location_count - 1
+            }
+        }
+    }
+
+    ///
+    /// Gets location string from id
+    ///
+    fn file_location_get_string(&self, id: &usize) -> Option<String> {
+        match self._file_location_usize.get(id) {
+            Some(num) => return Some(num.to_string()),
+            None => None,
+        }
     }
 
     ///
@@ -683,12 +712,11 @@ impl NewinMemDB {
     ///
     #[inline(always)]
     pub fn relationship_add(&mut self, file: usize, tag: usize) {
-        use nohash_hasher;
         let cantor = self.cantor_pair(&file, &tag);
         self._relationship_dual.insert(cantor);
         match self._relationship_tag_file.get_mut(&tag) {
             None => {
-                let mut temp = nohash::IntSet::default();
+                let mut temp = FnvHashSet::default();
                 temp.insert(file);
                 self._relationship_tag_file.insert(tag, temp);
             }
@@ -699,8 +727,8 @@ impl NewinMemDB {
         }
         match self._relationship_file_tag.get_mut(&file) {
             None => {
-                let mut temp = nohash::IntSet::default();
-                temp.insert(tag);
+                let mut temp = FnvHashSet::default();
+                temp.insert(file);
                 self._relationship_file_tag.insert(file, temp);
             }
             Some(rel_file) => {
