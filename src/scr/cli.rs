@@ -448,6 +448,7 @@ pub fn main(data: &mut database::Main, scraper: &mut scraper::ScraperManager) {
 
                     // Removing db namespace. Will get id to remove then remove it.
                     cli_structs::Database::Remove(db_rmv) => {
+                        data.load_table(&sharedtypes::LoadDBTable::Namespace);
                         let ns_id = match db_rmv {
                             cli_structs::NamespaceInfo::NamespaceString(ns) => {
                                 data.load_table(&sharedtypes::LoadDBTable::Namespace);

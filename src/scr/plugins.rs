@@ -334,7 +334,6 @@ impl PluginManager {
         self._callback.clear();
         self._thread_data_share.clear();
         self.callbackstorage.clear();
-        self.debug();
         for plugin in pluginlist {
             logging::log(&format!(
                 "Reloading plugin: {} at path {}.",
@@ -343,7 +342,6 @@ impl PluginManager {
 
             self.load_plugin_from_path(Path::new(&plugin.1));
         }
-        self.debug();
     }
 
     ///

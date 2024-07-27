@@ -147,6 +147,8 @@ fn check_existing_db() {
     let mut utable_count: HashMap<Supset, usize> = HashMap::new();
     let mut modernstorage: HashMap<sharedtypes::DbFileObj, Vec<Supset>> = HashMap::new();
 
+    let mut table_skip: Vec<Supset> = Vec::new();
+
     for table in Supset::iter() {
         utable_count.insert(table, 0);
     }
@@ -154,37 +156,30 @@ fn check_existing_db() {
     client::load_table(table_temp);
 
     let file_ids = client::file_get_list_all();
-    for table in Supset::iter() {
-        let mut name = client::settings_get_name(get_set(table).name);
-        if let None = name {
-            client::setting_add(
-                get_set(table).name,
-                get_set(table).description,
-                None,
-                Some("True".to_string()),
-                true,
-            );
-            client::transaction_flush();
-            name = client::settings_get_name(get_set(table).name);
-        }
-        // Continues the loop if this has already been checked.
-        if let Some(nam) = &name {
-            if nam.param.clone().unwrap() == "False" {
-                continue;
-            } else {
-                client::log(format!(
-                    "Missing table {} Set as something other then false.",
-                    nam.param.clone().unwrap()
-                ));
-                client::log(format!("Starting to load tables."));
-                let table_temp = sharedtypes::LoadDBTable::All;
-                client::load_table(table_temp);
-
-                client::log(format!("Finished loading tables for filehash"));
+    'suploop: for table in Supset::iter() {
+        let name = match client::settings_get_name(get_set(table).name) {
+            None => {
+                client::setting_add(
+                    get_set(table).name,
+                    get_set(table).description,
+                    None,
+                    Some("True".to_string()),
+                    true,
+                );
+                client::transaction_flush();
+                client::settings_get_name(get_set(table).name).unwrap()
             }
-        }
+            Some(name) => {
+                if name.param == Some("False".to_string()) {
+                    table_skip.push(table);
+                    continue 'suploop;
+                }
+                name
+            }
+        };
 
         client::log(format!("Starting to process table: {:?}", &table));
+
         let mut total = file_ids.clone();
         let ctab = TableData {
             name: get_set(table).name,
@@ -221,6 +216,15 @@ fn check_existing_db() {
         client::log(format!("Ended table loop for table: {:?}", &table));
     }
     for table in Supset::iter() {
+        // Early exist for if the table neeeds to be skipped
+        if table_skip.contains(&table) {
+            client::log_no_print(format!(
+                "FileHash - we've got 0 files to parse for {} skipping...",
+                get_set(table).name
+            ));
+
+            continue;
+        }
         let total = *utable_count.get(&table).unwrap();
         // Logs info. into system
         if total == 0 {
@@ -229,6 +233,14 @@ fn check_existing_db() {
                 total,
                 get_set(table).name
             ));
+            client::setting_add(
+                get_set(table).name,
+                get_set(table).description,
+                None,
+                Some("False".to_string()),
+                true,
+            );
+            client::transaction_flush();
         } else {
             client::log(format!(
                 "FileHash - we've got {} files to parse for {}.",

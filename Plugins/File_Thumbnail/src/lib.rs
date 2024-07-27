@@ -170,6 +170,8 @@ fn make_thumbnail_path(dbloc: &String, imgdata: &Vec<u8>) -> Option<(PathBuf, St
         .join(hash[2..4].to_string())
         .join(hash[4..6].to_string());
 
+    dbg!(&folderpath, &hash);
+
     create_dir_all(folderpath.clone()).unwrap();
 
     Some((folderpath, hash))

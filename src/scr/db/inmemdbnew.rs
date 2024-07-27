@@ -125,6 +125,7 @@ impl NewinMemDB {
 
     ///
     /// Adds setting into internal DB.
+    /// Updates setting if it doesn't exist.
     ///
     pub fn settings_add(
         &mut self,
@@ -133,21 +134,36 @@ impl NewinMemDB {
         num: Option<usize>,
         param: Option<String>,
     ) {
-        if !self._settings_name_id.contains_key(&name) {
-            self._settings_name_id
-                .insert(name.to_owned(), self._settings_max);
-            //self._settings_name_id[&name] = self._settings_max;
-
-            self._settings_id_data.insert(
-                self._settings_max,
-                sharedtypes::DbSettingObj {
-                    name,
-                    pretty,
-                    num,
-                    param,
-                },
-            );
-            self._settings_max += 1;
+        match self._settings_name_id.get(&name) {
+            None => {
+                self._settings_name_id
+                    .insert(name.to_owned(), self._settings_max);
+                self._settings_id_data.insert(
+                    self._settings_max,
+                    sharedtypes::DbSettingObj {
+                        name,
+                        pretty,
+                        num,
+                        param,
+                    },
+                );
+                self._settings_max += 1;
+            }
+            Some(setting_id) => {
+                logging::info_log(&format!(
+                    "Updating setting_id: {} with {} {:?} {:?} {:?}.",
+                    &setting_id, &name, &pretty, &num, &param
+                ));
+                self._settings_id_data.insert(
+                    *setting_id,
+                    sharedtypes::DbSettingObj {
+                        name,
+                        pretty,
+                        num,
+                        param,
+                    },
+                );
+            }
         }
     }
 

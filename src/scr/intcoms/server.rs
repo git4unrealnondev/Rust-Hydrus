@@ -217,6 +217,7 @@ another process and try again.",
             let plugin_supportedrequests = match types::recieve(&mut conn) {
                 Ok(out) => out,
                 Err(err) => {
+                    dbg!(&err);
                     logging::error_log(&err.to_string());
                     return Ok(());
                 }

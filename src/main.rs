@@ -179,8 +179,6 @@ fn main() {
 
     let mut pluginmanager = plugins::PluginManager::new(plugin_loc.to_string(), arc.clone());
 
-    pluginmanager.lock().unwrap().debug();
-
     pluginmanager.lock().unwrap().plugin_on_start();
     // Creates a threadhandler that manages callable threads.
     let mut threadhandler = threading::Threads::new();

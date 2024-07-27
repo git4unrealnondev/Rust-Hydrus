@@ -2386,14 +2386,12 @@ impl Main {
     pub fn namespace_delete_id(&mut self, id: &usize) {
         logging::info_log(&format!("Starting deletion work on namespace id: {}", id));
 
-        logging::info_log(&format!("starting db vac & index."));
-
         //self.vacuum();
         //self._conn.lock().unwrap().execute("create index ffid on Relationship(fileid);", []);
-        logging::info_log(&format!("Stopping db vac & index."));
 
         self.transaction_flush();
         if let None = self.namespace_get_string(id) {
+            logging::info_log(&format!("Stopping because I cannot get ns string."));
             return;
         }
 
