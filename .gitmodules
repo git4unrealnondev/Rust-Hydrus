@@ -1,3 +1,6 @@
 [submodule "Plugins/pluginblurhash/blurhash-rs"]
 	path = Plugins/pluginblurhash/blurhash-rs
 	url = git@github.com:git4unrealnondev/blurhash-rs.git
+[submodule "Plugins/File_Thumbnail/thumbnailer"]
+	path = Plugins/File_Thumbnail/thumbnailer
+	url = https://github.com/git4unrealnondev/thumbnailer
