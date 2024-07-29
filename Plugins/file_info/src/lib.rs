@@ -11,10 +11,6 @@ mod sharedtypes;
 #[path = "../../../src/scr/intcoms/client.rs"]
 mod client;
 
-#[path = "../../../src/scr/db/helpers.rs"]
-mod helpers;
-#[path = "../../../src/scr/logging.rs"]
-mod logging;
 static PLUGIN_NAME: &str = "File Info";
 static PLUGIN_DESCRIPTION: &str = "Gets information from a file.";
 
@@ -120,11 +116,8 @@ pub fn on_download(
 pub fn on_start() {
     println!("From Fileinfo plugin");
 
-    //fast_log::init(fast_log::Config::new().file("./log.txt")).unwrap();
-    //log::info!("FileInfo - Commencing yak shaving{}", 0);
     println!("Fileinfo waiting");
     check_existing_db();
-    //log::info!("FileInfo - Commencing yak shaving{}", 1);
 }
 
 struct SettingInfo {

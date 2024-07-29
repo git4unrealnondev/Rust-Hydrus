@@ -121,17 +121,16 @@ pub fn file_thumbnailer_give_thumbnail_location(
                     match cdreturning {
                         sharedtypes::CallbackCustomDataReturning::U8(imgdata) => match dbloc {
                             sharedtypes::CallbackCustomDataReturning::String(dbloc) => {
-                                let finpath = make_thumbnail_path(dbloc, imgdata);
-                                if let Some((finpath, outhash)) = finpath {
-                                    let mut out = HashMap::new();
-                                    out.insert(
-                                        "path".to_string(),
-                                        sharedtypes::CallbackCustomDataReturning::String(
-                                            finpath.join(outhash).to_string_lossy().to_string(),
-                                        ),
-                                    );
-                                    return Some(out);
-                                }
+                                let (finpath, outhash) =
+                                    make_thumbnail_path(&Path::new(dbloc).to_path_buf(), imgdata);
+                                let mut out = HashMap::new();
+                                out.insert(
+                                    "path".to_string(),
+                                    sharedtypes::CallbackCustomDataReturning::String(
+                                        finpath.join(outhash).to_string_lossy().to_string(),
+                                    ),
+                                );
+                                return Some(out);
                             }
                             _ => {}
                         },
@@ -148,33 +147,25 @@ pub fn file_thumbnailer_give_thumbnail_location(
 /// Generates and tries to create a folder path for thumbnail storage
 /// Returns the path of the thumbnail including the hash
 ///
-fn make_thumbnail_path(dbloc: &String, imgdata: &Vec<u8>) -> Option<(PathBuf, String)> {
+fn make_thumbnail_path(dbloc: &PathBuf, imgdata: &Vec<u8>) -> (PathBuf, String) {
     use sha2::Digest;
     use sha2::Sha256;
     use std::fs::canonicalize;
     use std::fs::create_dir_all;
-    // We've passes sanity checks for the meme
-    let mut dbpath = if !Path::new(dbloc).exists() {
-        return None;
-    } else {
-        // Returns the whole path for accessing.
-        canonicalize(Path::new(dbloc)).unwrap()
-    };
     let mut hasher = Sha256::new();
     hasher.update(imgdata);
     let hash = format!("{:X}", hasher.finalize());
 
     // Final folder location path of db
-    let folderpath = dbpath
+    let folderpath = canonicalize(dbloc)
+        .unwrap()
         .join(hash[0..2].to_string())
         .join(hash[2..4].to_string())
         .join(hash[4..6].to_string());
 
-    dbg!(&folderpath, &hash);
-
     create_dir_all(folderpath.clone()).unwrap();
 
-    Some((folderpath, hash))
+    (folderpath, hash)
 }
 
 ///
@@ -230,6 +221,50 @@ fn load_image(byte_c: &[u8]) -> Result<Vec<Thumbnail>, ThumbError> {
 pub fn on_start() {
     use rayon::iter::IntoParallelRefIterator;
     use rayon::iter::ParallelIterator;
+
+    let should_run = match client::settings_get_name(format!("{}-shouldrun", PLUGIN_NAME)) {
+        None => {
+            client::setting_add(
+                format!("{}-shouldrun", PLUGIN_NAME).into(),
+                format!(
+                    "From plugin {} {} Determines if we should run",
+                    PLUGIN_NAME, PLUGIN_DESCRIPTION
+                )
+                .into(),
+                None,
+                Some("True".to_string()),
+                true,
+            );
+            client::transaction_flush();
+            "True".to_string()
+        }
+        Some(loc) => match loc.param {
+            None => {
+                client::setting_add(
+                    format!("{}-shouldrun", PLUGIN_NAME).into(),
+                    format!(
+                        "From plugin {} {} Determines if we should run",
+                        PLUGIN_NAME, PLUGIN_DESCRIPTION
+                    )
+                    .into(),
+                    None,
+                    Some("True".to_string()),
+                    true,
+                );
+                "True".to_string()
+            }
+            Some(out) => out,
+        },
+    };
+
+    if should_run == "False".to_string() {
+        client::log_no_print(format!(
+            "{} - Returning due to should run is false.",
+            PLUGIN_NAME
+        ));
+        return;
+    }
+
     let table_temp = sharedtypes::LoadDBTable::Files;
     client::load_table(table_temp);
     let mut file_ids = client::file_get_list_all();
@@ -276,27 +311,20 @@ pub fn on_start() {
                 match generate_thumbnail(*fid.0) {
                     Ok(thumb_file) => {
                         client::log(format!("Starting work on fid: {}", fid.0));
-                        match make_thumbnail_path(
-                            &location.to_string_lossy().to_string(),
-                            &thumb_file,
-                        ) {
-                            None => {}
-                            Some((thumb_path, thumb_hash)) => {
-                                let thpath = thumb_path.join(thumb_hash.clone());
-                                let pa = thpath.to_string_lossy().to_string();
-                                /*client::log(format!(
-                                    "{}: Writing fileid: {} thumbnail to {}",
-                                    PLUGIN_NAME, fid.0, &pa
-                                ));*/
-                                let _ = std::fs::write(pa, thumb_file);
-                                let tid = client::relationship_file_tag_add(
-                                    *fid.0, thumb_hash, utable, true, None,
-                                );
-                            }
-                        }
-                        //let wri = std::fs::write(format!("./test/out-{}.webp", fid.0), thumb_file);
-                        //dbg!(format!("Writing out: {:?}", thumb_path));
+                        let (thumb_path, thumb_hash) = make_thumbnail_path(&location, &thumb_file);
+                        let thpath = thumb_path.join(thumb_hash.clone());
+                        let pa = thpath.to_string_lossy().to_string();
+                        /*client::log(format!(
+                            "{}: Writing fileid: {} thumbnail to {}",
+                            PLUGIN_NAME, fid.0, &pa
+                        ));*/
+                        let _ = std::fs::write(pa, thumb_file);
+                        let tid = client::relationship_file_tag_add(
+                            *fid.0, thumb_hash, utable, true, None,
+                        );
                     }
+                    //let wri = std::fs::write(format!("./test/out-{}.webp", fid.0), thumb_file);
+                    //dbg!(format!("Writing out: {:?}", thumb_path));
                     Err(st) => {
                         client::log(format!("FileThumbnailer Fid: {} ERR- {}", &fid.0, st));
                     }
@@ -304,8 +332,19 @@ pub fn on_start() {
             });
         });
     }
-    client::transaction_flush();
     client::log(format!("File-Thumbnailer generation done"));
+    client::setting_add(
+        format!("{}-shouldrun", PLUGIN_NAME).into(),
+        format!(
+            "From plugin {} {} Determines if we should run",
+            PLUGIN_NAME, PLUGIN_DESCRIPTION
+        )
+        .into(),
+        None,
+        Some("False".to_string()),
+        true,
+    );
+    client::transaction_flush();
 }
 
 ///
@@ -484,6 +523,41 @@ fn hash_file(file: &[u8]) -> String {
     format!("{:X}", hasher.finalize())
 }
 
+fn setup_thumbnail_default() -> PathBuf {
+    let storage = client::location_get();
+    let path = Path::new(&storage);
+    let finpath = std::fs::canonicalize(path.join(LOCATION_THUMBNAILS.to_string()))
+        .unwrap()
+        .to_string_lossy()
+        .to_string();
+    client::setting_add(
+        format!("{}-location", PLUGIN_NAME).into(),
+        format!("From plugin {} {}", PLUGIN_NAME, PLUGIN_DESCRIPTION).into(),
+        None,
+        Some(finpath.clone()),
+        true,
+    );
+    client::transaction_flush();
+    let final_location = Path::new(&finpath).to_path_buf();
+    final_location
+}
+
+///
+/// Gets the location to put thumbnails in
+///
+fn thumbnail_location_get() -> PathBuf {
+    match client::settings_get_name(format!("{}-location", PLUGIN_NAME).into()) {
+        Some(setting) => {
+            let locpath = match setting.param {
+                Some(loc) => Path::new(&loc).to_path_buf(),
+                None => setup_thumbnail_default(),
+            };
+            locpath
+        }
+        None => setup_thumbnail_default(),
+    }
+}
+
 ///
 /// Setting up the thumbnail folder
 /// Uses no unwrap and should be cross compatible across OSes
@@ -492,13 +566,14 @@ fn setup_thumbnail_location() -> Option<PathBuf> {
     let storage = client::location_get();
     let path = Path::new(&storage);
 
+    let finpath = std::fs::canonicalize(path.join(LOCATION_THUMBNAILS.to_string()))
+        .unwrap()
+        .to_string_lossy()
+        .to_string();
+
     // If we don't have a setting setup for this then make one
     let location = match client::settings_get_name(format!("{}-location", PLUGIN_NAME)) {
         None => {
-            let finpath = std::fs::canonicalize(path.join(LOCATION_THUMBNAILS.to_string()))
-                .unwrap()
-                .to_string_lossy()
-                .to_string();
             client::setting_add(
                 format!("{}-location", PLUGIN_NAME).into(),
                 format!("From plugin {} {}", PLUGIN_NAME, PLUGIN_DESCRIPTION).into(),
@@ -509,7 +584,19 @@ fn setup_thumbnail_location() -> Option<PathBuf> {
             client::transaction_flush();
             finpath
         }
-        Some(loc) => loc.param.unwrap(),
+        Some(loc) => match loc.param {
+            None => {
+                client::setting_add(
+                    format!("{}-location", PLUGIN_NAME).into(),
+                    format!("From plugin {} {}", PLUGIN_NAME, PLUGIN_DESCRIPTION).into(),
+                    None,
+                    Some(finpath.clone()),
+                    true,
+                );
+                finpath
+            }
+            Some(out) => out,
+        },
     };
     let final_location = Path::new(&location).to_path_buf();
 
@@ -566,39 +653,55 @@ pub fn on_download(
     ext_in: &String,
 ) -> Vec<sharedtypes::DBPluginOutputEnum> {
     let mut output = Vec::new();
+    match generate_thumbnail_u8(byte_c.to_vec()) {
+        Ok(thumb) => {
+            let thumbpath = thumbnail_location_get();
+            let (thumb_path, thumb_hash) = make_thumbnail_path(&thumbpath, &thumb);
+            let thpath = thumb_path.join(thumb_hash.clone());
+            let pa = thpath.to_string_lossy().to_string();
+            match std::fs::write(pa, thumb) {
+                Ok(_) => {
+                    client::log_no_print(format!(
+                        "Plugin: {} -- Wrote: {} to {:?}",
+                        PLUGIN_NAME, &thumb_hash, &thumb_path,
+                    ));
 
-    let lmimg = load_image(byte_c);
-    match lmimg {
-        Ok(good_lmimg) => {
-            /*let string_blurhash = downloadparse(good_lmimg);
+                    let plugin_output = sharedtypes::DBPluginOutput {
+                        file: Some(vec![sharedtypes::PluginFileObj {
+                            id: None,
+                            hash: Some(hash_in.to_string()),
+                            ext: Some(ext_in.to_string()),
+                            location: None,
+                        }]),
+                        jobs: None,
+                        namespace: Some(vec![sharedtypes::DbPluginNamespace {
+                            name: PLUGIN_NAME.to_string(),
+                            description: Some(PLUGIN_DESCRIPTION.to_string()),
+                        }]),
+                        parents: None,
+                        setting: None,
+                        tag: Some(vec![sharedtypes::DBPluginTagOut {
+                            name: thumb_hash.to_string(),
+                            namespace: PLUGIN_NAME.to_string(),
+                            parents: None,
+                        }]),
+                        relationship: Some(vec![sharedtypes::DbPluginRelationshipObj {
+                            file_hash: hash_in.to_string(),
+                            tag_name: thumb_hash,
+                            tag_namespace: PLUGIN_NAME.to_string(),
+                        }]),
+                    };
 
-            let plugin_output = sharedtypes::DBPluginOutput {
-                file: Some(vec![sharedtypes::PluginFileObj {
-                    id: None,
-                    hash: Some(hash_in.to_string()),
-                    ext: Some(ext_in.to_string()),
-                    location: None,
-                }]),
-                jobs: None,
-                namespace: Some(vec![sharedtypes::DbPluginNamespace {
-                    name: PLUGIN_NAME.to_string(),
-                    description: Some(PLUGIN_DESCRIPTION.to_string()),
-                }]),
-                parents: None,
-                setting: None,
-                tag: Some(vec![sharedtypes::DBPluginTagOut {
-                    name: string_blurhash.to_string(),
-                    namespace: PLUGIN_NAME.to_string(),
-                    parents: None,
-                }]),
-                relationship: Some(vec![sharedtypes::DbPluginRelationshipObj {
-                    file_hash: hash_in.to_string(),
-                    tag_name: string_blurhash,
-                    tag_namespace: PLUGIN_NAME.to_string(),
-                }]),
-            };
-
-            output.push(sharedtypes::DBPluginOutputEnum::Add(vec![plugin_output]));*/
+                    output.push(sharedtypes::DBPluginOutputEnum::Add(vec![plugin_output]));
+                    return output;
+                }
+                Err(err) => {
+                    client::log(format!(
+                        "Plugin: {} -- Failed to write: {}, {:?}",
+                        PLUGIN_NAME, hash_in, err,
+                    ));
+                }
+            }
         }
         Err(err) => {
             client::log(format!(

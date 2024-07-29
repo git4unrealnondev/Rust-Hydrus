@@ -10,6 +10,7 @@ opt-level = "z"
 lto=true
 codegenunits=1
 strip = true
+debud=false
 
 [lib]
 doc=true
@@ -18,11 +19,8 @@ path = "src/lib.rs"
 crate-type = ["dylib"]
 
 [dependencies]
-ahash = "0.8.3"
 chrono = "0.4.31"
 json = "0.12.4"
-nohash-hasher = "0.2.0"
-rayon = "1.7.0"
 serde = { version = "1.0.192", features = ["derive"] }
 strum = "0.25.0"
 strum_macros = "0.25.1"

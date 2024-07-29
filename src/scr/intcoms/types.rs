@@ -209,7 +209,8 @@ pub fn recieve<T: serde::de::DeserializeOwned>(
     conn: &mut BufReader<LocalSocketStream>,
 ) -> Result<T, anyhow::Error> {
     let mut usize_b: [u8; std::mem::size_of::<usize>()] = [0; std::mem::size_of::<usize>()];
-    conn.get_mut()
+    let _ = conn
+        .get_mut()
         .read_exact(&mut usize_b[..])
         .context("Socket send failed");
 

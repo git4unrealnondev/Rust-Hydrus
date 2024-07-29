@@ -74,7 +74,6 @@ pub fn on_download(
 
 #[no_mangle]
 pub fn on_start() {
-    println!("From FileHash plugin");
     check_existing_db();
     client::transaction_flush();
 }
@@ -152,12 +151,8 @@ fn check_existing_db() {
     for table in Supset::iter() {
         utable_count.insert(table, 0);
     }
-    let table_temp = sharedtypes::LoadDBTable::Files;
-    client::load_table(table_temp);
-
-    let file_ids = client::file_get_list_all();
     'suploop: for table in Supset::iter() {
-        let name = match client::settings_get_name(get_set(table).name) {
+        match client::settings_get_name(get_set(table).name) {
             None => {
                 client::setting_add(
                     get_set(table).name,
@@ -180,6 +175,10 @@ fn check_existing_db() {
 
         client::log(format!("Starting to process table: {:?}", &table));
 
+        let table_temp = sharedtypes::LoadDBTable::Files;
+        client::load_table(table_temp);
+
+        let file_ids = client::file_get_list_all();
         let mut total = file_ids.clone();
         let ctab = TableData {
             name: get_set(table).name,

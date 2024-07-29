@@ -60,6 +60,48 @@ fn downloadparse(img: DynamicImage) -> String {
 
 #[no_mangle]
 pub fn on_start() {
+    let should_run = match client::settings_get_name(format!("{}-shouldrun", PLUGIN_NAME)) {
+        None => {
+            client::setting_add(
+                format!("{}-shouldrun", PLUGIN_NAME).into(),
+                format!(
+                    "From plugin {} {} Determines if we should run",
+                    PLUGIN_NAME, PLUGIN_DESCRIPTION
+                )
+                .into(),
+                None,
+                Some("True".to_string()),
+                true,
+            );
+            client::transaction_flush();
+            "True".to_string()
+        }
+        Some(loc) => match loc.param {
+            None => {
+                client::setting_add(
+                    format!("{}-shouldrun", PLUGIN_NAME).into(),
+                    format!(
+                        "From plugin {} {} Determines if we should run",
+                        PLUGIN_NAME, PLUGIN_DESCRIPTION
+                    )
+                    .into(),
+                    None,
+                    Some("True".to_string()),
+                    true,
+                );
+                "True".to_string()
+            }
+            Some(out) => out,
+        },
+    };
+    if should_run == "False".to_string() {
+        client::log_no_print(format!(
+            "{} - Returning due to should run is false.",
+            PLUGIN_NAME
+        ));
+        return;
+    }
+
     let table_temp = sharedtypes::LoadDBTable::Files;
     client::load_table(table_temp);
 
@@ -101,7 +143,7 @@ pub fn on_start() {
         file_ids.len()
     ));
 
-    /*file_ids.par_iter().for_each(|fid| {
+    file_ids.par_iter().for_each(|fid| {
         if let Some(fbyte) = client::get_file(*fid.0) {
             let byte = std::fs::read(fbyte).unwrap();
 
@@ -112,10 +154,27 @@ pub fn on_start() {
                     &fid.0, &string_blurhash
                 ));
                 let tagid = client::tag_add(string_blurhash, utable, true, None);
-                client::relationship_add_db(*fid.0, tagid, true);
+                client::relationship_add(*fid.0, tagid, true);
+            } else {
+                client::log(format!(
+                    "{} Cannot load FID: {} as an image.",
+                    PLUGIN_NAME, &fid.0
+                ));
             }
         }
-    });*/
+    });
+    client::setting_add(
+        format!("{}-shouldrun", PLUGIN_NAME).into(),
+        format!(
+            "From plugin {} {} Determines if we should run",
+            PLUGIN_NAME, PLUGIN_DESCRIPTION
+        )
+        .into(),
+        None,
+        Some("False".to_string()),
+        true,
+    );
+    client::transaction_flush();
 }
 
 #[no_mangle]
