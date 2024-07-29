@@ -10,7 +10,7 @@ opt-level = "z"
 lto=true
 codegenunits=1
 strip = true
-debud=false
+debug=false
 
 [lib]
 doc=true
