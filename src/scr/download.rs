@@ -149,9 +149,7 @@ pub fn dlfile_new(
     while boolloop {
         let mut hasher = Sha512::new();
 
-        let errloop = true;
-
-        while errloop {
+        loop {
             let fileurlmatch = match &file.source_url {
                 None => {
                     panic!(

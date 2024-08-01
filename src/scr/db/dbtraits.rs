@@ -20,7 +20,6 @@ pub trait DBTraits {
     ///
     /// Adds relationship between db
     ///
-    #[inline(always)]
     fn relationship_add(&mut self, file: usize, tag: usize);
 
     ///

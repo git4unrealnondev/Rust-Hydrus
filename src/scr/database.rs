@@ -1015,13 +1015,6 @@ impl Main {
         }
     }
 
-    fn pause(&self) {
-        use std::io::{stdin, stdout, Read, Write};
-        let mut stdout = std::io::stdout();
-        stdout.write(b"Press Enter to continue...").unwrap();
-        stdout.flush().unwrap();
-        std::io::stdin().read(&mut [0]).unwrap();
-    }
     ///
     /// Checks if table is loaded in mem and if not then loads it.
     ///
