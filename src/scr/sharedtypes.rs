@@ -237,16 +237,6 @@ pub struct DbFileObj {
 }
 
 ///
-/// In memdb File object
-///
-#[derive(Debug, Deserialize, Serialize, Clone, Eq, Hash, PartialEq)]
-pub struct InMemFileObj {
-    pub hash: String,
-    pub ext: String,
-    pub location: usize,
-}
-
-///
 /// File object
 /// Should only be used for parsing data from plugins
 ///

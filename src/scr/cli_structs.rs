@@ -13,13 +13,13 @@ pub struct MainWrapper {
 
 #[derive(Debug, Parser)]
 pub enum test {
-    /// Manages their jobs in db.
+    /// Manages jobs in db.
     #[clap(subcommand)]
     Job(JobStruct),
     /// Searches the DB.
     #[clap(subcommand)]
     Search(SearchStruct),
-    /// Db Tasks Structure
+    /// Tasks to perform with the db.
     #[clap(subcommand)]
     Tasks(TasksStruct),
 }

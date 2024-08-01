@@ -197,9 +197,7 @@ pub fn main(data: &mut database::Main, scraper: &mut scraper::ScraperManager) {
                         }
                         Some(load) => load,
                     };
-                    data.load_table(&sharedtypes::LoadDBTable::Tags);
-                    data.load_table(&sharedtypes::LoadDBTable::Files);
-                    data.load_table(&sharedtypes::LoadDBTable::Relationship);
+                    data.load_table(&sharedtypes::LoadDBTable::All);
 
                     let failedtoparse: HashSet<String> = HashSet::new();
 
