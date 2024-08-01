@@ -3,9 +3,7 @@ use crate::sharedtypes;
 use crate::sharedtypes::DbFileObj;
 use crate::sharedtypes::DbJobsObj;
 use fnv::{FnvHashMap, FnvHashSet};
-use nohash::{IntMap, IntSet};
 use std::collections::{HashMap, HashSet};
-use std::hash::BuildHasherDefault;
 pub enum TagRelateConjoin {
     Tag,
     Error,
@@ -20,8 +18,8 @@ pub struct tes {
 impl tes {
     pub fn new() -> tes {
         let te = HashSet::default();
-        let out = tes { test: te };
-        out
+        
+        tes { test: te }
     }
     pub fn inc(&mut self, i: usize) {
         self.test.insert(i);
@@ -67,7 +65,8 @@ pub struct NewinMemDB {
 
 impl NewinMemDB {
     pub fn new() -> NewinMemDB {
-        let inst = NewinMemDB {
+        
+        NewinMemDB {
             _tag_nns_id_data: HashMap::default(),
             _tag_nns_data_id: HashMap::new(),
 
@@ -101,8 +100,7 @@ impl NewinMemDB {
             _namespace_max: 0,
             _file_max: 0,
             _relationship_max: 0,
-        };
-        return inst;
+        }
     }
 
     ///
@@ -181,9 +179,9 @@ impl NewinMemDB {
     pub fn settings_get_name(&self, name: &String) -> Option<&sharedtypes::DbSettingObj> {
         match self._settings_name_id.get(name) {
             None => {
-                return None;
+                None
             }
-            Some(nameref) => return Some(&self._settings_id_data[nameref]),
+            Some(nameref) => Some(&self._settings_id_data[nameref]),
         }
     }
 
@@ -193,9 +191,9 @@ impl NewinMemDB {
     pub fn namespace_get(&self, inp: &String) -> Option<&usize> {
         match self._namespace_name_id.get(inp) {
             None => {
-                return None;
+                None
             }
-            Some(inpref) => return Some(inpref),
+            Some(inpref) => Some(inpref),
         }
     }
 
@@ -215,7 +213,7 @@ impl NewinMemDB {
         for each in self._namespace_id_data.keys() {
             temp.push(*each);
         }
-        return temp;
+        temp
     }
 
     ///
@@ -234,9 +232,9 @@ impl NewinMemDB {
             Some(relref) => {
                 let mut out = HashSet::default();
                 for each in relref {
-                    out.insert(each.clone());
+                    out.insert(*each);
                 }
-                return Some(out);
+                Some(out)
             }
         }
     }
@@ -245,12 +243,7 @@ impl NewinMemDB {
     /// Returns a list of tag id's based on a file id
     ///
     pub fn relationship_get_tagid(&self, file: &usize) -> Option<HashSet<usize>> {
-        match self._relationship_file_tag.get(file) {
-            None => None,
-            Some(relref) => {
-                return Some(HashSet::from_iter(relref.clone()));
-            }
-        }
+        self._relationship_file_tag.get(file).map(|relref| HashSet::from_iter(relref.clone()))
     }
 
     ///
@@ -261,7 +254,7 @@ impl NewinMemDB {
             None => None,
             Some(relref) => {
                 if relref.is_empty() {
-                    return None;
+                    None
                 } else {
                     let temp = relref.iter();
                     let mut temp_int = &0;
@@ -269,7 +262,7 @@ impl NewinMemDB {
                         temp_int = each;
                         break;
                     }
-                    return Some(&temp_int);
+                    Some(temp_int)
                     //return Some(&relref.take(&0).unwrap());
                 }
             }
@@ -336,7 +329,7 @@ impl NewinMemDB {
     pub fn tag_remove(&mut self, id: &usize) -> Option<()> {
         let rmove = self._tag_nns_id_data.remove(id);
         match rmove {
-            None => return None,
+            None => None,
             Some(tag_data) => {
                 self._tag_nns_data_id.remove(&tag_data);
                 let ns_mgmnt = self._namespace_id_tag.get_mut(&tag_data.namespace);
@@ -346,7 +339,7 @@ impl NewinMemDB {
                         ns_data.remove(id);
                     }
                 }
-                return Some(());
+                Some(())
             }
         }
     }
@@ -418,7 +411,7 @@ impl NewinMemDB {
     ///
     fn file_location_get_id(&mut self, loc: String) -> usize {
         match self._file_location_string.get(&loc) {
-            Some(num) => return num.clone(),
+            Some(num) => *num,
             None => {
                 self._file_location_string
                     .insert(loc.to_owned(), self._file_location_count);
@@ -434,10 +427,7 @@ impl NewinMemDB {
     /// Gets location string from id
     ///
     fn file_location_get_string(&self, id: &usize) -> Option<String> {
-        match self._file_location_usize.get(id) {
-            Some(num) => return Some(num.to_string()),
-            None => None,
-        }
+        self._file_location_usize.get(id).map(|num| num.to_string())
     }
 
     ///
@@ -483,9 +473,9 @@ impl NewinMemDB {
         if namespace_exist.is_none() {
             let temp = self._namespace_max;
             self._namespace_max += 1;
-            return temp;
+            temp
         } else {
-            return self._namespace_max;
+            self._namespace_max
         }
     }
 
@@ -495,7 +485,7 @@ impl NewinMemDB {
     pub fn namespace_delete(&mut self, namepsace_id: &usize) {
         let namespace_data = self._namespace_id_data.remove(namepsace_id);
         match namespace_data {
-            None => return,
+            None => (),
             Some(namespace_obj) => {
                 self._namespace_name_id.remove(&namespace_obj.name);
                 self._namespace_id_tag.remove(namepsace_id);
@@ -514,7 +504,7 @@ impl NewinMemDB {
     /// Adds a tag into db
     ///
     pub fn tags_put(&mut self, tag_info: &sharedtypes::DbTagNNS, id: Option<usize>) -> usize {
-        let temp = self._tag_nns_data_id.get(tag_info).clone();
+        let temp = self._tag_nns_data_id.get(tag_info);
 
         match temp {
             None => {
@@ -544,7 +534,7 @@ impl NewinMemDB {
                 };
 
                 self.insert_tag_nns(sharedtypes::DbTagObjCompatability {
-                    id: working_id.clone(),
+                    id: working_id,
                     name: tag_info.name.clone(),
                     parents: None,
                     namespace: tag_info.namespace,
@@ -558,9 +548,9 @@ impl NewinMemDB {
                         }
                     }
                 }
-                return working_id;
+                working_id
             }
-            Some(id) => return id.clone(),
+            Some(id) => *id,
         }
     }
 
@@ -624,11 +614,11 @@ impl NewinMemDB {
                     self._parents_tag_rel.remove(tag_id);
                     let cantor = self.cantor_pair(tag_id, &rel);
                     self._parents_dual.remove(&cantor);
-                    ret.insert((tag_id.clone(), rel));
+                    ret.insert((*tag_id, rel));
                 }
             }
         }
-        return ret;
+        ret
     }
 
     ///
@@ -642,10 +632,10 @@ impl NewinMemDB {
         relate_tag_id: usize,
     ) -> usize {
         let parentdbojb = sharedtypes::DbParentsObj {
-            tag_namespace_id: tag_namespace_id,
-            tag_id: tag_id,
-            relate_tag_id: relate_tag_id,
-            relate_namespace_id: relate_namespace_id,
+            tag_namespace_id,
+            tag_id,
+            relate_tag_id,
+            relate_namespace_id,
         };
 
         // Catch to prevent further processing.
@@ -685,14 +675,14 @@ impl NewinMemDB {
             None => {
                 let par = self._parents_max;
                 self._parents_max += 1;
-                return par;
+                par
             }
-            Some(id) => return id.to_owned(),
+            Some(id) => id.to_owned(),
         }
     }
 
     fn cantor_pair(&self, n: &usize, m: &usize) -> usize {
-        return (n + m) * (n + m + 1) / 2 + m;
+        (n + m) * (n + m + 1) / 2 + m
     }
 
     ///
@@ -701,8 +691,8 @@ impl NewinMemDB {
     pub fn relationship_get(&self, file: &usize, tag: &usize) -> bool {
         //let utotal: usize = [file.to_string(), tag.to_string()].concat().parse::<usize>().unwrap();
         //let relate_f = self._relationship_dual.get(&(*file, *tag));
-        let relate = self._relationship_dual.get(&self.cantor_pair(&file, &tag));
-        return relate.is_some();
+        let relate = self._relationship_dual.get(&self.cantor_pair(file, tag));
+        relate.is_some()
         /*
         let tag_file = self._relationship_tag_file.get(tag);
         match tag_file {

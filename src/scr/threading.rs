@@ -12,7 +12,6 @@ use crate::sharedtypes::JobScraper;
 use crate::sharedtypes::ScraperReturn;
 
 use async_std::task;
-use futures;
 
 //use log::{error, info};
 use ratelimit::Ratelimiter;
@@ -215,7 +214,7 @@ impl Worker {
                         }
                     };
                     // Only instants the ratelimit if we don't already have it.
-                    let mut ratelimit = match rate_limit_key.get_mut(&job.site) {
+                    let ratelimit = match rate_limit_key.get_mut(&job.site) {
                         None => {
                             info_log(&format!("Creating ratelimiter for site: {}", &job.site));
                             let u_temp = rate_limit_vec.len();
@@ -233,10 +232,10 @@ impl Worker {
 
                     'urlloop: for urll in urlload {
                         'errloop: loop {
-                            download::ratelimiter_wait(&mut ratelimit);
+                            download::ratelimiter_wait(ratelimit);
                             let resp = task::block_on(download::dltext_new(
                                 urll.to_string(),
-                                &mut ratelimit,
+                                ratelimit,
                                 &mut client,
                             ));
                             let st = match resp {
@@ -304,7 +303,7 @@ impl Worker {
                                             unwrappydb
                                                 .tag_get_name(
                                                     source.clone(),
-                                                    source_url_id.unwrap().clone(),
+                                                    source_url_id.unwrap(),
                                                 )
                                                 .cloned()
                                         };
@@ -318,7 +317,7 @@ impl Worker {
                                         let fileid = match url_tag {
                                             None => {
                                                 // Download file doesn't exist.
-                                                download::ratelimiter_wait(&mut ratelimit);
+                                                download::ratelimiter_wait(ratelimit);
                                                 // URL doesn't exist in DB Will download
                                                 info_log(&format!(
                                                     "Downloading: {} to: {}",
@@ -347,7 +346,7 @@ impl Worker {
                                                     );
                                                     let tagid = unwrappydb.tag_add(
                                                         source,
-                                                        source_url_id.unwrap().clone(),
+                                                        source_url_id.unwrap(),
                                                         true,
                                                         None,
                                                     );
@@ -380,7 +379,7 @@ impl Worker {
                                                     // Fixes the link between file and url
                                                     // tag.
 
-                                                    download::ratelimiter_wait(&mut ratelimit);
+                                                    download::ratelimiter_wait(ratelimit);
                                                     // URL doesn't exist in DB Will download
                                                     info_log(&format!(
                                                         "Downloading: {} to: {}",
@@ -409,7 +408,7 @@ impl Worker {
                                                         );
                                                         let tagid = unwrappydb.tag_add(
                                                             source,
-                                                            source_url_id.unwrap().clone(),
+                                                            source_url_id.unwrap(),
                                                             true,
                                                             None,
                                                         );
@@ -449,8 +448,8 @@ impl Worker {
                     //println!("End of loop");
                     let unwrappydb = &mut db.lock().unwrap();
                     //dbg!(&job);
-                    unwrappydb.del_from_jobs_table(&job);
-                    job_params.remove(&job);
+                    unwrappydb.del_from_jobs_table(job);
+                    job_params.remove(job);
                     logging::info_log(&format!("Removing job {:?}", &job));
 
                     if let Some(jobscr) = job_ref_hash.get(job) {
@@ -467,12 +466,12 @@ impl Worker {
             }
         });
 
-        return Worker {
+        Worker {
             id,
             thread: Some(thread),
             scraper,
             jobs,
-        };
+        }
     }
 }
 

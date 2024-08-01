@@ -43,15 +43,12 @@ pub enum Tasks {
 }
 
 #[derive(Debug, EnumIter, Display)]
+#[derive(Default)]
 pub enum TasksRemove {
     RemoveNamespaceId(usize),
     RemoveNamespaceString(String),
+    #[default]
     None,
-}
-impl Default for TasksRemove {
-    fn default() -> Self {
-        TasksRemove::None
-    }
 }
 ///
 /// Determines how to run a function

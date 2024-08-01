@@ -25,7 +25,7 @@ mod cli_structs;
 pub fn main(data: &mut database::Main, scraper: &mut scraper::ScraperManager) {
     let args = cli_structs::MainWrapper::parse();
 
-    if let None = &args.a {
+    if args.a.is_none() {
         return;
     }
 
@@ -107,7 +107,7 @@ pub fn main(data: &mut database::Main, scraper: &mut scraper::ScraperManager) {
                 data.load_table(&sharedtypes::LoadDBTable::All);
                 let fids = data.relationship_get_fileid(&id.id);
                 if let Some(goodfid) = fids {
-                    logging::info_log(&format!("Found Fids:"));
+                    logging::info_log(&"Found Fids:".to_string());
                     for each in goodfid {
                         logging::info_log(&format!("{}", &each));
                     }
@@ -121,7 +121,7 @@ pub fn main(data: &mut database::Main, scraper: &mut scraper::ScraperManager) {
                     if let Some(tid) = tid {
                         let fids = data.relationship_get_fileid(tid);
                         if let Some(goodfid) = fids {
-                            logging::info_log(&format!("Found Fids:"));
+                            logging::info_log(&"Found Fids:".to_string());
                             for each in goodfid {
                                 logging::info_log(&format!("{}", &each));
                             }
@@ -132,10 +132,10 @@ pub fn main(data: &mut database::Main, scraper: &mut scraper::ScraperManager) {
                             ));
                         }
                     } else {
-                        logging::info_log(&format!("Cannot find tag :C"));
+                        logging::info_log(&"Cannot find tag :C".to_string());
                     }
                 } else {
-                    logging::info_log(&format!("Namespace isn't correct or cannot find it"));
+                    logging::info_log(&"Namespace isn't correct or cannot find it".to_string());
                 }
             }
             cli_structs::SearchStruct::Hash(hash) => {
@@ -247,7 +247,7 @@ pub fn main(data: &mut database::Main, scraper: &mut scraper::ScraperManager) {
                     }
                     data.transaction_flush();
                     println!("done");
-                    if failedtoparse.len() >= 1 {
+                    if !failedtoparse.is_empty() {
                         println!("We've got failed items.: {}", failedtoparse.len());
                         for ke in failedtoparse.iter() {
                             println!("{}", ke);
@@ -257,7 +257,7 @@ pub fn main(data: &mut database::Main, scraper: &mut scraper::ScraperManager) {
             },
             cli_structs::TasksStruct::Database(db) => {
                 use crate::helpers;
-                use async_std::task;
+                
                 match db {
                     cli_structs::Database::BackupDB => {
                         // backs up the db. check the location in setting or code if I change
@@ -302,7 +302,7 @@ pub fn main(data: &mut database::Main, scraper: &mut scraper::ScraperManager) {
                             }
                         }
                         lis.par_iter().for_each(|each| {
-                            if fiexist.lock().unwrap().contains(&each.0) {
+                            if fiexist.lock().unwrap().contains(each.0) {
                                 return;
                             }
                             let loc = helpers::getfinpath(&db_location, &lis[each.0].hash);
@@ -317,7 +317,7 @@ pub fn main(data: &mut database::Main, scraper: &mut scraper::ScraperManager) {
                             if !Path::new(&lispa).exists() {
                                 println!("{}", &lis[each.0].hash);
                                 if nsid.is_some() {
-                                    if let Some(rel) = data.relationship_get_tagid(&each.0) {
+                                    if let Some(rel) = data.relationship_get_tagid(each.0) {
                                         for eachs in rel.iter() {
                                             let dat = data.tag_id_get(eachs).unwrap();
                                             logging::info_log(&format!(
@@ -389,12 +389,11 @@ pub fn main(data: &mut database::Main, scraper: &mut scraper::ScraperManager) {
                                     }
                                 }
                             }
-                            fiexist.lock().unwrap().insert(each.0.clone());
+                            fiexist.lock().unwrap().insert(*each.0);
                             let fout = format!("{}\n", &each.0).into_bytes();
                             f.lock().unwrap().write_all(&fout).unwrap();
                         });
                         let _ = std::fs::remove_file("fileexists.txt");
-                        return;
                     }
                     cli_structs::Database::CheckInMemdb => {
                         data.load_table(&sharedtypes::LoadDBTable::Tags);

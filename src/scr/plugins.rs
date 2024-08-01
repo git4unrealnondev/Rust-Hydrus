@@ -1,4 +1,3 @@
-use bytes::BufMut;
 use libloading::{self, Library};
 use log::{error, info, warn};
 use std::collections::HashMap;
@@ -9,7 +8,6 @@ use std::thread::JoinHandle;
 use std::{fs, thread};
 use tracing_mutex::stdsync::Mutex;
 
-use crate::client::log;
 use crate::database::{self, Main};
 use crate::logging;
 use crate::sharedtypes::{self, CallbackInfo};
@@ -52,10 +50,10 @@ impl PluginManager {
         let _srv = std::thread::spawn(move || {
             let mut ipc_coms = server::PluginIpcInteract::new(main_db.clone(), threa);
             //let _ = rcv.recv();
-            let out = ipc_coms.spawn_listener(snd);
+            
 
             //println!("v");
-            out
+            ipc_coms.spawn_listener(snd)
         });
         reftoself
     }
@@ -145,7 +143,7 @@ impl PluginManager {
 
         // Errors out if I cant create a folder
         if !plugin_path.exists() {
-            let path_check = fs::create_dir_all(&plugin_path);
+            let path_check = fs::create_dir_all(plugin_path);
             match path_check {
                 Ok(_) => (),
                 Err(_) => panic!(
@@ -155,7 +153,7 @@ impl PluginManager {
             }
         }
 
-        let dirs = fs::read_dir(&plugin_path).unwrap();
+        let dirs = fs::read_dir(plugin_path).unwrap();
 
         for entry in dirs {
             let root: String = entry.as_ref().unwrap().path().display().to_string();
@@ -408,7 +406,7 @@ impl PluginManager {
                                 if tags.parents.is_none() && namespace_id.is_some() {
                                     unwrappy.tag_add(
                                         &tags.name,
-                                        namespace_id.unwrap().clone(),
+                                        namespace_id.unwrap(),
                                         true,
                                         None,
                                     );
@@ -417,7 +415,7 @@ impl PluginManager {
                                     for _parents_obj in tags.parents.unwrap() {
                                         unwrappy.tag_add(
                                             &tags.name,
-                                            namespace_id.unwrap().clone(),
+                                            namespace_id.unwrap(),
                                             true,
                                             None,
                                         );
@@ -445,7 +443,7 @@ impl PluginManager {
                                 let tag_id = unwrappy
                                     .tag_get_name(
                                         relations.tag_name.clone(),
-                                        namespace_id.unwrap().clone(),
+                                        *namespace_id.unwrap(),
                                     )
                                     .cloned();
                                 /*println!(
@@ -453,8 +451,8 @@ impl PluginManager {
                                     file_id, relations.tag_name
                                 );*/
                                 unwrappy.relationship_add(
-                                    file_id.unwrap().clone(),
-                                    tag_id.unwrap().clone(),
+                                    file_id.unwrap(),
+                                    tag_id.unwrap(),
                                     true,
                                 );
                                 //unwrappy.relationship_add(file, tag, addtodb)

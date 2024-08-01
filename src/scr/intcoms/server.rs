@@ -5,11 +5,9 @@ use crate::logging;
 use crate::plugins::PluginManager;
 use anyhow::Context;
 //use interprocess::local_socket::traits::tokio::Listener;
-use interprocess::local_socket::traits::Listener;
-use interprocess::local_socket::{prelude::*, GenericNamespaced, ListenerOptions, Stream};
+use interprocess::local_socket::{prelude::*, GenericNamespaced, ListenerOptions};
 use std::collections::HashSet;
 use std::sync::Arc;
-use std::thread;
 use tracing_mutex::stdsync::Mutex;
 //use std::sync::{Arc, Mutex};
 use std::{
@@ -321,7 +319,7 @@ impl DbInteract {
 
             types::SupportedDBRequests::RelationshipAdd(file, tag, addtodb) => {
                 let mut unwrappy = self._database.lock().unwrap();
-                let _tmep = unwrappy.relationship_add(file, tag, addtodb);
+                unwrappy.relationship_add(file, tag, addtodb);
                 Self::data_size_to_b(&true)
             }
 
@@ -408,7 +406,7 @@ impl DbInteract {
             }
             types::SupportedDBRequests::LoadTable(table) => {
                 let mut unwrappy = self._database.lock().unwrap();
-                let _tmep = unwrappy.load_table(&table);
+                unwrappy.load_table(&table);
                 Self::data_size_to_b(&true)
             }
             types::SupportedDBRequests::TransactionFlush() => {

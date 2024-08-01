@@ -6,10 +6,10 @@ use crate::logging;
 ///
 pub fn check_os_compatibility() {
     if cfg!(unix) {
-        logging::log(&format!("UNIX OS Detected."));
+        logging::log(&"UNIX OS Detected.".to_string());
     } else if cfg!(windows) {
-        logging::log(&format!("WINDOWS OS Detected."));
+        logging::log(&"WINDOWS OS Detected.".to_string());
     } else {
-        logging::panic_log(&format!("UNKNOWN OS Detected. PANICING"));
+        logging::panic_log(&"UNKNOWN OS Detected. PANICING".to_string());
     }
 }

@@ -327,7 +327,7 @@ fn init_data_request<T: serde::de::DeserializeOwned>(requesttype: &types::Suppor
 
     //Recieving size Data from server
     match types::recieve(&mut conn) {
-        Ok(out) => return out,
+        Ok(out) => out,
         Err(err) => {
             dbg!(err);
             panic!();

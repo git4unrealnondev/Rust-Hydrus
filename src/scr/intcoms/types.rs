@@ -198,8 +198,6 @@ pub fn send_preserialize(inp: &Vec<u8>, conn: &mut BufReader<LocalSocketStream>)
         .get_mut()
         .write_all(&temp)
         .context("Socket send failed");
-
-    return;
 }
 
 ///

@@ -16,7 +16,7 @@ pub fn time_secs() -> usize {
 /// Converts hour & day & minute repeatability.
 ///
 pub fn time_conv(inp: &String) -> usize {
-    if inp.to_lowercase() == "now".to_string() {
+    if inp.to_lowercase() == *"now" {
         return 0;
     }
 

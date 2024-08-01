@@ -7,9 +7,8 @@ use crate::sharedtypes::DbJobsObj;
 use crate::time_func;
 
 use log::{error, info};
-use nohash::IntSet;
 use rayon::prelude::*;
-pub use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, ValueRef};
+pub use rusqlite::types::ToSql;
 pub use rusqlite::{params, types::Null, Connection, Result, Transaction};
 use std::borrow::BorrowMut;
 use std::collections::HashMap;
@@ -38,7 +37,7 @@ macro_rules! vec_of_strings {
 /// Returns an open connection to use.
 pub fn dbinit(dbpath: &String) -> Connection {
     //Engaging Transaction Handling
-    Connection::open(&dbpath).unwrap()
+    Connection::open(dbpath).unwrap()
 }
 #[derive(Clone)]
 pub enum CacheType {
@@ -177,20 +176,18 @@ impl Main {
                         format!("{}\\{}\\{}\\{}\\", backupfolder, year, month, day);
                     break;
                 }
+            } else if Path::new(&format!(
+                "{}/{}/{}/{}/db{}.db",
+                backupfolder, year, month, day, cnt
+            ))
+            .exists()
+            {
+                cnt += 1;
             } else {
-                if Path::new(&format!(
-                    "{}/{}/{}/{}/db{}.db",
-                    backupfolder, year, month, day, cnt
-                ))
-                .exists()
-                {
-                    cnt += 1;
-                } else {
-                    properbackupfile =
-                        format!("{}/{}/{}/{}/db{}.db", backupfolder, year, month, day, cnt);
-                    properbackuplocation = format!("{}/{}/{}/{}/", backupfolder, year, month, day);
-                    break;
-                }
+                properbackupfile =
+                    format!("{}/{}/{}/{}/db{}.db", backupfolder, year, month, day, cnt);
+                properbackuplocation = format!("{}/{}/{}/{}/", backupfolder, year, month, day);
+                break;
             }
         }
 
@@ -217,7 +214,7 @@ impl Main {
             )
         }
         self.transaction_flush();
-        logging::info_log(&format!("Finished backing up the DB."));
+        logging::info_log(&"Finished backing up the DB.".to_string());
     }
 
     ///
@@ -246,7 +243,7 @@ impl Main {
                 let loc = if each.ends_with('/') | each.ends_with('\\') {
                     each[0..each.len() - 1].to_string()
                 } else {
-                    format!("{}", each)
+                    each.to_string()
                 };
 
                 let folderloc = helpers::getfinpath(&loc, &file.hash);
@@ -256,7 +253,7 @@ impl Main {
                 } else if cfg!(windows) {
                     out = format!("{}\\{}", folderloc, file.hash);
                 } else {
-                    logging::error_log(&format!("UNSUPPORTED OS FOR GETFILE CALLING."));
+                    logging::error_log(&"UNSUPPORTED OS FOR GETFILE CALLING.".to_string());
                     return None;
                 }
                 if Path::new(&out).exists() {
@@ -345,7 +342,7 @@ impl Main {
     ) {
         //let a1: String = time.to_string();
         let current_time: usize = time_func::time_secs();
-        let time_offset: usize = time_func::time_conv(&time);
+        let time_offset: usize = time_func::time_conv(time);
 
         self.jobs_add_new_todb(
             Some(site.to_owned()),
@@ -474,7 +471,7 @@ impl Main {
         let mut fin: HashSet<usize> = HashSet::new();
         let mut fin_temp: HashMap<usize, HashSet<usize>> = HashMap::new();
         let mut searched: Vec<(usize, usize)> = Vec::with_capacity(search.searches.len());
-        if let None = search.search_relate {
+        if search.search_relate.is_none() {
             if search.searches.len() == 1 {
                 stor.push(sharedtypes::SearchHolder::AND((0, 0)));
             } else {
@@ -533,7 +530,7 @@ impl Main {
                 sharedtypes::SearchHolder::AND((a, b)) => {
                     let fa = fin_temp.get(&a).unwrap();
                     let fb = fin_temp.get(&b).unwrap();
-                    let tem = fa.intersection(&fb);
+                    let tem = fa.intersection(fb);
                     for each in tem {
                         fin.insert(*each);
                     }
@@ -982,7 +979,7 @@ impl Main {
             println!("Manual loading failed. Trying from old table.");
             query_string = query_string_manual;
             let binding = self._conn.lock().unwrap();
-            let mut toexec = binding.prepare(&query_string).unwrap();
+            let mut toexec = binding.prepare(query_string).unwrap();
             let mut rows = toexec.query(params![]).unwrap();
             g1.clear();
             while let Some(each) = rows.next().unwrap() {
@@ -1020,13 +1017,13 @@ impl Main {
     ///
     pub fn load_table(&mut self, table: &sharedtypes::LoadDBTable) {
         // Blocks the thread until another thread has finished loading the table.
-        while self._tables_loading.contains(&table) {
+        while self._tables_loading.contains(table) {
             let dur = std::time::Duration::from_secs(1);
             std::thread::sleep(dur);
         }
 
-        if !self._tables_loaded.contains(&table) {
-            self._tables_loading.push(table.clone());
+        if !self._tables_loaded.contains(table) {
+            self._tables_loading.push(*table);
             match &table {
                 sharedtypes::LoadDBTable::Files => {
                     self.load_files();
@@ -1063,7 +1060,7 @@ impl Main {
                 }
             }
 
-            self._tables_loaded.push(table.clone());
+            self._tables_loaded.push(*table);
             self._tables_loading.retain(|&x| x != *table);
         }
     }
@@ -1100,29 +1097,26 @@ impl Main {
         let temp_test = binding.lock().unwrap();
         let temp = temp_test.prepare("SELECT * FROM File");
 
-        match temp {
-            Ok(mut con) => {
-                let files = con
-                    .query_map([], |row| {
-                        Ok(sharedtypes::DbFileObj {
-                            id: row.get(0).unwrap(),
-                            hash: row.get(1).unwrap(),
-                            ext: row.get(2).unwrap(),
-                            location: row.get(3).unwrap(),
-                        })
+        if let Ok(mut con) = temp {
+            let files = con
+                .query_map([], |row| {
+                    Ok(sharedtypes::DbFileObj {
+                        id: row.get(0).unwrap(),
+                        hash: row.get(1).unwrap(),
+                        ext: row.get(2).unwrap(),
+                        location: row.get(3).unwrap(),
                     })
-                    .unwrap();
+                })
+                .unwrap();
 
-                for each in files {
-                    if let Ok(res) = each {
-                        self.file_add_db(res.id, res.hash, res.ext, res.location);
-                    } else {
-                        error!("Bad File cant load {:?}", each);
-                    }
+            for each in files {
+                if let Ok(res) = each {
+                    self.file_add_db(res.id, res.hash, res.ext, res.location);
+                } else {
+                    error!("Bad File cant load {:?}", each);
                 }
             }
-            Err(_) => return,
-        };
+        }
 
         //fiex = conn.prepare("SELECT * FROM File").unwrap();
         /*files = fiex
@@ -1148,28 +1142,25 @@ impl Main {
         let temp_test = binding.lock().unwrap();
         let temp = temp_test.prepare("SELECT * FROM Namespace");
 
-        match temp {
-            Ok(mut con) => {
-                let namespaces = con
-                    .query_map([], |row| {
-                        Ok(sharedtypes::DbNamespaceObj {
-                            id: row.get(0).unwrap(),
-                            name: row.get(1).unwrap(),
-                            description: row.get(2).unwrap(),
-                        })
+        if let Ok(mut con) = temp {
+            let namespaces = con
+                .query_map([], |row| {
+                    Ok(sharedtypes::DbNamespaceObj {
+                        id: row.get(0).unwrap(),
+                        name: row.get(1).unwrap(),
+                        description: row.get(2).unwrap(),
                     })
-                    .unwrap();
+                })
+                .unwrap();
 
-                for each in namespaces {
-                    if let Ok(res) = each {
-                        self.namespace_add_db(res);
-                    } else {
-                        error!("Bad Namespace cant load {:?}", each);
-                    }
+            for each in namespaces {
+                if let Ok(res) = each {
+                    self.namespace_add_db(res);
+                } else {
+                    error!("Bad Namespace cant load {:?}", each);
                 }
             }
-            Err(_) => return,
-        };
+        }
     }
 
     ///
@@ -1182,41 +1173,38 @@ impl Main {
         let temp_test = binding.lock().unwrap();
         let temp = temp_test.prepare("SELECT * FROM Jobs");
 
-        match temp {
-            Ok(mut con) => {
-                let jobs = con
-                    .query_map([], |row| {
-                        Ok(sharedtypes::DbJobsObj {
-                            time: row.get(0).unwrap(),
-                            reptime: row.get(1).unwrap(),
-                            site: row.get(2).unwrap(),
-                            param: row.get(3).unwrap(),
-                            jobtype: sharedtypes::DbJobType::Params,
-                            //jobtype: sharedtypes::stringto_jobtype(&row.get(5).unwrap()),
-                            committype: Some(sharedtypes::stringto_commit_type(
-                                &row.get(4).unwrap(),
-                            )),
-                        })
+        if let Ok(mut con) = temp {
+            let jobs = con
+                .query_map([], |row| {
+                    Ok(sharedtypes::DbJobsObj {
+                        time: row.get(0).unwrap(),
+                        reptime: row.get(1).unwrap(),
+                        site: row.get(2).unwrap(),
+                        param: row.get(3).unwrap(),
+                        jobtype: sharedtypes::DbJobType::Params,
+                        //jobtype: sharedtypes::stringto_jobtype(&row.get(5).unwrap()),
+                        committype: Some(sharedtypes::stringto_commit_type(
+                            &row.get(4).unwrap(),
+                        )),
                     })
-                    .unwrap();
+                })
+                .unwrap();
 
-                for each in jobs {
-                    if let Ok(res) = each {
-                        self.jobs_add_new_todb(
-                            res.site,
-                            res.param,
-                            res.reptime,
-                            res.time,
-                            res.committype,
-                            res.jobtype,
-                        );
-                    } else {
-                        error!("Bad Job cant load {:?}", each);
-                    }
+            for each in jobs {
+                if let Ok(res) = each {
+                    self.jobs_add_new_todb(
+                        res.site,
+                        res.param,
+                        res.reptime,
+                        res.time,
+                        res.committype,
+                        res.jobtype,
+                    );
+                } else {
+                    error!("Bad Job cant load {:?}", each);
                 }
             }
-            Err(_) => return,
-        };
+        }
     }
 
     ///
@@ -1230,34 +1218,31 @@ impl Main {
         let temp_test = binding.lock().unwrap();
         let temp = temp_test.prepare("SELECT * FROM Parents");
 
-        match temp {
-            Ok(mut con) => {
-                let parents = con
-                    .query_map([], |row| {
-                        Ok(sharedtypes::DbParentsObj {
-                            tag_namespace_id: row.get(0).unwrap(),
-                            tag_id: row.get(1).unwrap(),
-                            relate_namespace_id: row.get(2).unwrap(),
-                            relate_tag_id: row.get(3).unwrap(),
-                        })
+        if let Ok(mut con) = temp {
+            let parents = con
+                .query_map([], |row| {
+                    Ok(sharedtypes::DbParentsObj {
+                        tag_namespace_id: row.get(0).unwrap(),
+                        tag_id: row.get(1).unwrap(),
+                        relate_namespace_id: row.get(2).unwrap(),
+                        relate_tag_id: row.get(3).unwrap(),
                     })
-                    .unwrap();
+                })
+                .unwrap();
 
-                for each in parents {
-                    if let Ok(res) = each {
-                        self.parents_add_db(
-                            res.tag_namespace_id,
-                            res.tag_id,
-                            res.relate_namespace_id,
-                            res.relate_tag_id,
-                        );
-                    } else {
-                        error!("Bad Parent cant load {:?}", each);
-                    }
+            for each in parents {
+                if let Ok(res) = each {
+                    self.parents_add_db(
+                        res.tag_namespace_id,
+                        res.tag_id,
+                        res.relate_namespace_id,
+                        res.relate_tag_id,
+                    );
+                } else {
+                    error!("Bad Parent cant load {:?}", each);
                 }
             }
-            Err(_) => return,
-        };
+        }
     }
 
     ///
@@ -1271,34 +1256,31 @@ impl Main {
         let temp_test = binding.lock().unwrap();
         let temp = temp_test.prepare("SELECT * FROM Relationship");
 
-        match temp {
-            Ok(mut con) => {
-                let relationship = con
-                    .query_map([], |row| {
-                        Ok(sharedtypes::DbRelationshipObj {
-                            fileid: row.get(0).unwrap(),
-                            tagid: row.get(1).unwrap(),
-                        })
+        if let Ok(mut con) = temp {
+            let relationship = con
+                .query_map([], |row| {
+                    Ok(sharedtypes::DbRelationshipObj {
+                        fileid: row.get(0).unwrap(),
+                        tagid: row.get(1).unwrap(),
                     })
-                    .unwrap();
+                })
+                .unwrap();
 
-                for each in relationship {
-                    match each {
-                        Ok(res) => {
-                            self.relationship_add_db(res.fileid, res.tagid);
-                        }
-                        Err(err) => {
-                            error!("Bad relationship cant load");
-                            err.to_string().contains("database disk image is malformed");
+            for each in relationship {
+                match each {
+                    Ok(res) => {
+                        self.relationship_add_db(res.fileid, res.tagid);
+                    }
+                    Err(err) => {
+                        error!("Bad relationship cant load");
+                        err.to_string().contains("database disk image is malformed");
 
-                            error!("DATABASE IMAGE IS MALFORMED PANICING rel {:?}", &err);
-                            panic!("DATABASE IMAGE IS MALFORMED PANICING rel {:?}", &err);
-                        }
+                        error!("DATABASE IMAGE IS MALFORMED PANICING rel {:?}", &err);
+                        panic!("DATABASE IMAGE IS MALFORMED PANICING rel {:?}", &err);
                     }
                 }
             }
-            Err(_) => return,
-        };
+        }
     }
 
     ///
@@ -1349,35 +1331,31 @@ impl Main {
         let temp_test = binding.lock().unwrap();
         let temp = temp_test.prepare("SELECT * FROM Tags");
 
-        match temp {
-            Ok(mut con) => {
-                let tag = con.query_map([], |row| {
-                    Ok(sharedtypes::DbTagObjCompatability {
-                        id: row.get(0).unwrap(),
-                        name: row.get(1).unwrap(),
-                        parents: None,
-                        namespace: row.get(3).unwrap(),
-                    })
-                });
+        if let Ok(mut con) = temp {
+            let tag = con.query_map([], |row| {
+                Ok(sharedtypes::DbTagObjCompatability {
+                    id: row.get(0).unwrap(),
+                    name: row.get(1).unwrap(),
+                    parents: None,
+                    namespace: row.get(3).unwrap(),
+                })
+            });
 
-                match tag {
-                    Ok(tags) => {
-                        for each in tags {
-                            if let Ok(res) = each {
-                                self.tag_add(&res.name, res.namespace, false, Some(res.id));
-                            } else {
-                                error!("Bad Tag cant load {:?}", each);
-                            }
+            match tag {
+                Ok(tags) => {
+                    for each in tags {
+                        if let Ok(res) = each {
+                            self.tag_add(&res.name, res.namespace, false, Some(res.id));
+                        } else {
+                            error!("Bad Tag cant load {:?}", each);
                         }
                     }
-                    Err(errer) => {
-                        error!("WARNING COULD NOT LOAD TAG: {:?} DUE TO ERROR", errer);
-                        return;
-                    }
+                }
+                Err(errer) => {
+                    error!("WARNING COULD NOT LOAD TAG: {:?} DUE TO ERROR", errer);
                 }
             }
-            Err(_) => return,
-        };
+        }
     }
 
     ///
@@ -1469,7 +1447,7 @@ impl Main {
                     Err(_error) => "".to_string(),
                 };
 
-                hashmap_settings.insert((set.get(0).unwrap(), re1, b.try_into().unwrap(), re3), 0);
+                hashmap_settings.insert((set.get(0).unwrap(), re1, b.into(), re3), 0);
             }
         }
         for each in hashmap_settings.keys() {
@@ -1699,7 +1677,7 @@ impl Main {
         location: &String,
         addtodb: bool,
     ) -> usize {
-        let file_grab = self.file_get_hash(&hash);
+        let file_grab = self.file_get_hash(hash);
 
         match file_grab {
             None => {
@@ -1710,7 +1688,7 @@ impl Main {
                     location.to_owned(),
                 );
                 if addtodb {
-                    self.file_add_sql(&hash, &extension, &location, &file_id);
+                    self.file_add_sql(hash, extension, location, &file_id);
                     file_id
                 } else {
                     file_id
@@ -1828,10 +1806,10 @@ impl Main {
         addtodb: bool,
     ) {
         let parent = self._inmemdb.parents_get(&sharedtypes::DbParentsObj {
-            tag_namespace_id: tag_namespace_id,
-            tag_id: tag_id,
-            relate_tag_id: relate_tag_id,
-            relate_namespace_id: relate_namespace_id,
+            tag_namespace_id,
+            tag_id,
+            relate_tag_id,
+            relate_namespace_id,
         });
 
         if addtodb & &parent.is_none() {
@@ -1857,12 +1835,12 @@ impl Main {
             None => {
                 let tag_info = sharedtypes::DbTagNNS {
                     name: tag.to_string(),
-                    namespace: namespace.clone(),
+                    namespace: *namespace,
                 };
-                let idz = self._inmemdb.tags_put(&tag_info, id);
-                return idz;
+                
+                self._inmemdb.tags_put(&tag_info, id)
             }
-            Some(tag_id_max) => return *tag_id_max,
+            Some(tag_id_max) => *tag_id_max,
         }
     }
 
@@ -1912,10 +1890,10 @@ impl Main {
                         if addtodb {
                             self.tag_add_sql(&tag_id, tags, &"".to_string(), &namespace);
                         }
-                        return tag_id;
+                        tag_id
                     }
-                    Some(tag_id) => return tag_id,
-                };
+                    Some(tag_id) => tag_id,
+                }
             }
             Some(_) => {
                 // We've got an ID coming in will check if it exists.
@@ -1930,9 +1908,9 @@ impl Main {
                 if addtodb {
                     self.tag_add_sql(&tag_id, tags, &"".to_string(), &namespace);
                 }
-                return tag_id;
+                tag_id
             }
-        };
+        }
     }
 
     ///
@@ -1990,7 +1968,7 @@ impl Main {
             site: Some(site),
             param: Some(param),
             committype: None,
-            jobtype: jobtype,
+            jobtype,
         });
     }
 
@@ -2154,14 +2132,8 @@ impl Main {
     ///
     fn search_for_namespace(&self, search: &sharedtypes::DbSearchObject) -> Option<usize> {
         match &search.namespace {
-            None => match search.namespace_id {
-                None => None,
-                Some(id) => Some(id),
-            },
-            Some(id_string) => match self.namespace_get(id_string) {
-                None => None,
-                Some(id) => Some(id.clone()),
-            },
+            None => search.namespace_id,
+            Some(id_string) => self.namespace_get(id_string).copied(),
         }
     }
 
@@ -2236,7 +2208,7 @@ impl Main {
     /// Doesn't remove from inmemory database
     ///
     pub fn del_from_jobs_table(&mut self, job: &sharedtypes::JobScraper) {
-        let mut delcommand = format!("DELETE FROM Jobs");
+        let mut delcommand = "DELETE FROM Jobs".to_string();
 
         // This is horribly shit code.
         // Opens us up to SQL injection. I should change this later
@@ -2327,7 +2299,7 @@ impl Main {
 
         // Gets list of fileids from internal db.
         match relationships {
-            None => return,
+            None => (),
             Some(fileids) => {
                 logging::log(&format!(
                     "Found {} relationships's effected for tagid: {}.",
@@ -2352,7 +2324,7 @@ impl Main {
                 logging::log(&"Relationship Loop".to_string());
                 //  self.transaction_flush();
             }
-        };
+        }
 
         //let ns_tagid = self._inmemdb.namespace_get_tagids(tagid).unwrap();
     }
@@ -2383,12 +2355,12 @@ impl Main {
         //self._conn.lock().unwrap().execute("create index ffid on Relationship(fileid);", []);
 
         self.transaction_flush();
-        if let None = self.namespace_get_string(id) {
-            logging::info_log(&format!("Stopping because I cannot get ns string."));
+        if self.namespace_get_string(id).is_none() {
+            logging::info_log(&"Stopping because I cannot get ns string.".to_string());
             return;
         }
 
-        let tagida = self.namespace_get_tagids(id).clone();
+        let tagida = self.namespace_get_tagids(id);
         if let Some(tagids) = tagida {
             for each in tagids.clone().iter() {
                 logging::log(&format!("Removing tagid: {}.", each));
@@ -2426,9 +2398,9 @@ impl Main {
         self.load_table(&sharedtypes::LoadDBTable::Parents);
         self.load_table(&sharedtypes::LoadDBTable::Tags);
 
-        logging::info_log(&format!("Starting compression of tags & relationships."));
+        logging::info_log(&"Starting compression of tags & relationships.".to_string());
 
-        let tag_max = self._inmemdb.tags_max_return().clone();
+        let tag_max = self._inmemdb.tags_max_return();
         dbg!(&tag_max);
         self._inmemdb.tags_max_reset();
 

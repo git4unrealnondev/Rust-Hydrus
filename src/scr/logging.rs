@@ -3,7 +3,6 @@
 use std::fs;
 use std::path::Path;
 
-use fast_log;
 use log::{error, info};
 
 /// TODO Needs to make check if I have access to folder before I write db.

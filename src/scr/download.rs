@@ -4,9 +4,7 @@ use super::sharedtypes;
 use bytes::Bytes;
 use file_format::FileFormat;
 use log::{error, info};
-use md5;
 use reqwest::Client;
-use sha1;
 use sha2::Digest as sha2Digest;
 use sha2::Sha512;
 use std::io::BufReader;
@@ -202,7 +200,7 @@ pub fn dlfile_new(
             cnt += 1;
         }
 
-        hasher.update(&bytes.as_ref());
+        hasher.update(bytes.as_ref());
 
         // Final Hash
         hash = format!("{:X}", hasher.finalize());
@@ -215,7 +213,7 @@ pub fn dlfile_new(
         };
 
         // Check and compare  to what the scraper wants
-        let status = hash_bytes(&bytes, &parsedhash);
+        let status = hash_bytes(&bytes, parsedhash);
 
         // Logging
         if !status.1 {
@@ -233,7 +231,7 @@ pub fn dlfile_new(
         boolloop = !status.1;
     }
 
-    let final_loc = helpers::getfinpath(&location, &hash);
+    let final_loc = helpers::getfinpath(location, &hash);
 
     // Gives file extension
     let file_ext = FileFormat::from_bytes(&bytes).extension().to_string();

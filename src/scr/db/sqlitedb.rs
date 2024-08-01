@@ -1,6 +1,6 @@
 use crate::database::CacheType;
 use log::error;
-pub use rusqlite::{params, types::Null, Connection, Result, Transaction};
+pub use rusqlite::Connection;
 use std::sync::Arc;
 use std::sync::Mutex;
 pub trait SqliteConnection {}
@@ -12,12 +12,12 @@ pub struct SqliteSearchStructs {
 
 impl SqliteSearchStructs {
     pub fn new(db_type: CacheType) -> Self {
-        let hold = SqliteSearchStructs {
+        
+
+        SqliteSearchStructs {
             conn: make_connection(db_type.clone()),
             conn_type: db_type,
-        };
-
-        hold
+        }
     }
 }
 fn make_connection(conntype: CacheType) -> Arc<Mutex<Connection>> {

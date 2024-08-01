@@ -1,4 +1,3 @@
-use crate::logging;
 use crate::logging::error_log;
 ///
 /// Returns the location as a string that will store the string
@@ -21,5 +20,5 @@ pub fn getfinpath(location: &String, hash: &String) -> String {
             error_log(&format!("{} {}", hash, err));
         }
     }
-    return final_loc;
+    final_loc
 }

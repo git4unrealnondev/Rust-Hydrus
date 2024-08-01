@@ -3,7 +3,6 @@
 
 use crate::sharedtypes;
 use ahash::AHashMap;
-use libloading;
 use log::{error, info, warn};
 use std::fs;
 use std::path::Path;
@@ -225,7 +224,7 @@ pub fn url_dump(
     let temp: libloading::Symbol<
         unsafe extern "C" fn(&Vec<sharedtypes::ScraperParam>) -> Vec<String>,
     > = unsafe { libloading.get(b"url_dump\0").unwrap() };
-    unsafe { temp(&params) }
+    unsafe { temp(params) }
 }
 ///
 /// Calls a parser. Gives the HTML to the parser to parse.

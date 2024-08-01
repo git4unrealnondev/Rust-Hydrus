@@ -6,7 +6,6 @@ use super::download;
 use super::sharedtypes;
 use crate::helpers;
 use ahash::AHashMap;
-use csv;
 use file_format::FileFormat;
 use log::{error, info};
 use serde::Deserialize;

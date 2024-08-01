@@ -1,7 +1,7 @@
 //use crate::scr::sharedtypes::jobs_add;
 //use crate::scr::sharedtypes::AllFields::EJobsAdd;
 //use crate::scr::tasks;
-use log::{error, info, warn};
+use log::{error, warn};
 
 use std::sync::Arc;
 //use std::sync::{Arc, Mutex};
@@ -154,7 +154,7 @@ fn main() {
     };
 
     let location = data.location_get();
-    file::folder_make(&format!("{}", &location));
+    file::folder_make(&location.to_string());
 
     //TODO Put code here
 
@@ -166,7 +166,7 @@ fn main() {
         "so".to_string(),
     );
 
-    let _all_field = cli::main(&mut data, &mut scraper_manager);
+    cli::main(&mut data, &mut scraper_manager);
     data.load_table(&sharedtypes::LoadDBTable::Jobs);
     let mut jobmanager = jobs::Jobs::new(scraper_manager);
 
