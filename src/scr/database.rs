@@ -1183,9 +1183,7 @@ impl Main {
                         param: row.get(3).unwrap(),
                         jobtype: sharedtypes::DbJobType::Params,
                         //jobtype: sharedtypes::stringto_jobtype(&row.get(5).unwrap()),
-                        committype: Some(sharedtypes::stringto_commit_type(
-                            &row.get(4).unwrap(),
-                        )),
+                        committype: Some(sharedtypes::stringto_commit_type(&row.get(4).unwrap())),
                     })
                 })
                 .unwrap();
@@ -1837,7 +1835,7 @@ impl Main {
                     name: tag.to_string(),
                     namespace: *namespace,
                 };
-                
+
                 self._inmemdb.tags_put(&tag_info, id)
             }
             Some(tag_id_max) => *tag_id_max,
@@ -2325,8 +2323,6 @@ impl Main {
                 //  self.transaction_flush();
             }
         }
-
-        //let ns_tagid = self._inmemdb.namespace_get_tagids(tagid).unwrap();
     }
 
     ///
@@ -2399,6 +2395,8 @@ impl Main {
         self.load_table(&sharedtypes::LoadDBTable::Tags);
 
         logging::info_log(&"Starting compression of tags & relationships.".to_string());
+        logging::info_log(&"Backing up db this could be messy.".to_string());
+        self.backup_db();
 
         let tag_max = self._inmemdb.tags_max_return();
         dbg!(&tag_max);

@@ -1,5 +1,4 @@
 static PLUGIN_NAME: &str = "file_thumbnailer";
-static DEFAULT_FOLDER_NAME: &str = "thumbnails";
 static PLUGIN_DESCRIPTION: &str = "Generates thumbnails for image files";
 static LOCATION_THUMBNAILS: &str = "thumbnails";
 static SIZE_THUMBNAIL_X: u32 = 100;
@@ -36,9 +35,7 @@ use std::{
     path::{Path, PathBuf},
 };
 use strum_macros::EnumIter;
-use thumbnailer::{
-    create_thumbnails, create_thumbnails_unknown_type, error::ThumbError, Thumbnail, ThumbnailSize,
-};
+use thumbnailer::{create_thumbnails_unknown_type, error::ThumbError, Thumbnail, ThumbnailSize};
 use webp_animation::EncodingConfig;
 use webp_animation::EncodingType;
 #[no_mangle]
@@ -89,12 +86,6 @@ pub fn return_info() -> sharedtypes::PluginInfo {
 pub fn file_thumbnailer_give_thumbnail_location(
     callback: &sharedtypes::CallbackInfoInput,
 ) -> Option<HashMap<String, sharedtypes::CallbackCustomDataReturning>> {
-    use crate::client;
-    use sha2::Digest;
-    use sha2::Sha256;
-    use std::fs::canonicalize;
-    use std::fs::create_dir_all;
-    use std::io::Cursor;
     use std::path::Path;
 
     // If we have both image and thumbnail location
@@ -175,8 +166,6 @@ fn make_thumbnail_path(dbloc: &PathBuf, imgdata: &Vec<u8>) -> (PathBuf, String) 
 pub fn file_thumbnailer_generate_thumbnail_u8(
     callback: &sharedtypes::CallbackInfoInput,
 ) -> Option<HashMap<String, sharedtypes::CallbackCustomDataReturning>> {
-    use crate::client;
-    use std::io::Cursor;
     if callback.data_name.contains(&"image".to_string()) {
         let i = callback
             .data_name
@@ -263,6 +252,8 @@ pub fn on_start() {
             PLUGIN_NAME
         ));
         return;
+    } else {
+        client::log(format!("{} - Running main processing job", PLUGIN_NAME));
     }
 
     let table_temp = sharedtypes::LoadDBTable::Files;
@@ -319,7 +310,7 @@ pub fn on_start() {
                             PLUGIN_NAME, fid.0, &pa
                         ));*/
                         let _ = std::fs::write(pa, thumb_file);
-                        let tid = client::relationship_file_tag_add(
+                        let _ = client::relationship_file_tag_add(
                             *fid.0, thumb_hash, utable, true, None,
                         );
                     }
@@ -419,7 +410,6 @@ fn generate_thumbnail_u8(inp: Vec<u8>) -> Result<Vec<u8>, std::io::Error> {
 /// Actually generates thumbnails
 ///
 pub fn generate_thumbnail(fid: usize) -> Result<Vec<u8>, std::io::Error> {
-    use file_format::{FileFormat, Kind};
     use std::io::{Error, ErrorKind};
     if let Some(fbyte) = client::get_file(fid) {
         let byte = std::fs::read(fbyte)?;
@@ -473,7 +463,6 @@ fn make_animated_img(
     };
     match res {
         Ok(ve) => {
-            use webp_animation::prelude::*;
             use webp_animation::Encoder;
             use webp_animation::EncoderOptions;
             let mut encoder = Encoder::new_with_options(
@@ -497,7 +486,7 @@ fn make_animated_img(
                     }
                 }
 
-                let test = encoder.add_frame(&*pixelbuf, (cnt * frate).try_into().unwrap());
+                let _ = encoder.add_frame(&*pixelbuf, (cnt * frate).try_into().unwrap());
                 cnt += 1;
             }
             let out = match encoder.finalize(((cnt + 1) * frate).try_into().unwrap()) {
@@ -511,16 +500,6 @@ fn make_animated_img(
             return None;
         }
     }
-}
-
-///
-/// Hash file using SHA512
-///
-fn hash_file(file: &[u8]) -> String {
-    use sha2::{Digest, Sha512};
-    let mut hasher = Sha512::new();
-    hasher.update(file);
-    format!("{:X}", hasher.finalize())
 }
 
 fn setup_thumbnail_default() -> PathBuf {
@@ -621,16 +600,6 @@ fn setup_thumbnail_location() -> Option<PathBuf> {
             };
         }
     };
-}
-
-///
-/// Appends a folder to a dir
-/// Yoinked from: https://stackoverflow.com/questions/66193779/how-to-add-a-folder-to-a-path-before-the-filename
-/// Uses unwrap should only be an issue if someone is doing something stupid like
-/// using their C directly as their location
-///
-fn append_dir(p: &Path, d: &str) -> PathBuf {
-    p.join(d)
 }
 
 ///
