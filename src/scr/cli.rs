@@ -85,8 +85,10 @@ pub fn main(data: &mut database::Main, scraper: &mut scraper::ScraperManager) {
                         );
                     }
                     Some(tags) => {
-                        for tid in tags.iter() {
-                            let tag = data.tag_id_get(tid);
+                        let mut itvec: Vec<usize> = tags.into_iter().collect();
+                        itvec.sort();
+                        for tid in itvec {
+                            let tag = data.tag_id_get(&tid);
                             match tag {
                                 None => {
                                     println!("WANRING CORRUPTION DETECTED for tagid: {}", &tid);
@@ -182,6 +184,19 @@ pub fn main(data: &mut database::Main, scraper: &mut scraper::ScraperManager) {
             }
         },
         cli_structs::test::Tasks(taskstruct) => match taskstruct {
+            cli_structs::TasksStruct::Scraper(action) => match action {
+                cli_structs::ScraperAction::Test(inp) => {
+                    match scraper.return_libloading_string(&inp.scraper) {
+                        Some(lib) => {
+                            dbg!(&lib);
+                        }
+                        None => {
+                            dbg!(scraper.sites_get());
+                        }
+                    }
+                    dbg!(&inp);
+                }
+            },
             cli_structs::TasksStruct::Reimport(reimp) => match reimp {
                 cli_structs::Reimport::DirectoryLocation(loc) => {
                     if !Path::new(&loc.location).exists() {
@@ -257,7 +272,7 @@ pub fn main(data: &mut database::Main, scraper: &mut scraper::ScraperManager) {
             },
             cli_structs::TasksStruct::Database(db) => {
                 use crate::helpers;
-                
+
                 match db {
                     cli_structs::Database::BackupDB => {
                         // backs up the db. check the location in setting or code if I change

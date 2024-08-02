@@ -631,7 +631,7 @@ pub fn on_download(
             match std::fs::write(pa, thumb) {
                 Ok(_) => {
                     client::log_no_print(format!(
-                        "Plugin: {} -- Wrote: {} to {:?}",
+                        "Plugin: {} -- Hash {hash_in} Wrote: {} to {:?}",
                         PLUGIN_NAME, &thumb_hash, &thumb_path,
                     ));
 
@@ -662,11 +662,10 @@ pub fn on_download(
                     };
 
                     output.push(sharedtypes::DBPluginOutputEnum::Add(vec![plugin_output]));
-                    return output;
                 }
                 Err(err) => {
                     client::log(format!(
-                        "Plugin: {} -- Failed to write: {}, {:?}",
+                        "Plugin: {} -- {hash_in} Failed to write: {}, {:?}",
                         PLUGIN_NAME, hash_in, err,
                     ));
                 }
@@ -674,7 +673,7 @@ pub fn on_download(
         }
         Err(err) => {
             client::log(format!(
-                "Plugin: {} -- Failed to load: {}, {:?}",
+                "Plugin: {} -- {hash_in} Failed to load: {}, {:?}",
                 PLUGIN_NAME, hash_in, err,
             ));
         }

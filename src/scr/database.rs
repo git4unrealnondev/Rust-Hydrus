@@ -1362,8 +1362,8 @@ impl Main {
     ///
     pub fn db_open(&mut self) {
         //self.execute("PRAGMA journal_mode = MEMORY".to_string());
-        self.execute("PRAGMA synchronous = OFF".to_string());
-        info!("Setting synchronous = OFF");
+        //self.execute("PRAGMA synchronous = OFF".to_string());
+        //info!("Setting synchronous = OFF");
     }
 
     ///

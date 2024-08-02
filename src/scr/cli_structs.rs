@@ -1,4 +1,4 @@
-use clap::{arg, Parser, Subcommand};
+use clap::{arg, Parser, Subcommand, ValueEnum};
 
 ///
 /// From: git4unrealnondev
@@ -19,7 +19,7 @@ pub enum test {
     /// Searches the DB.
     #[clap(subcommand)]
     Search(SearchStruct),
-    /// Tasks to perform with the db.
+    /// Tasks to perform with the program.
     #[clap(subcommand)]
     Tasks(TasksStruct),
 }
@@ -35,7 +35,42 @@ pub enum TasksStruct {
     /// Reimports a directory based on scraper.
     #[clap(subcommand)]
     Reimport(Reimport),
+    /// Scraper related actions
+    #[clap(subcommand)]
+    Scraper(ScraperAction),
 }
+///
+/// Type of job in db.
+/// Will be used to confirm what the scraping logic should work.
+///
+#[derive(Debug, Copy, Hash, Eq, PartialEq, Clone, ValueEnum)]
+#[clap(rename_all = "kebab_case")]
+pub enum DbJobType {
+    /// Default recognises this as a param query.
+    Params,
+    /// Runs a plugin directly (don't use plz).
+    Plugin,
+    /// Signifies that this is a FileUrl.
+    FileUrl,
+    /// Something else sends to scraper.
+    Scraper,
+}
+
+#[derive(Debug, Parser)]
+pub enum ScraperAction {
+    /// Tests a scraper
+    Test(ScraperTest),
+}
+#[derive(Debug, Parser)]
+pub struct ScraperTest {
+    /// Scraper to call
+    pub scraper: String,
+    /// Action to call into a scraper
+    pub action_type: DbJobType,
+    /// Input to send to the scraper
+    pub input: Option<String>,
+}
+
 #[derive(Debug, Parser)]
 pub struct DirectoryLocation {
     pub location: String,

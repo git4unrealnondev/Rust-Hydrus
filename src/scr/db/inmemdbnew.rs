@@ -18,7 +18,7 @@ pub struct tes {
 impl tes {
     pub fn new() -> tes {
         let te = HashSet::default();
-        
+
         tes { test: te }
     }
     pub fn inc(&mut self, i: usize) {
@@ -65,7 +65,6 @@ pub struct NewinMemDB {
 
 impl NewinMemDB {
     pub fn new() -> NewinMemDB {
-        
         NewinMemDB {
             _tag_nns_id_data: HashMap::default(),
             _tag_nns_data_id: HashMap::new(),
@@ -178,9 +177,7 @@ impl NewinMemDB {
     ///
     pub fn settings_get_name(&self, name: &String) -> Option<&sharedtypes::DbSettingObj> {
         match self._settings_name_id.get(name) {
-            None => {
-                None
-            }
+            None => None,
             Some(nameref) => Some(&self._settings_id_data[nameref]),
         }
     }
@@ -190,9 +187,7 @@ impl NewinMemDB {
     ///
     pub fn namespace_get(&self, inp: &String) -> Option<&usize> {
         match self._namespace_name_id.get(inp) {
-            None => {
-                None
-            }
+            None => None,
             Some(inpref) => Some(inpref),
         }
     }
@@ -243,7 +238,12 @@ impl NewinMemDB {
     /// Returns a list of tag id's based on a file id
     ///
     pub fn relationship_get_tagid(&self, file: &usize) -> Option<HashSet<usize>> {
-        self._relationship_file_tag.get(file).map(|relref| HashSet::from_iter(relref.clone()))
+        match self._relationship_file_tag.get(file) {
+            None => None,
+            Some(relref) => {
+                return Some(HashSet::from_iter(relref.clone()));
+            }
+        }
     }
 
     ///
@@ -734,7 +734,7 @@ impl NewinMemDB {
         match self._relationship_file_tag.get_mut(&file) {
             None => {
                 let mut temp = FnvHashSet::default();
-                temp.insert(file);
+                temp.insert(tag);
                 self._relationship_file_tag.insert(file, temp);
             }
             Some(rel_file) => {

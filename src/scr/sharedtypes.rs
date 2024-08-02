@@ -42,8 +42,7 @@ pub enum Tasks {
     Remove(TasksRemove),
 }
 
-#[derive(Debug, EnumIter, Display)]
-#[derive(Default)]
+#[derive(Debug, EnumIter, Display, Default)]
 pub enum TasksRemove {
     RemoveNamespaceId(usize),
     RemoveNamespaceString(String),
@@ -287,10 +286,14 @@ pub struct DbJobsObj {
 ///
 #[derive(Debug, Copy, Hash, Eq, PartialEq, Clone, EnumIter, Display)]
 pub enum DbJobType {
-    Params,  // Default recognises this as a param query.
-    Plugin,  // Runs a plugin with the data inside it.
-    FileUrl, // This is a url containing files
-    Scraper, // Sends this to a scraper directly.
+    /// Default recognises this as a param query.
+    Params,
+    /// Runs a plugin directly (don't use plz).
+    Plugin,
+    /// Signifies that this is a FileUrl.
+    FileUrl,
+    /// Something else sends to scraper.
+    Scraper,
 }
 
 ///
