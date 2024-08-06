@@ -273,7 +273,7 @@ impl Main {
     ///
     pub fn jobs_add_new_todb(
         &mut self,
-        site: Option<String>,
+        site: String,
         query: Option<String>,
         time_offset: Option<usize>,
         current_time: Option<usize>,
@@ -345,7 +345,7 @@ impl Main {
         let time_offset: usize = time_func::time_conv(time);
 
         self.jobs_add_new_todb(
-            Some(site.to_owned()),
+            site.to_owned(),
             Some(query.to_owned()),
             Some(time_offset),
             Some(current_time),
@@ -1963,7 +1963,7 @@ impl Main {
         self._inmemdb.jobs_add(DbJobsObj {
             time: Some(time),
             reptime: Some(reptime),
-            site: Some(site),
+            site,
             param: Some(param),
             committype: None,
             jobtype,

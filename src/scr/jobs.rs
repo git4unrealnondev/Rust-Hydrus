@@ -54,24 +54,34 @@ impl Jobs {
     }
 
     ///
-    /// Loads jobs to run into _jobstorun
+    /// Loads jobs to run into _jobref
     ///
     pub fn jobs_get(&mut self, db: &database::Main) {
+        let mut jobvec = Vec::new();
+        let mut scrapervec = Vec::new();
         self._secs = time_func::time_secs();
-        let _ttl = db.jobs_get_max();
+        //let _ttl = db.jobs_get_max();
         let hashjobs = db.jobs_get_all();
         let beans = self.scrapermanager.scraper_get();
         for each in hashjobs {
+            // If our time is greater then time created + offset then run job.
+            // Hella basic but it works need to make this better.
             if time_func::time_secs() >= each.1.time.unwrap() + each.1.reptime.unwrap() {
                 for eacha in beans {
-                    let dbsite = each.1.site.to_owned();
-                    if eacha._sites.contains(&dbsite.unwrap()) {
-                        self._jobref
-                            .insert(*each.0, (each.1.to_owned(), eacha.to_owned()));
+                    if eacha._sites.contains(&each.1.site.to_owned()) {
+                        // If we already have the job and it's scraper then don't add job.
+                        // Helps with deduplication can move this out of the jobs stuff
+                        if !jobvec.contains(each.1) && !scrapervec.contains(eacha) {
+                            self._jobref
+                                .insert(*each.0, (each.1.to_owned(), eacha.to_owned()));
+                            jobvec.push(each.1.to_owned());
+                            scrapervec.push(eacha.to_owned());
+                        }
                     }
                 }
             }
         }
+        dbg!(&self._jobref);
         let msg = format!(
             "Loaded {} jobs out of {} jobs. Didn't load {} Jobs due to lack of scrapers or timing.",
             &self._jobref.len(),

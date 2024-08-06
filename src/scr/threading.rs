@@ -79,21 +79,6 @@ struct Worker {
 }
 
 ///
-/// When code get deleted (cleaned up. This code runs.)
-///  Cleans thread from pool.  
-///
-/*impl Drop for threads {
-    fn drop(&mut self) {
-        for worker in &mut self._workers {
-            if let Some(thread) = worker.thread.take() {
-                info!("Shutting Down Worker from ThreadManager: {}", worker.id);
-                futures::executor::block_on(async { thread.await.unwrap()});
-            }
-        }
-    }
-}*/
-
-///
 /// closes the thread that the worker contains.
 /// Used in easy thread handeling
 /// Only reason to do this over doing this with default drop behaviour is the logging.
@@ -182,7 +167,7 @@ impl Worker {
                     }
 
                     let sc = JobScraper {
-                        site: job.site.clone().unwrap(),
+                        site: job.site.clone(),
                         param: par_vec,
                         original_param: job.param.clone().unwrap(),
                         job_type: job.jobtype,

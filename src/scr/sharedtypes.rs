@@ -274,10 +274,11 @@ pub struct PluginRelatesObj {
 pub struct DbJobsObj {
     pub time: Option<usize>,
     pub reptime: Option<usize>,
-    pub site: Option<String>,
+    pub site: String,
     pub param: Option<String>,
     pub jobtype: DbJobType,
     pub committype: Option<CommitType>,
+    //pub isrunning: bool,
 }
 
 ///

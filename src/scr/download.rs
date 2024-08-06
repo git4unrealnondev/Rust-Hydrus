@@ -63,6 +63,7 @@ pub fn client_create() -> Client {
         .gzip(true)
         .brotli(true)
         .deflate(true)
+        .zstd(true)
         .build()
         .unwrap()
 }
@@ -175,6 +176,7 @@ pub fn dlfile_new(
                     }
                 }
             }
+
             let byte = task::block_on(
                 // Downloads file into byte memory buffer
                 futureresult.unwrap().bytes(),
@@ -246,11 +248,13 @@ pub fn dlfile_new(
 
     // If the plugin manager is None then don't do anything plugin wise.
     // Useful for if doing something that we CANNOT allow plugins to run.
-    if let Some(pluginmanager) = pluginmanager {
-        pluginmanager
-            .lock()
-            .unwrap()
-            .plugin_on_download(bytes.as_ref(), &hash, &file_ext);
+    {
+        if let Some(pluginmanager) = pluginmanager {
+            pluginmanager
+                .lock()
+                .unwrap()
+                .plugin_on_download(bytes.as_ref(), &hash, &file_ext);
+        }
     }
 
     println!("Downloaded hash: {}", &hash);
