@@ -1,5 +1,6 @@
 use crate::database;
 
+use crate::logging;
 use crate::plugins::PluginManager;
 use crate::scraper;
 use crate::scraper::InternalScraper;
@@ -71,7 +72,7 @@ impl Jobs {
                     if eacha._sites.contains(&each.1.site.to_owned()) {
                         // If we already have the job and it's scraper then don't add job.
                         // Helps with deduplication can move this out of the jobs stuff
-                        if !jobvec.contains(each.1) && !scrapervec.contains(eacha) {
+                        if !jobvec.contains(each.1) {
                             self._jobref
                                 .insert(*each.0, (each.1.to_owned(), eacha.to_owned()));
                             jobvec.push(each.1.to_owned());
@@ -81,15 +82,13 @@ impl Jobs {
                 }
             }
         }
-        dbg!(&self._jobref);
         let msg = format!(
             "Loaded {} jobs out of {} jobs. Didn't load {} Jobs due to lack of scrapers or timing.",
             &self._jobref.len(),
             db.jobs_get_max(),
             db.jobs_get_max() - self._jobref.len(),
         );
-        info!("{}", msg);
-        println!("{}", msg);
+        logging::info_log(&msg);
     }
 
     ///
