@@ -155,7 +155,8 @@ pub fn stringto_jobtype(into: &String) -> DbJobType {
     }
     panic!("{}", panic);
 }
-#[derive(Debug, EnumIter, Clone, Eq, Hash, PartialEq, Copy, EnumString)]
+#[derive(Debug, EnumIter, Clone, Eq, Hash, PartialEq, Copy, EnumString, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
 pub enum CommitType {
     StopOnNothing, // Processes all files and data doesn't stop processing.
     StopOnFile,    // Stops processing if it sees a file it's already seen.
@@ -278,7 +279,7 @@ pub struct DbJobsObj {
     pub param: Option<String>,
     pub jobtype: DbJobType,
     pub committype: Option<CommitType>,
-    //pub isrunning: bool,
+    pub isrunning: bool,
 }
 
 ///

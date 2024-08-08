@@ -57,9 +57,10 @@ impl Jobs {
     ///
     /// Loads jobs to run into _jobref
     ///
-    pub fn jobs_get(&mut self, db: &database::Main) {
+    pub fn jobs_get(&mut self, db: &mut database::Main) {
         let mut jobvec = Vec::new();
-        let mut scrapervec = Vec::new();
+        let mut invalidjobvec = Vec::new();
+        let mut duplicatejobvec = Vec::new();
         self._secs = time_func::time_secs();
         //let _ttl = db.jobs_get_max();
         let hashjobs = db.jobs_get_all();
@@ -76,12 +77,22 @@ impl Jobs {
                             self._jobref
                                 .insert(*each.0, (each.1.to_owned(), eacha.to_owned()));
                             jobvec.push(each.1.to_owned());
-                            scrapervec.push(eacha.to_owned());
+                        } else {
+                            duplicatejobvec.push(each.1.to_owned());
                         }
+                    } else {
+                        invalidjobvec.push(each.1.to_owned());
                     }
                 }
             }
         }
+        dbg!(&self._jobref);
+        for (each, _) in self._jobref.iter() {
+            db.jobs_flip_inmemdb(each);
+        }
+        dbg!(db.jobs_get_isrunning());
+        dbg!(&invalidjobvec);
+        dbg!(&duplicatejobvec);
         let msg = format!(
             "Loaded {} jobs out of {} jobs. Didn't load {} Jobs due to lack of scrapers or timing.",
             &self._jobref.len(),

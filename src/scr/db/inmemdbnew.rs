@@ -173,6 +173,47 @@ impl NewinMemDB {
     }
 
     ///
+    /// Removes a job from the internal db.
+    /// Dont want to remove from the _jobs_max count because all ID's should be unique
+    /// (ensures consistency between caches of data)
+    ///
+    pub fn jobref_remove(&mut self, id: &usize) {
+        let _ = self._jobs_id_data.remove(id);
+    }
+
+    ///
+    /// Job flip is running
+    ///
+    pub fn jobref_flip_isrunning(&mut self, id: &usize) -> Option<bool> {
+        match self._jobs_id_data.get_mut(id) {
+            Some(job) => match job.isrunning {
+                true => {
+                    job.isrunning = false;
+                    Some(false)
+                }
+                false => {
+                    job.isrunning = true;
+                    Some(true)
+                }
+            },
+            None => None,
+        }
+    }
+
+    ///
+    /// Gets all running jobs
+    ///
+    pub fn jobref_get_isrunning(&self) -> HashSet<&sharedtypes::DbJobsObj> {
+        let mut out = HashSet::new();
+        for each in self._jobs_id_data.values() {
+            if each.isrunning {
+                out.insert(each);
+            }
+        }
+        out
+    }
+
+    ///
     /// Returns tag by ID.
     ///
     pub fn settings_get_name(&self, name: &String) -> Option<&sharedtypes::DbSettingObj> {

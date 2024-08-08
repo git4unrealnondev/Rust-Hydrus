@@ -79,7 +79,7 @@ fn pause() {
 fn makedb(dbloc: &str) -> database::Main {
     // Setting up DB VARS
     let path = dbloc.to_string();
-    let vers: u64 = 2;
+    let vers: usize = 3;
 
     //let dbexist = Path::new(&path).exists();
 
@@ -87,7 +87,7 @@ fn makedb(dbloc: &str) -> database::Main {
 
     //let mut dbcon = scr::database::dbinit(&path);
 
-    database::Main::new(path, vers.try_into().unwrap())
+    database::Main::new(path, vers)
 
     //let dbcon =
     //data.load_mem(&mut data._conn);
@@ -172,7 +172,7 @@ fn main() {
 
     data.transaction_flush();
 
-    jobmanager.jobs_get(&data);
+    jobmanager.jobs_get(&mut data);
 
     // Converts db into Arc for multithreading
     let mut arc = Arc::new(Mutex::new(data));
