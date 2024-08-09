@@ -272,28 +272,11 @@ impl Main {
     ///
     /// Adds the job to the inmemdb
     ///
-    pub fn jobs_add_new_todb(
-        &mut self,
-        site: String,
-        query: Option<String>,
-        time_offset: Option<usize>,
-        current_time: Option<usize>,
-        committype: Option<sharedtypes::CommitType>,
-        jobtype: sharedtypes::DbJobType,
-    ) {
+    pub fn jobs_add_new_todb(&mut self, job: sharedtypes::DbJobsObj) {
         //let querya = query.split(' ').map(|s| s.to_string()).collect();
-        let wrap = sharedtypes::DbJobsObj {
-            site,
-            param: query,
-            time: current_time,
-            reptime: time_offset,
-            jobtype,
-            committype,
-            isrunning: false,
-        };
         //let wrap = jobs::JobsRef{};
 
-        self._inmemdb.jobref_new(wrap);
+        self._inmemdb.jobref_new(job);
 
         /*self._inmemdb.jobref_new(
             site.to_string(),
@@ -327,44 +310,6 @@ impl Main {
             ],
         );
         self.db_commit_man();
-    }
-
-    ///
-    /// New jobs adding management.
-    /// Will not add job to db is time is now.
-    ///
-    pub fn jobs_add_new(
-        &mut self,
-        site: &String,
-        query: &String,
-        time: &String,
-        committype: Option<sharedtypes::CommitType>,
-        addtodb: bool,
-        jobtype: sharedtypes::DbJobType,
-    ) {
-        //let a1: String = time.to_string();
-        let current_time: usize = time_func::time_secs();
-        let time_offset: usize = time_func::time_conv(time);
-
-        self.jobs_add_new_todb(
-            site.to_owned(),
-            Some(query.to_owned()),
-            Some(time_offset),
-            Some(current_time),
-            committype,
-            jobtype,
-        );
-        if addtodb {
-            self.jobs_add_new_sql(
-                site,
-                query,
-                time,
-                &committype.unwrap(),
-                current_time,
-                time_offset,
-                jobtype,
-            );
-        }
     }
 
     ///
@@ -422,11 +367,11 @@ impl Main {
         });
     }
 
-    ///
+    /*///
     /// Adds job to system.
     /// Will not add job to system if time is now.
     ///
-    pub fn jobs_add_main(
+    pub fn jobs_add_main_OLD(
         &mut self,
         jobs_time: String,
         jobs_rep: &str,
@@ -472,7 +417,7 @@ impl Main {
                 jobtype,
             );
         }
-    }
+    }*/
 
     ///
     /// Handles the searching of the DB dynamically.
@@ -721,19 +666,14 @@ impl Main {
 
         // Making Tags Table
         name = "Tags".to_string();
-        keys = vec_of_strings!["id", "name", "parents", "namespace"];
-        vals = vec_of_strings!["INTEGER", "TEXT", "INTEGER", "INTEGER"];
+        keys = vec_of_strings!["id", "name", "namespace"];
+        vals = vec_of_strings!["INTEGER", "TEXT", "INTEGER"];
         self.table_create(&name, &keys, &vals);
 
         // Making Parents Table. Relates tags to tag parents.
         name = "Parents".to_string();
-        keys = vec_of_strings![
-            "tag_namespace_id",
-            "tag_id",
-            "relate_namespace_id",
-            "relate_tag_id"
-        ];
-        vals = vec_of_strings!["INTEGER", "INTEGER", "INTEGER", "INTEGER"];
+        keys = vec_of_strings!["tag_id", "relate_tag_id"];
+        vals = vec_of_strings!["INTEGER", "INTEGER"];
         self.table_create(&name, &keys, &vals);
 
         // Making Namespace Table
@@ -751,8 +691,16 @@ impl Main {
 
         // Making Jobs Table
         name = "Jobs".to_string();
-        keys = vec_of_strings!["time", "reptime", "site", "param", "CommitType"];
-        vals = vec_of_strings!["INTEGER", "INTEGER", "TEXT", "TEXT", "TEXT"];
+        keys = vec_of_strings![
+            "id",
+            "time",
+            "reptime",
+            "Manager",
+            "site",
+            "param",
+            "CommitType"
+        ];
+        vals = vec_of_strings!["INTEGER", "INTEGER", "INTEGER", "TEXT", "TEXT", "TEXT", "TEXT"];
         self.table_create(&name, &keys, &vals);
 
         self.transaction_flush();
@@ -920,7 +868,7 @@ impl Main {
         self.backup_db();
         let jobs_cnt = self.db_table_collumn_getnames(&"Jobs".to_string()).len();
         match jobs_cnt {
-            6 => {
+            5 => {
                 logging::info_log(&format!("Starting work on Jobs."));
                 if !self.check_table_exists("Jobs_Old".to_string()) {
                     self.alter_table(&"Jobs".to_string(), &"Jobs_Old".to_string());
@@ -942,7 +890,20 @@ impl Main {
                         let param: String = row.get(3).unwrap();
                         let committype: String = row.get(4).unwrap();
 
-                        storage.insert((cnt.clone(), time, reptime, "", site, param, committype));
+                        storage.insert((
+                            cnt.clone(),
+                            time,
+                            reptime,
+                            serde_json::to_string(&sharedtypes::DbJobsManager {
+                                jobtype: sharedtypes::DbJobType::Params,
+                                recreation: None,
+                                additionaldata: None,
+                            })
+                            .unwrap(),
+                            site,
+                            param,
+                            committype,
+                        ));
                         cnt += 1;
                     }
                 }
@@ -987,7 +948,8 @@ impl Main {
             }
             _ => {
                 logging::error_log(&format!(
-                    "Weird table loading. Should be 6 or 7 for db upgrade."
+                    "Weird table loading. Should be 5 or 7 for db upgrade. Pulled {}",
+                    &jobs_cnt
                 ));
                 logging::panic_log(&format!(
                     "DB IS IN WEIRD INCONSISTEINT STATE PLEASE ROLLBACK TO LATEST BACKUP."
@@ -1058,7 +1020,7 @@ impl Main {
         }
         let tags_cnt = self.db_table_collumn_getnames(&"Parents".to_string()).len();
         match tags_cnt {
-            2 => {
+            3 => {
                 if self.check_table_exists("Parents".to_string())
                     && !self.check_table_exists("Parents_Old".to_string())
                 {
@@ -1090,8 +1052,8 @@ impl Main {
                         storage.insert((tag, relate));
                     }
                 }
-                let keys = &vec_of_strings!("tag_id", "relate_tag_id");
-                let vals = &vec_of_strings!("INTEGER", "INTEGER");
+                let keys = &vec_of_strings!("tag_id", "relate_tag_id", "limit_to");
+                let vals = &vec_of_strings!("INTEGER", "INTEGER", "TEXT");
                 self.table_create(&"Parents".to_string(), keys, vals);
 
                 // Putting blank parenthesis forces rust to drop conn which is locking our reference to
@@ -1110,7 +1072,7 @@ impl Main {
             }
             _ => {
                 logging::error_log(&format!(
-                    "Weird tags table loading. Should be 2 or 4 for db upgrade."
+                    "Weird tags table loading. Should be 3 or 4 for db upgrade."
                 ));
                 logging::panic_log(&format!(
                     "DB IS IN WEIRD INCONSISTEINT STATE PLEASE ROLLBACK TO LATEST BACKUP."
@@ -1118,59 +1080,7 @@ impl Main {
             }
         }
 
-        //self.db_version_set(3);
-
-        self.transaction_flush();
-    }
-
-    ///
-    /// Migrates version of DB from one to two
-    /// MESSY DO NOT ACTUALLY CALL THIS
-    ///
-    fn db_update_one_to_two(&mut self) {
-        if !self.check_table_exists("File_Old".to_string()) {
-            self.alter_table(&"File".to_string(), &"File_Old".to_string());
-        }
-        if !self.check_table_exists("Jobs_Old".to_string()) {
-            self.alter_table(&"Jobs".to_string(), &"Jobs_Old".to_string());
-        }
-        if !self.check_table_exists("Namespace_Old".to_string()) {
-            self.alter_table(&"Namespace".to_string(), &"Namespace_Old".to_string());
-        }
-        if !self.check_table_exists("Parents_Old".to_string()) {
-            self.alter_table(&"Parents".to_string(), &"Parents_Old".to_string());
-        }
-        if !self.check_table_exists("Relationship_Old".to_string()) {
-            self.alter_table(&"Relationship".to_string(), &"Relationship_Old".to_string());
-        }
-        if !self.check_table_exists("Settings_Old".to_string()) {
-            self.alter_table(&"Settings".to_string(), &"Settings_Old".to_string());
-        }
-        if !self.check_table_exists("Tags_Old".to_string()) {
-            self.alter_table(&"Tags".to_string(), &"Tags_Old".to_string());
-        }
-        self.first_db(); // Recreates tables with new defaults
-
-        //let conn = dbinit(&loc);
-        self.transaction_flush();
-        self.load_mesm(true);
-
-        println!("Dropping temp tables");
-        info!("Dropping temp tables");
-        self.db_drop_table(&"File_Old".to_string());
-        self.db_drop_table(&"Jobs_Old".to_string());
-        self.db_drop_table(&"Namespace_Old".to_string());
-        self.db_drop_table(&"Parents_Old".to_string());
-        self.db_drop_table(&"Relationship_Old".to_string());
-        self.db_drop_table(&"Settings_Old".to_string());
-        self.db_drop_table(&"Tags_Old".to_string());
-        self.transaction_flush();
-        println!("Vacuuming DB");
-        info!("Vacuuming DB");
-
-        self.vacuum();
-
-        self.db_version_set(2);
+        self.db_version_set(3);
 
         self.transaction_flush();
     }
@@ -1246,10 +1156,11 @@ impl Main {
             ));
         }
 
-        let db_vers = g1[0] as usize;
+        let mut db_vers = g1[0] as usize;
 
         logging::info_log(&format!("check_version: Loaded version {}", db_vers));
         loop {
+            dbg!("loop");
             if self._vers != db_vers {
                 info!("STARTING MIGRATION");
                 logging::info_log(&format!(
@@ -1258,15 +1169,14 @@ impl Main {
                     db_vers + 1
                 ));
                 if db_vers == 1 && self._vers == 2 {
-                    self.db_update_one_to_two();
+                    panic!("How did you get here vers is 1 did you do something dumb??")
                 } else if db_vers + 1 == 3 {
                     self.db_update_two_to_three();
-                    //g1[0] += 1;
+                    db_vers += 1;
                 }
 
                 logging::info_log(&format!("Finished upgrade to V{}.", db_vers + 1));
 
-                return false;
                 self.transaction_flush();
                 if db_vers == self._vers {
                     logging::info_log(&format!(
@@ -1447,14 +1357,17 @@ impl Main {
         if let Ok(mut con) = temp {
             let jobs = con
                 .query_map([], |row| {
+                    let manager: String = row.get(3).unwrap();
+                    let man = serde_json::from_str(&manager).unwrap();
+
                     Ok(sharedtypes::DbJobsObj {
-                        time: row.get(0).unwrap(),
-                        reptime: row.get(1).unwrap(),
-                        site: row.get(2).unwrap(),
-                        param: row.get(3).unwrap(),
-                        jobtype: sharedtypes::DbJobType::Params,
-                        //jobtype: sharedtypes::stringto_jobtype(&row.get(5).unwrap()),
-                        committype: Some(sharedtypes::stringto_commit_type(&row.get(4).unwrap())),
+                        id: row.get(0).unwrap(),
+                        time: row.get(1).unwrap(),
+                        reptime: row.get(2).unwrap(),
+                        site: row.get(4).unwrap(),
+                        param: row.get(5).unwrap(),
+                        jobmanager: man,
+                        committype: Some(sharedtypes::stringto_commit_type(&row.get(6).unwrap())),
                         isrunning: false,
                     })
                 })
@@ -1462,14 +1375,7 @@ impl Main {
 
             for each in jobs {
                 if let Ok(res) = each {
-                    self.jobs_add_new_todb(
-                        res.site,
-                        res.param,
-                        res.reptime,
-                        res.time,
-                        res.committype,
-                        res.jobtype,
-                    );
+                    self.jobs_add_new_todb(res);
                 } else {
                     error!("Bad Job cant load {:?}", each);
                 }
@@ -1492,22 +1398,16 @@ impl Main {
             let parents = con
                 .query_map([], |row| {
                     Ok(sharedtypes::DbParentsObj {
-                        tag_namespace_id: row.get(0).unwrap(),
-                        tag_id: row.get(1).unwrap(),
-                        relate_namespace_id: row.get(2).unwrap(),
-                        relate_tag_id: row.get(3).unwrap(),
+                        tag_id: row.get(0).unwrap(),
+                        relate_tag_id: row.get(1).unwrap(),
+                        limit_to: row.get(2).unwrap(),
                     })
                 })
                 .unwrap();
 
             for each in parents {
                 if let Ok(res) = each {
-                    self.parents_add_db(
-                        res.tag_namespace_id,
-                        res.tag_id,
-                        res.relate_namespace_id,
-                        res.relate_tag_id,
-                    );
+                    self.parents_add_db(res);
                 } else {
                     error!("Bad Parent cant load {:?}", each);
                 }
@@ -1675,224 +1575,6 @@ impl Main {
     }
 
     ///
-    /// Pulls OLD db into memdb.
-    /// main: &mut Main, conn: &Connection
-    ///
-    pub fn load_mesm(&mut self, _addtodb: bool) {
-        dbg!("Loading DB.");
-        //let mut brr =  tempmem._conn.borrow();1
-
-        //drop(brr);
-        //let conn = dbinit(&self._dbpath);
-        //let mutborrow = &*self._conn.borrow_mut();
-        // Loads data from db into memory. CAN BE SLOW SHOULD OPTIMIZE WITH HASHMAP MAYBE??
-
-        let mut hashmap_files: HashMap<(usize, String, String, String), u32> = HashMap::new();
-        let mut hashmap_jobs: HashMap<(String, String, String, sharedtypes::CommitType), u32> =
-            HashMap::new();
-        let _hashmap_namespace: HashMap<(usize, String, String), u32> = HashMap::new();
-        let mut hashmap_parents: HashMap<(usize, usize, usize, usize), u32> = HashMap::new();
-        let mut hashmap_namespace: HashMap<(usize, String, String), u32> = HashMap::new();
-        let mut hashmap_relationships: HashMap<(usize, usize), u32> = HashMap::new();
-        let mut hashmap_tags: HashMap<(usize, String, String, usize), u32> = HashMap::new();
-        let mut hashmap_settings: HashMap<(String, String, Option<usize>, String), u32> =
-            HashMap::new();
-
-        {
-            let con = self._conn.clone();
-            let conney = con.lock().unwrap();
-            let mut setex = conney.prepare("SELECT * FROM Settings_Old").unwrap();
-            let mut sets = setex.query(params![]).unwrap();
-
-            dbg!("Loading Settings");
-            while let Some(set) = sets.next().unwrap() {
-                let b1: String = set.get(2).unwrap(); // FIXME
-                let b: usize = b1.parse::<usize>().unwrap();
-                let re1: String = match set.get(1) {
-                    Ok(re1) => re1,
-                    Err(_error) => "".to_string(),
-                };
-                let re3: String = match set.get(3) {
-                    Ok(re3) => re3,
-                    Err(_error) => "".to_string(),
-                };
-
-                hashmap_settings.insert((set.get(0).unwrap(), re1, b.into(), re3), 0);
-            }
-        }
-        for each in hashmap_settings.keys() {
-            self.setting_add_sql(
-                each.0.to_string(),
-                &Some(each.1.to_owned()),
-                each.2,
-                &Some(each.3.to_owned()),
-            );
-        }
-        hashmap_settings.clear();
-        self.transaction_flush();
-
-        {
-            let con = self._conn.clone();
-            let conney = con.lock().unwrap();
-
-            let mut fiex = conney.prepare("SELECT * FROM File_Old").unwrap();
-            let mut files = fiex.query(params![]).unwrap();
-            while let Some(file) = files.next().unwrap() {
-                let id: String = file.get(0).unwrap();
-                hashmap_files.insert(
-                    (
-                        id.parse::<usize>().unwrap(),
-                        file.get(1).unwrap(),
-                        file.get(2).unwrap(),
-                        file.get(3).unwrap(),
-                    ),
-                    0,
-                );
-            }
-        }
-        dbg!("Loading Files");
-        for each in hashmap_files.keys() {
-            //let file_id = self.file_add_db(
-            //    &each.0.to_string(),
-            //    &each.1.to_string(),
-            //    &each.2.to_string(),
-            //);
-
-            self.file_add_sql(&each.1, &each.2, &each.3, &each.0);
-        }
-
-        {
-            let con = self._conn.clone();
-            let conney = con.lock().unwrap();
-            let mut jobex = conney.prepare("SELECT * FROM Jobs_Old").unwrap();
-            let mut jobs = jobex.query(params![]).unwrap();
-
-            while let Some(job) = jobs.next().unwrap() {
-                let a1: String = job.get(0).unwrap();
-                let b1: String = job.get(1).unwrap();
-                let d1: String = job.get(2).unwrap();
-                let e1: String = job.get(3).unwrap();
-                let c1: String = job.get(4).unwrap();
-                let c: sharedtypes::CommitType = sharedtypes::stringto_commit_type(&c1);
-                let _a: usize = a1.parse::<usize>().unwrap();
-                let _b: usize = b1.parse::<usize>().unwrap();
-                hashmap_jobs.insert((d1, e1, b1, c), 0);
-            }
-        }
-        for each in hashmap_jobs.keys() {
-            let current_time: usize = time_func::time_secs();
-            let time_offset: usize = time_func::time_conv(&each.2);
-            self.jobs_add_new_sql(
-                &each.0,
-                &each.1,
-                &each.2,
-                &each.3,
-                current_time,
-                time_offset,
-                sharedtypes::DbJobType::Params,
-            );
-            //self.jobs_add_new(, addtodb);
-        }
-        hashmap_jobs.clear();
-        {
-            let con = self._conn.clone();
-            let conney = con.lock().unwrap();
-            let mut naex = conney.prepare("SELECT * FROM Namespace_Old").unwrap();
-            let mut names = naex.query(params![]).unwrap();
-
-            dbg!("Loading Namespaces");
-            while let Some(name) = names.next().unwrap() {
-                let id: String = name.get(0).unwrap();
-                hashmap_namespace.insert(
-                    (
-                        id.parse::<usize>().unwrap(),
-                        name.get(1).unwrap(),
-                        name.get(2).unwrap(),
-                    ),
-                    0,
-                );
-            }
-        }
-        for each in hashmap_namespace.keys() {
-            //let name_id = self.namespace_add_db(&each.0.to_string());
-            self.namespace_add_sql(&each.1.to_string(), &Some(each.2.to_string()), &each.0);
-        }
-        hashmap_namespace.clear();
-        {
-            let con = self._conn.clone();
-            let conney = con.lock().unwrap();
-            let mut paex = conney.prepare("SELECT * FROM Parents_Old").unwrap();
-            let mut paes = paex.query(params![]).unwrap();
-            dbg!("Loading Parents");
-            while let Some(tag) = paes.next().unwrap() {
-                let a1: String = tag.get(0).unwrap();
-                let a2: String = tag.get(1).unwrap();
-                let a3: String = tag.get(2).unwrap();
-                let a4: String = tag.get(3).unwrap();
-
-                let b1 = a1.parse::<usize>().unwrap();
-                let b2 = a2.parse::<usize>().unwrap();
-                let b3 = a3.parse::<usize>().unwrap();
-                let b4 = a4.parse::<usize>().unwrap();
-                hashmap_parents.insert((b1, b2, b3, b4), 0);
-            }
-        }
-
-        for each in hashmap_parents.keys() {
-            self.parents_add_sql(&each.0, &each.1, &each.2, &each.3);
-        }
-        hashmap_parents.clear();
-        {
-            let con = self._conn.clone();
-            let conney = con.lock().unwrap();
-            let mut relx = conney.prepare("SELECT * FROM Relationship_Old").unwrap();
-            let mut rels = relx.query(params![]).unwrap();
-            dbg!("Loading Relationships");
-            while let Some(tag) = rels.next().unwrap() {
-                let a1: String = tag.get(0).unwrap();
-                let b1: String = tag.get(1).unwrap();
-                let a: usize = a1.parse::<usize>().unwrap();
-                let b = b1.parse::<usize>();
-                if let Err(ref error) = b.clone() {
-                    println!("WARNING: CANNOT LOAD NUMBER: {} {} {} {}", error, a1, b1, a);
-                    panic!();
-                }
-                hashmap_relationships.insert((a, b.unwrap()), 0);
-                //relationship_vec.push((a, b));
-            }
-        }
-        for each in hashmap_relationships.keys() {
-            self.relationship_add_sql(each.0, each.1);
-        }
-        hashmap_relationships.clear();
-        {
-            let con = self._conn.clone();
-            let conney = con.lock().unwrap();
-            let mut taex = conney.prepare("SELECT * FROM Tags_Old").unwrap();
-            let mut tags = taex.query(params![]).unwrap();
-            dbg!("Loading Tags");
-            while let Some(tag) = tags.next().unwrap() {
-                let id: String = tag.get(0).unwrap();
-                let ns: String = tag.get(3).unwrap();
-                hashmap_tags.insert(
-                    (
-                        id.parse::<usize>().unwrap(),
-                        tag.get(1).unwrap(),
-                        tag.get(2).unwrap(),
-                        ns.parse::<usize>().unwrap(),
-                    ),
-                    0,
-                );
-            }
-        }
-        for each in hashmap_tags.keys() {
-            self.tag_add_sql(&each.0, &each.1, &each.2, &each.3);
-        }
-
-        hashmap_tags.clear();
-    }
-
-    ///
     /// db get namespace wrapper
     ///
     pub fn namespace_get(&self, inp: &String) -> Option<&usize> {
@@ -2030,21 +1712,19 @@ impl Main {
     ///
     /// Wrapper that handles inserting parents info into DB.
     ///
-    fn parents_add_sql(
-        &mut self,
-        tag_namespace_id: &usize,
-        tag_id: &usize,
-        relate_namespace_id: &usize,
-        relate_tag_id: &usize,
-    ) {
-        let inp = "INSERT INTO Parents VALUES(?, ?, ?, ?)";
+    fn parents_add_sql(&mut self, parent: &sharedtypes::DbParentsObj) {
+        let inp = "INSERT INTO Parents VALUES(?, ?, ?)";
+        let limit_to = match parent.limit_to {
+            None => &Null as &dyn ToSql,
+            Some(out) => &out.to_string(),
+        };
+
         let _out = self._conn.borrow_mut().lock().unwrap().execute(
             inp,
             params![
-                tag_namespace_id.to_string(),
-                tag_id.to_string(),
-                relate_namespace_id.to_string(),
-                relate_tag_id.to_string()
+                parent.tag_id.to_string(),
+                parent.relate_tag_id.to_string(),
+                limit_to
             ],
         );
         self.db_commit_man();
@@ -2053,15 +1733,8 @@ impl Main {
     ///
     /// Wrapper for inmemdb adding
     ///
-    fn parents_add_db(
-        &mut self,
-        tag_namespace_id: usize,
-        tag_id: usize,
-        relate_namespace_id: usize,
-        relate_tag_id: usize,
-    ) -> usize {
-        self._inmemdb
-            .parents_put(tag_namespace_id, tag_id, relate_namespace_id, relate_tag_id)
+    fn parents_add_db(&mut self, parent: sharedtypes::DbParentsObj) -> usize {
+        self._inmemdb.parents_put(parent)
     }
 
     ///
@@ -2069,29 +1742,23 @@ impl Main {
     ///
     pub fn parents_add(
         &mut self,
-        tag_namespace_id: usize,
         tag_id: usize,
-        relate_namespace_id: usize,
         relate_tag_id: usize,
+        limit_to: Option<usize>,
         addtodb: bool,
     ) {
-        let parent = self._inmemdb.parents_get(&sharedtypes::DbParentsObj {
-            tag_namespace_id,
+        let par = sharedtypes::DbParentsObj {
             tag_id,
             relate_tag_id,
-            relate_namespace_id,
-        });
+            limit_to,
+        };
+        let parent = self._inmemdb.parents_get(&par);
 
         if addtodb & &parent.is_none() {
-            self.parents_add_sql(
-                &tag_namespace_id,
-                &tag_id,
-                &relate_namespace_id,
-                &relate_tag_id,
-            );
+            self.parents_add_sql(&par);
         }
 
-        self.parents_add_db(tag_namespace_id, tag_id, relate_namespace_id, relate_tag_id);
+        self.parents_add_db(par);
     }
 
     ///
@@ -2226,25 +1893,28 @@ impl Main {
 
     fn jobs_add_db(
         &mut self,
+        id: usize,
         time: usize,
         reptime: usize,
         site: String,
         param: String,
-        jobtype: sharedtypes::DbJobType,
+        jobmanager: sharedtypes::DbJobsManager,
     ) {
         self._inmemdb.jobs_add(DbJobsObj {
+            id,
             time: Some(time),
             reptime: Some(reptime),
             site,
             param: Some(param),
             committype: None,
-            jobtype,
+            jobmanager,
             isrunning: false,
         });
     }
 
     pub fn jobs_add(
         &mut self,
+        id: Option<usize>,
         time: usize,
         reptime: usize,
         site: &String,
@@ -2252,25 +1922,37 @@ impl Main {
         filler: bool,
         addtodb: bool,
         committype: &sharedtypes::CommitType,
-        jobtype: sharedtypes::DbJobType,
+        jobsmanager: sharedtypes::DbJobsManager,
     ) {
-        self.jobs_add_db(time, reptime, site.to_string(), param.to_string(), jobtype);
-
+        let id = match id {
+            None => self._inmemdb.jobs_get_max().clone(),
+            Some(id) => id,
+        };
         if addtodb {
             let inp = "INSERT INTO Jobs VALUES(?, ?, ?, ?, ?, ?)";
             let _out = self._conn.borrow_mut().lock().unwrap().execute(
                 inp,
                 params![
+                    id.to_string(),
                     time.to_string(),
                     reptime.to_string(),
+                    serde_json::to_string(&jobsmanager).unwrap(),
                     site,
                     param,
                     committype.to_string(),
-                    jobtype.to_string()
                 ],
             );
             self.db_commit_man();
         }
+        self.jobs_add_db(
+            id,
+            time,
+            reptime,
+            site.to_string(),
+            param.to_string(),
+            jobsmanager,
+        );
+
         dbg!(&filler, &addtodb);
     }
 

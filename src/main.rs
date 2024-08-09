@@ -148,25 +148,32 @@ fn main() {
     data.check_version();
 
     let plugin_option = data.settings_get_name(&"pluginloadloc".to_string());
+    dbg!("a");
     let plugin_loc = match plugin_option {
         None => "".to_string(),
         Some(pluginobj) => pluginobj.param.as_ref().unwrap().clone(),
     };
 
+    dbg!("a");
     let location = data.location_get();
+    dbg!("a");
     file::folder_make(&location.to_string());
 
     //TODO Put code here
 
+    dbg!("a");
     // Makes new scraper manager.
     let mut scraper_manager = scraper::ScraperManager::new();
+    dbg!("a");
     scraper_manager.load(
         "./scrapers".to_string(),
         "/target/release/".to_string(),
         "so".to_string(),
     );
 
+    dbg!("a");
     cli::main(&mut data, &mut scraper_manager);
+    dbg!("a");
     data.load_table(&sharedtypes::LoadDBTable::Jobs);
     let mut jobmanager = jobs::Jobs::new(scraper_manager);
 

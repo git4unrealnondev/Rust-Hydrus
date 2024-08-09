@@ -170,7 +170,7 @@ impl Worker {
                         site: job.site.clone(),
                         param: par_vec,
                         original_param: job.param.clone().unwrap(),
-                        job_type: job.jobtype,
+                        job_type: job.jobmanager.jobtype,
                         //job_ref: job.clone(),
                     };
                     job_ref_hash.insert(sc.clone(), job);
@@ -496,8 +496,21 @@ fn parse_tags(
                         relate.namespace.description,
                         true,
                     );
-                    let relate_id = unwrappy.tag_add(&relate.tag, relate_ns_id, true, None);
-                    unwrappy.parents_add(namespace_id, tag_id, relate_ns_id, relate_id, true);
+                    let limit_to = match relate.limit_to {
+                        None => None,
+                        Some(tag) => {
+                            let namespace_id = unwrappy.namespace_add(
+                                tag.namespace.name,
+                                tag.namespace.description,
+                                true,
+                            );
+
+                            let tid = unwrappy.tag_add(&tag.tag, namespace_id, true, None);
+                            Some(tid)
+                        }
+                    };
+                    let relate_tag_id = unwrappy.tag_add(&relate.tag, relate_ns_id, true, None);
+                    unwrappy.parents_add(tag_id, relate_tag_id, limit_to, true);
                 }
             }
 

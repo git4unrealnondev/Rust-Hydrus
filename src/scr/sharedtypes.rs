@@ -2,7 +2,7 @@
 #![allow(unused_variables)]
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use std::fmt;
 use strum::IntoEnumIterator;
@@ -273,20 +273,40 @@ pub struct PluginRelatesObj {
 ///
 #[derive(Debug, Hash, Eq, PartialEq, Clone)]
 pub struct DbJobsObj {
+    pub id: usize,
     pub time: Option<usize>,
     pub reptime: Option<usize>,
     pub site: String,
     pub param: Option<String>,
-    pub jobtype: DbJobType,
+    pub jobmanager: DbJobsManager,
     pub committype: Option<CommitType>,
     pub isrunning: bool,
+}
+
+///
+/// Manager on job type and logic
+///
+#[derive(Debug, Hash, Eq, PartialEq, Clone, Serialize, Deserialize)]
+pub struct DbJobsManager {
+    pub jobtype: DbJobType,
+    pub recreation: Option<DbJobRecreation>,
+    pub additionaldata: Option<(Vec<String>, Vec<String>)>,
+}
+
+///
+/// Recreate current job on x event
+///
+#[derive(Debug, Hash, Eq, PartialEq, Clone, Serialize, Deserialize)]
+pub enum DbJobRecreation {
+    OnTagId(usize),
+    OnTag(String, usize),
 }
 
 ///
 /// Type of job in db.
 /// Will be used to confirm what the scraping logic should work.
 ///
-#[derive(Debug, Copy, Hash, Eq, PartialEq, Clone, EnumIter, Display)]
+#[derive(Debug, Copy, Hash, Eq, PartialEq, Clone, EnumIter, Display, Serialize, Deserialize)]
 pub enum DbJobType {
     /// Default recognises this as a param query.
     Params,
@@ -303,10 +323,10 @@ pub enum DbJobType {
 ///
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy)]
 pub struct DbParentsObj {
-    pub tag_namespace_id: usize,
     pub tag_id: usize,
-    pub relate_namespace_id: usize,
     pub relate_tag_id: usize,
+    /// IE Only limit this to A->B as it relates to C.
+    pub limit_to: Option<usize>,
 }
 
 ///
@@ -429,7 +449,7 @@ pub struct FileObject {
 /// Holder of Tag info.
 /// Keeps relationalship info into account.
 ///
-#[derive(Debug, Eq, PartialEq, Hash)]
+#[derive(Debug, Eq, PartialEq, Hash, Clone)]
 
 pub struct TagObject {
     pub namespace: GenericNamespaceObj,
@@ -442,6 +462,7 @@ pub struct TagObject {
 pub struct SubTag {
     pub namespace: GenericNamespaceObj,
     pub tag: String,
+    pub limit_to: Option<Tag>,
     pub tag_type: TagType,
 }
 #[derive(Debug, Eq, PartialEq, Hash, Clone)]

@@ -46,14 +46,15 @@ pub fn main(data: &mut database::Main, scraper: &mut scraper::ScraperManager) {
                             committype: comfinal,
                         };
 
-                        data.jobs_add_new(
+                        /*data.jobs_add(
+                            None,
                             &jobs_add.site,
                             &jobs_add.query,
                             &jobs_add.time,
                             Some(jobs_add.committype),
                             true,
                             sharedtypes::DbJobType::Params,
-                        );
+                        );*/
                     }
                     Err(_) => {
                         let enum_vec = sharedtypes::CommitType::iter().collect::<Vec<_>>();

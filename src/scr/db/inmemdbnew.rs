@@ -665,54 +665,40 @@ impl NewinMemDB {
     ///
     /// Puts a parent into db
     ///
-    pub fn parents_put(
-        &mut self,
-        tag_namespace_id: usize,
-        tag_id: usize,
-        relate_namespace_id: usize,
-        relate_tag_id: usize,
-    ) -> usize {
-        let parentdbojb = sharedtypes::DbParentsObj {
-            tag_namespace_id,
-            tag_id,
-            relate_tag_id,
-            relate_namespace_id,
-        };
-
+    pub fn parents_put(&mut self, parent: sharedtypes::DbParentsObj) -> usize {
         // Catch to prevent further processing.
-        match self.parents_get(&parentdbojb) {
+        match self.parents_get(&parent) {
             None => {}
             Some(id) => return id.to_owned(),
         }
 
-        let cantor = self.cantor_pair(&parentdbojb.tag_id, &parentdbojb.relate_tag_id);
+        let cantor = self.cantor_pair(&parent.tag_id, &parent.relate_tag_id);
         self._parents_dual.insert(cantor);
-        let rel = self._parents_rel_tag.get_mut(&parentdbojb.relate_tag_id);
+        let rel = self._parents_rel_tag.get_mut(&parent.relate_tag_id);
         match rel {
             None => {
                 let mut temp: HashSet<usize> = HashSet::default();
-                temp.insert(parentdbojb.tag_id);
-                self._parents_rel_tag
-                    .insert(parentdbojb.relate_tag_id, temp);
+                temp.insert(parent.tag_id);
+                self._parents_rel_tag.insert(parent.relate_tag_id, temp);
             }
             Some(rel_id) => {
-                rel_id.insert(parentdbojb.tag_id); //parents_tag_get
+                rel_id.insert(parent.tag_id); //parents_tag_get
             }
         }
 
-        let tag = self._parents_tag_rel.get_mut(&parentdbojb.tag_id);
+        let tag = self._parents_tag_rel.get_mut(&parent.tag_id);
         match tag {
             None => {
                 let mut temp: HashSet<usize> = HashSet::default();
-                temp.insert(parentdbojb.relate_tag_id);
-                self._parents_tag_rel.insert(parentdbojb.tag_id, temp);
+                temp.insert(parent.relate_tag_id);
+                self._parents_tag_rel.insert(parent.tag_id, temp);
             }
             Some(tag_id) => {
-                tag_id.insert(parentdbojb.relate_tag_id);
+                tag_id.insert(parent.relate_tag_id);
             }
         }
 
-        match self.parents_get(&parentdbojb) {
+        match self.parents_get(&parent) {
             None => {
                 let par = self._parents_max;
                 self._parents_max += 1;
