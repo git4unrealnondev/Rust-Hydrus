@@ -577,7 +577,6 @@ impl NewinMemDB {
                 self.insert_tag_nns(sharedtypes::DbTagObjCompatability {
                     id: working_id,
                     name: tag_info.name.clone(),
-                    parents: None,
                     namespace: tag_info.namespace,
                 });
                 self._tag_max += 1;

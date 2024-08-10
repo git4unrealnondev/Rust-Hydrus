@@ -183,7 +183,18 @@ pub enum SearchStruct {
     Tag(Tag),
     /// Searches By Hash.
     Hash(Hashy),
+    /// Searches for parent relations with a tag
+    Parent(Parent),
 }
+
+#[derive(Debug, Parser)]
+pub struct Parent {
+    #[arg(required = true, exclusive = false)]
+    pub tag: String,
+    #[arg(required = true, exclusive = false)]
+    pub namespace: usize,
+}
+
 #[derive(Debug, Parser)]
 pub struct Tag {
     #[arg(required = true, exclusive = false)]

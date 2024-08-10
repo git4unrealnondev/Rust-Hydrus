@@ -131,6 +131,15 @@ fn main() {
 
     os::check_os_compatibility();
 
+    let mut scraper_manager = scraper::ScraperManager::new();
+
+    // Makes new scraper manager.
+    scraper_manager.load(
+        "./scrapers".to_string(),
+        "/target/release/".to_string(),
+        "so".to_string(),
+    );
+
     //TODO NEEDS MAIN INFO PULLER HERE. PULLS IN EVERYTHING INTO DB.
 
     //if let scr::sharedtypes::AllFields::EJobsAdd(ref tempe) = all_field {
@@ -145,47 +154,35 @@ fn main() {
     let mut alt_connection = database::dbinit(&dbloc.to_string()); // NOTE ONLY USER FOR LOADING DB DYNAMICALLY
     data.load_table(&sharedtypes::LoadDBTable::Settings);
     data.transaction_flush();
-    data.check_version();
+    data.check_version(&mut scraper_manager);
 
     let plugin_option = data.settings_get_name(&"pluginloadloc".to_string());
-    dbg!("a");
     let plugin_loc = match plugin_option {
         None => "".to_string(),
         Some(pluginobj) => pluginobj.param.as_ref().unwrap().clone(),
     };
-
-    dbg!("a");
-    let location = data.location_get();
-    dbg!("a");
-    file::folder_make(&location.to_string());
-
-    //TODO Put code here
-
-    dbg!("a");
-    // Makes new scraper manager.
-    let mut scraper_manager = scraper::ScraperManager::new();
-    dbg!("a");
-    scraper_manager.load(
-        "./scrapers".to_string(),
-        "/target/release/".to_string(),
-        "so".to_string(),
-    );
-
-    dbg!("a");
-    cli::main(&mut data, &mut scraper_manager);
-    dbg!("a");
-    data.load_table(&sharedtypes::LoadDBTable::Jobs);
-    let mut jobmanager = jobs::Jobs::new(scraper_manager);
-
-    data.transaction_flush();
-
-    jobmanager.jobs_get(&mut data);
 
     // Converts db into Arc for multithreading
     let mut arc = Arc::new(Mutex::new(data));
 
     let mut pluginmanager = plugins::PluginManager::new(plugin_loc.to_string(), arc.clone());
 
+    let location = arc.lock().unwrap().location_get();
+    file::folder_make(&location.to_string());
+
+    //TODO Put code here
+
+    cli::main(&mut arc.lock().unwrap(), &mut scraper_manager);
+    arc.lock()
+        .unwrap()
+        .load_table(&sharedtypes::LoadDBTable::Jobs);
+    let mut jobmanager = jobs::Jobs::new(scraper_manager);
+
+    arc.lock().unwrap().transaction_flush();
+
+    jobmanager.jobs_get(&mut arc.lock().unwrap());
+
+    // Calls the on_start func for the plugins
     pluginmanager.lock().unwrap().plugin_on_start();
     // Creates a threadhandler that manages callable threads.
     let mut threadhandler = threading::Threads::new();

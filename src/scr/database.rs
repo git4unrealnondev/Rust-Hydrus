@@ -2,6 +2,8 @@
 
 use crate::logging;
 
+use crate::scraper::db_upgrade_call;
+use crate::scraper::ScraperManager;
 use crate::sharedtypes;
 use crate::sharedtypes::CommitType;
 use crate::sharedtypes::DbJobsObj;
@@ -865,7 +867,8 @@ impl Main {
     /// SQLITE Only bb
     ///
     fn db_update_two_to_three(&mut self) {
-        self.backup_db();
+        dbg!("db update");
+        //self.backup_db();
         let jobs_cnt = self.db_table_collumn_getnames(&"Jobs".to_string()).len();
         match jobs_cnt {
             5 => {
@@ -1080,7 +1083,7 @@ impl Main {
             }
         }
 
-        self.db_version_set(3);
+        //self.db_version_set(3);
 
         self.transaction_flush();
     }
@@ -1111,7 +1114,7 @@ impl Main {
     /// Checks if db version is consistent.
     /// If this function returns false signifies that we shouldn't run.
     ///
-    pub fn check_version(&mut self) -> bool {
+    pub fn check_version(&mut self, scraper_manager: &mut ScraperManager) -> bool {
         let mut query_string = "SELECT num FROM Settings WHERE name='VERSION';";
         let query_string_manual = "SELECT num FROM Settings_Old WHERE name='VERSION';";
 
@@ -1162,6 +1165,7 @@ impl Main {
         loop {
             dbg!("loop");
             if self._vers != db_vers {
+                let mut call_scrapers: bool = false;
                 info!("STARTING MIGRATION");
                 logging::info_log(&format!(
                     "Starting upgrade from V{} to V{}",
@@ -1173,9 +1177,21 @@ impl Main {
                 } else if db_vers + 1 == 3 {
                     self.db_update_two_to_three();
                     db_vers += 1;
+                    call_scrapers = true;
                 }
 
-                logging::info_log(&format!("Finished upgrade to V{}.", db_vers + 1));
+                if call_scrapers {
+                    for (internal_scraper, scraper_library) in scraper_manager.library_get().iter()
+                    {
+                        logging::info_log(&format!(
+                            "Starting scraper upgrade: {}",
+                            internal_scraper._name
+                        ));
+                        db_upgrade_call(scraper_library, &db_vers);
+                    }
+                }
+
+                logging::info_log(&format!("Finished upgrade to V{}.", db_vers));
 
                 self.transaction_flush();
                 if db_vers == self._vers {
@@ -1506,8 +1522,7 @@ impl Main {
                 Ok(sharedtypes::DbTagObjCompatability {
                     id: row.get(0).unwrap(),
                     name: row.get(1).unwrap(),
-                    parents: None,
-                    namespace: row.get(3).unwrap(),
+                    namespace: row.get(2).unwrap(),
                 })
             });
 
@@ -1759,6 +1774,19 @@ impl Main {
         }
 
         self.parents_add_db(par);
+    }
+
+    ///
+    /// Relates the list of relationships assoicated with tag
+    ///
+    pub fn parents_rel_get(&self, relid: &usize) -> Option<&HashSet<usize>> {
+        self._inmemdb.parents_rel_get(relid)
+    }
+    ///
+    /// Relates the list of tags assoicated with relations
+    ///
+    pub fn parents_tag_get(&self, tagid: &usize) -> Option<&HashSet<usize>> {
+        self._inmemdb.parents_tag_get(tagid)
     }
 
     ///

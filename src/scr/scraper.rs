@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 #![allow(unused_variables)]
 
-use crate::sharedtypes;
+use crate::{logging, sharedtypes};
 use ahash::AHashMap;
 use log::{error, info, warn};
 use std::fs;
@@ -246,4 +246,20 @@ pub fn url_load_test(libloading: &libloading::Library, params: Vec<String>) -> V
     let temp: libloading::Symbol<unsafe extern "C" fn(&Vec<String>) -> Vec<String>> =
         unsafe { libloading.get(b"url_get\0").unwrap() };
     unsafe { temp(&params) }
+}
+
+pub fn db_upgrade_call(libloading: &libloading::Library, db_version: &usize) {
+    let temp: libloading::Symbol<unsafe extern "C" fn(&usize)> =
+        match unsafe { libloading.get(b"db_upgrade_call\0") } {
+            Err(err) => {
+                logging::error_log(&format!(
+                    "Could not run scraper upgrade for db version {} because of {}.",
+                    db_version, err
+                ));
+                return;
+            }
+            Ok(lib) => lib,
+        };
+
+    unsafe { temp(db_version) }
 }

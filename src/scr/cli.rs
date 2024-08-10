@@ -75,6 +75,33 @@ pub fn main(data: &mut database::Main, scraper: &mut scraper::ScraperManager) {
             }
         },
         cli_structs::test::Search(searchstruct) => match searchstruct {
+            cli_structs::SearchStruct::Parent(parent) => {
+                data.load_table(&sharedtypes::LoadDBTable::Parents);
+                data.load_table(&sharedtypes::LoadDBTable::Tags);
+                match data.tag_get_name(parent.tag.clone(), parent.namespace) {
+                    None => {
+                        dbg!("Cannot find tag.");
+                    }
+                    Some(tid) => {
+                        dbg!("rel_get");
+                        //let mut col = Vec::new();
+                        //let mut ucol = Vec::new();
+                        if let Some(rel) = data.parents_rel_get(tid) {
+                            for each in rel {
+                                dbg!(each, data.tag_id_get(each).unwrap());
+                            }
+                        }
+
+                        dbg!("tag_get");
+
+                        if let Some(rel) = data.parents_tag_get(tid) {
+                            for each in rel {
+                                dbg!(each, data.tag_id_get(each).unwrap());
+                            }
+                        }
+                    }
+                }
+            }
             cli_structs::SearchStruct::Fid(id) => {
                 data.load_table(&sharedtypes::LoadDBTable::All);
                 let hstags = data.relationship_get_tagid(&id.id);

@@ -68,14 +68,21 @@ fn scraper_file_return(inp: &sharedtypes::ScraperFileInput) -> sharedtypes::SubT
         },
         tag: url,
         tag_type: sharedtypes::TagType::Normal,
+        limit_to: None,
     }
 }
 
-fn subgen(name: &NsIdent, tag: String, ttype: sharedtypes::TagType) -> sharedtypes::SubTag {
+fn subgen(
+    name: &NsIdent,
+    tag: String,
+    ttype: sharedtypes::TagType,
+    limit_to: Option<sharedtypes::Tag>,
+) -> sharedtypes::SubTag {
     sharedtypes::SubTag {
         namespace: nsobjplg(name),
-        tag: tag,
+        tag,
         tag_type: ttype,
+        limit_to,
     }
 }
 
@@ -487,6 +494,7 @@ fn parse_pools(
                 &NsIdent::PoolId,
                 multpool["id"].to_string(),
                 sharedtypes::TagType::Normal,
+                None,
             )),
             tag: multpool["creator_name"].to_string(),
             tag_type: sharedtypes::TagType::Normal,
@@ -499,6 +507,7 @@ fn parse_pools(
                 &NsIdent::PoolCreator,
                 multpool["creator_name"].to_string(),
                 sharedtypes::TagType::Normal,
+                None,
             )),
             tag: multpool["creator_id"].to_string(),
             tag_type: sharedtypes::TagType::Normal,
@@ -511,6 +520,7 @@ fn parse_pools(
                 &NsIdent::PoolId,
                 multpool["id"].to_string(),
                 sharedtypes::TagType::Normal,
+                None,
             )),
             tag: multpool["name"].to_string(),
             tag_type: sharedtypes::TagType::Normal,
@@ -523,6 +533,7 @@ fn parse_pools(
                 &NsIdent::PoolId,
                 multpool["id"].to_string(),
                 sharedtypes::TagType::Normal,
+                None,
             )),
             tag: multpool["description"].to_string(),
             tag_type: sharedtypes::TagType::Normal,
@@ -550,6 +561,7 @@ fn parse_pools(
                 &NsIdent::PoolId,
                 multpool["id"].to_string(),
                 sharedtypes::TagType::Normal,
+                None,
             )),
             tag: created_at,
             tag_type: sharedtypes::TagType::Normal,
@@ -561,6 +573,7 @@ fn parse_pools(
                 &NsIdent::PoolId,
                 multpool["id"].to_string(),
                 sharedtypes::TagType::Normal,
+                None,
             )),
             tag: updated_at,
             tag_type: sharedtypes::TagType::Normal,
@@ -585,16 +598,16 @@ fn parse_pools(
                     }),
                 )),
             }); // Relates the file id to pool
-            tag.insert(sharedtypes::TagObject {
-                namespace: nsobjplg(&NsIdent::PoolId),
-                relates_to: Some(subgen(
-                    &NsIdent::FileId,
-                    postids.to_string(),
-                    sharedtypes::TagType::Normal,
-                )),
-                tag: multpool["id"].to_string(),
-                tag_type: sharedtypes::TagType::Normal,
-            });
+                /*tag.insert(sharedtypes::TagObject {
+                    namespace: nsobjplg(&NsIdent::PoolId),
+                    relates_to: Some(subgen(
+                        &NsIdent::FileId,
+                        postids.to_string(),
+                        sharedtypes::TagType::Normal,None
+                    )),
+                    tag: multpool["id"].to_string(),
+                    tag_type: sharedtypes::TagType::Normal,
+                });*/
 
             // TODO need to fix the pool positing. Needs to relate the pool position with the ID better.
             tag.insert(sharedtypes::TagObject {
@@ -603,12 +616,17 @@ fn parse_pools(
                     &NsIdent::FileId,
                     postids.to_string(),
                     sharedtypes::TagType::Normal,
+                    Some(sharedtypes::Tag {
+                        tag: multpool["id"].to_string(),
+                        namespace: nsobjplg(&NsIdent::PoolId),
+                        needsrelationship: false,
+                    }),
                 )),
                 tag: cnt.to_string(),
                 tag_type: sharedtypes::TagType::Normal,
             });
 
-            tag.insert(sharedtypes::TagObject {
+            /*tag.insert(sharedtypes::TagObject {
                 namespace: nsobjplg(&NsIdent::PoolId),
                 relates_to: Some(subgen(
                     &NsIdent::PoolPosition,
@@ -617,7 +635,7 @@ fn parse_pools(
                 )),
                 tag: multpool["id"].to_string(),
                 tag_type: sharedtypes::TagType::Normal,
-            });
+            });*/
 
             cnt += 1;
         }
@@ -778,6 +796,7 @@ pub fn parser(params: &String) -> Result<sharedtypes::ScraperObject, sharedtypes
                 &NsIdent::FileId,
                 js["posts"][inc]["id"].to_string(),
                 sharedtypes::TagType::Normal,
+                None,
             )),
             sharedtypes::TagType::Normal,
         );
@@ -811,6 +830,7 @@ pub fn parser(params: &String) -> Result<sharedtypes::ScraperObject, sharedtypes
                     &NsIdent::FileId,
                     js["posts"][inc]["id"].to_string(),
                     sharedtypes::TagType::Normal,
+                    None,
                 )),
 
                 tag: js["posts"][inc]["relationships"]["parent_id"].to_string(),
@@ -824,6 +844,7 @@ pub fn parser(params: &String) -> Result<sharedtypes::ScraperObject, sharedtypes
                     &NsIdent::FileId,
                     js["posts"][inc]["id"].to_string(),
                     sharedtypes::TagType::Normal,
+                    None,
                 )),
                 sharedtypes::TagType::Normal,
             );

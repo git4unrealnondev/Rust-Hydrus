@@ -24,7 +24,6 @@ pub struct DbTagNNS {
 pub struct DbTagObjCompatability {
     pub id: usize,
     pub name: String,
-    pub parents: Option<usize>,
     pub namespace: usize,
 }
 
