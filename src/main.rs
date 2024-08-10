@@ -2,6 +2,7 @@
 //use crate::scr::sharedtypes::AllFields::EJobsAdd;
 //use crate::scr::tasks;
 use log::{error, warn};
+use scraper::db_upgrade_call;
 
 use std::sync::Arc;
 //use std::sync::{Arc, Mutex};
@@ -154,7 +155,6 @@ fn main() {
     let mut alt_connection = database::dbinit(&dbloc.to_string()); // NOTE ONLY USER FOR LOADING DB DYNAMICALLY
     data.load_table(&sharedtypes::LoadDBTable::Settings);
     data.transaction_flush();
-    data.check_version(&mut scraper_manager);
 
     let plugin_option = data.settings_get_name(&"pluginloadloc".to_string());
     let plugin_loc = match plugin_option {
@@ -167,6 +167,28 @@ fn main() {
 
     let mut pluginmanager = plugins::PluginManager::new(plugin_loc.to_string(), arc.clone());
 
+    // Putting this down here after plugin manager because that's when the IPC server starts and we
+    // can then inside of the scraper start calling IPC functions
+    'upgradeloop: loop {
+        let repeat = arc.lock().unwrap().check_version(&mut scraper_manager);
+        for (internal_scraper, scraper_library) in scraper_manager.library_get().iter() {
+            if repeat {
+                logging::info_log(&format!(
+                    "Starting scraper upgrade: {}",
+                    internal_scraper._name
+                ));
+
+                let db_vers = {
+                    let lck = arc.lock().unwrap();
+                    lck.db_vers_get()
+                };
+                db_upgrade_call(scraper_library, &db_vers);
+            }
+        }
+        if !repeat {
+            break 'upgradeloop;
+        }
+    }
     let location = arc.lock().unwrap().location_get();
     file::folder_make(&location.to_string());
 

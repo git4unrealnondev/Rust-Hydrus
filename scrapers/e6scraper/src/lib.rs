@@ -887,3 +887,11 @@ fn gen_source_from_md5_ext(md5: &String, ext: &String) -> String {
 
     format!("{}/{}/{}/{}.{}", base, &md5[0..2], &md5[2..4], &md5, ext)
 }
+#[path = "../../../src/scr/intcoms/client.rs"]
+mod client;
+
+#[no_mangle]
+pub fn db_upgrade_call(db_version: &usize) {
+    dbg!("E6 GOING TO LOCK DB DOES THIS WORKY");
+    client::transaction_flush();
+}

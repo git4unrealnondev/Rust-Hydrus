@@ -120,6 +120,13 @@ impl Main {
     }
 
     ///
+    /// Returns the db version number
+    ///
+    pub fn db_vers_get(&self) -> usize {
+        self._vers
+    }
+
+    ///
     /// Backs up the DB file.
     ///
     pub fn backup_db(&mut self) {
@@ -1083,7 +1090,7 @@ impl Main {
             }
         }
 
-        //self.db_version_set(3);
+        self.db_version_set(3);
 
         self.transaction_flush();
     }
@@ -1093,6 +1100,7 @@ impl Main {
     ///
     fn db_version_set(&mut self, version: usize) {
         logging::log(&format!("Setting DB Version to: {}", &version));
+        self._vers = version;
         self.setting_add(
             "VERSION".to_string(),
             Some("Version that the database is currently on.".to_string()),
@@ -1162,51 +1170,37 @@ impl Main {
         let mut db_vers = g1[0] as usize;
 
         logging::info_log(&format!("check_version: Loaded version {}", db_vers));
-        loop {
-            dbg!("loop");
-            if self._vers != db_vers {
-                let mut call_scrapers: bool = false;
-                info!("STARTING MIGRATION");
-                logging::info_log(&format!(
-                    "Starting upgrade from V{} to V{}",
-                    db_vers,
-                    db_vers + 1
-                ));
-                if db_vers == 1 && self._vers == 2 {
-                    panic!("How did you get here vers is 1 did you do something dumb??")
-                } else if db_vers + 1 == 3 {
-                    self.db_update_two_to_three();
-                    db_vers += 1;
-                    call_scrapers = true;
-                }
-
-                if call_scrapers {
-                    for (internal_scraper, scraper_library) in scraper_manager.library_get().iter()
-                    {
-                        logging::info_log(&format!(
-                            "Starting scraper upgrade: {}",
-                            internal_scraper._name
-                        ));
-                        db_upgrade_call(scraper_library, &db_vers);
-                    }
-                }
-
-                logging::info_log(&format!("Finished upgrade to V{}.", db_vers));
-
-                self.transaction_flush();
-                if db_vers == self._vers {
-                    logging::info_log(&format!(
-                        "Successfully updated db to version {}",
-                        self._vers
-                    ));
-                    break;
-                }
-            } else {
-                info!("Database Version is: {}", g1[0]);
-                break;
+        if self._vers != db_vers {
+            info!("STARTING MIGRATION");
+            logging::info_log(&format!(
+                "Starting upgrade from V{} to V{}",
+                db_vers,
+                db_vers + 1
+            ));
+            if db_vers == 1 && self._vers == 2 {
+                panic!("How did you get here vers is 1 did you do something dumb??")
+            } else if db_vers + 1 == 3 {
+                self.db_update_two_to_three();
+                db_vers += 1;
+            } else if db_vers + 1 == 4 {
+                dbg!("4 soup");
             }
+
+            logging::info_log(&format!("Finished upgrade to V{}.", db_vers));
+
+            self.transaction_flush();
+            if db_vers == self._vers {
+                logging::info_log(&format!(
+                    "Successfully updated db to version {}",
+                    self._vers
+                ));
+                return true;
+            }
+        } else {
+            info!("Database Version is: {}", g1[0]);
+            return false;
         }
-        true
+        false
     }
 
     ///

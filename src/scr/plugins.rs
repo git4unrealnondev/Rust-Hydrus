@@ -47,10 +47,10 @@ impl PluginManager {
         let threa = reftoself.clone();
 
         let (snd, _rcv) = mpsc::channel();
+        logging::log(&"Starting IPC Server.".to_string());
         let _srv = std::thread::spawn(move || {
             let mut ipc_coms = server::PluginIpcInteract::new(main_db.clone(), threa);
             //let _ = rcv.recv();
-            
 
             //println!("v");
             ipc_coms.spawn_listener(snd)
@@ -404,12 +404,7 @@ impl PluginManager {
                                 //match namespace_id {}
                                 //dbg!(&tags);
                                 if tags.parents.is_none() && namespace_id.is_some() {
-                                    unwrappy.tag_add(
-                                        &tags.name,
-                                        namespace_id.unwrap(),
-                                        true,
-                                        None,
-                                    );
+                                    unwrappy.tag_add(&tags.name, namespace_id.unwrap(), true, None);
                                 //                                    println!("plugins323 making tag: {}", tags.name);
                                 } else {
                                     for _parents_obj in tags.parents.unwrap() {
@@ -450,11 +445,7 @@ impl PluginManager {
                                     "plugins356 relating: file id {:?} to {:?}",
                                     file_id, relations.tag_name
                                 );*/
-                                unwrappy.relationship_add(
-                                    file_id.unwrap(),
-                                    tag_id.unwrap(),
-                                    true,
-                                );
+                                unwrappy.relationship_add(file_id.unwrap(), tag_id.unwrap(), true);
                                 //unwrappy.relationship_add(file, tag, addtodb)
                             }
                         }
