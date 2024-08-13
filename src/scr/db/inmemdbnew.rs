@@ -4,6 +4,7 @@ use crate::sharedtypes::DbFileObj;
 use crate::sharedtypes::DbJobsObj;
 use fnv::{FnvHashMap, FnvHashSet};
 use std::collections::{HashMap, HashSet};
+use std::hash::Hash;
 pub enum TagRelateConjoin {
     Tag,
     Error,
@@ -37,6 +38,8 @@ pub struct NewinMemDB {
 
     _parents_tag_rel: HashMap<usize, HashSet<usize>>,
     _parents_rel_tag: HashMap<usize, HashSet<usize>>,
+    _parents_cantor_limitto: HashMap<usize, HashSet<usize>>,
+    _parents_limitto_cantor: HashMap<usize, HashSet<usize>>,
 
     _jobs_id_data: HashMap<usize, sharedtypes::DbJobsObj>,
     //_jobs_name_id: HashMap<String, usize>,
@@ -79,6 +82,8 @@ impl NewinMemDB {
 
             _parents_rel_tag: HashMap::default(),
             _parents_tag_rel: HashMap::default(),
+            _parents_cantor_limitto: HashMap::default(),
+            _parents_limitto_cantor: HashMap::default(),
 
             _settings_name_id: HashMap::new(),
             _settings_id_data: HashMap::default(),
@@ -662,6 +667,78 @@ impl NewinMemDB {
     }
 
     ///
+    /// Removes a list of parents based on relational tag id
+    /// Returns a list of tag id's that were removed
+    /// DANGEROUS AVOID TO USE IF POSSIBLE
+    ///
+    pub fn parents_reltagid_remove(&mut self, relate_tag_id: &usize) -> HashSet<usize> {
+        let mut out = HashSet::new();
+        match self.parents_rel_get(relate_tag_id) {
+            None => {}
+            Some(tag_id_set) => {
+                for tag_id in tag_id_set.clone() {
+                    out.insert(tag_id);
+                    self.parents_selective_remove(&sharedtypes::DbParentsObj {
+                        tag_id,
+                        relate_tag_id: *relate_tag_id,
+                        limit_to: None,
+                    });
+                }
+            }
+        }
+        out
+    }
+
+    ///
+    /// Removes a list of parents based on tag id
+    /// Returns a list of relational tag id's that were removed
+    /// DANGEROUS AVOID TO USE IF POSSIBLE
+    ///
+    pub fn parents_tagid_remove(&mut self, tag_id: &usize) -> HashSet<usize> {
+        let mut out = HashSet::new();
+        match self.parents_tag_get(tag_id) {
+            None => {}
+            Some(relate_tag_id_set) => {
+                for relate_tag_id in relate_tag_id_set.clone() {
+                    out.insert(relate_tag_id);
+                    self.parents_selective_remove(&sharedtypes::DbParentsObj {
+                        tag_id: *tag_id,
+                        relate_tag_id,
+                        limit_to: None,
+                    });
+                }
+            }
+        }
+        out
+    }
+
+    ///
+    /// Removes a parent selectivly from the Db
+    /// USE THIS IF POSSIBLE
+    ///
+    pub fn parents_selective_remove(&mut self, parentobj: &sharedtypes::DbParentsObj) {
+        let cantor = self.cantor_pair(&parentobj.tag_id, &parentobj.relate_tag_id);
+        match self._parents_dual.remove(&cantor) {
+            false => return,
+            true => {
+                match self._parents_rel_tag.get_mut(&parentobj.relate_tag_id) {
+                    None => {}
+                    Some(relset) => {
+                        relset.remove(&parentobj.tag_id);
+                    }
+                }
+
+                match self._parents_tag_rel.get_mut(&parentobj.tag_id) {
+                    None => {}
+                    Some(tagset) => {
+                        tagset.remove(&parentobj.relate_tag_id);
+                    }
+                }
+            }
+        }
+    }
+
+    ///
     /// Puts a parent into db
     ///
     pub fn parents_put(&mut self, parent: sharedtypes::DbParentsObj) -> usize {
@@ -673,6 +750,33 @@ impl NewinMemDB {
 
         let cantor = self.cantor_pair(&parent.tag_id, &parent.relate_tag_id);
         self._parents_dual.insert(cantor);
+
+        // Manages links betwen cantor and limit arguments
+        if let Some(limitto) = parent.limit_to {
+            match self._parents_cantor_limitto.get_mut(&cantor) {
+                None => {
+                    let mut out = HashSet::new();
+                    out.insert(limitto);
+                    self._parents_cantor_limitto.insert(cantor, out);
+                }
+                Some(parentcantor) => {
+                    parentcantor.insert(limitto);
+                }
+            }
+
+            match self._parents_limitto_cantor.get_mut(&limitto) {
+                None => {
+                    let mut out = HashSet::new();
+                    out.insert(cantor);
+                    self._parents_limitto_cantor.insert(limitto, out);
+                }
+                Some(parentlimit) => {
+                    parentlimit.insert(cantor);
+                }
+            }
+        }
+
+        //Manages the relations and tags between parents
         let rel = self._parents_rel_tag.get_mut(&parent.relate_tag_id);
         match rel {
             None => {
@@ -707,8 +811,35 @@ impl NewinMemDB {
         }
     }
 
+    ///
+    /// Removes a parent from the internal db
+    ///
+    pub fn parents_delete(&self, parent_id: &usize) {
+        match self._parents_dual.get(parent_id) {
+            None => {}
+            Some(pid) => {
+                let (tag_id, relate_tag_id) = self.cantor_unpair(pid);
+            }
+        }
+    }
+
+    ///
+    /// Gets a unique value based on two inputs
+    ///
     fn cantor_pair(&self, n: &usize, m: &usize) -> usize {
         (n + m) * (n + m + 1) / 2 + m
+    }
+
+    ///
+    /// Gets the unique inputs from a cantor number
+    ///
+    fn cantor_unpair(&self, z: &usize) -> (usize, usize) {
+        let w64 = (8 * z + 1) as f64;
+        let w64two = ((w64.sqrt() - 1.0) / 2.0).floor() as usize;
+        let t = (w64two * w64two + w64two) / 2;
+        let m = z - t;
+        let n = w64two - m;
+        return (n, m);
     }
 
     ///

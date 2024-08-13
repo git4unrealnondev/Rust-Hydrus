@@ -262,6 +262,35 @@ impl DbInteract {
     ///
     pub fn dbactions_to_function(&mut self, dbaction: types::SupportedDBRequests) -> Vec<u8> {
         match dbaction {
+            types::SupportedDBRequests::ParentsPut(parent) => {
+                let mut unwrappy = self._database.lock().unwrap();
+                Self::data_size_to_b(&unwrappy.parents_add(
+                    parent.tag_id,
+                    parent.relate_tag_id,
+                    parent.limit_to,
+                    true,
+                ))
+            }
+            types::SupportedDBRequests::ParentsGet((parentswitch, id)) => {
+                let unwrappy = self._database.lock().unwrap();
+                match parentswitch {
+                    types::ParentsType::Tag => {
+                        return Self::option_to_bytes(unwrappy.parents_rel_get(&id));
+                    }
+                    types::ParentsType::Rel => {
+                        return Self::option_to_bytes(unwrappy.parents_tag_get(&id));
+                    }
+                }
+            }
+            types::SupportedDBRequests::ParentsDelete((parentswitch, (id, idtwo))) => {
+                let unwrappy = self._database.lock().unwrap();
+                match parentswitch {
+                    types::ParentsType::Tag => {}
+                    types::ParentsType::Rel => {}
+                }
+
+                Self::data_size_to_b(&true)
+            }
             types::SupportedDBRequests::GetFileLocation(id) => {
                 let unwrappy = self._database.lock().unwrap();
                 let tmep = unwrappy.get_file(&id);

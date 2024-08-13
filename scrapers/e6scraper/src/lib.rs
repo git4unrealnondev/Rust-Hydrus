@@ -893,5 +893,68 @@ mod client;
 #[no_mangle]
 pub fn db_upgrade_call(db_version: &usize) {
     dbg!("E6 GOING TO LOCK DB DOES THIS WORKY");
+    client::load_table(sharedtypes::LoadDBTable::All);
+
+    // Loads all fileids into memory
+    let mut file_ids = client::file_get_list_all();
+
+    // Gets namespace id from poolid
+    let pool_nsid = match client::namespace_get(nsobjplg(&NsIdent::PoolId).name) {
+        Some(id) => id,
+        None => client::namespace_put(
+            nsobjplg(&NsIdent::PoolId).name,
+            nsobjplg(&NsIdent::PoolId).description,
+            true,
+        ),
+    };
+
+    // Loads all tagid's that are attached to the pool
+    let pool_table = match client::namespace_get_tagids(pool_nsid) {
+        None => HashSet::new(),
+        Some(out) => out,
+    };
+    // Gets namespace id from source urls ensures that we're only working on e621 files
+    let sourceurl_nsid = match client::namespace_get("source_url".to_string()) {
+        Some(id) => id,
+        None => client::namespace_put("source_url".to_string(), None, true),
+    };
+
+    // Loads all tagid's that are attached to the e621 sources
+    let sourceurl_table = match client::namespace_get_tagids(sourceurl_nsid) {
+        None => HashSet::new(),
+        Some(out) => out,
+    };
+
+    client::log(format!(
+        "E6 Scraper-Starting to strip: {} fileids from processing list",
+        file_ids.len()
+    ));
+    let mut cnt = 0;
+    // Remotes all fileids where teh source is not e621
+    for each in sourceurl_table {
+        if let Some(tag) = client::tag_get_id(each) {
+            if !tag.name.contains("e621.net") {
+                if let Some(fids) = client::relationship_get_fileid(each) {
+                    for fid in fids.iter() {
+                        file_ids.remove(fid);
+                        cnt += 1;
+                    }
+                }
+            }
+        }
+    }
+
+    client::log(format!(
+        "E6 Scraper-Stripped: {} fileids from processing list",
+        cnt
+    ));
+    for (each, _) in file_ids {
+        if let Some(tids) = client::relationship_get_tagid(each) {
+            for tid in tids.intersection(&pool_table) {
+                dbg!(&tid);
+            }
+        }
+    }
+
     client::transaction_flush();
 }

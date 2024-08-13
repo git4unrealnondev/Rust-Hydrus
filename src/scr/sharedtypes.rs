@@ -320,7 +320,7 @@ pub enum DbJobType {
 ///
 /// Database Parents Object.
 ///
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy, Serialize, Deserialize)]
 pub struct DbParentsObj {
     pub tag_id: usize,
     pub relate_tag_id: usize,

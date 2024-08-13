@@ -171,8 +171,8 @@ fn main() {
     // can then inside of the scraper start calling IPC functions
     'upgradeloop: loop {
         let repeat = arc.lock().unwrap().check_version(&mut scraper_manager);
-        for (internal_scraper, scraper_library) in scraper_manager.library_get().iter() {
-            if repeat {
+        if repeat {
+            for (internal_scraper, scraper_library) in scraper_manager.library_get().iter() {
                 logging::info_log(&format!(
                     "Starting scraper upgrade: {}",
                     internal_scraper._name
@@ -184,11 +184,12 @@ fn main() {
                 };
                 db_upgrade_call(scraper_library, &db_vers);
             }
-        }
-        if !repeat {
+        } else {
             break 'upgradeloop;
         }
     }
+
+    // Grabs location of db
     let location = arc.lock().unwrap().location_get();
     file::folder_make(&location.to_string());
 

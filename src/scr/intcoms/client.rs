@@ -246,6 +246,31 @@ pub fn namespace_get_tagids(id: usize) -> Option<HashSet<usize>> {
         types::SupportedDBRequests::GetNamespaceTagIDs(id),
     ))
 }
+
+///
+/// Returns the parents relationship
+/// The Tag returns data about the parent
+/// The Rel returns data about the parent to it's relation
+///
+/// It's basically a 2 way pointer like the Relations table
+/// limit_to limits the exposure of
+///
+pub fn parents_get(parenttype: types::ParentsType, id: usize) -> Option<HashSet<usize>> {
+    init_data_request(&types::SupportedRequests::Database(
+        types::SupportedDBRequests::ParentsGet((parenttype, id)),
+    ))
+}
+
+///
+/// Deletes a relationship
+/// If idtwo is set to none then this deletes all relationships that match the key
+///
+pub fn parents_delete(parenttype: types::ParentsType, id: usize, idtwo: Option<usize>) -> bool {
+    init_data_request(&types::SupportedRequests::Database(
+        types::SupportedDBRequests::ParentsDelete((parenttype, (id, idtwo))),
+    ))
+}
+
 ///
 /// See the database reference for this function.
 /// I'm a lazy turd just check it their

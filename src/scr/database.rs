@@ -1755,7 +1755,7 @@ impl Main {
         relate_tag_id: usize,
         limit_to: Option<usize>,
         addtodb: bool,
-    ) {
+    ) -> usize {
         let par = sharedtypes::DbParentsObj {
             tag_id,
             relate_tag_id,
@@ -1767,7 +1767,7 @@ impl Main {
             self.parents_add_sql(&par);
         }
 
-        self.parents_add_db(par);
+        self.parents_add_db(par)
     }
 
     ///
@@ -2324,6 +2324,11 @@ impl Main {
             self.delete_parent_sql(&each.0, &each.1);
         }
     }
+
+    ///
+    /// Removes a parent item from system.
+    ///
+    pub fn parents_remove_id(&mut self, parent_id: usize) {}
 
     ///
     /// Deletes namespace by id

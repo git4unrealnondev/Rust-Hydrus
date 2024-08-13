@@ -109,6 +109,18 @@ pub enum SupportedDBRequests {
     FilterNamespaceById((HashSet<usize>, usize)),
     PluginCallback(String, usize, sharedtypes::CallbackInfoInput),
     ReloadLoadedPlugins(),
+    ParentsGet((ParentsType, usize)),
+    ParentsDelete((ParentsType, (usize, Option<usize>))),
+    ParentsPut(sharedtypes::DbParentsObj),
+}
+
+///
+/// A descriptor for the parents and the type of data that we're sending
+///
+#[derive(Debug, Serialize, Deserialize)]
+pub enum ParentsType {
+    Tag,
+    Rel,
 }
 
 ///
