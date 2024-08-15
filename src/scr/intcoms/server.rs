@@ -275,7 +275,7 @@ impl DbInteract {
                 let unwrappy = self._database.lock().unwrap();
                 match parentswitch {
                     types::ParentsType::Tag => {
-                        return Self::option_to_bytes(unwrappy.parents_rel_get(&id));
+                        return Self::option_to_bytes(unwrappy.parents_rel_get(&id).as_ref());
                     }
                     types::ParentsType::Rel => {
                         return Self::option_to_bytes(unwrappy.parents_tag_get(&id));

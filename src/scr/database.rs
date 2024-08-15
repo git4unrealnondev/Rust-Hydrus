@@ -1773,14 +1773,14 @@ impl Main {
     ///
     /// Relates the list of relationships assoicated with tag
     ///
-    pub fn parents_rel_get(&self, relid: &usize) -> Option<&HashSet<usize>> {
-        self._inmemdb.parents_rel_get(relid)
+    pub fn parents_rel_get(&self, relid: &usize) -> Option<HashSet<usize>> {
+        self._inmemdb.parents_rel_get(relid, None)
     }
     ///
     /// Relates the list of tags assoicated with relations
     ///
     pub fn parents_tag_get(&self, tagid: &usize) -> Option<&HashSet<usize>> {
-        self._inmemdb.parents_tag_get(tagid)
+        self._inmemdb.parents_tag_get(tagid, None)
     }
 
     ///
@@ -2328,7 +2328,9 @@ impl Main {
     ///
     /// Removes a parent item from system.
     ///
-    pub fn parents_remove_id(&mut self, parent_id: usize) {}
+    pub fn parents_remove_id(&mut self, parent_id: &usize) {
+        self._inmemdb.parents_remove_id(parent_id)
+    }
 
     ///
     /// Deletes namespace by id

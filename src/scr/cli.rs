@@ -87,7 +87,7 @@ pub fn main(data: &mut database::Main, scraper: &mut scraper::ScraperManager) {
                         //let mut col = Vec::new();
                         //let mut ucol = Vec::new();
                         if let Some(rel) = data.parents_rel_get(tid) {
-                            for each in rel {
+                            for each in rel.iter() {
                                 dbg!(each, data.tag_id_get(each).unwrap());
                             }
                         }

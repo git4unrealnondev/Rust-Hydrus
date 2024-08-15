@@ -3,6 +3,7 @@ use crate::sharedtypes;
 use crate::sharedtypes::DbFileObj;
 use crate::sharedtypes::DbJobsObj;
 use fnv::{FnvHashMap, FnvHashSet};
+use std::clone;
 use std::collections::{HashMap, HashSet};
 use std::hash::Hash;
 pub enum TagRelateConjoin {
@@ -621,23 +622,75 @@ impl NewinMemDB {
     ///
     pub fn parents_get(&self, parent: &sharedtypes::DbParentsObj) -> Option<&usize> {
         let cantor = &self.cantor_pair(&parent.tag_id, &parent.relate_tag_id);
-        match self._parents_dual.get(cantor) {
-            None => None,
-            Some(id) => Some(id),
+        match parent.limit_to {
+            None => self._parents_dual.get(cantor),
+            Some(limit_to_id) => match self._parents_limitto_cantor.get(&limit_to_id) {
+                None => None,
+                Some(limit_to_cantors) => {
+                    if limit_to_cantors.contains(cantor) {
+                        self._parents_dual.get(cantor)
+                    } else {
+                        None
+                    }
+                }
+            },
         }
+        /*match self._parents_dual.get(cantor) {
+            None => None,
+            Some(id) => match parent.limit_to {
+                None => Some(id),
+                Some(limit_to_id) => match self._parents_limitto_cantor.get(&limit_to_id) {
+                    None => None,
+                    Some(limit_to_id_list) => {
+                        if limit_to_id_list.contains(&id) {
+                            Some(id)
+                        } else {
+                            None
+                        }
+                    }
+                },
+            },
+        }*/
     }
 
     ///
     /// Returns the list of relationships assicated with tag
     ///
-    pub fn parents_rel_get(&self, relate_tag_id: &usize) -> Option<&HashSet<usize>> {
-        self._parents_tag_rel.get(relate_tag_id)
+    pub fn parents_rel_get(
+        &self,
+        relate_tag_id: &usize,
+        limit_to: Option<usize>,
+    ) -> Option<HashSet<usize>> {
+        let out = self._parents_tag_rel.get(relate_tag_id);
+        if let Some(out) = out {
+            let temp = out.clone();
+            match limit_to {
+                None => {
+                    return Some(temp);
+                }
+                Some(limitto) => {
+                    for each in temp.iter() {
+                        let cantor = self.cantor_pair(each, relate_tag_id);
+                        if let Some(cantorlist) = self._parents_limitto_cantor.get(&limitto) {
+                            let re = temp.intersection(cantorlist);
+                            let te = re.cloned().collect();
+                            return Some(te);
+                        }
+                    }
+                }
+            }
+        }
+        None
     }
 
     ///
     /// Returns the list of tags assicated with relationship
     ///
-    pub fn parents_tag_get(&self, tag_id: &usize) -> Option<&HashSet<usize>> {
+    pub fn parents_tag_get(
+        &self,
+        tag_id: &usize,
+        limit_to: Option<usize>,
+    ) -> Option<&HashSet<usize>> {
         self._parents_rel_tag.get(tag_id)
     }
 
@@ -647,7 +700,7 @@ impl NewinMemDB {
     #[inline(never)]
     pub fn parents_remove(&mut self, tag_id: &usize) -> HashSet<(usize, usize)> {
         let mut ret: HashSet<(usize, usize)> = HashSet::new();
-        let rel_op = self.parents_rel_get(tag_id).cloned();
+        let rel_op = self.parents_rel_get(tag_id, None);
 
         match rel_op {
             None => return ret,
@@ -673,7 +726,7 @@ impl NewinMemDB {
     ///
     pub fn parents_reltagid_remove(&mut self, relate_tag_id: &usize) -> HashSet<usize> {
         let mut out = HashSet::new();
-        match self.parents_rel_get(relate_tag_id) {
+        match self.parents_rel_get(relate_tag_id, None) {
             None => {}
             Some(tag_id_set) => {
                 for tag_id in tag_id_set.clone() {
@@ -696,7 +749,7 @@ impl NewinMemDB {
     ///
     pub fn parents_tagid_remove(&mut self, tag_id: &usize) -> HashSet<usize> {
         let mut out = HashSet::new();
-        match self.parents_tag_get(tag_id) {
+        match self.parents_tag_get(tag_id, None) {
             None => {}
             Some(relate_tag_id_set) => {
                 for relate_tag_id in relate_tag_id_set.clone() {
@@ -721,6 +774,18 @@ impl NewinMemDB {
         match self._parents_dual.remove(&cantor) {
             false => return,
             true => {
+                match self._parents_cantor_limitto.get_mut(&cantor) {
+                    None => {}
+                    Some(set) => {
+                        for each in set.iter() {
+                            self._parents_limitto_cantor
+                                .get_mut(each)
+                                .unwrap()
+                                .remove(&cantor);
+                        }
+                    }
+                }
+
                 match self._parents_rel_tag.get_mut(&parentobj.relate_tag_id) {
                     None => {}
                     Some(relset) => {
@@ -740,11 +805,16 @@ impl NewinMemDB {
 
     ///
     /// Puts a parent into db
+    /// NOTE: If limit_to is set and their was a previous parent that didn't have a limit_to it
+    /// will be overwritten.
     ///
     pub fn parents_put(&mut self, parent: sharedtypes::DbParentsObj) -> usize {
+        let mut increment_parents = false;
         // Catch to prevent further processing.
         match self.parents_get(&parent) {
-            None => {}
+            None => {
+                increment_parents = true;
+            }
             Some(id) => return id.to_owned(),
         }
 
@@ -755,6 +825,7 @@ impl NewinMemDB {
         if let Some(limitto) = parent.limit_to {
             match self._parents_cantor_limitto.get_mut(&cantor) {
                 None => {
+                    increment_parents = false;
                     let mut out = HashSet::new();
                     out.insert(limitto);
                     self._parents_cantor_limitto.insert(cantor, out);
@@ -766,6 +837,7 @@ impl NewinMemDB {
 
             match self._parents_limitto_cantor.get_mut(&limitto) {
                 None => {
+                    increment_parents = false;
                     let mut out = HashSet::new();
                     out.insert(cantor);
                     self._parents_limitto_cantor.insert(limitto, out);
@@ -800,25 +872,35 @@ impl NewinMemDB {
                 tag_id.insert(parent.relate_tag_id);
             }
         }
-
-        match self.parents_get(&parent) {
-            None => {
-                let par = self._parents_max;
-                self._parents_max += 1;
-                par
-            }
-            Some(id) => id.to_owned(),
+        // If we've been setup to increment then we should have this in the parents list
+        if increment_parents {
+            let par = self._parents_max;
+            self._parents_max += 1;
+            par
+        } else {
+            *self.parents_get(&parent).unwrap()
         }
     }
 
     ///
     /// Removes a parent from the internal db
     ///
-    pub fn parents_delete(&self, parent_id: &usize) {
-        match self._parents_dual.get(parent_id) {
-            None => {}
-            Some(pid) => {
-                let (tag_id, relate_tag_id) = self.cantor_unpair(pid);
+    pub fn parents_remove_id(&mut self, parent_id: &usize) {
+        if let Some(pid) = self._parents_dual.get(parent_id) {
+            let lim = self._parents_cantor_limitto.remove(parent_id);
+            if let Some(lim) = lim {
+                for each in lim.iter() {
+                    if let Some(can) = self._parents_limitto_cantor.get_mut(each) {
+                        can.remove(parent_id);
+                    }
+                }
+            }
+            let (tag_id, relate_tag_id) = self.cantor_unpair(pid);
+            if let Some(rels) = self._parents_tag_rel.get_mut(&tag_id) {
+                rels.remove(&relate_tag_id);
+            }
+            if let Some(tags) = self._parents_rel_tag.get_mut(&relate_tag_id) {
+                tags.remove(&tag_id);
             }
         }
     }
@@ -917,5 +999,144 @@ impl NewinMemDB {
     ///
     pub fn jobs_get_all(&self) -> &HashMap<usize, sharedtypes::DbJobsObj> {
         &self._jobs_id_data
+    }
+}
+
+#[cfg(test)]
+mod inmemdb {
+    use sharedtypes::DbParentsObj;
+
+    use super::*;
+
+    fn setup_db() -> NewinMemDB {
+        inmemdb::NewinMemDB::new()
+    }
+
+    #[test]
+    fn test_setup_db() {
+        let _ = setup_db();
+    }
+
+    ///
+    /// Tests if the integration with putting parents are deduplicated properly
+    ///
+    #[test]
+    fn test_parents_add() {
+        let mut db = setup_db();
+        db.parents_put(sharedtypes::DbParentsObj {
+            tag_id: 0,
+            relate_tag_id: 0,
+            limit_to: None,
+        });
+        db.parents_put(sharedtypes::DbParentsObj {
+            tag_id: 0,
+            relate_tag_id: 0,
+            limit_to: None,
+        });
+        assert!(db._parents_max == 1);
+        db.parents_put(sharedtypes::DbParentsObj {
+            tag_id: 1,
+            relate_tag_id: 0,
+            limit_to: None,
+        });
+        assert!(db._parents_max == 2);
+        db.parents_put(sharedtypes::DbParentsObj {
+            tag_id: 1,
+            relate_tag_id: 0,
+            limit_to: Some(1),
+        });
+        assert!(db._parents_max == 2);
+    }
+
+    ///
+    /// Tests if integration with getting works
+    ///
+    #[test]
+    fn test_parents_get() {
+        let mut db = setup_db();
+        db.parents_put(sharedtypes::DbParentsObj {
+            tag_id: 0,
+            relate_tag_id: 0,
+            limit_to: None,
+        });
+        assert!(db._parents_max == 1);
+        let rela = db.parents_get(&DbParentsObj {
+            tag_id: 0,
+            relate_tag_id: 0,
+            limit_to: None,
+        });
+
+        assert_eq!(rela, Some(&0));
+        let rela = db.parents_get(&DbParentsObj {
+            tag_id: 0,
+            relate_tag_id: 0,
+            limit_to: Some(3),
+        });
+
+        assert_eq!(rela, None);
+        db.parents_put(sharedtypes::DbParentsObj {
+            tag_id: 0,
+            relate_tag_id: 0,
+            limit_to: Some(3),
+        });
+        let rela = db.parents_get(&DbParentsObj {
+            tag_id: 0,
+            relate_tag_id: 0,
+            limit_to: Some(3),
+        });
+        assert_eq!(rela, Some(&0));
+
+        assert!(db._parents_max == 1);
+        db.parents_put(sharedtypes::DbParentsObj {
+            tag_id: 1,
+            relate_tag_id: 0,
+            limit_to: Some(3),
+        });
+        let rela = db.parents_get(&DbParentsObj {
+            tag_id: 1,
+            relate_tag_id: 0,
+            limit_to: None,
+        });
+
+        assert_eq!(rela, Some(db.cantor_pair(&1, &0)).as_ref());
+    }
+
+    #[test]
+    fn test_parents_remove() {
+        let mi = 3;
+        let mj = 3;
+        let mut db = setup_db();
+        for i in 0..mi {
+            for j in 0..mj {
+                db.parents_put(sharedtypes::DbParentsObj {
+                    tag_id: i,
+                    relate_tag_id: j,
+                    limit_to: None,
+                });
+            }
+        }
+        assert_eq!(db._parents_max, mi * mj);
+        db.parents_selective_remove(&DbParentsObj {
+            tag_id: 1,
+            relate_tag_id: 0,
+            limit_to: None,
+        });
+        let rela = db.parents_get(&DbParentsObj {
+            tag_id: 1,
+            relate_tag_id: 0,
+            limit_to: None,
+        });
+
+        assert_ne!(rela, Some(db.cantor_pair(&1, &0)).as_ref());
+
+        assert_eq!(db._parents_max, mi * mj);
+        dbg!(
+            &db._parents_dual,
+            &db._parents_limitto_cantor,
+            &db._parents_rel_tag,
+            &db._parents_tag_rel,
+            &db._parents_cantor_limitto,
+            &db._parents_max
+        );
     }
 }
