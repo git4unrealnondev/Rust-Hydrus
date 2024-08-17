@@ -3,6 +3,7 @@
 use crate::database;
 use crate::logging;
 use crate::plugins::PluginManager;
+use crate::sharedtypes;
 use anyhow::Context;
 //use interprocess::local_socket::traits::tokio::Listener;
 use interprocess::local_socket::{prelude::*, GenericNamespaced, ListenerOptions};
@@ -282,13 +283,9 @@ impl DbInteract {
                     }
                 }
             }
-            types::SupportedDBRequests::ParentsDelete((parentswitch, (id, idtwo))) => {
-                let unwrappy = self._database.lock().unwrap();
-                match parentswitch {
-                    types::ParentsType::Tag => {}
-                    types::ParentsType::Rel => {}
-                }
-
+            types::SupportedDBRequests::ParentsDelete(parentobj) => {
+                let mut unwrappy = self._database.lock().unwrap();
+                unwrappy.parents_selective_remove(&parentobj);
                 Self::data_size_to_b(&true)
             }
             types::SupportedDBRequests::GetFileLocation(id) => {

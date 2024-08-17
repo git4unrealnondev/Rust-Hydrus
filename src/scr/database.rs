@@ -2333,6 +2333,13 @@ impl Main {
     }
 
     ///
+    /// Removes a parent selectivly
+    ///
+    pub fn parents_selective_remove(&mut self, parentobj: &sharedtypes::DbParentsObj) {
+        self._inmemdb.parents_selective_remove(parentobj);
+    }
+
+    ///
     /// Deletes namespace by id
     /// Removes tags & relationships assocated.
     ///

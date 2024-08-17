@@ -906,7 +906,27 @@ pub fn db_upgrade_call(db_version: &usize) {
             nsobjplg(&NsIdent::PoolId).description,
             true,
         ),
+    }; 
+    // Gets namespace id from poolid
+    let poolposition_nsid = match client::namespace_get(nsobjplg(&NsIdent::PoolPosition).name) {
+        Some(id) => id,
+        None => client::namespace_put(
+            nsobjplg(&NsIdent::PoolPosition).name,
+            nsobjplg(&NsIdent::PoolPosition).description,
+            true,
+        ),
     };
+
+// Gets e6id from db
+    let fileid_nsid = match client::namespace_get(nsobjplg(&NsIdent::FileId).name) {
+        Some(id) => id,
+        None => client::namespace_put(
+            nsobjplg(&NsIdent::FileId).name,
+            nsobjplg(&NsIdent::FileId).description,
+            true,
+        ),
+    };
+
 
     // Loads all tagid's that are attached to the pool
     let pool_table = match client::namespace_get_tagids(pool_nsid) {
@@ -930,7 +950,7 @@ pub fn db_upgrade_call(db_version: &usize) {
         file_ids.len()
     ));
     let mut cnt = 0;
-    // Remotes all fileids where teh source is not e621
+    // Removes all fileids where the source is not e621
     for each in sourceurl_table {
         if let Some(tag) = client::tag_get_id(each) {
             if !tag.name.contains("e621.net") {
@@ -951,7 +971,24 @@ pub fn db_upgrade_call(db_version: &usize) {
     for (each, _) in file_ids {
         if let Some(tids) = client::relationship_get_tagid(each) {
             for tid in tids.intersection(&pool_table) {
-                dbg!(&tid);
+                if let Some(tag_rels) =
+                    client::parents_get(crate::client::types::ParentsType::Tag, tid.clone())
+                {
+                    dbg!(tid);
+                    for each in tag_rels {
+                        if let Some(tag_nns) = client::tag_get_id(each) {
+                            // Removes the spare poolid tag as a position that I added for some
+                            // reason. lol
+                            if tag_nns.namespace == poolposition_nsid {
+                                client::parents_delete(sharedtypes::DbParentsObj {
+                                    tag_id: *tid,
+                                    relate_tag_id: each.clone(),
+                                    limit_to: None,
+                                });
+                            } else if tag_nns.namespace == 
+                        }
+                    }
+                }
             }
         }
     }

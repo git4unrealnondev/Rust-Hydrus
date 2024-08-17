@@ -820,12 +820,13 @@ impl NewinMemDB {
 
         let cantor = self.cantor_pair(&parent.tag_id, &parent.relate_tag_id);
         self._parents_dual.insert(cantor);
+        let par = self._parents_max;
+        self._parents_max += 1;
 
         // Manages links betwen cantor and limit arguments
         if let Some(limitto) = parent.limit_to {
             match self._parents_cantor_limitto.get_mut(&cantor) {
                 None => {
-                    increment_parents = false;
                     let mut out = HashSet::new();
                     out.insert(limitto);
                     self._parents_cantor_limitto.insert(cantor, out);
@@ -874,8 +875,6 @@ impl NewinMemDB {
         }
         // If we've been setup to increment then we should have this in the parents list
         if increment_parents {
-            let par = self._parents_max;
-            self._parents_max += 1;
             par
         } else {
             *self.parents_get(&parent).unwrap()
@@ -1045,7 +1044,7 @@ mod inmemdb {
             relate_tag_id: 0,
             limit_to: Some(1),
         });
-        assert!(db._parents_max == 2);
+        assert_eq!(db._parents_max, 3);
     }
 
     ///
@@ -1085,8 +1084,14 @@ mod inmemdb {
             limit_to: Some(3),
         });
         assert_eq!(rela, Some(&0));
+        let rela = db.parents_get(&DbParentsObj {
+            tag_id: 0,
+            relate_tag_id: 0,
+            limit_to: None,
+        });
+        assert_eq!(rela, Some(&0));
 
-        assert!(db._parents_max == 1);
+        assert_eq!(db._parents_max, 2);
         db.parents_put(sharedtypes::DbParentsObj {
             tag_id: 1,
             relate_tag_id: 0,
@@ -1099,6 +1104,49 @@ mod inmemdb {
         });
 
         assert_eq!(rela, Some(db.cantor_pair(&1, &0)).as_ref());
+    }
+
+    #[test]
+    fn parents_nondedup_put() {
+        let mut db = setup_db();
+        db.parents_put(sharedtypes::DbParentsObj {
+            tag_id: 0,
+            relate_tag_id: 0,
+            limit_to: Some(1),
+        });
+        db.parents_put(sharedtypes::DbParentsObj {
+            tag_id: 0,
+            relate_tag_id: 0,
+            limit_to: Some(2),
+        });
+        db.parents_put(sharedtypes::DbParentsObj {
+            tag_id: 0,
+            relate_tag_id: 0,
+            limit_to: Some(2),
+        });
+
+        dbg!(
+            &db._parents_dual,
+            &db._parents_limitto_cantor,
+            &db._parents_rel_tag,
+            &db._parents_tag_rel,
+            &db._parents_cantor_limitto,
+            &db._parents_max
+        );
+
+        assert_eq!(db._parents_max, 2);
+        db.parents_put(sharedtypes::DbParentsObj {
+            tag_id: 0,
+            relate_tag_id: 0,
+            limit_to: None,
+        });
+        assert_eq!(db._parents_max, 2);
+
+        let rela = db.parents_get(&DbParentsObj {
+            tag_id: 0,
+            relate_tag_id: 0,
+            limit_to: None,
+        });
     }
 
     #[test]
@@ -1121,6 +1169,18 @@ mod inmemdb {
             relate_tag_id: 0,
             limit_to: None,
         });
+        db.parents_put(sharedtypes::DbParentsObj {
+            tag_id: 100,
+            relate_tag_id: 100,
+            limit_to: Some(50),
+        });
+
+        db.parents_put(sharedtypes::DbParentsObj {
+            tag_id: 100,
+            relate_tag_id: 101,
+            limit_to: Some(50),
+        });
+
         let rela = db.parents_get(&DbParentsObj {
             tag_id: 1,
             relate_tag_id: 0,
@@ -1128,8 +1188,21 @@ mod inmemdb {
         });
 
         assert_ne!(rela, Some(db.cantor_pair(&1, &0)).as_ref());
+        db.parents_selective_remove(&DbParentsObj {
+            tag_id: 100,
+            relate_tag_id: 101,
+            limit_to: Some(60),
+        });
+        let rela = db.parents_get(&DbParentsObj {
+            tag_id: 100,
+            relate_tag_id: 101,
+            limit_to: None,
+        });
 
-        assert_eq!(db._parents_max, mi * mj);
+        assert_eq!(db._parents_max, 11);
+
+        assert_ne!(rela, Some(db.cantor_pair(&100, &101)).as_ref());
+
         dbg!(
             &db._parents_dual,
             &db._parents_limitto_cantor,

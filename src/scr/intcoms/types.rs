@@ -110,7 +110,7 @@ pub enum SupportedDBRequests {
     PluginCallback(String, usize, sharedtypes::CallbackInfoInput),
     ReloadLoadedPlugins(),
     ParentsGet((ParentsType, usize)),
-    ParentsDelete((ParentsType, (usize, Option<usize>))),
+    ParentsDelete(sharedtypes::DbParentsObj),
     ParentsPut(sharedtypes::DbParentsObj),
 }
 

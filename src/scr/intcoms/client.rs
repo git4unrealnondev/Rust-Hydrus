@@ -265,9 +265,9 @@ pub fn parents_get(parenttype: types::ParentsType, id: usize) -> Option<HashSet<
 /// Deletes a relationship
 /// If idtwo is set to none then this deletes all relationships that match the key
 ///
-pub fn parents_delete(parenttype: types::ParentsType, id: usize, idtwo: Option<usize>) -> bool {
+pub fn parents_delete(parentobj: sharedtypes::DbParentsObj) -> bool {
     init_data_request(&types::SupportedRequests::Database(
-        types::SupportedDBRequests::ParentsDelete((parenttype, (id, idtwo))),
+        types::SupportedDBRequests::ParentsDelete(parentobj),
     ))
 }
 
