@@ -45,7 +45,16 @@ pub fn main(data: &mut database::Main, scraper: &mut scraper::ScraperManager) {
                             time: addstruct.time.to_string(),
                             committype: comfinal,
                         };
-
+                        data.jobs_add(
+                            None,
+                            0,
+                            0,
+                            &addstruct.site,
+                            &addstruct.query,
+                            false,
+                            true,
+                            &sharedtypes::CommitType::StopOnNothing,
+                        );
                         /*data.jobs_add(
                             None,
                             &jobs_add.site,
@@ -95,7 +104,7 @@ pub fn main(data: &mut database::Main, scraper: &mut scraper::ScraperManager) {
                         dbg!("tag_get");
 
                         if let Some(rel) = data.parents_tag_get(tid) {
-                            for each in rel {
+                            for each in rel.iter() {
                                 dbg!(each, data.tag_id_get(each).unwrap());
                             }
                         }

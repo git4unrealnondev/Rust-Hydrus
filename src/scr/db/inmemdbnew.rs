@@ -635,22 +635,6 @@ impl NewinMemDB {
                 }
             },
         }
-        /*match self._parents_dual.get(cantor) {
-            None => None,
-            Some(id) => match parent.limit_to {
-                None => Some(id),
-                Some(limit_to_id) => match self._parents_limitto_cantor.get(&limit_to_id) {
-                    None => None,
-                    Some(limit_to_id_list) => {
-                        if limit_to_id_list.contains(&id) {
-                            Some(id)
-                        } else {
-                            None
-                        }
-                    }
-                },
-            },
-        }*/
     }
 
     ///
@@ -690,8 +674,27 @@ impl NewinMemDB {
         &self,
         tag_id: &usize,
         limit_to: Option<usize>,
-    ) -> Option<&HashSet<usize>> {
-        self._parents_rel_tag.get(tag_id)
+    ) -> Option<HashSet<usize>> {
+        let out = self._parents_rel_tag.get(tag_id);
+        if let Some(out) = out {
+            let temp = out.clone();
+            match limit_to {
+                None => {
+                    return Some(temp);
+                }
+                Some(limitto) => {
+                    for each in temp.iter() {
+                        let cantor = self.cantor_pair(each, tag_id);
+                        if let Some(cantorlist) = self._parents_limitto_cantor.get(&limitto) {
+                            let re = temp.intersection(cantorlist);
+                            let te = re.cloned().collect();
+                            return Some(te);
+                        }
+                    }
+                }
+            }
+        }
+        None
     }
 
     ///
@@ -1011,6 +1014,9 @@ mod inmemdb {
         inmemdb::NewinMemDB::new()
     }
 
+    ///
+    /// Tests if we can setup the db.
+    ///
     #[test]
     fn test_setup_db() {
         let _ = setup_db();
@@ -1020,7 +1026,7 @@ mod inmemdb {
     /// Tests if the integration with putting parents are deduplicated properly
     ///
     #[test]
-    fn test_parents_add() {
+    fn parents_add() {
         let mut db = setup_db();
         db.parents_put(sharedtypes::DbParentsObj {
             tag_id: 0,
@@ -1051,7 +1057,7 @@ mod inmemdb {
     /// Tests if integration with getting works
     ///
     #[test]
-    fn test_parents_get() {
+    fn parents_get() {
         let mut db = setup_db();
         db.parents_put(sharedtypes::DbParentsObj {
             tag_id: 0,
@@ -1107,6 +1113,41 @@ mod inmemdb {
     }
 
     #[test]
+    fn parents_rel_get() {
+        let mut db = setup_db();
+        db.parents_put(sharedtypes::DbParentsObj {
+            tag_id: 0,
+            relate_tag_id: 1,
+            limit_to: Some(1),
+        });
+        db.parents_put(sharedtypes::DbParentsObj {
+            tag_id: 0,
+            relate_tag_id: 2,
+            limit_to: Some(2),
+        });
+        db.parents_put(sharedtypes::DbParentsObj {
+            tag_id: 1,
+            relate_tag_id: 0,
+            limit_to: Some(2),
+        });
+
+        let ll = db.parents_rel_get(&0, None).unwrap();
+        assert_eq!(ll.len(), 2);
+        let ll = db.parents_rel_get(&0, Some(1)).unwrap();
+        assert_eq!(ll.len(), 1);
+        assert_eq!(db.parents_rel_get(&0, Some(4)), None);
+
+        dbg!(
+            &db._parents_dual,
+            &db._parents_limitto_cantor,
+            &db._parents_rel_tag,
+            &db._parents_tag_rel,
+            &db._parents_cantor_limitto,
+            &db._parents_max
+        );
+    }
+
+    #[test]
     fn parents_nondedup_put() {
         let mut db = setup_db();
         db.parents_put(sharedtypes::DbParentsObj {
@@ -1125,15 +1166,6 @@ mod inmemdb {
             limit_to: Some(2),
         });
 
-        dbg!(
-            &db._parents_dual,
-            &db._parents_limitto_cantor,
-            &db._parents_rel_tag,
-            &db._parents_tag_rel,
-            &db._parents_cantor_limitto,
-            &db._parents_max
-        );
-
         assert_eq!(db._parents_max, 2);
         db.parents_put(sharedtypes::DbParentsObj {
             tag_id: 0,
@@ -1150,7 +1182,7 @@ mod inmemdb {
     }
 
     #[test]
-    fn test_parents_remove() {
+    fn parents_remove() {
         let mi = 3;
         let mj = 3;
         let mut db = setup_db();

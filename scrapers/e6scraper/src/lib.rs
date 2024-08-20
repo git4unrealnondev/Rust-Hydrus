@@ -906,7 +906,7 @@ pub fn db_upgrade_call(db_version: &usize) {
             nsobjplg(&NsIdent::PoolId).description,
             true,
         ),
-    }; 
+    };
     // Gets namespace id from poolid
     let poolposition_nsid = match client::namespace_get(nsobjplg(&NsIdent::PoolPosition).name) {
         Some(id) => id,
@@ -917,7 +917,7 @@ pub fn db_upgrade_call(db_version: &usize) {
         ),
     };
 
-// Gets e6id from db
+    // Gets e6id from db
     let fileid_nsid = match client::namespace_get(nsobjplg(&NsIdent::FileId).name) {
         Some(id) => id,
         None => client::namespace_put(
@@ -926,7 +926,6 @@ pub fn db_upgrade_call(db_version: &usize) {
             true,
         ),
     };
-
 
     // Loads all tagid's that are attached to the pool
     let pool_table = match client::namespace_get_tagids(pool_nsid) {
@@ -985,7 +984,8 @@ pub fn db_upgrade_call(db_version: &usize) {
                                     relate_tag_id: each.clone(),
                                     limit_to: None,
                                 });
-                            } else if tag_nns.namespace == 
+                            } else if tag_nns.namespace == poolposition_nsid {
+                            }
                         }
                     }
                 }

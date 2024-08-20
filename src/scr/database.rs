@@ -1779,7 +1779,7 @@ impl Main {
     ///
     /// Relates the list of tags assoicated with relations
     ///
-    pub fn parents_tag_get(&self, tagid: &usize) -> Option<&HashSet<usize>> {
+    pub fn parents_tag_get(&self, tagid: &usize) -> Option<HashSet<usize>> {
         self._inmemdb.parents_tag_get(tagid, None)
     }
 
@@ -1944,11 +1944,16 @@ impl Main {
         filler: bool,
         addtodb: bool,
         committype: &sharedtypes::CommitType,
-        jobsmanager: sharedtypes::DbJobsManager,
     ) {
         let id = match id {
             None => self._inmemdb.jobs_get_max().clone(),
             Some(id) => id,
+        };
+
+        let jobsmanager = sharedtypes::DbJobsManager {
+            jobtype: sharedtypes::DbJobType::Params,
+            recreation: None,
+            additionaldata: None,
         };
         if addtodb {
             let inp = "INSERT INTO Jobs VALUES(?, ?, ?, ?, ?, ?)";
