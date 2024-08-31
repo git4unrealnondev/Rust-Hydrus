@@ -54,6 +54,7 @@ pub fn main(data: &mut database::Main, scraper: &mut scraper::ScraperManager) {
                             false,
                             true,
                             &sharedtypes::CommitType::StopOnNothing,
+                            &sharedtypes::DbJobType::Params,
                         );
                         /*data.jobs_add(
                             None,

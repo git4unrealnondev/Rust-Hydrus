@@ -262,12 +262,21 @@ pub fn parents_get(parenttype: types::ParentsType, id: usize) -> Option<HashSet<
 }
 
 ///
-/// Deletes a relationship
+/// Deletes a parent
 /// If idtwo is set to none then this deletes all relationships that match the key
 ///
 pub fn parents_delete(parentobj: sharedtypes::DbParentsObj) -> bool {
     init_data_request(&types::SupportedRequests::Database(
         types::SupportedDBRequests::ParentsDelete(parentobj),
+    ))
+}
+
+///
+/// Adds a parent into the db returns the cantor pair of the parent inserted
+///
+pub fn parents_put(parentobj: sharedtypes::DbParentsObj) -> usize {
+    init_data_request(&types::SupportedRequests::Database(
+        types::SupportedDBRequests::ParentsPut(parentobj),
     ))
 }
 
@@ -287,6 +296,27 @@ pub fn location_get() -> String {
 pub fn tag_add(tag: String, namespace_id: usize, addtodb: bool, id: Option<usize>) -> usize {
     init_data_request(&types::SupportedRequests::Database(
         types::SupportedDBRequests::PutTag(tag, namespace_id, addtodb, id),
+    ))
+}
+
+///
+/// Adds job into db
+///
+pub fn job_add(
+    id: Option<usize>,
+    time: usize,
+    reptime: usize,
+    site: String,
+    param: String,
+    filler: bool,
+    addtodb: bool,
+    committype: sharedtypes::CommitType,
+    dbjobtype: sharedtypes::DbJobType,
+) -> bool {
+    init_data_request(&types::SupportedRequests::Database(
+        types::SupportedDBRequests::PutJob((
+            id, time, reptime, site, param, filler, addtodb, committype, dbjobtype,
+        )),
     ))
 }
 

@@ -597,19 +597,9 @@ fn parse_pools(
                         needsrelationship: true,
                     }),
                 )),
-            }); // Relates the file id to pool
-                /*tag.insert(sharedtypes::TagObject {
-                    namespace: nsobjplg(&NsIdent::PoolId),
-                    relates_to: Some(subgen(
-                        &NsIdent::FileId,
-                        postids.to_string(),
-                        sharedtypes::TagType::Normal,None
-                    )),
-                    tag: multpool["id"].to_string(),
-                    tag_type: sharedtypes::TagType::Normal,
-                });*/
+            });
 
-            // TODO need to fix the pool positing. Needs to relate the pool position with the ID better.
+            // Relates fileid to position in table with the restriction of the poolid
             tag.insert(sharedtypes::TagObject {
                 namespace: nsobjplg(&NsIdent::PoolPosition),
                 relates_to: Some(subgen(
@@ -625,17 +615,6 @@ fn parse_pools(
                 tag: cnt.to_string(),
                 tag_type: sharedtypes::TagType::Normal,
             });
-
-            /*tag.insert(sharedtypes::TagObject {
-                namespace: nsobjplg(&NsIdent::PoolId),
-                relates_to: Some(subgen(
-                    &NsIdent::PoolPosition,
-                    multpool["id"].to_string(),
-                    sharedtypes::TagType::Normal,
-                )),
-                tag: multpool["id"].to_string(),
-                tag_type: sharedtypes::TagType::Normal,
-            });*/
 
             cnt += 1;
         }
@@ -767,7 +746,8 @@ pub fn parser(params: &String) -> Result<sharedtypes::ScraperObject, sharedtypes
                     None,
                     sharedtypes::TagType::Normal,
                 );*/
-                let parse_url = format!("https://e621.net/pools?format=json&search[id={}]", each);
+                //let parse_url = format!("https://e621.net/pools?format=json&search[id={}]", each);
+                let parse_url = format!("https://e621.net/pools.json?search[id]={}", each);
                 tags_list.push(sharedtypes::TagObject {
                     namespace: sharedtypes::GenericNamespaceObj {
                         name: "Do Not Add".to_string(),
@@ -890,8 +870,7 @@ fn gen_source_from_md5_ext(md5: &String, ext: &String) -> String {
 #[path = "../../../src/scr/intcoms/client.rs"]
 mod client;
 
-#[no_mangle]
-pub fn db_upgrade_call(db_version: &usize) {
+pub fn db_upgrade_call_3() {
     dbg!("E6 GOING TO LOCK DB DOES THIS WORKY");
     client::load_table(sharedtypes::LoadDBTable::All);
 
@@ -925,6 +904,22 @@ pub fn db_upgrade_call(db_version: &usize) {
             nsobjplg(&NsIdent::FileId).description,
             true,
         ),
+    }; // Gets e6's parent ids from db
+    let parent_nsid = match client::namespace_get(nsobjplg(&NsIdent::Parent).name) {
+        Some(id) => id,
+        None => client::namespace_put(
+            nsobjplg(&NsIdent::Parent).name,
+            nsobjplg(&NsIdent::Parent).description,
+            true,
+        ),
+    }; // Gets e6's children id's from db
+    let children_nsid = match client::namespace_get(nsobjplg(&NsIdent::Children).name) {
+        Some(id) => id,
+        None => client::namespace_put(
+            nsobjplg(&NsIdent::Children).name,
+            nsobjplg(&NsIdent::Children).description,
+            true,
+        ),
     };
 
     // Loads all tagid's that are attached to the pool
@@ -940,6 +935,20 @@ pub fn db_upgrade_call(db_version: &usize) {
 
     // Loads all tagid's that are attached to the e621 sources
     let sourceurl_table = match client::namespace_get_tagids(sourceurl_nsid) {
+        None => HashSet::new(),
+        Some(out) => out,
+    };
+
+    // Loads all tagid's that are attached to the parents sources
+    let parent_table = match client::namespace_get_tagids(parent_nsid) {
+        None => HashSet::new(),
+        Some(out) => out,
+    }; // Loads all tagid's that are attached to the children sources
+    let children_table = match client::namespace_get_tagids(children_nsid) {
+        None => HashSet::new(),
+        Some(out) => out,
+    }; // Loads all tagid's that are attached to the position
+    let position_table = match client::namespace_get_tagids(poolposition_nsid) {
         None => HashSet::new(),
         Some(out) => out,
     };
@@ -973,18 +982,100 @@ pub fn db_upgrade_call(db_version: &usize) {
                 if let Some(tag_rels) =
                     client::parents_get(crate::client::types::ParentsType::Tag, tid.clone())
                 {
-                    dbg!(tid);
+                    dbg!(tid, &tag_rels);
+                    let mut vec_poolpos = Vec::new();
+                    let mut hashset_fileid = HashSet::new();
                     for each in tag_rels {
                         if let Some(tag_nns) = client::tag_get_id(each) {
                             // Removes the spare poolid tag as a position that I added for some
                             // reason. lol
                             if tag_nns.namespace == poolposition_nsid {
-                                client::parents_delete(sharedtypes::DbParentsObj {
+                                /*client::parents_delete(sharedtypes::DbParentsObj {
                                     tag_id: *tid,
                                     relate_tag_id: each.clone(),
                                     limit_to: None,
-                                });
-                            } else if tag_nns.namespace == poolposition_nsid {
+                                });*/
+
+                                vec_poolpos.push(each);
+                            } else if tag_nns.namespace == fileid_nsid {
+                                hashset_fileid.insert(each);
+                            }
+                        }
+                    }
+
+                    for position in vec_poolpos.iter() {
+                        if let Some(tag_id) =
+                            client::parents_get(crate::client::types::ParentsType::Rel, *position)
+                        {
+                            //dbg!("FID'S POSITION", &tag_id, tid, &tag_id.len());
+                        }
+                    }
+                    for fid in hashset_fileid.iter() {
+                        if let Some(mut tag_id) =
+                            client::parents_get(crate::client::types::ParentsType::Rel, *fid)
+                        {
+                            // Removes the parents and children from tag_ids
+                            for tid_iter in tag_id.clone().iter() {
+                                if parent_table.contains(tid_iter)
+                                    || children_table.contains(tid_iter)
+                                {
+                                    tag_id.remove(tid_iter);
+                                }
+                            }
+                            if tag_id.len() < 2 {
+                                dbg!("LESS 2 ITEMS IN HERE", tag_id);
+                                dbg!(&fid, tid);
+                            } else if tag_id.len() > 2 {
+                                // Clears sub items and add job to db to
+                                // scrape
+                                dbg!("MORE THEN 2 ITEMS IN HERE", &tag_id);
+                                dbg!(&fid, tid);
+                                for tid_iter in tag_id.iter() {
+                                    if pool_table.contains(&tid_iter) {
+                                        client::job_add(
+                                            None,
+                                            0,
+                                            0,
+                                            "e6".to_string(),
+                                            format!(
+                                                "https://e621.net/pools.json?search[id]={}",
+                                                client::tag_get_id(*tid_iter).unwrap().name
+                                            ),
+                                            false,
+                                            true,
+                                            sharedtypes::CommitType::StopOnNothing,
+                                            sharedtypes::DbJobType::Scraper,
+                                        );
+                                    }
+                                    client::parents_delete(sharedtypes::DbParentsObj {
+                                        tag_id: *tid_iter,
+                                        relate_tag_id: *fid,
+                                        limit_to: None,
+                                    });
+                                }
+                            } else {
+                                let mut pos = None;
+                                // Updates the pool position.
+                                // Clears out relations not including children and parents
+                                // Adds relation if it exists properly
+                                for tid_iter in tag_id.iter() {
+                                    client::parents_delete(sharedtypes::DbParentsObj {
+                                        tag_id: *tid_iter,
+                                        relate_tag_id: *fid,
+                                        limit_to: None,
+                                    });
+                                    if position_table.contains(&tid_iter) {
+                                        pos = Some(sharedtypes::DbParentsObj {
+                                            tag_id: *tid_iter,
+                                            relate_tag_id: *fid,
+                                            limit_to: Some(*tid),
+                                        });
+                                    }
+                                }
+                                if let Some(pos) = pos {
+                                    client::parents_put(pos);
+                                }
+                                dbg!("FID TO REMOVE FROM TAG_ID", &fid, tid, &tag_id);
                             }
                         }
                     }
@@ -994,4 +1085,16 @@ pub fn db_upgrade_call(db_version: &usize) {
     }
 
     client::transaction_flush();
+}
+
+#[no_mangle]
+pub fn db_upgrade_call(db_version: &usize) {
+    match db_version {
+        3 => {
+            db_upgrade_call_3();
+        }
+        _ => {
+            client::log_no_print(format!("E621 No upgrade for version: {}", db_version));
+        }
+    }
 }

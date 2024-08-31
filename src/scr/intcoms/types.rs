@@ -112,6 +112,20 @@ pub enum SupportedDBRequests {
     ParentsGet((ParentsType, usize)),
     ParentsDelete(sharedtypes::DbParentsObj),
     ParentsPut(sharedtypes::DbParentsObj),
+    PutJob(
+        (
+            Option<usize>,
+            usize,
+            usize,
+            String,
+            String,
+            bool,
+            bool,
+            sharedtypes::CommitType,
+            sharedtypes::DbJobType,
+        ),
+    ),
+    GetJob(usize),
 }
 
 ///

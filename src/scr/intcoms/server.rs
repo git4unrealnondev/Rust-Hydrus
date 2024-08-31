@@ -263,6 +263,35 @@ impl DbInteract {
     ///
     pub fn dbactions_to_function(&mut self, dbaction: types::SupportedDBRequests) -> Vec<u8> {
         match dbaction {
+            types::SupportedDBRequests::PutJob((
+                id,
+                time,
+                reptime,
+                site,
+                param,
+                filler,
+                addtodb,
+                committype,
+                dbjobtype,
+            )) => {
+                let mut unwrappy = self._database.lock().unwrap();
+                &unwrappy.jobs_add(
+                    id,
+                    time,
+                    reptime,
+                    &site,
+                    &param,
+                    filler,
+                    addtodb,
+                    &committype,
+                    &dbjobtype,
+                );
+                Self::data_size_to_b(&true)
+            }
+            types::SupportedDBRequests::GetJob(id) => {
+                let unwrappy = self._database.lock().unwrap();
+                Self::option_to_bytes(unwrappy.jobs_get(&id))
+            }
             types::SupportedDBRequests::ParentsPut(parent) => {
                 let mut unwrappy = self._database.lock().unwrap();
                 Self::data_size_to_b(&unwrappy.parents_add(

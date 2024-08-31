@@ -270,7 +270,7 @@ pub struct PluginRelatesObj {
 ///
 /// Database Jobs object
 ///
-#[derive(Debug, Hash, Eq, PartialEq, Clone)]
+#[derive(Debug, Hash, Eq, PartialEq, Clone, Serialize, Deserialize)]
 pub struct DbJobsObj {
     pub id: usize,
     pub time: Option<usize>,

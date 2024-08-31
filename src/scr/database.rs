@@ -535,9 +535,9 @@ impl Main {
     /// Pull job by id
     /// TODO NEEDS TO ADD IN PROPER POLLING FROM DB.
     ///
-    //pub fn jobs_get(&self, id: usize) -> Option<DbJobsObj> {
-    //    self._inmemdb.jobs_get(&id)
-    //}
+    pub fn jobs_get(&self, id: &usize) -> Option<&sharedtypes::DbJobsObj> {
+        self._inmemdb.jobs_get(id)
+    }
 
     pub fn tag_id_get(&self, uid: &usize) -> Option<&sharedtypes::DbTagNNS> {
         self._inmemdb.tags_get_data(uid)
@@ -681,8 +681,8 @@ impl Main {
 
         // Making Parents Table. Relates tags to tag parents.
         name = "Parents".to_string();
-        keys = vec_of_strings!["tag_id", "relate_tag_id"];
-        vals = vec_of_strings!["INTEGER", "INTEGER"];
+        keys = vec_of_strings!["tag_id", "relate_tag_id", "limit_to"];
+        vals = vec_of_strings!["INTEGER", "INTEGER", "INTEGER"];
         self.table_create(&name, &keys, &vals);
 
         // Making Namespace Table
@@ -1021,7 +1021,8 @@ impl Main {
             }
             _ => {
                 logging::error_log(&format!(
-                    "Weird tags table loading. Should be 3 or 4 for db upgrade."
+                    "Weird tags table loading. Should be 3 or 4 for db upgrade. Was {}",
+                    tags_cnt
                 ));
                 logging::panic_log(&format!(
                     "DB IS IN WEIRD INCONSISTEINT STATE PLEASE ROLLBACK TO LATEST BACKUP."
@@ -1063,7 +1064,7 @@ impl Main {
                     }
                 }
                 let keys = &vec_of_strings!("tag_id", "relate_tag_id", "limit_to");
-                let vals = &vec_of_strings!("INTEGER", "INTEGER", "TEXT");
+                let vals = &vec_of_strings!("INTEGER", "INTEGER", "INTEGER");
                 self.table_create(&"Parents".to_string(), keys, vals);
 
                 // Putting blank parenthesis forces rust to drop conn which is locking our reference to
@@ -1082,7 +1083,8 @@ impl Main {
             }
             _ => {
                 logging::error_log(&format!(
-                    "Weird tags table loading. Should be 3 or 4 for db upgrade."
+                    "Weird parents table loading. Should be 3 or 4 for db upgrade. Was {}",
+                    tags_cnt
                 ));
                 logging::panic_log(&format!(
                     "DB IS IN WEIRD INCONSISTEINT STATE PLEASE ROLLBACK TO LATEST BACKUP."
@@ -1806,14 +1808,14 @@ impl Main {
     ///
     /// Adds tags into sql database
     ///
-    fn tag_add_sql(&mut self, tag_id: &usize, tags: &String, parents: &String, namespace: &usize) {
-        let inp = "INSERT INTO Tags VALUES(?, ?, ?, ?)";
+    fn tag_add_sql(&mut self, tag_id: &usize, tags: &String, namespace: &usize) {
+        let inp = "INSERT INTO Tags VALUES(?, ?, ?)";
         let _out = self
             ._conn
             .borrow_mut()
             .lock()
             .unwrap()
-            .execute(inp, params![tag_id, tags, parents, namespace]);
+            .execute(inp, params![tag_id, tags, namespace]);
         self.db_commit_man();
     }
 
@@ -1847,7 +1849,7 @@ impl Main {
                     None => {
                         let tag_id = self.tag_add_db(tags, &namespace, None);
                         if addtodb {
-                            self.tag_add_sql(&tag_id, tags, &"".to_string(), &namespace);
+                            self.tag_add_sql(&tag_id, tags, &namespace);
                         }
                         tag_id
                     }
@@ -1865,7 +1867,7 @@ impl Main {
                     &tagnns.namespace
                 );*/
                 if addtodb {
-                    self.tag_add_sql(&tag_id, tags, &"".to_string(), &namespace);
+                    self.tag_add_sql(&tag_id, tags, &namespace);
                 }
                 tag_id
             }
@@ -1944,6 +1946,7 @@ impl Main {
         filler: bool,
         addtodb: bool,
         committype: &sharedtypes::CommitType,
+        dbjobtype: &sharedtypes::DbJobType,
     ) {
         let id = match id {
             None => self._inmemdb.jobs_get_max().clone(),
@@ -1951,7 +1954,7 @@ impl Main {
         };
 
         let jobsmanager = sharedtypes::DbJobsManager {
-            jobtype: sharedtypes::DbJobType::Params,
+            jobtype: *dbjobtype,
             recreation: None,
             additionaldata: None,
         };
@@ -2499,7 +2502,7 @@ impl Main {
             for tid in tids.clone() {
                 let file_listop = self._inmemdb.relationship_get_fileid(&tid).unwrap().clone();
                 let tag = self._inmemdb.tags_get_data(&tid).unwrap().clone();
-                self.tag_add_sql(&cnt, &tag.name, &"".to_string(), &tag.namespace);
+                self.tag_add_sql(&cnt, &tag.name, &tag.namespace);
                 for file in file_listop {
                     self.relationship_add_sql(file, cnt);
                 }

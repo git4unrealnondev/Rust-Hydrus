@@ -984,9 +984,19 @@ impl NewinMemDB {
         }
     }
 
+    ///
+    /// Adds job into internal db
+    ///
     pub fn jobs_add(&mut self, job: DbJobsObj) {
         self._jobs_id_data.insert(self._jobs_max, job);
         self._jobs_max += 1;
+    }
+
+    ///
+    /// Gets a job by id
+    ///
+    pub fn jobs_get(&self, id: &usize) -> Option<&sharedtypes::DbJobsObj> {
+        self._jobs_id_data.get(id)
     }
 
     ///
