@@ -30,7 +30,7 @@ pub fn time_conv(inp: &String) -> usize {
 
     let strings = [
         "y".to_string(),
-        "m".to_string(),
+        "mo".to_string(),
         "w".to_string(),
         "d".to_string(),
         "h".to_string(),
@@ -43,7 +43,22 @@ pub fn time_conv(inp: &String) -> usize {
     let mut combine: usize = 0;
     let mut st = inp.clone();
 
-    for each in 0..strings.len() {
+    let mut cnt = 0;
+    let mut ttl = 0;
+    for time in strings.iter() {
+        if st.contains(time) {
+            let tmp: Vec<&str> = st.split(time).collect();
+            if tmp[0].is_empty() {
+                break;
+            }
+            ttl += nums[cnt] * tmp[0].parse::<usize>().unwrap();
+            st = tmp[1].to_string();
+        }
+        cnt += 1;
+    }
+
+    /*for each in 0..strings.len() {
+        dbg!(&each);
         if !st.contains(&strings[each]) {
             continue;
         }
@@ -54,5 +69,6 @@ pub fn time_conv(inp: &String) -> usize {
         combine += nums[each] * tmp[0].parse::<usize>().unwrap();
         st = tmp[1].to_string();
     }
-    combine
+    combine*/
+    ttl
 }

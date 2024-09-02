@@ -154,13 +154,19 @@ pub fn stringto_jobtype(into: &String) -> DbJobType {
     }
     panic!("{}", panic);
 }
-#[derive(Debug, EnumIter, Clone, Eq, Hash, PartialEq, Copy, EnumString, Serialize, Deserialize)]
+use clap::{arg, Parser, Subcommand, ValueEnum};
+#[derive(
+    Debug, EnumIter, Clone, Eq, Hash, PartialEq, Copy, EnumString, Serialize, Deserialize, ValueEnum,
+)]
 #[serde(rename_all = "PascalCase")]
+#[clap(rename_all = "kebab_case")]
 pub enum CommitType {
-    StopOnNothing, // Processes all files and data doesn't stop processing.
-    StopOnFile,    // Stops processing if it sees a file it's already seen.
-                   //SkipOnFile,
-                   //AddToDB,
+    /// Processes all files and data doesn't stop processing.
+    StopOnNothing,
+
+    /// Stops processing if it sees a file it's already seen.
+    StopOnFile, //SkipOnFile,
+                //AddToDB,
 }
 
 impl fmt::Display for CommitType {
@@ -305,7 +311,10 @@ pub enum DbJobRecreation {
 /// Type of job in db.
 /// Will be used to confirm what the scraping logic should work.
 ///
-#[derive(Debug, Copy, Hash, Eq, PartialEq, Clone, EnumIter, Display, Serialize, Deserialize)]
+#[derive(
+    Debug, Copy, Hash, Eq, PartialEq, Clone, EnumIter, Display, Serialize, Deserialize, ValueEnum,
+)]
+#[clap(rename_all = "kebab_case")]
 pub enum DbJobType {
     /// Default recognises this as a param query.
     Params,

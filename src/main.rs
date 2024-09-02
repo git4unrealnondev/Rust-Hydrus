@@ -154,7 +154,6 @@ fn main() {
     let mut data = makedb(dbloc);
     let mut alt_connection = database::dbinit(&dbloc.to_string()); // NOTE ONLY USER FOR LOADING DB DYNAMICALLY
     data.load_table(&sharedtypes::LoadDBTable::Settings);
-    data.transaction_flush();
 
     let plugin_option = data.settings_get_name(&"pluginloadloc".to_string());
     let plugin_loc = match plugin_option {
@@ -196,6 +195,7 @@ fn main() {
     //TODO Put code here
 
     cli::main(&mut arc.lock().unwrap(), &mut scraper_manager);
+
     arc.lock()
         .unwrap()
         .load_table(&sharedtypes::LoadDBTable::Jobs);
@@ -219,7 +219,7 @@ fn main() {
     // Jobs run in OS threads
 
     // Waits until all threads have closed.
-    let one_sec = time::Duration::from_secs(1);
+    let one_sec = time::Duration::from_millis(100);
     loop {
         let brk;
         {
@@ -229,8 +229,10 @@ fn main() {
         if brk {
             break;
         }
+        dbg!("Sleep");
         thread::sleep(one_sec);
     }
+    arc.lock().unwrap().transaction_flush();
     /* pluginmanager.lock().unwrap().thread_finish_closed();
     while !pluginmanager.lock().unwrap().return_thread() {
         let one_sec = time::Duration::from_secs(1);
@@ -240,7 +242,7 @@ fn main() {
 
     // This wait is done for allowing any thread to "complete"
     // Shouldn't be nessisary but hey. :D
-    let mills_fifty = time::Duration::from_millis(50);
+    let mills_fifty = time::Duration::from_millis(5);
     std::thread::sleep(mills_fifty);
     logging::info_log(&"UNLOADING".to_string());
     log::logger().flush();

@@ -1982,8 +1982,6 @@ impl Main {
             param.to_string(),
             jobsmanager,
         );
-
-        dbg!(&filler, &addtodb);
     }
 
     ///

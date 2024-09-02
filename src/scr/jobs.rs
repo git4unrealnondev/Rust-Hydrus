@@ -86,13 +86,13 @@ impl Jobs {
                 }
             }
         }
-        dbg!(&self._jobref);
+        //dbg!(&self._jobref);
         for (each, _) in self._jobref.iter() {
             db.jobs_flip_inmemdb(each);
         }
-        dbg!(db.jobs_get_isrunning());
-        dbg!(&invalidjobvec);
-        dbg!(&duplicatejobvec);
+        //dbg!(db.jobs_get_isrunning());
+        //dbg!(&invalidjobvec);
+        //dbg!(&duplicatejobvec);
         let msg = format!(
             "Loaded {} jobs out of {} jobs. Didn't load {} Jobs due to lack of scrapers or timing.",
             &self._jobref.len(),

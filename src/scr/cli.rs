@@ -1,7 +1,9 @@
 extern crate clap;
 use rayon::prelude::*;
+use std::collections::HashMap;
 use std::path::Path;
 use std::{collections::HashSet, io::Write};
+use strfmt::Format;
 //use std::str::pattern::Searcher;
 use file_format::FileFormat;
 use std::str::FromStr;
@@ -36,46 +38,47 @@ pub fn main(data: &mut database::Main, scraper: &mut scraper::ScraperManager) {
         cli_structs::test::Job(jobstruct) => match jobstruct {
             cli_structs::JobStruct::Add(addstruct) => {
                 data.load_table(&sharedtypes::LoadDBTable::Jobs);
-                let comtype = sharedtypes::CommitType::from_str(&addstruct.committype);
-                match comtype {
-                    Ok(comfinal) => {
-                        let jobs_add = sharedtypes::JobsAdd {
-                            site: addstruct.site.to_string(),
-                            query: addstruct.query.to_string(),
-                            time: addstruct.time.to_string(),
-                            committype: comfinal,
-                        };
+                let comtype = addstruct.committype;
+                let jobs_add = sharedtypes::JobsAdd {
+                    site: addstruct.site.to_string(),
+                    query: addstruct.query.to_string(),
+                    time: addstruct.time.to_string(),
+                    committype: comtype,
+                };
+                data.jobs_add(
+                    None,
+                    crate::time_func::time_secs(),
+                    crate::time_func::time_conv(&addstruct.time),
+                    &addstruct.site,
+                    &addstruct.query,
+                    false,
+                    true,
+                    &addstruct.committype,
+                    &addstruct.jobtype,
+                );
+            }
+            cli_structs::JobStruct::AddBulk(addstruct) => {
+                data.load_table(&sharedtypes::LoadDBTable::Jobs);
+                for bulk in addstruct.bulkadd.iter() {
+                    let mut vars = HashMap::new();
+                    vars.insert("inject".to_string(), bulk.to_string());
+                    let temp = addstruct.query.format(&vars);
+                    if let Ok(ins) = temp {
                         data.jobs_add(
                             None,
-                            0,
-                            0,
+                            crate::time_func::time_secs(),
+                            crate::time_func::time_conv(&addstruct.time),
                             &addstruct.site,
-                            &addstruct.query,
+                            &ins,
                             false,
                             true,
-                            &sharedtypes::CommitType::StopOnNothing,
-                            &sharedtypes::DbJobType::Params,
+                            &addstruct.committype,
+                            &addstruct.jobtype,
                         );
-                        /*data.jobs_add(
-                            None,
-                            &jobs_add.site,
-                            &jobs_add.query,
-                            &jobs_add.time,
-                            Some(jobs_add.committype),
-                            true,
-                            sharedtypes::DbJobType::Params,
-                        );*/
-                    }
-                    Err(_) => {
-                        let enum_vec = sharedtypes::CommitType::iter().collect::<Vec<_>>();
-                        println!(
-                            "Could not parse commit type. Expected one of {:?}",
-                            enum_vec
-                        );
-                        //return sharedtypes::AllFields::Nothing;
                     }
                 }
             }
+
             cli_structs::JobStruct::Remove(_remove) => {
                 /*return sharedtypes::AllFields::JobsRemove(sharedtypes::JobsRemove {
                     site: remove.site.to_string(),

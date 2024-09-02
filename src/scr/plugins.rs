@@ -135,7 +135,7 @@ impl PluginManager {
     /// Loads plugins into plugin manager
     ///
     fn load_plugins(&mut self, pluginsloc: &String) {
-        println!("Starting to load plugins at: {}", pluginsloc);
+        logging::log(&format!("Starting to load plugins at: {}", pluginsloc));
 
         let ext = ["rlib", "so", "dylib", "dll"];
 

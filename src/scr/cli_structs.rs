@@ -1,5 +1,7 @@
 use clap::{arg, Parser, Subcommand, ValueEnum};
 
+use crate::sharedtypes;
+
 ///
 /// From: git4unrealnondev
 /// Das code sucks.
@@ -131,12 +133,38 @@ pub enum CsvStruct {
 pub enum JobStruct {
     /// Adds a job to the system
     Add(JobAddStruct),
+    /// Bulk adds jobs to the system
+    AddBulk(JobBulkAddStruct),
     /// Removes a job from the system
     Remove(JobRemovalStruct),
 }
 
-/// Holder of job adding.
+/// Adds support for bulk adding jobs
 #[derive(Debug, Parser)]
+pub struct JobBulkAddStruct {
+    /// Webite, Setup by nickname or by url base
+    #[arg(exclusive = false, required = true)]
+    pub site: String,
+    /// Tag query for multiple items use " " and a space to seperate tags
+    #[arg(exclusive = false, required = true)]
+    pub query: String,
+    /// Time, special time of now for running a job now.
+    #[arg(exclusive = false, required = true)]
+    pub time: String,
+    /// How we will process the job
+    #[arg(exclusive = false, required = true)]
+    pub committype: sharedtypes::CommitType,
+    /// Job type to run
+    #[arg(exclusive = false, required = true)]
+    pub jobtype: sharedtypes::DbJobType,
+    /// Loops through all items have a , to seperate the items currently injects into the query
+    /// parameter of the job using {inject} as the injection point
+    #[arg(value_delimiter = ',', exclusive = false, required = true)]
+    pub bulkadd: Vec<String>,
+}
+
+/// Holder of job adding.
+#[derive(Debug, Parser, Clone)]
 pub struct JobAddStruct {
     /// Webite, Setup by nickname or by url base
     #[arg(exclusive = false, required = true)]
@@ -147,9 +175,12 @@ pub struct JobAddStruct {
     /// Time, special time of now for running a job now.
     #[arg(exclusive = false, required = true)]
     pub time: String,
-    /// TODO need to fix this later.
+    /// How we will process the job
     #[arg(exclusive = false, required = true)]
-    pub committype: String,
+    pub committype: sharedtypes::CommitType,
+    /// Job type to run
+    #[arg(exclusive = false, required = true)]
+    pub jobtype: sharedtypes::DbJobType,
 }
 
 /// Holder of job removal.
