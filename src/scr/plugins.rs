@@ -4,9 +4,9 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::sync::{mpsc, Arc};
 //use std::sync::{mpsc, Arc, Mutex};
+use std::sync::Mutex;
 use std::thread::JoinHandle;
 use std::{fs, thread};
-use tracing_mutex::stdsync::Mutex;
 
 use crate::database::{self, Main};
 use crate::logging;

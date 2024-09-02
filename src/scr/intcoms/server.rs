@@ -9,7 +9,7 @@ use anyhow::Context;
 use interprocess::local_socket::{prelude::*, GenericNamespaced, ListenerOptions};
 use std::collections::HashSet;
 use std::sync::Arc;
-use tracing_mutex::stdsync::Mutex;
+use std::sync::Mutex;
 //use std::sync::{Arc, Mutex};
 use std::{
     io::{self, prelude::*, BufReader},

@@ -1959,7 +1959,7 @@ impl Main {
             additionaldata: None,
         };
         if addtodb {
-            let inp = "INSERT INTO Jobs VALUES(?, ?, ?, ?, ?, ?)";
+            let inp = "INSERT INTO Jobs VALUES(?, ?, ?, ?, ?, ?, ?)";
             let _out = self._conn.borrow_mut().lock().unwrap().execute(
                 inp,
                 params![

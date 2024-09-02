@@ -4,7 +4,7 @@ use super::sharedtypes;
 use bytes::Bytes;
 use file_format::FileFormat;
 use log::{error, info};
-use reqwest::Client;
+use reqwest::blocking::Client;
 use sha2::Digest as sha2Digest;
 use sha2::Sha512;
 use std::io::BufReader;
@@ -18,9 +18,10 @@ use async_std::task;
 use ratelimit::Ratelimiter;
 use std::fs::File;
 //use std::sync::{Arc, Mutex};
+use std::collections::HashMap;
 use std::sync::Arc;
+use std::sync::Mutex;
 use std::thread;
-use tracing_mutex::stdsync::Mutex;
 ///
 /// Makes ratelimiter and example
 ///
@@ -38,14 +39,22 @@ pub fn ratelimiter_create(number: u64, duration: Duration) -> Ratelimiter {
         .unwrap()
 }
 
-pub fn ratelimiter_wait(ratelimit_object: &mut Ratelimiter) {
-    let limit = ratelimit_object.try_wait();
+pub fn ratelimiter_wait(
+    ratelimit_object: &Arc<Mutex<HashMap<String, Ratelimiter>>>,
+    site: &String,
+) {loop {
+    let limit;
+    {
+        let hold = ratelimit_object.lock().unwrap();
+        let rlimit = hold.get(site).unwrap();
+        limit = rlimit.try_wait();
+    }
     match limit {
-        Ok(_) => {}
+        Ok(_) => {break}
         Err(sleep) => {
             std::thread::sleep(sleep);
         }
-    }
+    }}
 }
 
 ///
@@ -55,7 +64,7 @@ pub fn ratelimiter_wait(ratelimit_object: &mut Ratelimiter) {
 pub fn client_create() -> Client {
     let useragent = "RustHydrusV1".to_string();
     // The client that does the downloading
-    reqwest::ClientBuilder::new()
+    reqwest::blocking::ClientBuilder::new()
         .user_agent(useragent)
         .cookie_store(true)
         //.brotli(true)
@@ -71,11 +80,7 @@ pub fn client_create() -> Client {
 ///
 /// Downloads text into db as responses. Filters responses by default limit if their's anything wrong with request.
 ///
-pub async fn dltext_new(
-    url_string: String,
-    ratelimit_object: &mut Ratelimiter,
-    client: &mut Client,
-) -> Result<String, reqwest::Error> {
+pub async fn dltext_new(url_string: String, client: &Client) -> Result<String, reqwest::Error> {
     //let mut ret: Vec<AHashMap<String, AHashMap<String, Vec<String>>>> = Vec::new();
     //let ex = Executor::new();
 
@@ -87,8 +92,7 @@ pub async fn dltext_new(
     println!("Spawned web reach to: {}", &url_string);
     //let futureresult = futures::executor::block_on(ratelimit_object.ready())
     //    .unwrap()
-    ratelimiter_wait(ratelimit_object);
-    let futureresult = client.get(url).send().await;
+    let futureresult = client.get(url).send();
 
     //let test = reqwest::get(url).await.unwrap().text();
 
@@ -96,7 +100,7 @@ pub async fn dltext_new(
     //dbg!(&futureresult);
 
     match futureresult {
-        Ok(_) => Ok(task::block_on(futureresult.unwrap().text()).unwrap()),
+        Ok(_) => Ok(futureresult.unwrap().text().unwrap()),
         Err(_) => Err(futureresult.err().unwrap()),
     }
 }
@@ -145,6 +149,7 @@ pub fn dlfile_new(
     let mut hash = String::new();
     let mut bytes: bytes::Bytes = Bytes::from(&b""[..]);
     let mut cnt = 0;
+                                let client = client_create();
     while boolloop {
         let mut hasher = Sha512::new();
 
@@ -161,7 +166,7 @@ pub fn dlfile_new(
 
             let url = Url::parse(fileurlmatch).unwrap();
 
-            let mut futureresult = task::block_on(client.get(url.as_ref()).send());
+            let mut futureresult = client.get(url.as_ref()).send();
             loop {
                 match futureresult {
                     Ok(_) => {
@@ -172,15 +177,15 @@ pub fn dlfile_new(
                         dbg!("Repeating: {}", &url);
                         let time_dur = Duration::from_secs(10);
                         thread::sleep(time_dur);
-                        futureresult = task::block_on(client.get(url.as_ref()).send());
+                        futureresult = client.get(url.as_ref()).send();
                     }
                 }
             }
 
-            let byte = task::block_on(
+            let byte = 
                 // Downloads file into byte memory buffer
-                futureresult.unwrap().bytes(),
-            );
+                futureresult.unwrap().bytes()
+            ;
 
             // Error handling for dling a file.
             // Waits 10 secs to retry

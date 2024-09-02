@@ -5,9 +5,9 @@ use log::{error, warn};
 use scraper::db_upgrade_call;
 
 use std::sync::Arc;
+use std::sync::Mutex;
 //use std::sync::{Arc, Mutex};
 use std::{thread, time};
-use tracing_mutex::stdsync::Mutex;
 extern crate ratelimit;
 
 #[path = "./scr/cli.rs"]
