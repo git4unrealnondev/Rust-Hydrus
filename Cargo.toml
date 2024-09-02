@@ -53,9 +53,9 @@ rusty_pool = "0.7.0"
 opt-level = 3
 lto=true
 codegenunits=1
-strip = false
+strip = true
 panic = "abort"
-debug = true
+debug = false
 
 [build-dependencies]
 walkdir = "2.4.0"
