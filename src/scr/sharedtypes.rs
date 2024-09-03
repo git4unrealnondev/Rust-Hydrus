@@ -2,7 +2,7 @@
 #![allow(unused_variables)]
 
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use std::fmt;
 use strum::IntoEnumIterator;
@@ -202,6 +202,16 @@ pub struct ScraperObject {
 }
 
 ///
+/// Shared data to be passed for jobs
+///
+#[derive(Debug, Clone, Eq, PartialEq, Hash, Ord, PartialOrd)]
+pub struct ScraperData {
+    pub job: JobScraper,
+    pub system_data: BTreeMap<String, String>,
+    pub user_data: BTreeMap<String, String>,
+}
+
+///
 /// Defines what we need to reimport a file to derive a source URL.
 /// Currently only support hash.
 ///
@@ -291,7 +301,7 @@ pub struct DbJobsObj {
 ///
 /// Manager on job type and logic
 ///
-#[derive(Debug, Hash, Eq, PartialEq, Clone, Serialize, Deserialize)]
+#[derive(Debug, Hash, Eq, PartialEq, Clone, Serialize, Deserialize, Ord, PartialOrd)]
 pub struct DbJobsManager {
     pub jobtype: DbJobType,
     pub recreation: Option<DbJobRecreation>,
@@ -301,7 +311,7 @@ pub struct DbJobsManager {
 ///
 /// Recreate current job on x event
 ///
-#[derive(Debug, Hash, Eq, PartialEq, Clone, Serialize, Deserialize)]
+#[derive(Debug, Hash, Eq, PartialEq, Clone, Serialize, Deserialize, Ord, PartialOrd)]
 pub enum DbJobRecreation {
     OnTagId(usize),
     OnTag(String, usize),
@@ -312,7 +322,19 @@ pub enum DbJobRecreation {
 /// Will be used to confirm what the scraping logic should work.
 ///
 #[derive(
-    Debug, Copy, Hash, Eq, PartialEq, Clone, EnumIter, Display, Serialize, Deserialize, ValueEnum,
+    Debug,
+    Copy,
+    Hash,
+    Eq,
+    PartialEq,
+    Clone,
+    EnumIter,
+    Display,
+    Serialize,
+    Deserialize,
+    ValueEnum,
+    Ord,
+    PartialOrd,
 )]
 #[clap(rename_all = "kebab_case")]
 pub enum DbJobType {
@@ -486,8 +508,8 @@ pub struct GenericNamespaceObj {
 #[allow(dead_code)]
 #[derive(Eq, Hash, PartialEq)]
 pub enum TagType {
-    Normal,                         // Normal tag.
-    ParseUrl((JobScraper, SkipIf)), // Scraper to download and parse a new url.
+    Normal,                          // Normal tag.
+    ParseUrl((ScraperData, SkipIf)), // Scraper to download and parse a new url.
     Special, // Probably will add support for something like file descriptors or plugin specific things.
              //
 }
@@ -508,13 +530,12 @@ pub enum SkipIf {
     None,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Ord, PartialOrd)]
 pub struct JobScraper {
     pub site: String,
     pub param: Vec<ScraperParam>,
     pub original_param: String,
     pub job_type: DbJobType,
-    //pub job_ref: DbJobsObj,
 }
 ///
 /// Supported types of hashes in Rust Hydrus
@@ -641,12 +662,10 @@ pub enum PluginCommunicationChannel {
     None,
 }
 
-// let temp = AllFields::JobsAdd(JobsAdd{Site: "yeet".to_owned(), Query: "yeet".to_owned(), Time: "Lo".to_owned(), Loop: "yes".to_owned(), ReCommit: "Test".
-
 ///
 /// Straper type passed to params
 ///
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Ord, PartialOrd)]
 pub enum ScraperParamType {
     Normal,
     Database,
@@ -655,7 +674,7 @@ pub enum ScraperParamType {
 ///
 /// Used to hold Scraper Parameters in db.
 ///
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Ord, PartialOrd)]
 pub struct ScraperParam {
     pub param_data: String,
     pub param_type: ScraperParamType,

@@ -175,6 +175,9 @@ pub fn scraper_file_regen(libloading: &libloading::Library) -> sharedtypes::Scra
     unsafe { temp() }
 }
 
+///
+/// Used to generate a download link given the input data
+///
 pub fn scraper_file_return(
     libloading: &libloading::Library,
     regen: &sharedtypes::ScraperFileInput,
@@ -185,6 +188,10 @@ pub fn scraper_file_return(
     unsafe { temp(regen) }
 }
 
+///
+/// Checks job storage type. If manual then do nothing if Automatic then it will store info before
+/// the scraper even starts. Useful for storing API keys or anything similar to that.
+///
 pub fn cookie_need(libloading: &libloading::Library) -> (sharedtypes::ScraperType, String) {
     let temp: libloading::Symbol<unsafe extern "C" fn() -> (sharedtypes::ScraperType, String)> =
         unsafe { libloading.get(b"cookie_needed\0").unwrap() };
@@ -220,26 +227,34 @@ pub fn url_load(
 pub fn url_dump(
     libloading: &libloading::Library,
     params: &Vec<sharedtypes::ScraperParam>,
-) -> Vec<String> {
+    scraperdata: &sharedtypes::ScraperData,
+) -> (Vec<String>, sharedtypes::ScraperData) {
     let temp: libloading::Symbol<
-        unsafe extern "C" fn(&Vec<sharedtypes::ScraperParam>) -> Vec<String>,
+        unsafe extern "C" fn(
+            &Vec<sharedtypes::ScraperParam>,
+            &sharedtypes::ScraperData,
+        ) -> (Vec<String>, sharedtypes::ScraperData),
     > = unsafe { libloading.get(b"url_dump\0").unwrap() };
-    unsafe { temp(params) }
+    unsafe { temp(params, scraperdata) }
 }
 ///
 /// Calls a parser. Gives the HTML to the parser to parse.
 ///
 pub fn parser_call(
     libloading: &libloading::Library,
-    params: &String,
-) -> Result<sharedtypes::ScraperObject, sharedtypes::ScraperReturn> {
+    url_output: &String,
+    actual_params: &sharedtypes::ScraperData,
+) -> Result<(sharedtypes::ScraperObject, sharedtypes::ScraperData), sharedtypes::ScraperReturn> {
     let temp: libloading::Symbol<
         unsafe extern "C" fn(
             &String,
-        )
-            -> Result<sharedtypes::ScraperObject, sharedtypes::ScraperReturn>,
+            &sharedtypes::ScraperData,
+        ) -> Result<
+            (sharedtypes::ScraperObject, sharedtypes::ScraperData),
+            sharedtypes::ScraperReturn,
+        >,
     > = unsafe { libloading.get(b"parser\0").unwrap() };
-    unsafe { temp(params) }
+    unsafe { temp(url_output, actual_params) }
 } //ScraperObject
 
 pub fn url_load_test(libloading: &libloading::Library, params: Vec<String>) -> Vec<String> {

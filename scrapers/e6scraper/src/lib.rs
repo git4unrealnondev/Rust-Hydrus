@@ -642,7 +642,7 @@ pub fn parser(params: &String) -> Result<sharedtypes::ScraperObject, sharedtypes
     let js = match json::parse(params) {
         Err(err) => {
             if params.contains("Please confirm you are not a robot.") {
-                return Err(sharedtypes::ScraperReturn::Timeout(20));
+        https://a.4cdn.org/b/thread/923829745.json        return Err(sharedtypes::ScraperReturn::Timeout(20));
             } else if params.contains("502: Bad gateway") {
                 return Err(sharedtypes::ScraperReturn::Timeout(10));
             } else if params.contains("SSL handshake failed") {

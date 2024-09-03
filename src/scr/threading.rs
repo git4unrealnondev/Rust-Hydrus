@@ -1,5 +1,7 @@
 use crate::database;
 use crate::download;
+use crate::sharedtypes::ScraperData;
+use std::collections::BTreeMap;
 
 use crate::logging;
 //use crate::jobs::JobsRef;
@@ -15,6 +17,7 @@ use async_std::task;
 
 //use log::{error, info};
 use ratelimit::Ratelimiter;
+use std::collections::BTreeSet;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -116,9 +119,9 @@ impl Worker {
         let manageeplugin = pluginmanager.clone();
         let scrap = scraper.clone();
         let thread = thread::spawn(move || {
-            let mut job_params: Arc<Mutex<HashSet<JobScraper>>> =
-                Arc::new(Mutex::new(HashSet::new()));
-            let mut job_ref_hash: HashMap<JobScraper, sharedtypes::DbJobsObj> = HashMap::new();
+            let mut job_params: Arc<Mutex<BTreeSet<ScraperData>>> =
+                Arc::new(Mutex::new(BTreeSet::new()));
+            let mut job_ref_hash: BTreeMap<ScraperData, sharedtypes::DbJobsObj> = BTreeMap::new();
             let mut rate_limit_vec: Vec<Ratelimiter> = Vec::new();
             let mut rate_limit_key: HashMap<String, usize> = HashMap::new();
 
@@ -172,28 +175,39 @@ impl Worker {
                         }
                     }
 
-                    let sc = JobScraper {
-                        site: job.site.clone(),
-                        param: par_vec,
-                        original_param: job.param.clone().unwrap(),
-                        job_type: job.jobmanager.jobtype,
-                        //job_ref: job.clone(),
+                    let sc = sharedtypes::ScraperData {
+                        job: JobScraper {
+                            site: job.site.clone(),
+                            param: par_vec,
+                            original_param: job.param.clone().unwrap(),
+                            job_type: job.jobmanager.jobtype,
+                            //job_ref: job.clone(),
+                        },
+                        system_data: BTreeMap::new(),
+                        user_data: BTreeMap::new(),
                     };
                     job_ref_hash.insert(sc.clone(), job);
                     job_params.lock().unwrap().insert(sc);
                 }
                 // dbg!(&job_params.lock().unwrap();
                 let temp = job_params.lock().unwrap().clone();
-                for job in temp.iter() {
-                    let urlload = match job.job_type {
+                for mut scraper_data in temp {
+                    let urlload = match scraper_data.job.job_type {
                         sharedtypes::DbJobType::Params => {
-                            scraper::url_dump(&libloading, &job.param)
+                            let temp = scraper::url_dump(
+                                &libloading,
+                                &scraper_data.job.param,
+                                &scraper_data,
+                            );
+                            scraper_data = temp.1;
+                            temp.0
                         }
                         sharedtypes::DbJobType::Plugin => {
                             continue;
                         }
                         sharedtypes::DbJobType::FileUrl => {
-                            let parpms: Vec<String> = job
+                            let parpms: Vec<String> = scraper_data
+                                .job
                                 .original_param
                                 .split_whitespace()
                                 .map(str::to_string)
@@ -201,12 +215,12 @@ impl Worker {
                             parpms
                         }
                         sharedtypes::DbJobType::Scraper => {
-                            vec![job.original_param.clone()]
+                            vec![scraper_data.job.original_param.clone()]
                         }
                     };
                     {
                         rate_limit_store.lock().unwrap().insert(
-                            job.site.clone(),
+                            scraper_data.job.site.clone(),
                             download::ratelimiter_create(scrap._ratelimit.0, scrap._ratelimit.1),
                         );
                     }
@@ -228,18 +242,20 @@ impl Worker {
                     let mut client = download::client_create();
                     'urlloop: for urll in urlload {
                         'errloop: loop {
-                            download::ratelimiter_wait(&rate_limit_store, &job.site);
+                            download::ratelimiter_wait(&rate_limit_store, &scraper_data.job.site);
                             let resp =
                                 task::block_on(download::dltext_new(urll.to_string(), &mut client));
                             let st = match resp {
-                                Ok(respstring) => scraper::parser_call(&libloading, &respstring),
+                                Ok(respstring) => {
+                                    scraper::parser_call(&libloading, &respstring, &scraper_data)
+                                }
                                 Err(_) => continue,
                             };
 
-                            let out_st = match st {
+                            let (out_st, scraper_data_parser) = match st {
                                 Ok(objectscraper) => objectscraper,
                                 Err(ScraperReturn::Nothing) => {
-                                    job_params.lock().unwrap().remove(&job);
+                                    job_params.lock().unwrap().remove(&scraper_data);
                                     dbg!("Exiting loop due to nothing.");
                                     break 'urlloop;
                                 }
@@ -249,9 +265,9 @@ impl Worker {
                                 Err(ScraperReturn::Stop(stop)) => {
                                     logging::error_log(&format!(
                                         "Stopping job: {:?} due to {}",
-                                        job.param, stop
+                                        &scraper_data.job.param, stop
                                     ));
-                                    job_params.lock().unwrap().remove(&job);
+                                    job_params.lock().unwrap().remove(&scraper_data);
                                     continue;
                                 }
                                 Err(ScraperReturn::Timeout(time)) => {
@@ -260,9 +276,10 @@ impl Worker {
                                     continue;
                                 }
                             };
+                            scraper_data = scraper_data_parser;
                             //Parses tags from urls
                             for tag in out_st.tag {
-                                let to_parse = parse_tags(&db, tag, None);
+                                let to_parse = parse_tags(&db, tag, None, &scraper_data);
                                 for each in to_parse {
                                     job_params.lock().unwrap().insert(each);
                                 }
@@ -283,7 +300,7 @@ impl Worker {
                                 // defaults to 0 due to unknown.
                             };
 
-                            let job_site = job.site.clone();
+                            let job_site = scraper_data.job.site.clone();
                             let pool = ThreadPool::default();
                             // Parses files from urls
                             for file in out_st.file {
@@ -423,7 +440,7 @@ impl Worker {
                                         //dbg!(&taz);
                                         let tag = taz;
 
-                                        let urls_scrap = parse_tags(&db, tag, Some(fileid));
+                                        let urls_scrap = parse_tags(&db, tag, Some(fileid), &scraper_data.clone());
                                         for urlz in urls_scrap {
                                             //let url_job = JobScraper {};
                                             //dbg!(&urlz);
@@ -447,11 +464,11 @@ impl Worker {
                     //println!("End of loop");
                     let unwrappydb = &mut db.lock().unwrap();
                     //dbg!(&job);
-                    unwrappydb.del_from_jobs_table(&job);
-                    job_params.lock().unwrap().remove(&job);
-                    logging::info_log(&format!("Removing job {:?}", &job));
+                    unwrappydb.del_from_jobs_table(&scraper_data.job);
+                    job_params.lock().unwrap().remove(&scraper_data);
+                    logging::info_log(&format!("Removing job {:?}", &scraper_data));
 
-                    if let Some(jobscr) = job_ref_hash.get(&job) {
+                    if let Some(jobscr) = job_ref_hash.get(&scraper_data) {
                         let index = jblist.iter().position(|r| r == jobscr).unwrap();
                         jblist.remove(index);
                     }
@@ -481,8 +498,9 @@ fn parse_tags(
     db: &Arc<Mutex<database::Main>>,
     tag: sharedtypes::TagObject,
     file_id: Option<usize>,
-) -> HashSet<sharedtypes::JobScraper> {
-    let mut url_return: HashSet<sharedtypes::JobScraper> = HashSet::new();
+    scraper_data: &sharedtypes::ScraperData,
+) -> BTreeSet<sharedtypes::ScraperData> {
+    let mut url_return: BTreeSet<sharedtypes::ScraperData> = BTreeSet::new();
 
     let unwrappy = &mut db.lock().unwrap();
 
