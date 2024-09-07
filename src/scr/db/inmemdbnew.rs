@@ -1016,6 +1016,8 @@ impl NewinMemDB {
 
 #[cfg(test)]
 mod inmemdb {
+    use std::collections::BTreeMap;
+
     use sharedtypes::DbParentsObj;
 
     use super::*;
@@ -1253,5 +1255,32 @@ mod inmemdb {
             &db._parents_cantor_limitto,
             &db._parents_max
         );
+    }
+
+    #[test]
+    fn jobs_check() {
+        let mut db = setup_db();
+        let none = db.jobs_get(&0);
+        assert_eq!(None, none);
+
+        let jobobj = sharedtypes::DbJobsObj {
+            id: *db.jobs_get_max(),
+            time: None,
+            reptime: None,
+            site: "test".to_owned(),
+            param: None,
+            jobmanager: sharedtypes::DbJobsManager {
+                jobtype: sharedtypes::DbJobType::Params,
+                recreation: None,
+                additionaldata: None,
+            },
+            committype: None,
+            isrunning: false,
+            system_data: BTreeMap::new(),
+            user_data: BTreeMap::new(),
+        };
+
+        db.jobs_add(jobobj.clone());
+        assert_eq!(db.jobs_get(&0).unwrap(), &jobobj);
     }
 }

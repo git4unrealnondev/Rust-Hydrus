@@ -192,6 +192,7 @@ impl Worker {
                 // dbg!(&job_params.lock().unwrap();
                 let temp = job_params.lock().unwrap().clone();
                 for mut scraper_data in temp {
+                    let scraper_data_orig = scraper_data.clone();
                     let urlload = match scraper_data.job.job_type {
                         sharedtypes::DbJobType::Params => {
                             let temp = scraper::url_dump(
@@ -242,7 +243,10 @@ impl Worker {
                     let mut client = download::client_create();
                     'urlloop: for urll in urlload {
                         'errloop: loop {
-                            download::ratelimiter_wait(&rate_limit_store, &scraper_data.job.site);
+                            download::ratelimiter_wait(
+                                &rate_limit_store,
+                                &scraper_data.clone().job.site,
+                            );
                             let resp =
                                 task::block_on(download::dltext_new(urll.to_string(), &mut client));
                             let st = match resp {
@@ -263,11 +267,14 @@ impl Worker {
                                     panic!("EMC STOP DUE TO: {}", emc);
                                 }
                                 Err(ScraperReturn::Stop(stop)) => {
+                                    let temp = scraper_data.clone().job;
+                                    job_params.lock().unwrap().remove(&scraper_data);
+
                                     logging::error_log(&format!(
                                         "Stopping job: {:?} due to {}",
-                                        &scraper_data.job.param, stop
+                                        &temp.param.clone(),
+                                        stop
                                     ));
-                                    job_params.lock().unwrap().remove(&scraper_data);
                                     continue;
                                 }
                                 Err(ScraperReturn::Timeout(time)) => {
@@ -276,7 +283,8 @@ impl Worker {
                                     continue;
                                 }
                             };
-                            scraper_data = scraper_data_parser;
+
+                            //scraper_data = scraper_data_parser;
                             //Parses tags from urls
                             for tag in out_st.tag {
                                 let to_parse = parse_tags(&db, tag, None, &scraper_data);
@@ -310,6 +318,7 @@ impl Worker {
                                 let job_params = job_params.clone();
                                 let rate_limit_store = rate_limit_store.clone();
                                 let job_site = job_site.clone();
+                                let scraper_data = scraper_data.clone();
                                 let location = {
                                     let unwrappydb = &mut db.lock().unwrap();
                                     unwrappydb.location_get()
@@ -331,7 +340,7 @@ impl Worker {
                                      let fileid = match url_tag {
                                         None => {
                                             // Download file doesn't exist.
-                                                                        download::ratelimiter_wait(&rate_limit_store, &job_site);
+                                                                        download::ratelimiter_wait(&rate_limit_store, &job_site.clone());
 
                                             // URL doesn't exist in DB Will download
                                             info_log(&format!(
@@ -464,11 +473,17 @@ impl Worker {
                     //println!("End of loop");
                     let unwrappydb = &mut db.lock().unwrap();
                     //dbg!(&job);
-                    unwrappydb.del_from_jobs_table(&scraper_data.job);
+                    unwrappydb.del_from_jobs_table(&scraper_data.clone().job);
                     job_params.lock().unwrap().remove(&scraper_data);
+                    unwrappydb.del_from_jobs_table(&scraper_data_orig.job);
+                    job_params.lock().unwrap().remove(&scraper_data_orig);
                     logging::info_log(&format!("Removing job {:?}", &scraper_data));
 
                     if let Some(jobscr) = job_ref_hash.get(&scraper_data) {
+                        let index = jblist.iter().position(|r| r == jobscr).unwrap();
+                        jblist.remove(index);
+                    }
+                    if let Some(jobscr) = job_ref_hash.get(&scraper_data_orig) {
                         let index = jblist.iter().position(|r| r == jobscr).unwrap();
                         jblist.remove(index);
                     }
@@ -478,6 +493,7 @@ impl Worker {
 
                 if job_params.lock().unwrap().is_empty() {
                     job_loop = false;
+                } else {
                 }
             }
         });

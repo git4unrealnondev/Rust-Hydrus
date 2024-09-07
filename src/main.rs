@@ -80,7 +80,7 @@ fn pause() {
 fn makedb(dbloc: &str) -> database::Main {
     // Setting up DB VARS
     let path = dbloc.to_string();
-    let vers: usize = 3;
+    let vers: usize = 4;
 
     //let dbexist = Path::new(&path).exists();
 

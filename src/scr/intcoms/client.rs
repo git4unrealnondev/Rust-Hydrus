@@ -7,6 +7,7 @@ use interprocess::local_socket::prelude::LocalSocketStream;
 use interprocess::local_socket::traits::Stream;
 use interprocess::local_socket::GenericNamespaced;
 use interprocess::local_socket::ToNsName;
+use std::collections::BTreeMap;
 use std::collections::{HashMap, HashSet};
 use std::io::BufReader;
 pub mod types;
@@ -308,14 +309,24 @@ pub fn job_add(
     reptime: usize,
     site: String,
     param: String,
-    filler: bool,
     addtodb: bool,
     committype: sharedtypes::CommitType,
     dbjobtype: sharedtypes::DbJobType,
+    system_data: BTreeMap<String, String>,
+    user_data: BTreeMap<String, String>,
 ) -> bool {
     init_data_request(&types::SupportedRequests::Database(
         types::SupportedDBRequests::PutJob((
-            id, time, reptime, site, param, filler, addtodb, committype, dbjobtype,
+            id,
+            time,
+            reptime,
+            site,
+            param,
+            addtodb,
+            committype,
+            dbjobtype,
+            system_data,
+            user_data,
         )),
     ))
 }

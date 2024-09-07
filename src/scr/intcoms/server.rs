@@ -269,22 +269,24 @@ impl DbInteract {
                 reptime,
                 site,
                 param,
-                filler,
                 addtodb,
                 committype,
                 dbjobtype,
+                system_data,
+                user_data,
             )) => {
                 let mut unwrappy = self._database.lock().unwrap();
                 &unwrappy.jobs_add(
                     id,
                     time,
                     reptime,
-                    &site,
-                    &param,
-                    filler,
+                    site,
+                    param,
                     addtodb,
-                    &committype,
+                    committype,
                     &dbjobtype,
+                    system_data,
+                    user_data,
                 );
                 Self::data_size_to_b(&true)
             }

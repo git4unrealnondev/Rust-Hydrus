@@ -1,6 +1,6 @@
 extern crate clap;
 use rayon::prelude::*;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
 use std::{collections::HashSet, io::Write};
 use strfmt::Format;
@@ -38,23 +38,17 @@ pub fn main(data: &mut database::Main, scraper: &mut scraper::ScraperManager) {
         cli_structs::test::Job(jobstruct) => match jobstruct {
             cli_structs::JobStruct::Add(addstruct) => {
                 data.load_table(&sharedtypes::LoadDBTable::Jobs);
-                let comtype = addstruct.committype;
-                let jobs_add = sharedtypes::JobsAdd {
-                    site: addstruct.site.to_string(),
-                    query: addstruct.query.to_string(),
-                    time: addstruct.time.to_string(),
-                    committype: comtype,
-                };
                 data.jobs_add(
                     None,
                     crate::time_func::time_secs(),
                     crate::time_func::time_conv(&addstruct.time),
-                    &addstruct.site,
-                    &addstruct.query,
-                    false,
+                    addstruct.site.clone(),
+                    addstruct.query.clone(),
                     true,
-                    &addstruct.committype,
+                    addstruct.committype,
                     &addstruct.jobtype,
+                    BTreeMap::new(),
+                    BTreeMap::new(),
                 );
             }
             cli_structs::JobStruct::AddBulk(addstruct) => {
@@ -68,12 +62,13 @@ pub fn main(data: &mut database::Main, scraper: &mut scraper::ScraperManager) {
                             None,
                             crate::time_func::time_secs(),
                             crate::time_func::time_conv(&addstruct.time),
-                            &addstruct.site,
-                            &ins,
-                            false,
+                            addstruct.site.clone(),
+                            ins,
                             true,
-                            &addstruct.committype,
+                            addstruct.committype,
                             &addstruct.jobtype,
+                            BTreeMap::new(),
+                            BTreeMap::new(),
                         );
                     }
                 }
@@ -390,6 +385,7 @@ pub fn main(data: &mut database::Main, scraper: &mut scraper::ScraperManager) {
                                                         ),
                                                     ),
                                                     tag_list: Vec::new(),
+                                                    skip_if: Vec::new(),
                                                 };
                                                 download::dlfile_new(
                                                     &client,
@@ -432,6 +428,7 @@ pub fn main(data: &mut database::Main, scraper: &mut scraper::ScraperManager) {
                                                             ),
                                                         ),
                                                         tag_list: Vec::new(),
+                                                        skip_if: Vec::new(),
                                                     };
                                                     download::dlfile_new(
                                                         &client,

@@ -212,14 +212,13 @@ pub fn dlfile_new(
         // Final Hash
         hash = format!("{:X}", hasher.finalize());
 
-        let parsedhash = match &file.hash {
+        match &file.hash {
             None => {
-                panic!("DlFileNew: Cannot parse hash info : {:?}", &file);
+                boolloop = false;
+                //panic!("DlFileNew: Cannot parse hash info : {:?}", &file);
             }
-            Some(inputhash) => inputhash,
-        };
-
-        // Check and compare  to what the scraper wants
+            Some(parsedhash) => {
+// Check and compare  to what the scraper wants
         let status = hash_bytes(&bytes, parsedhash);
 
         // Logging
@@ -236,7 +235,11 @@ pub fn dlfile_new(
             return None;
         }
         boolloop = !status.1;
-    }
+
+            },
+        };
+
+            }
 
     let final_loc = helpers::getfinpath(location, &hash);
 

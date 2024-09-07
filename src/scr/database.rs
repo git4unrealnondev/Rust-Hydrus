@@ -2,7 +2,6 @@
 
 use crate::logging;
 
-use crate::scraper::db_upgrade_call;
 use crate::scraper::ScraperManager;
 use crate::sharedtypes;
 use crate::sharedtypes::CommitType;
@@ -14,6 +13,7 @@ use rayon::prelude::*;
 pub use rusqlite::types::ToSql;
 pub use rusqlite::{params, types::Null, Connection, Result, Transaction};
 use std::borrow::BorrowMut;
+use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::collections::HashSet;
 
@@ -707,9 +707,13 @@ impl Main {
             "Manager",
             "site",
             "param",
-            "CommitType"
+            "CommitType",
+            "SystemData",
+            "UserData"
         ];
-        vals = vec_of_strings!["INTEGER", "INTEGER", "INTEGER", "TEXT", "TEXT", "TEXT", "TEXT"];
+        vals = vec_of_strings![
+            "INTEGER", "INTEGER", "INTEGER", "TEXT", "TEXT", "TEXT", "TEXT", "TEXT", "TEXT"
+        ];
         self.table_create(&name, &keys, &vals);
 
         self.transaction_flush();
@@ -1121,6 +1125,82 @@ impl Main {
     }
 
     ///
+    /// Manages the upgrading process from V3 to V4.
+    ///
+    fn db_update_three_to_four(&mut self) {
+        let jobs_cnt = self.db_table_collumn_getnames(&"Jobs".to_string()).len();
+        dbg!(&jobs_cnt);
+        let mut storage = std::collections::HashSet::new();
+        match jobs_cnt {
+            7 => {
+                logging::info_log(&format!("Starting work on Jobs."));
+
+                // Renames table to Jobs_Old
+                if !self.check_table_exists("Jobs_Old".to_string()) {
+                    self.alter_table(&"Jobs".to_string(), &"Jobs_Old".to_string());
+                }
+
+                {
+                    let conn = self._conn.lock().unwrap();
+                    let mut stmt = conn.prepare("SELECT * FROM Jobs_Old").unwrap();
+                    let mut rows = stmt.query([]).unwrap();
+
+                    // Loads the V3 jobs into memory
+                    while let Some(row) = rows.next().unwrap() {
+                        let id: usize = row.get(0).unwrap();
+                        let time: usize = row.get(1).unwrap();
+                        let reptime: usize = row.get(2).unwrap();
+                        let manager: String = row.get(3).unwrap();
+                        let site: String = row.get(4).unwrap();
+                        let param: String = row.get(5).unwrap();
+                        let committype: String = row.get(6).unwrap();
+
+                        storage.insert((
+                            id,
+                            time,
+                            reptime,
+                            manager,
+                            site,
+                            param,
+                            committype,
+                            serde_json::to_string(&BTreeMap::<String, String>::new()).unwrap(),
+                            serde_json::to_string(&BTreeMap::<String, String>::new()).unwrap(),
+                        ));
+                    }
+                }
+                let keys = &vec_of_strings!(
+                    "id",
+                    "time",
+                    "reptime",
+                    "Manager",
+                    "site",
+                    "param",
+                    "CommitType",
+                    "SystemData",
+                    "UserData"
+                );
+                let vals = &vec_of_strings!(
+                    "INTEGER", "INTEGER", "INTEGER", "TEXT", "TEXT", "TEXT", "TEXT", "TEXT", "TEXT"
+                );
+                self.table_create(&"Jobs".to_string(), keys, vals);
+                {
+                    let conn = self._conn.lock().unwrap();
+                    let mut stmt = conn.prepare("INSERT INTO Jobs (id,time,reptime,Manager,site,param,CommitType,SystemData,UserData) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)").unwrap();
+                    for item in storage.into_iter() {
+                        stmt.execute(item).unwrap();
+                    }
+                }
+                self.db_drop_table(&"Jobs_Old".to_string());
+                self.transaction_flush();
+            }
+            9 => {
+                logging::info_log(&format!("Already processed jobs. Skipping..."));
+            }
+            _ => {}
+        }
+    }
+
+    ///
     /// Checks if db version is consistent.
     /// If this function returns false signifies that we shouldn't run.
     ///
@@ -1185,7 +1265,7 @@ impl Main {
                 self.db_update_two_to_three();
                 db_vers += 1;
             } else if db_vers + 1 == 4 {
-                dbg!("4 soup");
+                self.db_update_three_to_four();
             }
 
             logging::info_log(&format!("Finished upgrade to V{}.", db_vers));
@@ -1356,7 +1436,6 @@ impl Main {
         }
     }
 
-    ///
     /// Loads jobs in from DB Connection
     ///
     fn load_jobs(&mut self) {
@@ -1372,6 +1451,11 @@ impl Main {
                     let manager: String = row.get(3).unwrap();
                     let man = serde_json::from_str(&manager).unwrap();
 
+                    let system_data_string: String = row.get(7).unwrap();
+                    let user_data_string: String = row.get(8).unwrap();
+                    let system_data = serde_json::from_str(&system_data_string).unwrap();
+                    let user_data = serde_json::from_str(&user_data_string).unwrap();
+
                     Ok(sharedtypes::DbJobsObj {
                         id: row.get(0).unwrap(),
                         time: row.get(1).unwrap(),
@@ -1381,6 +1465,8 @@ impl Main {
                         jobmanager: man,
                         committype: Some(sharedtypes::stringto_commit_type(&row.get(6).unwrap())),
                         isrunning: false,
+                        user_data,
+                        system_data,
                     })
                 })
                 .unwrap();
@@ -1915,25 +2001,8 @@ impl Main {
         //println!("relationship complete : {} {}", file, tag);
     }
 
-    fn jobs_add_db(
-        &mut self,
-        id: usize,
-        time: usize,
-        reptime: usize,
-        site: String,
-        param: String,
-        jobmanager: sharedtypes::DbJobsManager,
-    ) {
-        self._inmemdb.jobs_add(DbJobsObj {
-            id,
-            time: Some(time),
-            reptime: Some(reptime),
-            site,
-            param: Some(param),
-            committype: None,
-            jobmanager,
-            isrunning: false,
-        });
+    fn jobs_add_db(&mut self, jobs_obj: sharedtypes::DbJobsObj) {
+        self._inmemdb.jobs_add(jobs_obj);
     }
 
     pub fn jobs_add(
@@ -1941,12 +2010,13 @@ impl Main {
         id: Option<usize>,
         time: usize,
         reptime: usize,
-        site: &String,
-        param: &String,
-        filler: bool,
+        site: String,
+        param: String,
         addtodb: bool,
-        committype: &sharedtypes::CommitType,
+        committype: sharedtypes::CommitType,
         dbjobtype: &sharedtypes::DbJobType,
+        system_data: BTreeMap<String, String>,
+        user_data: BTreeMap<String, String>,
     ) {
         let id = match id {
             None => self._inmemdb.jobs_get_max().clone(),
@@ -1958,8 +2028,9 @@ impl Main {
             recreation: None,
             additionaldata: None,
         };
+
         if addtodb {
-            let inp = "INSERT INTO Jobs VALUES(?, ?, ?, ?, ?, ?, ?)";
+            let inp = "INSERT INTO Jobs VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)";
             let _out = self._conn.borrow_mut().lock().unwrap().execute(
                 inp,
                 params![
@@ -1970,18 +2041,27 @@ impl Main {
                     site,
                     param,
                     committype.to_string(),
+                    serde_json::to_string(&system_data).unwrap(),
+                    serde_json::to_string(&user_data).unwrap()
                 ],
             );
             self.db_commit_man();
         }
-        self.jobs_add_db(
+        let params = if param.is_empty() { None } else { Some(param) };
+        let jobs_obj: sharedtypes::DbJobsObj = sharedtypes::DbJobsObj {
             id,
-            time,
-            reptime,
-            site.to_string(),
-            param.to_string(),
-            jobsmanager,
-        );
+            time: Some(time),
+            reptime: Some(reptime),
+            site,
+            param: params,
+            jobmanager: jobsmanager,
+            committype: Some(committype),
+            isrunning: false,
+            system_data,
+            user_data,
+        };
+
+        self.jobs_add_db(jobs_obj);
     }
 
     ///

@@ -4,6 +4,7 @@ use crate::sharedtypes;
 use anyhow::Context;
 use interprocess::local_socket::prelude::LocalSocketStream;
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use std::collections::HashSet;
 use std::io::BufReader;
 use std::io::Read;
@@ -120,9 +121,10 @@ pub enum SupportedDBRequests {
             String,
             String,
             bool,
-            bool,
             sharedtypes::CommitType,
             sharedtypes::DbJobType,
+            BTreeMap<String, String>,
+            BTreeMap<String, String>,
         ),
     ),
     GetJob(usize),

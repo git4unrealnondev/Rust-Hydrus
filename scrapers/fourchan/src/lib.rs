@@ -1,4 +1,4 @@
-use chrono::DateTime;
+use base64::Engine;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::io;
@@ -278,6 +278,48 @@ pub fn cookie_url() -> String {
     "e6scraper_cookie".to_string()
 }
 
+enum Nsid {
+    PostId,
+    PostComment,
+    PostTimestamp,
+    ThreadId,
+    AttachmentName,
+    OriginalMD5,
+}
+
+fn nsout(inp: &Nsid) -> sharedtypes::GenericNamespaceObj {
+    return match inp {
+        Nsid::PostId => sharedtypes::GenericNamespaceObj {
+            name: "4chan_Post_Id".to_string(),
+            description: Some("A 4chan's post id, is unique".to_string()),
+        },
+        Nsid::PostTimestamp => sharedtypes::GenericNamespaceObj {
+            name: "4chan_Post_Timestamp".to_string(),
+            description: Some("A 4chan's post's timestamp UNIX style".to_string()),
+        },
+        Nsid::ThreadId => sharedtypes::GenericNamespaceObj {
+            name: "4chan_Thread_ID".to_string(),
+            description: Some("The thread ID from 4chan".to_string()),
+        },
+        Nsid::PostComment => sharedtypes::GenericNamespaceObj {
+            name: "4chan_Post_Comment".to_string(),
+            description: Some("A comment attached to a post".to_string()),
+        },
+        Nsid::AttachmentName => sharedtypes::GenericNamespaceObj {
+            name: "4chan_Attachment_Name".to_string(),
+            description: Some("The original name of an atachment that was uploaded".to_string()),
+        },Nsid::OriginalMD5 => sharedtypes::GenericNamespaceObj {
+            name: "4chan_Polish_Original_MD5".to_string(),
+            description: Some("The original MD5 of the image before CF Polish tampered with this. I cannot find a way to bypass or to do other naughty things to it to get the original image".to_string()),
+        },
+
+    };
+}
+
+fn gen_fileurl(boardcode: String, filename: String, fileext: String) -> String {
+    format!("https://i.4cdn.org/{}/{}{}", boardcode, filename, fileext)
+}
+
 ///
 /// Parses return from download.
 ///
@@ -292,22 +334,133 @@ pub fn parser(
         tag: HashSet::new(),
     };
 
-    dbg!("PARSER", actual_params);
+    if let Some(jobtype) = actual_params.user_data.get("JobType") {
+        let jobtype_str: &str = jobtype;
+        match jobtype_str {
+            "Thread" => {
+                let mut isop = true;
+                if let Ok(chjson) = json::parse(params) {
+                    let mut thread = sharedtypes::TagObject {
+                        namespace: nsout(&Nsid::ThreadId),
+                        tag: actual_params.user_data.get("ThreadID").unwrap().to_string(),
+                        tag_type: sharedtypes::TagType::Normal,
+                        relates_to: None,
+                    };
+                    out.tag.insert(thread);
+                    let subthread = sharedtypes::SubTag {
+                        namespace: nsout(&Nsid::ThreadId),
+                        tag: actual_params.user_data.get("ThreadID").unwrap().to_string(),
+                        tag_type: sharedtypes::TagType::Normal,
+                        limit_to: None,
+                    };
+
+                    for each in chjson["posts"].members() {
+                        if isop {
+                            isop = false;
+                        }
+
+                        if let Some(comment) = each["com"].as_str() {
+                            out.tag.insert(sharedtypes::TagObject {
+                                namespace: nsout(&Nsid::PostComment),
+                                tag: comment.to_string(),
+                                tag_type: sharedtypes::TagType::Normal,
+                                relates_to: Some(subthread.clone()),
+                            });
+                        }
+                        if let Some(comment) = each["no"].as_usize() {
+                            out.tag.insert(sharedtypes::TagObject {
+                                namespace: nsout(&Nsid::PostId),
+                                tag: comment.to_string(),
+                                tag_type: sharedtypes::TagType::Normal,
+                                relates_to: Some(subthread.clone()),
+                            });
+                        }
+                        if let Some(comment) = each["time"].as_usize() {
+                            out.tag.insert(sharedtypes::TagObject {
+                                namespace: nsout(&Nsid::PostTimestamp),
+                                tag: comment.to_string(),
+                                tag_type: sharedtypes::TagType::Normal,
+                                relates_to: Some(subthread.clone()),
+                            });
+                        }
+
+                        // If we have a file name then we should download it
+                        if let Some(attachment_filename) = each["tim"].as_usize() {
+                            let post_tag = sharedtypes::SubTag {
+                                namespace: nsout(&Nsid::PostId),
+                                tag: each["no"].as_usize().unwrap().to_string(),
+                                tag_type: sharedtypes::TagType::Normal,
+                                limit_to: None,
+                            };
+
+                            let mut tag_list = Vec::new();
+                            tag_list.push(sharedtypes::TagObject {
+                                namespace: nsout(&Nsid::AttachmentName),
+                                tag: attachment_filename.to_string(),
+                                tag_type: sharedtypes::TagType::Normal,
+                                relates_to: Some(post_tag.clone()),
+                            });
+
+                            let attachment_md5 = hex::encode(
+                                base64::prelude::BASE64_STANDARD
+                                    .decode(each["md5"].as_str().unwrap())
+                                    .unwrap(),
+                            );
+                            tag_list.push(sharedtypes::TagObject {
+                                namespace: nsout(&Nsid::OriginalMD5),
+                                tag: attachment_md5.to_string(),
+                                tag_type: sharedtypes::TagType::Normal,
+                                relates_to: Some(post_tag.clone()),
+                            });
+
+                            let skip = sharedtypes::TagObject {
+                                namespace: sharedtypes::GenericNamespaceObj {
+                                    name: "FileHash-MD5".to_string(),
+                                    description: None,
+                                },
+                                tag: attachment_md5.clone(),
+                                tag_type: sharedtypes::TagType::Normal,
+                                relates_to: None,
+                            };
+
+                            let source_url = gen_fileurl(
+                                "b".to_string(),
+                                attachment_filename.to_string(),
+                                each["ext"].as_str().unwrap().to_string(),
+                            );
+                            let file = sharedtypes::FileObject {
+                                tag_list,
+                                skip_if: vec![skip],
+                                source_url: Some(source_url),
+                                //hash: Some(sharedtypes::HashesSupported::Md5(attachment_md5)),
+                                hash: None,
+                            };
+                            out.file.insert(file);
+                        }
+                    }
+                }
+            }
+            _ => {
+                dbg!("CANNOT FIND JOBTYPE");
+            }
+        }
+    }
+
     if let Ok(chjson) = json::parse(params) {
         for each in chjson.members() {
             for thread in each["threads"].members() {
                 let mut cnt = 0;
                 while let Some(key) = scraper_data.user_data.get(&format!("key_search_{cnt}")) {
                     if thread["com"].to_string().contains(key) {
-                        scraper_data
-                            .user_data
-                            .insert("Stop".to_string(), "Stop".to_string());
                         //dbg!(&thread["com"]);
                         let threadurl = format!(
                             "https://a.4cdn.org/b/thread/{}.json",
                             thread["no"].to_string()
                         );
                         if !scraper_data.user_data.contains_key("Stop") {
+                            let mut usr_data = scraper_data.user_data.clone();
+                            usr_data.insert("JobType".to_string(), "Thread".to_string());
+                            usr_data.insert("ThreadID".to_string(), format!("{}", thread["no"]));
                             out.tag.insert(sharedtypes::TagObject {
                                 namespace: sharedtypes::GenericNamespaceObj {
                                     name: "DO NOT ADD".to_string(),
@@ -323,7 +476,7 @@ pub fn parser(
                                             job_type: sharedtypes::DbJobType::Scraper,
                                         },
                                         system_data: scraper_data.system_data.clone(),
-                                        user_data: scraper_data.user_data.clone(),
+                                        user_data: usr_data,
                                     },
                                     sharedtypes::SkipIf::None,
                                 )),
@@ -338,7 +491,9 @@ pub fn parser(
             }
         }
     }
-    dbg!(&out, &scraper_data);
+    scraper_data
+        .user_data
+        .insert("Stop".to_string(), "Stop".to_string());
     Ok((out, scraper_data))
 }
 ///

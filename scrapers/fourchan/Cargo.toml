@@ -19,8 +19,9 @@ path = "src/lib.rs"
 crate-type = ["dylib"]
 
 [dependencies]
-chrono = "0.4.31"
+base64 = "0.22.1"
 clap = { version = "4.5.16", features = ["derive"] }
+hex = "0.4.3"
 json = "0.12.4"
 serde = { version = "1.0.192", features = ["derive"] }
 strum = "0.25.0"

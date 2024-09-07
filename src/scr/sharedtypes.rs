@@ -296,6 +296,8 @@ pub struct DbJobsObj {
     pub jobmanager: DbJobsManager,
     pub committype: Option<CommitType>,
     pub isrunning: bool,
+    pub system_data: BTreeMap<String, String>,
+    pub user_data: BTreeMap<String, String>,
 }
 
 ///
@@ -457,7 +459,7 @@ pub struct DbPluginNamespace {
 #[derive(Debug)]
 pub struct DBPluginOutput {
     pub tag: Option<Vec<DBPluginTagOut>>,   // Adds a tag to DB
-    pub setting: Option<Vec<DbSettingObj>>, // Adds a setting
+    pub setting: Option<Vec<DbSettingObj>>, // Add;s a setting
     pub relationship: Option<Vec<DbPluginRelationshipObj>>, // Adds a relationship into the DB.
     pub parents: Option<Vec<DbParentsObj>>, // Adds a parent object in db
     pub jobs: Option<Vec<DbJobsObj>>,       // Adds a job
@@ -473,6 +475,7 @@ pub struct FileObject {
     pub source_url: Option<String>,
     pub hash: Option<HashesSupported>, // Hash of file
     pub tag_list: Vec<TagObject>,
+    pub skip_if: Vec<TagObject>, // Skips downloading the file if a tag matches this.
 }
 
 ///
