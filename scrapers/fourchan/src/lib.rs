@@ -1,8 +1,6 @@
 use base64::Engine;
 use std::collections::HashSet;
-use std::str::FromStr;
 use std::time::Duration;
-use strum_macros::EnumString;
 
 //use ahash::HashSet;
 //use ahash::HashSet;
@@ -10,107 +8,32 @@ use strum_macros::EnumString;
 #[path = "../../../src/scr/sharedtypes.rs"]
 mod sharedtypes;
 
+mod boards;
+
 #[macro_export]
 macro_rules! vec_of_strings {
     ($($x:expr),*) => (vec![$($x.to_string()),*]);
 }
 
-///
-/// List of all board codes.
-/// Only exepction is /3/ because of enum restrictions
-///
-#[derive(Debug, PartialEq, Eq, EnumString)]
-enum BoardCodes {
-    THREE,
-    A,
-    ACO,
-    ADV,
-    AN,
-    B,
-    BANT,
-    BIZ,
-    C,
-    CGL,
-    CK,
-    CO,
-    D,
-    DIY,
-    E,
-    F,
-    FA,
-    FIT,
-    G,
-    GD,
-    GIF,
-    H,
-    HC,
-    HIS,
-    HM,
-    HR,
-    I,
-    IC,
-    INT,
-    J,
-    JP,
-    K,
-    LGBT,
-    LIT,
-    M,
-    MLP,
-    MU,
-    N,
-    NEWS,
-    O,
-    OUT,
-    P,
-    POL,
-    PW,
-    QST,
-    R,
-    R9K,
-    S,
-    S4S,
-    SCI,
-    SOC,
-    SP,
-    T,
-    TEST,
-    TG,
-    TOY,
-    TRASH,
-    TRV,
-    TV,
-    U,
-    V,
-    VG,
-    VIP,
-    VM,
-    VMG,
-    VP,
-    VR,
-    VRPG,
-    VST,
-    VT,
-    W,
-    WG,
-    WSG,
-    X,
-    XS,
-    Y,
+#[derive(Debug)]
+pub enum CurrentSite {
+    Fourchan,
+    Eightchan,
+    Unknown,
 }
 
-///
-/// Quick and dirty hack for getting the board code as a String
-///
-impl std::fmt::Display for BoardCodes {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        if self == &BoardCodes::THREE {
-            write!(f, "3")
-        } else {
-            write!(f, "{}", format!("{:?}", self).to_lowercase())
-        }
-        // or, alternatively:
-        // fmt::Debug::fmt(self, f)
+pub trait Site {
+    fn filter_hash(&self, inp: &str, hash: &str) -> Option<sharedtypes::HashesSupported>;
+    fn gen_fileurl(&self, boardcode: String, filename: String, fileext: String) -> String;
+    fn filter_board(&self, inp: &str) -> Option<String>;
+    fn gen_catalog(&self, boardcode: &str) -> String;
+    fn gen_thread(&self, boardcode: &str, thread_number: &str) -> String;
+}
+
+pub fn get_site(inp: &str) -> Option<impl Site> {
+    match inp {
+        "4ch" | "4chan" => Some(boards::fourchan::BoardCodes::B),
+        _ => None,
     }
 }
 
@@ -187,34 +110,46 @@ pub fn url_dump(
     }
 
     let mut scraper_data = scraperdata.clone();
-    //let mut out = Vec::new();
-    dbg!("URL_DUMP", params);
 
-    if let Some((board_codes, search_term)) = filter_boardcodes(params) {
-        for cnt in 0..board_codes.len() {
-            scraper_data.user_data.insert(
-                format!("key_board_{cnt}"),
-                format!("{}", board_codes.get(cnt).unwrap()),
-            );
-            scraper_data.user_data.insert(
-                format!("key_search_{cnt}"),
-                search_term.get(cnt).unwrap().to_string(),
-            );
+    let mut catalog_urls = Vec::new();
+
+    if let Some(site) = get_site(&scraperdata.job.site) {
+        let site = site;
+        if let Some((board_codes, search_term, catalog)) = filter_boardcodes(params, site) {
+            for cnt in 0..board_codes.len() {
+                scraper_data
+                    .user_data
+                    .insert(format!("key_board_{cnt}"), format!("{}", &board_codes[cnt]));
+                scraper_data.user_data.insert(
+                    format!("key_search_{cnt}"),
+                    search_term.get(cnt).unwrap().to_string(),
+                );
+                catalog_urls.push(catalog[cnt].to_string());
+            }
+            return (catalog_urls, scraper_data);
         }
     }
-
-    (gen_url_catalog(params), scraper_data)
+    (Vec::new(), scraper_data)
+    //(gen_url_catalog(params), scraper_data)
 }
+
+///
+/// Filters the board info
+/// gets the site, parameters parsed and catalog urls
+///
 fn filter_boardcodes(
     params: &[sharedtypes::ScraperParam],
-) -> Option<(Vec<BoardCodes>, Vec<String>)> {
+    site: impl Site,
+) -> Option<(Vec<String>, Vec<String>, Vec<String>)> {
     let mut params_boardcodes = Vec::new();
     //let mut params_query = Vec::new();
     let mut params_storage = Vec::new();
+    let mut catalog_urls = Vec::new();
     for each in params.iter() {
         if each.param_type == sharedtypes::ScraperParamType::Normal {
-            if let Ok(boardcode) = BoardCodes::from_str(&each.param_data.to_uppercase()) {
-                params_boardcodes.push(boardcode);
+            if let Some(boardcode) = site.filter_board(&each.param_data.to_string()) {
+                params_boardcodes.push(boardcode.clone());
+                catalog_urls.push(site.gen_catalog(&boardcode));
             } else {
                 params_storage.push(each.param_data.to_string());
             }
@@ -222,31 +157,10 @@ fn filter_boardcodes(
     }
 
     if params_boardcodes.len() == params_storage.len() {
-        Some((params_boardcodes, params_storage))
+        Some((params_boardcodes, params_storage, catalog_urls))
     } else {
         None
     }
-}
-
-///
-/// Generates a catalog url
-///
-fn gen_url_catalog(params: &[sharedtypes::ScraperParam]) -> Vec<String> {
-    let catalog_base = "https://a.4cdn.org/";
-    let catalog_end = "/catalog.json";
-    let mut params = params.to_owned();
-    params.pop();
-
-    let mut out = Vec::new();
-    if let Some((params_boardcodes, _)) = filter_boardcodes(&params) {
-        for each in params_boardcodes.iter() {
-            out.push(format!("{catalog_base}{}{catalog_end}", each));
-        }
-    }
-
-    dbg!(&out);
-
-    out
 }
 
 ///
@@ -262,7 +176,7 @@ pub fn cookie_needed() -> (sharedtypes::ScraperType, String) {
 ///
 #[no_mangle]
 pub fn cookie_url() -> String {
-    "e6scraper_cookie".to_string()
+    String::new()
 }
 
 enum Nsid {
@@ -303,10 +217,6 @@ fn nsout(inp: &Nsid) -> sharedtypes::GenericNamespaceObj {
     }
 }
 
-fn gen_fileurl(boardcode: String, filename: String, fileext: String) -> String {
-    format!("https://i.4cdn.org/{}/{}{}", boardcode, filename, fileext)
-}
-
 ///
 /// Parses return from download.
 ///
@@ -320,6 +230,8 @@ pub fn parser(
         file: HashSet::new(),
         tag: HashSet::new(),
     };
+
+    let site = get_site(&actual_params.job.site);
 
     if let Some(jobtype) = actual_params.user_data.get("JobType") {
         let jobtype_str: &str = jobtype;
@@ -405,35 +317,25 @@ pub fn parser(
                                 tag_type: sharedtypes::TagType::Normal,
                                 relates_to: None,
                             };
-
-                            let bcode: BoardCodes = BoardCodes::from_str(
-                                &actual_params
-                                    .user_data
-                                    .get("key_board_0")
-                                    .unwrap()
-                                    .to_uppercase(),
-                            )
-                            .unwrap();
-
-                            // /b is protected by cloudflare polish cannot pull down "unoptimized"
-                            // images from it
-                            let hash = match bcode {
-                                BoardCodes::B => None,
-                                _ => Some(sharedtypes::HashesSupported::Md5(attachment_md5)),
-                            };
-
-                            let source_url = gen_fileurl(
-                                bcode.to_string(),
-                                attachment_filename.to_string(),
-                                each["ext"].as_str().unwrap().to_string(),
-                            );
-                            let file = sharedtypes::FileObject {
-                                tag_list,
-                                skip_if: vec![skip],
-                                source_url: Some(source_url),
-                                hash,
-                            };
-                            out.file.insert(file);
+                            if let Some(ref site) = site {
+                                let bcode = &actual_params.user_data.get("key_board_0").unwrap();
+                                let hash = site.filter_hash(
+                                    &bcode.to_uppercase(),
+                                    &attachment_md5.clone().to_string(),
+                                );
+                                let source_url = site.gen_fileurl(
+                                    bcode.to_string(),
+                                    attachment_filename.to_string(),
+                                    each["ext"].as_str().unwrap().to_string(),
+                                );
+                                let file = sharedtypes::FileObject {
+                                    tag_list,
+                                    skip_if: vec![skip],
+                                    source_url: Some(source_url),
+                                    hash,
+                                };
+                                out.file.insert(file);
+                            }
                         }
                     }
                 }
@@ -444,52 +346,70 @@ pub fn parser(
         }
     }
 
-    if let Ok(chjson) = json::parse(params) {
-        for each in chjson.members() {
-            for thread in each["threads"].members() {
-                let mut cnt = 0;
-                while let Some(key) = scraper_data.user_data.get(&format!("key_search_{cnt}")) {
-                    if thread["com"].to_string().contains(key) {
-                        //dbg!(&thread["com"]);
-                        let threadurl =
-                            format!("https://a.4cdn.org/b/thread/{}.json", thread["no"]);
-                        if !scraper_data.user_data.contains_key("Stop") {
-                            let mut usr_data = scraper_data.user_data.clone();
-                            usr_data.insert("JobType".to_string(), "Thread".to_string());
-                            usr_data.insert("ThreadID".to_string(), format!("{}", thread["no"]));
-                            out.tag.insert(sharedtypes::TagObject {
-                                namespace: sharedtypes::GenericNamespaceObj {
-                                    name: "DO NOT ADD".to_string(),
-                                    description: Some("DO NOT PARSE".to_string()),
-                                },
-                                tag: threadurl.clone(),
-                                tag_type: sharedtypes::TagType::ParseUrl((
-                                    sharedtypes::ScraperData {
-                                        job: sharedtypes::JobScraper {
-                                            site: "4ch".to_string(),
-                                            param: Vec::new(),
-                                            original_param: threadurl,
-                                            job_type: sharedtypes::DbJobType::Scraper,
-                                        },
-                                        system_data: scraper_data.system_data.clone(),
-                                        user_data: usr_data,
-                                    },
-                                    sharedtypes::SkipIf::None,
-                                )),
-                                relates_to: None,
-                            });
+    if let Some(site) = site {
+        if let Ok(chjson) = json::parse(params) {
+            for each in chjson.members() {
+                for thread in each["threads"].members() {
+                    let mut cnt = 0;
+                    while let Some(key) = scraper_data.user_data.get(&format!("key_search_{cnt}")) {
+                        let mut process = false;
+                        if thread["com"].to_string().contains(key) {
+                            process = true;
                         }
-                    }
+                        if !thread["sub"].is_null() {
+                            if thread["sub"].to_string().contains(key) {
+                                process = true;
+                            }
+                        }
+                        if process {
+                            //dbg!(&thread["com"]);
+                            let threadurl = site.gen_thread(
+                                scraper_data
+                                    .user_data
+                                    .get(&format!("key_board_{cnt}"))
+                                    .unwrap(),
+                                &thread["no"].to_string(),
+                            );
 
-                    cnt += 1;
+                            if !scraper_data.user_data.contains_key("Stop") {
+                                let mut usr_data = scraper_data.user_data.clone();
+                                usr_data.insert("JobType".to_string(), "Thread".to_string());
+                                usr_data
+                                    .insert("ThreadID".to_string(), format!("{}", thread["no"]));
+                                out.tag.insert(sharedtypes::TagObject {
+                                    namespace: sharedtypes::GenericNamespaceObj {
+                                        name: "DO NOT ADD".to_string(),
+                                        description: Some("DO NOT PARSE".to_string()),
+                                    },
+                                    tag: threadurl.clone(),
+                                    tag_type: sharedtypes::TagType::ParseUrl((
+                                        sharedtypes::ScraperData {
+                                            job: sharedtypes::JobScraper {
+                                                site: "4ch".to_string(),
+                                                param: Vec::new(),
+                                                original_param: threadurl,
+                                                job_type: sharedtypes::DbJobType::Scraper,
+                                            },
+                                            system_data: scraper_data.system_data.clone(),
+                                            user_data: usr_data,
+                                        },
+                                        sharedtypes::SkipIf::None,
+                                    )),
+                                    relates_to: None,
+                                });
+                            }
+                        }
+
+                        cnt += 1;
+                    }
+                    //dbg!(thread);
                 }
-                //dbg!(thread);
             }
         }
+        scraper_data
+            .user_data
+            .insert("Stop".to_string(), "Stop".to_string());
     }
-    scraper_data
-        .user_data
-        .insert("Stop".to_string(), "Stop".to_string());
     Ok((out, scraper_data))
 }
 ///
