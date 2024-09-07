@@ -479,13 +479,17 @@ impl Worker {
                     job_params.lock().unwrap().remove(&scraper_data_orig);
                     logging::info_log(&format!("Removing job {:?}", &scraper_data));
 
+                    // Safer way to remove jobs from list.
                     if let Some(jobscr) = job_ref_hash.get(&scraper_data) {
-                        let index = jblist.iter().position(|r| r == jobscr).unwrap();
-                        jblist.remove(index);
+                        if let Some(index) = jblist.iter().position(|r| r == jobscr) {
+                            jblist.remove(index);
+                        }
                     }
+
                     if let Some(jobscr) = job_ref_hash.get(&scraper_data_orig) {
-                        let index = jblist.iter().position(|r| r == jobscr).unwrap();
-                        jblist.remove(index);
+                        if let Some(index) = jblist.iter().position(|r| r == jobscr) {
+                            jblist.remove(index);
+                        }
                     }
 
                     unwrappydb.transaction_flush();

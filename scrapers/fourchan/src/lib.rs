@@ -1,10 +1,8 @@
 use base64::Engine;
-use std::collections::HashMap;
 use std::collections::HashSet;
-use std::io;
-use std::io::BufRead;
 use std::str::FromStr;
 use std::time::Duration;
+use strum_macros::EnumString;
 
 //use ahash::HashSet;
 //use ahash::HashSet;
@@ -21,7 +19,7 @@ macro_rules! vec_of_strings {
 /// List of all board codes.
 /// Only exepction is /3/ because of enum restrictions
 ///
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, EnumString)]
 enum BoardCodes {
     THREE,
     A,
@@ -107,24 +105,12 @@ enum BoardCodes {
 impl std::fmt::Display for BoardCodes {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         if self == &BoardCodes::THREE {
-            write!(f, "{}", "3")
+            write!(f, "3")
         } else {
             write!(f, "{}", format!("{:?}", self).to_lowercase())
         }
         // or, alternatively:
         // fmt::Debug::fmt(self, f)
-    }
-}
-impl FromStr for BoardCodes {
-    type Err = ();
-
-    fn from_str(input: &str) -> Result<BoardCodes, Self::Err> {
-        let inp = input.to_uppercase();
-        match inp.as_str() {
-            "B" => Ok(BoardCodes::B),
-            "3" => Ok(BoardCodes::THREE),
-            _ => Err(()),
-        }
     }
 }
 
@@ -134,6 +120,12 @@ pub struct InternalScraper {
     _sites: Vec<String>,
     _ratelimit: (u64, Duration),
     _type: sharedtypes::ScraperType,
+}
+
+impl Default for InternalScraper {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl InternalScraper {
@@ -176,13 +168,11 @@ pub fn new() -> InternalScraper {
 }
 ///
 /// Returns one url from the parameters.
+/// TODO Not implemented yet
 ///
 #[no_mangle]
-pub fn url_get(params: &Vec<sharedtypes::ScraperParam>) -> Vec<String> {
-    let mut out = Vec::new();
-
-    dbg!("URL_GET", params);
-    out
+pub fn url_get(_params: &Vec<sharedtypes::ScraperParam>) -> Vec<String> {
+    Vec::new()
 }
 ///
 /// Dumps a list of urls to scrape
@@ -200,7 +190,7 @@ pub fn url_dump(
     //let mut out = Vec::new();
     dbg!("URL_DUMP", params);
 
-    if let Some((board_codes, search_term)) = filter_boardcodes(&params) {
+    if let Some((board_codes, search_term)) = filter_boardcodes(params) {
         for cnt in 0..board_codes.len() {
             scraper_data.user_data.insert(
                 format!("key_board_{cnt}"),
@@ -208,7 +198,7 @@ pub fn url_dump(
             );
             scraper_data.user_data.insert(
                 format!("key_search_{cnt}"),
-                format!("{}", search_term.get(cnt).unwrap()),
+                search_term.get(cnt).unwrap().to_string(),
             );
         }
     }
@@ -216,26 +206,23 @@ pub fn url_dump(
     (gen_url_catalog(params), scraper_data)
 }
 fn filter_boardcodes(
-    params: &Vec<sharedtypes::ScraperParam>,
+    params: &[sharedtypes::ScraperParam],
 ) -> Option<(Vec<BoardCodes>, Vec<String>)> {
     let mut params_boardcodes = Vec::new();
     //let mut params_query = Vec::new();
     let mut params_storage = Vec::new();
     for each in params.iter() {
-        match each.param_type {
-            sharedtypes::ScraperParamType::Normal => {
-                if let Ok(boardcode) = BoardCodes::from_str(&each.param_data) {
-                    params_boardcodes.push(boardcode);
-                } else {
-                    params_storage.push(each.param_data.to_string());
-                }
+        if each.param_type == sharedtypes::ScraperParamType::Normal {
+            if let Ok(boardcode) = BoardCodes::from_str(&each.param_data.to_uppercase()) {
+                params_boardcodes.push(boardcode);
+            } else {
+                params_storage.push(each.param_data.to_string());
             }
-            _ => {}
         }
     }
 
     if params_boardcodes.len() == params_storage.len() {
-        return Some((params_boardcodes, params_storage));
+        Some((params_boardcodes, params_storage))
     } else {
         None
     }
@@ -244,10 +231,10 @@ fn filter_boardcodes(
 ///
 /// Generates a catalog url
 ///
-fn gen_url_catalog(params: &Vec<sharedtypes::ScraperParam>) -> Vec<String> {
+fn gen_url_catalog(params: &[sharedtypes::ScraperParam]) -> Vec<String> {
     let catalog_base = "https://a.4cdn.org/";
     let catalog_end = "/catalog.json";
-    let mut params = params.clone();
+    let mut params = params.to_owned();
     params.pop();
 
     let mut out = Vec::new();
@@ -267,7 +254,7 @@ fn gen_url_catalog(params: &Vec<sharedtypes::ScraperParam>) -> Vec<String> {
 ///
 #[no_mangle]
 pub fn cookie_needed() -> (sharedtypes::ScraperType, String) {
-    return (sharedtypes::ScraperType::Manual, format!(""));
+    (sharedtypes::ScraperType::Manual, String::new())
 }
 ///
 /// Gets url to query cookie url.
@@ -288,7 +275,7 @@ enum Nsid {
 }
 
 fn nsout(inp: &Nsid) -> sharedtypes::GenericNamespaceObj {
-    return match inp {
+    match inp {
         Nsid::PostId => sharedtypes::GenericNamespaceObj {
             name: "4chan_Post_Id".to_string(),
             description: Some("A 4chan's post id, is unique".to_string()),
@@ -313,7 +300,7 @@ fn nsout(inp: &Nsid) -> sharedtypes::GenericNamespaceObj {
             description: Some("The original MD5 of the image before CF Polish tampered with this. I cannot find a way to bypass or to do other naughty things to it to get the original image".to_string()),
         },
 
-    };
+    }
 }
 
 fn gen_fileurl(boardcode: String, filename: String, fileext: String) -> String {
@@ -338,9 +325,8 @@ pub fn parser(
         let jobtype_str: &str = jobtype;
         match jobtype_str {
             "Thread" => {
-                let mut isop = true;
                 if let Ok(chjson) = json::parse(params) {
-                    let mut thread = sharedtypes::TagObject {
+                    let thread = sharedtypes::TagObject {
                         namespace: nsout(&Nsid::ThreadId),
                         tag: actual_params.user_data.get("ThreadID").unwrap().to_string(),
                         tag_type: sharedtypes::TagType::Normal,
@@ -355,10 +341,7 @@ pub fn parser(
                     };
 
                     for each in chjson["posts"].members() {
-                        if isop {
-                            isop = false;
-                        }
-
+                        // Gets information about post associates it to the thread
                         if let Some(comment) = each["com"].as_str() {
                             out.tag.insert(sharedtypes::TagObject {
                                 namespace: nsout(&Nsid::PostComment),
@@ -423,8 +406,24 @@ pub fn parser(
                                 relates_to: None,
                             };
 
+                            let bcode: BoardCodes = BoardCodes::from_str(
+                                &actual_params
+                                    .user_data
+                                    .get("key_board_0")
+                                    .unwrap()
+                                    .to_uppercase(),
+                            )
+                            .unwrap();
+
+                            // /b is protected by cloudflare polish cannot pull down "unoptimized"
+                            // images from it
+                            let hash = match bcode {
+                                BoardCodes::B => None,
+                                _ => Some(sharedtypes::HashesSupported::Md5(attachment_md5)),
+                            };
+
                             let source_url = gen_fileurl(
-                                "b".to_string(),
+                                bcode.to_string(),
                                 attachment_filename.to_string(),
                                 each["ext"].as_str().unwrap().to_string(),
                             );
@@ -432,8 +431,7 @@ pub fn parser(
                                 tag_list,
                                 skip_if: vec![skip],
                                 source_url: Some(source_url),
-                                //hash: Some(sharedtypes::HashesSupported::Md5(attachment_md5)),
-                                hash: None,
+                                hash,
                             };
                             out.file.insert(file);
                         }
@@ -453,10 +451,8 @@ pub fn parser(
                 while let Some(key) = scraper_data.user_data.get(&format!("key_search_{cnt}")) {
                     if thread["com"].to_string().contains(key) {
                         //dbg!(&thread["com"]);
-                        let threadurl = format!(
-                            "https://a.4cdn.org/b/thread/{}.json",
-                            thread["no"].to_string()
-                        );
+                        let threadurl =
+                            format!("https://a.4cdn.org/b/thread/{}.json", thread["no"]);
                         if !scraper_data.user_data.contains_key("Stop") {
                             let mut usr_data = scraper_data.user_data.clone();
                             usr_data.insert("JobType".to_string(), "Thread".to_string());

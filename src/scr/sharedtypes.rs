@@ -2,7 +2,7 @@
 #![allow(unused_variables)]
 
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, HashSet};
 
 use std::fmt;
 use strum::IntoEnumIterator;
@@ -154,7 +154,7 @@ pub fn stringto_jobtype(into: &String) -> DbJobType {
     }
     panic!("{}", panic);
 }
-use clap::{arg, Parser, Subcommand, ValueEnum};
+use clap::ValueEnum;
 #[derive(
     Debug, EnumIter, Clone, Eq, Hash, PartialEq, Copy, EnumString, Serialize, Deserialize, ValueEnum,
 )]
