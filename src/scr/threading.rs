@@ -336,6 +336,21 @@ impl Worker {
                                             .cloned();
                                     };
 
+                                    for file_tag in file.skip_if.iter() {
+                                        let unwrappydb = db.lock().unwrap();
+                                        if let Some(nsid) = unwrappydb.namespace_get(&file_tag.namespace.name){
+if let Some(_)=unwrappydb.tag_get_name(file_tag.tag.to_string(), *nsid){ 
+info_log(&format!(
+                                                "Skipping file: {} Due to skip tag {} already existing in Tags Table.",
+                                                &source, file_tag.tag
+                                            ));
+return;
+}
+
+                                        }
+                                        
+                                    }
+
                                     // Get's the hash & file ext for the file.
                                      let fileid = match url_tag {
                                         None => {

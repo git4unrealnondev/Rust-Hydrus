@@ -57,7 +57,7 @@ impl InternalScraper {
             _version: 0,
             _name: "4chan".to_string(),
             _sites: vec_of_strings!("4ch", "4chan", "4channel"),
-            _ratelimit: (1, Duration::from_secs(1)),
+            _ratelimit: (1, Duration::from_secs(2)),
             _type: sharedtypes::ScraperType::Automatic,
         }
     }
@@ -230,6 +230,7 @@ pub fn parser(
         file: HashSet::new(),
         tag: HashSet::new(),
     };
+    dbg!(&params);
 
     let site = get_site(&actual_params.job.site);
 

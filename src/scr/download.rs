@@ -3,15 +3,17 @@ use super::plugins::PluginManager;
 use super::sharedtypes;
 use bytes::Bytes;
 use file_format::FileFormat;
+use http::header;
 use log::{error, info};
 use reqwest::blocking::Client;
+use reqwest::cookie;
 use sha2::Digest as sha2Digest;
 use sha2::Sha512;
+use url::Url;
 use std::io::BufReader;
 use std::io::Cursor;
 use std::io::Read;
 use std::time::Duration;
-use url::Url;
 extern crate reqwest;
 use crate::helpers;
 use async_std::task;
@@ -62,11 +64,13 @@ pub fn ratelimiter_wait(
 ///
 ///
 pub fn client_create() -> Client {
-    let useragent = "RustHydrusV1".to_string();
+    let useragent = "RustHydrusV1 0".to_string();
+
+let jar = cookie::Jar::default();
     // The client that does the downloading
     reqwest::blocking::ClientBuilder::new()
         .user_agent(useragent)
-        .cookie_store(true)
+        .cookie_provider(jar.into())
         //.brotli(true)
         //.deflate(true)
         .gzip(true)
