@@ -62,7 +62,6 @@ pub fn ratelimiter_wait(
 ///
 /// Creates Client that the downloader will use.
 ///
-///
 pub fn client_create() -> Client {
     let useragent = "RustHydrusV1 0".to_string();
 
@@ -153,7 +152,6 @@ pub fn dlfile_new(
     let mut hash = String::new();
     let mut bytes: bytes::Bytes = Bytes::from(&b""[..]);
     let mut cnt = 0;
-                                let client = client_create();
     while boolloop {
         let mut hasher = Sha512::new();
 
@@ -217,19 +215,20 @@ pub fn dlfile_new(
         hash = format!("{:X}", hasher.finalize());
 
         match &file.hash {
-            None => {
+            sharedtypes::HashesSupported::None => {
                 boolloop = false;
                 //panic!("DlFileNew: Cannot parse hash info : {:?}", &file);
             }
-            Some(parsedhash) => {
-// Check and compare  to what the scraper wants
-        let status = hash_bytes(&bytes, parsedhash);
+            _ => {
+
+                // Check and compare  to what the scraper wants
+        let status = hash_bytes(&bytes, &file.hash);
 
         // Logging
         if !status.1 {
             error!(
                 "Parser file: {} FAILED HASHCHECK: {} {}",
-                &parsedhash, status.0, status.1
+                &file.hash, status.0, status.1
             );
             cnt += 1;
         } else {

@@ -379,11 +379,10 @@ pub fn main(data: &mut database::Main, scraper: &mut scraper::ScraperManager) {
                                                 let client = download::client_create();
                                                 let file = &sharedtypes::FileObject {
                                                     source_url: Some(dat.name.clone()),
-                                                    hash: Some(
-                                                        sharedtypes::HashesSupported::Sha256(
-                                                            lis[each.0].hash.clone(),
-                                                        ),
+                                                    hash: sharedtypes::HashesSupported::Sha256(
+                                                        lis[each.0].hash.clone(),
                                                     ),
+
                                                     tag_list: Vec::new(),
                                                     skip_if: Vec::new(),
                                                 };
@@ -422,11 +421,10 @@ pub fn main(data: &mut database::Main, scraper: &mut scraper::ScraperManager) {
                                                     let client = download::client_create();
                                                     let file = &sharedtypes::FileObject {
                                                         source_url: Some(dat.name.clone()),
-                                                        hash: Some(
-                                                            sharedtypes::HashesSupported::Sha256(
-                                                                lis[each.0].hash.clone(),
-                                                            ),
+                                                        hash: sharedtypes::HashesSupported::Sha256(
+                                                            lis[each.0].hash.clone(),
                                                         ),
+
                                                         tag_list: Vec::new(),
                                                         skip_if: Vec::new(),
                                                     };

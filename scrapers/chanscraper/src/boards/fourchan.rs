@@ -1,16 +1,11 @@
 use crate::{sharedtypes, Site};
+use base64::Engine;
+use json::JsonValue;
 use rand::distributions::{Alphanumeric, DistString};
 use std::str::FromStr;
 use strum_macros::EnumString; // 0.8use
 
 impl Site for BoardCodes {
-    fn filter_hash(&self, board: &str, hash: &str) -> Option<sharedtypes::HashesSupported> {
-        let bcode: BoardCodes = BoardCodes::from_str(board).unwrap();
-        match bcode {
-            BoardCodes::B => None,
-            _ => Some(sharedtypes::HashesSupported::Md5(hash.to_owned())),
-        }
-    }
     fn gen_fileurl(&self, boardcode: String, filename: String, fileext: String) -> String {
         match BoardCodes::from_str(&boardcode.to_uppercase()).unwrap() {
             BoardCodes::B => {
@@ -44,6 +39,35 @@ impl Site for BoardCodes {
             "https://a.4cdn.org/{}/thread/{}.json",
             boardcode, thread_number
         )
+    }
+    fn json_getfiles(&self, inp: &JsonValue, boardcode: &str) -> Option<Vec<crate::ChanFile>> {
+        if let Some(name) = inp["tim"].as_usize() {
+            let mut out = Vec::new();
+            let attachment_md5 = hex::encode(
+                base64::prelude::BASE64_STANDARD
+                    .decode(inp["md5"].as_str().unwrap())
+                    .unwrap(),
+            );
+
+            let hash = match BoardCodes::from_str(&boardcode.to_uppercase()).unwrap() {
+                BoardCodes::B => sharedtypes::HashesSupported::None,
+                _ => sharedtypes::HashesSupported::Md5(attachment_md5.clone()),
+            };
+            out.push(crate::ChanFile {
+                attachment_name: name.to_string(),
+                attachment_filename: Some(inp["filename"].as_str().unwrap().to_string()),
+                attachment_hash: hash,
+                attachment_hash_string: Some(attachment_md5),
+                attachment_ext: inp["ext"].as_str().unwrap().to_string(),
+            });
+
+            Some(out)
+        } else {
+            None
+        }
+    }
+    fn site_get(&self) -> &str {
+        "4chan"
     }
 }
 

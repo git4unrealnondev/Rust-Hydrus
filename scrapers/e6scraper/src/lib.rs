@@ -1,4 +1,5 @@
 use chrono::DateTime;
+use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::io;
@@ -356,14 +357,17 @@ pub fn url_get(params: &Vec<sharedtypes::ScraperParam>) -> Vec<String> {
 /// Dumps a list of urls to scrape
 ///
 #[no_mangle]
-pub fn url_dump(params: &Vec<sharedtypes::ScraperParam>) -> Vec<String> {
+pub fn url_dump(
+    params: &Vec<sharedtypes::ScraperParam>,
+    scraperdata: &sharedtypes::ScraperData,
+) -> (Vec<String>, sharedtypes::ScraperData) {
     let mut ret = Vec::new();
     let hardlimit = 751;
     for i in 1..hardlimit {
         let a = build_url(params, i);
         ret.push(a);
     }
-    ret
+    (ret, scraperdata.clone())
 }
 ///
 /// Returns bool true or false if a cookie is needed. If so return the cookie name in storage
@@ -465,7 +469,8 @@ fn json_sub_tag(
 */
 fn parse_pools(
     js: &json::JsonValue,
-) -> Result<sharedtypes::ScraperObject, sharedtypes::ScraperReturn> {
+    scraperdata: &sharedtypes::ScraperData,
+) -> Result<(sharedtypes::ScraperObject, sharedtypes::ScraperData), sharedtypes::ScraperReturn> {
     let mut files: HashSet<sharedtypes::FileObject> = HashSet::default();
     let mut tag: HashSet<sharedtypes::TagObject> = HashSet::default();
     let mut cnttotal = 0;
@@ -585,11 +590,18 @@ fn parse_pools(
                 relates_to: None,
                 tag: multpool["id"].to_string(),
                 tag_type: sharedtypes::TagType::ParseUrl((
-                    (sharedtypes::JobScraper {
-                        site: "e6".to_string(),
-                        param: Vec::new(),
-                        original_param: format!("https://e621.net/posts.json?tags=id:{}", postids),
-                        job_type: sharedtypes::DbJobType::Scraper,
+                    (sharedtypes::ScraperData {
+                        job: sharedtypes::JobScraper {
+                            site: "e6".to_string(),
+                            param: Vec::new(),
+                            original_param: format!(
+                                "https://e621.net/posts.json?tags=id:{}",
+                                postids
+                            ),
+                            job_type: sharedtypes::DbJobType::Scraper,
+                        },
+                        system_data: BTreeMap::new(),
+                        user_data: BTreeMap::new(),
                     }),
                     sharedtypes::SkipIf::Tag(sharedtypes::Tag {
                         tag: postids.to_string(),
@@ -622,27 +634,34 @@ fn parse_pools(
             source_url: None,
             hash: None,
             tag_list: tags_list,
+            skip_if: Vec::new(),
         });
     }
 
-    Ok(sharedtypes::ScraperObject {
-        file: files,
-        tag: tag,
-    })
+    Ok((
+        sharedtypes::ScraperObject {
+            file: files,
+            tag: tag,
+        },
+        scraperdata.clone(),
+    ))
 }
 
 ///
 /// Parses return from download.
 ///
 #[no_mangle]
-pub fn parser(params: &String) -> Result<sharedtypes::ScraperObject, sharedtypes::ScraperReturn> {
+pub fn parser(
+    params: &String,
+    scraperdata: &sharedtypes::ScraperData,
+) -> Result<(sharedtypes::ScraperObject, sharedtypes::ScraperData), sharedtypes::ScraperReturn> {
     //let vecvecstr: AHashMap<String, AHashMap<String, Vec<String>>> = AHashMap::new();
 
     let mut files: HashSet<sharedtypes::FileObject> = HashSet::default();
     let js = match json::parse(params) {
         Err(err) => {
             if params.contains("Please confirm you are not a robot.") {
-        https://a.4cdn.org/b/thread/923829745.json        return Err(sharedtypes::ScraperReturn::Timeout(20));
+                return Err(sharedtypes::ScraperReturn::Timeout(20));
             } else if params.contains("502: Bad gateway") {
                 return Err(sharedtypes::ScraperReturn::Timeout(10));
             } else if params.contains("SSL handshake failed") {
@@ -666,7 +685,7 @@ pub fn parser(params: &String) -> Result<sharedtypes::ScraperObject, sharedtypes
     if js["posts"].is_empty() & !js["posts"].is_null() {
         return Err(sharedtypes::ScraperReturn::Nothing);
     } else if js["posts"].is_null() {
-        let pool = parse_pools(&js);
+        let pool = parse_pools(&js, scraperdata);
         return pool;
     }
 
@@ -756,11 +775,16 @@ pub fn parser(params: &String) -> Result<sharedtypes::ScraperObject, sharedtypes
                     relates_to: None,
                     tag: parse_url.clone(),
                     tag_type: sharedtypes::TagType::ParseUrl((
-                        sharedtypes::JobScraper {
-                            site: "e6".to_string(),
-                            param: Vec::new(),
-                            original_param: parse_url,
-                            job_type: sharedtypes::DbJobType::Scraper,
+                        sharedtypes::ScraperData {
+                            job: sharedtypes::JobScraper {
+                                site: "e6".to_string(),
+                                param: Vec::new(),
+                                original_param: parse_url,
+                                job_type: sharedtypes::DbJobType::Scraper,
+                            },
+
+                            system_data: BTreeMap::new(),
+                            user_data: BTreeMap::new(),
                         },
                         sharedtypes::SkipIf::None,
                     )),
@@ -845,13 +869,17 @@ pub fn parser(params: &String) -> Result<sharedtypes::ScraperObject, sharedtypes
                 js["posts"][inc]["file"]["md5"].to_string(),
             )),
             tag_list: tags_list,
+            skip_if: Vec::new(),
         };
         files.insert(file);
     }
-    Ok(sharedtypes::ScraperObject {
-        file: files,
-        tag: HashSet::new(),
-    })
+    Ok((
+        sharedtypes::ScraperObject {
+            file: files,
+            tag: HashSet::new(),
+        },
+        scraperdata.clone(),
+    ))
     //return Ok(vecvecstr);
 }
 ///
@@ -1041,10 +1069,11 @@ pub fn db_upgrade_call_3() {
                                                 "https://e621.net/pools.json?search[id]={}",
                                                 client::tag_get_id(*tid_iter).unwrap().name
                                             ),
-                                            false,
                                             true,
                                             sharedtypes::CommitType::StopOnNothing,
                                             sharedtypes::DbJobType::Scraper,
+                                            BTreeMap::new(),
+                                            BTreeMap::new(),
                                         );
                                     }
                                     client::parents_delete(sharedtypes::DbParentsObj {

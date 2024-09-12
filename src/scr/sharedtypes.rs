@@ -473,7 +473,7 @@ pub struct DBPluginOutput {
 #[derive(Debug, Eq, Hash, PartialEq)]
 pub struct FileObject {
     pub source_url: Option<String>,
-    pub hash: Option<HashesSupported>, // Hash of file
+    pub hash: HashesSupported, // Hash of file
     pub tag_list: Vec<TagObject>,
     pub skip_if: Vec<TagObject>, // Skips downloading the file if a tag matches this.
 }

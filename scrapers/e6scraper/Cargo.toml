@@ -22,6 +22,7 @@ crate-type = ["dylib"]
 anyhow = "1.0.86"
 bincode = "1.3.3"
 chrono = "0.4.31"
+clap = { version = "4.5.17", features = ["derive"] }
 interprocess = "2.2.1"
 json = "0.12.4"
 serde = { version = "1.0.192", features = ["derive"] }

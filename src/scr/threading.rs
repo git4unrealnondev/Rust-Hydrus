@@ -127,6 +127,7 @@ impl Worker {
 
             let mut rate_limit_store: Arc<Mutex<HashMap<String, Ratelimiter>>> =
                 Arc::new(Mutex::new(HashMap::new()));
+                    let mut client = download::client_create();
 
             // Main loop for processing
             // All queries have been deduplicated.
@@ -240,7 +241,6 @@ impl Worker {
                         Some(u_temp) => rate_limit_vec.get_mut(*u_temp).unwrap(),
                     };*/
 
-                    let mut client = download::client_create();
                     'urlloop: for urll in urlload {
                         'errloop: loop {
                             download::ratelimiter_wait(
@@ -314,11 +314,11 @@ impl Worker {
                             for file in out_st.file {
                                 let manageeplugin = manageeplugin.clone();
                                 let mut db = db.clone();
-                                let client = download::client_create();
                                 let job_params = job_params.clone();
                                 let rate_limit_store = rate_limit_store.clone();
                                 let job_site = job_site.clone();
                                 let scraper_data = scraper_data.clone();
+                                let client = client.clone();
                                 let location = {
                                     let unwrappydb = &mut db.lock().unwrap();
                                     unwrappydb.location_get()
