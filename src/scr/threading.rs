@@ -118,7 +118,9 @@ impl Worker {
         let mut jblist = jobs.clone();
         let manageeplugin = pluginmanager.clone();
         let scrap = scraper.clone();
+                            let ratelimiter_main = Arc::new(Mutex::new(download::ratelimiter_create(scrap._ratelimit.0, scrap._ratelimit.1)));
         let thread = thread::spawn(move || {
+            let ratelimiter_obj = ratelimiter_main.clone();
             let mut job_params: Arc<Mutex<BTreeSet<ScraperData>>> =
                 Arc::new(Mutex::new(BTreeSet::new()));
             let mut job_ref_hash: BTreeMap<ScraperData, sharedtypes::DbJobsObj> = BTreeMap::new();
@@ -220,12 +222,6 @@ impl Worker {
                             vec![scraper_data.job.original_param.clone()]
                         }
                     };
-                    {
-                        rate_limit_store.lock().unwrap().insert(
-                            scraper_data.job.site.clone(),
-                            download::ratelimiter_create(scrap._ratelimit.0, scrap._ratelimit.1),
-                        );
-                    }
                     /*// Only instants the ratelimit if we don't already have it.
                     let rlimit = match rate_limit_key.get_mut(&job.site) {
                         None => {
@@ -244,8 +240,7 @@ impl Worker {
                     'urlloop: for urll in urlload {
                         'errloop: loop {
                             download::ratelimiter_wait(
-                                &rate_limit_store,
-                                &scraper_data.clone().job.site,
+                                &ratelimiter_obj,
                             );
                             let resp =
                                 task::block_on(download::dltext_new(urll.to_string(), &mut client));
@@ -312,6 +307,7 @@ impl Worker {
                             let pool = ThreadPool::default();
                             // Parses files from urls
                             for file in out_st.file {
+            let ratelimiter_obj = ratelimiter_main.clone();
                                 let manageeplugin = manageeplugin.clone();
                                 let mut db = db.clone();
                                 let job_params = job_params.clone();
@@ -353,10 +349,12 @@ return;
 
                                     // Get's the hash & file ext for the file.
                                      let fileid = match url_tag {
-                                        None => {
-                                            // Download file doesn't exist.
-                                                                        download::ratelimiter_wait(&rate_limit_store, &job_site.clone());
+                                        None => {download::ratelimiter_wait(
+                                &ratelimiter_obj,
+                            );
 
+                                            // Download file doesn't exist.
+                                                                        
                                             // URL doesn't exist in DB Will download
                                             info_log(&format!(
                                                 "Downloading: {} to: {}",
@@ -416,7 +414,10 @@ return;
                                             } else {
                                                 // Fixes the link between file and url
                                                 // tag.
-                                                                        download::ratelimiter_wait(&rate_limit_store, &job_site);
+                                                                        download::ratelimiter_wait(
+                                &ratelimiter_obj,
+                            );
+
 
                                                 // URL doesn't exist in DB Will download
                                                 info_log(&format!(

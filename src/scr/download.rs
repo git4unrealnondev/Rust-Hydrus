@@ -42,14 +42,12 @@ pub fn ratelimiter_create(number: u64, duration: Duration) -> Ratelimiter {
 }
 
 pub fn ratelimiter_wait(
-    ratelimit_object: &Arc<Mutex<HashMap<String, Ratelimiter>>>,
-    site: &String,
+    ratelimit_object: &Arc<Mutex<Ratelimiter>>,
 ) {loop {
     let limit;
     {
         let hold = ratelimit_object.lock().unwrap();
-        let rlimit = hold.get(site).unwrap();
-        limit = rlimit.try_wait();
+        limit = hold.try_wait();
     }
     match limit {
         Ok(_) => {break}
