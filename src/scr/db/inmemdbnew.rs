@@ -48,7 +48,7 @@ pub struct NewinMemDB {
     _namespace_name_id: HashMap<String, usize>,
     _namespace_id_tag: HashMap<usize, HashSet<usize>>,
 
-    _file_id_data: HashMap<usize, sharedtypes::DbFileObj>,
+    _file_id_data: HashMap<usize, sharedtypes::DbFileStorage>,
     _file_location_usize: FnvHashMap<usize, String>,
     _file_location_string: FnvHashMap<String, usize>,
     _file_name_id: HashMap<String, usize>,
@@ -421,36 +421,50 @@ impl NewinMemDB {
     ///
     /// inserts file into db returns file id
     ///
-    pub fn file_put(&mut self, file: sharedtypes::DbFileObj) -> usize {
-        let id = match file.id {
-            None => self._file_max,
-            Some(rid) => rid,
-        };
-
-        match file.id {
-            None => {
-                self._file_max += 1;
-            }
-            Some(file_id) => {
-                if file_id >= self._file_max {
-                    self._file_max = file_id;
+    pub fn file_put(&mut self, file: sharedtypes::DbFileStorage) -> usize {
+        match file {
+            sharedtypes::DbFileStorage::Exist(file) => {
+                if file.id >= self._file_max {
+                    self._file_max = file.id;
                     self._file_max += 1;
                 }
+
+                self._file_name_id.insert(file.hash.clone(), file.id);
+                self._file_id_data
+                    .insert(file.id, sharedtypes::DbFileStorage::Exist(file.clone()));
+
+                file.id
+            }
+            sharedtypes::DbFileStorage::NoIdExist(file_noid) => {
+                let file = sharedtypes::DbFileObj {
+                    id: self._file_max,
+                    hash: file_noid.hash,
+                    ext: file_noid.ext,
+                    location: file_noid.location,
+                };
+                self._file_max += 1;
+
+                self._file_name_id.insert(file.hash.clone(), file.id);
+                self._file_id_data
+                    .insert(file.id, sharedtypes::DbFileStorage::Exist(file.clone()));
+
+                file.id
+            }
+            sharedtypes::DbFileStorage::NoExist(fid) => {
+                if fid >= self._file_max {
+                    self._file_max = fid;
+                    self._file_max += 1;
+                }
+                self._file_id_data.insert(fid, file);
+                fid
+            }
+            sharedtypes::DbFileStorage::NoExistUnknown => {
+                let file = sharedtypes::DbFileStorage::NoExist(self._file_max);
+                self._file_id_data.insert(self._file_max, file);
+                self._file_max += 1;
+                self._file_max - 1
             }
         }
-
-        self._file_name_id.insert(file.hash.to_owned(), id);
-        // let locid = self.file_location_get_id(file.location);
-        self._file_id_data.insert(
-            id,
-            sharedtypes::DbFileObj {
-                id: file.id,
-                hash: file.hash,
-                ext: file.ext,
-                location: file.location,
-            },
-        );
-        id
     }
 
     ///
@@ -480,7 +494,7 @@ impl NewinMemDB {
     ///
     /// Returns a file based on ID
     ///
-    pub fn file_get_id(&self, id: &usize) -> Option<&DbFileObj> {
+    pub fn file_get_id(&self, id: &usize) -> Option<&sharedtypes::DbFileStorage> {
         self._file_id_data.get(id)
     }
 
@@ -505,7 +519,7 @@ impl NewinMemDB {
     ///
     /// Returns all file objects in db
     ///
-    pub fn file_get_list_all(&self) -> &HashMap<usize, DbFileObj> {
+    pub fn file_get_list_all(&self) -> &HashMap<usize, sharedtypes::DbFileStorage> {
         &self._file_id_data
     }
     ///
@@ -1282,5 +1296,88 @@ mod inmemdb {
 
         db.jobs_add(jobobj.clone());
         assert_eq!(db.jobs_get(&0).unwrap(), &jobobj);
+    }
+
+    #[test]
+    ///
+    /// Checks the file adding feature
+    ///
+    fn file_add() {
+        let mut db = setup_db();
+
+        dbg!(&db._file_id_data, &db._file_name_id, &db._file_max);
+        let init = db.file_put(sharedtypes::DbFileStorage::NoExistUnknown);
+        assert_eq!(init, 0);
+
+        dbg!(&db._file_id_data, &db._file_name_id, &db._file_max);
+        let init = db.file_put(sharedtypes::DbFileStorage::NoExistUnknown);
+        assert_eq!(init, 1);
+
+        dbg!(&db._file_id_data, &db._file_name_id, &db._file_max);
+        let file = sharedtypes::DbFileObj {
+            id: 1,
+            hash: "None".to_owned(),
+            ext: "None".to_owned(),
+            location: "None".to_owned(),
+        };
+        let init = db.file_put(sharedtypes::DbFileStorage::Exist(file));
+        dbg!(&db._file_id_data, &db._file_name_id, &db._file_max);
+
+        assert_eq!(init, 1);
+        let init = db.file_put(sharedtypes::DbFileStorage::NoExistUnknown);
+        assert_eq!(init, 2);
+        let file = sharedtypes::DbFileObj {
+            id: 10,
+            hash: "None".to_owned(),
+            ext: "None".to_owned(),
+            location: "None".to_owned(),
+        };
+        dbg!(&db._file_id_data, &db._file_name_id, &db._file_max);
+        let init = db.file_put(sharedtypes::DbFileStorage::Exist(file));
+        assert_eq!(init, 10);
+
+        dbg!(&db._file_id_data, &db._file_name_id, &db._file_max);
+        let init = db.file_put(sharedtypes::DbFileStorage::NoExistUnknown);
+        assert_eq!(init, 11);
+        let file = sharedtypes::DbFileObjNoId {
+            hash: "None".to_owned(),
+            ext: "None".to_owned(),
+            location: "None".to_owned(),
+        };
+        dbg!(&db._file_id_data, &db._file_name_id, &db._file_max);
+        let init = db.file_put(sharedtypes::DbFileStorage::NoIdExist(file));
+        assert_eq!(init, 12);
+
+        dbg!(&db._file_id_data, &db._file_name_id, &db._file_max);
+        let init = db.file_put(sharedtypes::DbFileStorage::NoExistUnknown);
+        assert_eq!(init, 13);
+        let file = sharedtypes::DbFileObjNoId {
+            hash: "None".to_owned(),
+            ext: "None".to_owned(),
+            location: "None".to_owned(),
+        };
+        dbg!(&db._file_id_data, &db._file_name_id, &db._file_max);
+        let init = db.file_put(sharedtypes::DbFileStorage::NoIdExist(file));
+        assert_eq!(init, 14);
+        let mut db = setup_db();
+        let file = sharedtypes::DbFileObj {
+            id: 13,
+            hash: "None".to_owned(),
+            ext: "None".to_owned(),
+            location: "None".to_owned(),
+        };
+        dbg!(&db._file_id_data, &db._file_name_id, &db._file_max);
+        let init = db.file_put(sharedtypes::DbFileStorage::Exist(file));
+
+        assert_eq!(init, 13);
+        let file = sharedtypes::DbFileObjNoId {
+            hash: "None".to_owned(),
+            ext: "None".to_owned(),
+            location: "None".to_owned(),
+        };
+        dbg!(&db._file_id_data, &db._file_name_id, &db._file_max);
+        let init = db.file_put(sharedtypes::DbFileStorage::NoIdExist(file));
+
+        assert_eq!(init, 14);
     }
 }

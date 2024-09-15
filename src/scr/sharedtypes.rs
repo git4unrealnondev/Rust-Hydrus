@@ -242,10 +242,30 @@ pub struct ScraperFileReturn {
 ///
 #[derive(Debug, Deserialize, Serialize, Clone, Eq, Hash, PartialEq)]
 pub struct DbFileObj {
-    pub id: Option<usize>,
+    pub id: usize,
     pub hash: String,
     pub ext: String,
     pub location: String,
+}
+///
+/// File object with no id field if unknown
+///
+#[derive(Debug, Deserialize, Serialize, Clone, Eq, Hash, PartialEq)]
+pub struct DbFileObjNoId {
+    pub hash: String,
+    pub ext: String,
+    pub location: String,
+}
+
+///
+/// Wrapper for DbFileStorage
+///
+#[derive(Debug, Deserialize, Serialize, Clone, Eq, Hash, PartialEq)]
+pub enum DbFileStorage {
+    Exist(DbFileObj),         //Complete file object
+    NoIdExist(DbFileObjNoId), // File object except ID
+    NoExist(usize),           //Only the fileid is known at the time
+    NoExistUnknown,           //Nothing is known (generate fid)
 }
 
 ///

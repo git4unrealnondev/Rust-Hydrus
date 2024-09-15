@@ -289,7 +289,13 @@ pub fn main(data: &mut database::Main, scraper: &mut scraper::ScraperManager) {
                         );
                         let filesloc = data.location_get();
                         // Adds data into db
-                        let fid = data.file_add(None, &sha2, &ext, &filesloc, true);
+                        let file =
+                            sharedtypes::DbFileStorage::NoIdExist(sharedtypes::DbFileObjNoId {
+                                hash: sha2,
+                                ext,
+                                location: filesloc,
+                            });
+                        let fid = data.file_add(file, true);
                         let nid =
                             data.namespace_add(tag.namespace.name, tag.namespace.description, true);
                         let tid = data.tag_add(&tag.tag, nid, true, None);
@@ -352,12 +358,19 @@ pub fn main(data: &mut database::Main, scraper: &mut scraper::ScraperManager) {
                                 nsid = Some(*ns);
                             }
                         }
-                        lis.par_iter().for_each(|each| {
-                            if fiexist.lock().unwrap().contains(each.0) {
+                        lis.par_iter().for_each(|(fid, storage)| {
+                            if fiexist.lock().unwrap().contains(fid) {
                                 return;
                             }
-                            let loc = helpers::getfinpath(&db_location, &lis[each.0].hash);
-                            let lispa = format!("{}/{}", loc, lis[each.0].hash);
+
+                            let file = match storage {
+                                sharedtypes::DbFileStorage::NoExistUnknown => return,
+                                sharedtypes::DbFileStorage::NoExist(_) => return,
+                                sharedtypes::DbFileStorage::NoIdExist(_) => return,
+                                sharedtypes::DbFileStorage::Exist(file) => file,
+                            };
+                            let loc = helpers::getfinpath(&db_location, &file.hash);
+                            let lispa = format!("{}/{}", loc, file.hash);
                             *cnt.lock().unwrap() += 1;
 
                             if *cnt.lock().unwrap() == 1000 {
@@ -366,21 +379,21 @@ pub fn main(data: &mut database::Main, scraper: &mut scraper::ScraperManager) {
                             }
 
                             if !Path::new(&lispa).exists() {
-                                println!("{}", &lis[each.0].hash);
+                                println!("{}", &file.hash);
                                 if nsid.is_some() {
-                                    if let Some(rel) = data.relationship_get_tagid(each.0) {
+                                    if let Some(rel) = data.relationship_get_tagid(fid) {
                                         for eachs in rel.iter() {
                                             let dat = data.tag_id_get(eachs).unwrap();
                                             logging::info_log(&format!(
                                                 "Got Tag: {} for fileid: {}",
-                                                dat.name, each.0
+                                                dat.name, fid
                                             ));
                                             if dat.namespace == nsid.unwrap() {
                                                 let client = download::client_create();
                                                 let file = &sharedtypes::FileObject {
                                                     source_url: Some(dat.name.clone()),
                                                     hash: sharedtypes::HashesSupported::Sha256(
-                                                        lis[each.0].hash.clone(),
+                                                        file.hash.clone(),
                                                     ),
 
                                                     tag_list: Vec::new(),
@@ -400,29 +413,27 @@ pub fn main(data: &mut database::Main, scraper: &mut scraper::ScraperManager) {
                                 let fil = std::fs::read(lispa).unwrap();
                                 let hinfo = download::hash_bytes(
                                     &bytes::Bytes::from(fil),
-                                    &sharedtypes::HashesSupported::Sha256(lis[each.0].hash.clone()),
+                                    &sharedtypes::HashesSupported::Sha256(file.hash.clone()),
                                 );
                                 if !hinfo.1 {
                                     logging::error_log(&format!(
                                         "BAD HASH: ID: {}  HASH: {}   2ND HASH: {}",
-                                        &lis[each.0].id.unwrap(),
-                                        &lis[each.0].hash,
-                                        hinfo.0
+                                        &file.id, &file.hash, hinfo.0
                                     ));
                                     if nsid.is_some() {
-                                        if let Some(rel) = data.relationship_get_tagid(each.0) {
+                                        if let Some(rel) = data.relationship_get_tagid(fid) {
                                             for eachs in rel.iter() {
                                                 let dat = data.tag_id_get(eachs).unwrap();
                                                 logging::info_log(&format!(
                                                     "Got Tag: {} for fileid: {}",
-                                                    dat.name, each.0
+                                                    dat.name, fid
                                                 ));
                                                 if dat.namespace == nsid.unwrap() {
                                                     let client = download::client_create();
                                                     let file = &sharedtypes::FileObject {
                                                         source_url: Some(dat.name.clone()),
                                                         hash: sharedtypes::HashesSupported::Sha256(
-                                                            lis[each.0].hash.clone(),
+                                                            file.hash.clone(),
                                                         ),
 
                                                         tag_list: Vec::new(),
@@ -440,8 +451,8 @@ pub fn main(data: &mut database::Main, scraper: &mut scraper::ScraperManager) {
                                     }
                                 }
                             }
-                            fiexist.lock().unwrap().insert(*each.0);
-                            let fout = format!("{}\n", &each.0).into_bytes();
+                            fiexist.lock().unwrap().insert(*fid);
+                            let fout = format!("{}\n", fid).into_bytes();
                             f.lock().unwrap().write_all(&fout).unwrap();
                         });
                         let _ = std::fs::remove_file("fileexists.txt");

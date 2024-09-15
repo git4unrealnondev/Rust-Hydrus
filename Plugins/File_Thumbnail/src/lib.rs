@@ -537,6 +537,20 @@ fn thumbnail_location_get() -> PathBuf {
     }
 }
 
+fn setup_default_path(path: &Path) -> String {
+    let fpath = std::fs::canonicalize(path.join(LOCATION_THUMBNAILS.to_string()));
+    match fpath {
+        Ok(_) => {}
+        Err(_) => {
+            std::fs::create_dir_all(path.join(LOCATION_THUMBNAILS.to_string()));
+        }
+    }
+    std::fs::canonicalize(path.join(LOCATION_THUMBNAILS.to_string()))
+        .unwrap()
+        .to_string_lossy()
+        .to_string()
+}
+
 ///
 /// Setting up the thumbnail folder
 /// Uses no unwrap and should be cross compatible across OSes
@@ -544,11 +558,7 @@ fn thumbnail_location_get() -> PathBuf {
 fn setup_thumbnail_location() -> Option<PathBuf> {
     let storage = client::location_get();
     let path = Path::new(&storage);
-
-    let finpath = std::fs::canonicalize(path.join(LOCATION_THUMBNAILS.to_string()))
-        .unwrap()
-        .to_string_lossy()
-        .to_string();
+    let finpath = setup_default_path(path);
 
     // If we don't have a setting setup for this then make one
     let location = match client::settings_get_name(format!("{}-location", PLUGIN_NAME)) {

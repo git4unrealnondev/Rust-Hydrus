@@ -213,7 +213,7 @@ pub fn tag_get_name(tag: String, namespaceid: usize) -> Option<usize> {
 /// See the database reference for this function.
 /// I'm a lazy turd just check it their
 ///
-pub fn file_get_list_all() -> HashMap<usize, sharedtypes::DbFileObj> {
+pub fn file_get_list_all() -> HashMap<usize, Option<sharedtypes::DbFileObj>> {
     init_data_request(&types::SupportedRequests::Database(
         types::SupportedDBRequests::GetFileListAll(),
     ))
@@ -395,7 +395,7 @@ fn init_data_request<T: serde::de::DeserializeOwned>(requesttype: &types::Suppor
     match types::recieve(&mut conn) {
         Ok(out) => out,
         Err(err) => {
-            dbg!(err);
+            dbg!(err, requesttype);
             panic!();
         }
     }

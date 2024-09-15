@@ -246,7 +246,12 @@ impl Main {
     ///
     pub fn get_file(&self, file_id: &usize) -> Option<String> {
         let file = self.file_get_id(file_id);
-        if let Some(file) = file {
+        if let Some(file_obj) = file {
+            // Checks that the file with existing info exists
+            let file = match file_obj {
+                sharedtypes::DbFileStorage::Exist(file) => file,
+                _ => return None,
+            };
             let sup = [file.location.to_string(), self.location_get()];
             for each in sup {
                 // Cleans the file path if it contains a '/' in it
@@ -348,7 +353,14 @@ impl Main {
 
         let flist = self.file_get_list_id();
         flist.par_iter().for_each(|feach| {
-            if let Some(fileinfo) = self.file_get_id(feach) {
+            // Check is needed to support if the file with nonexistant info was gotten from db
+            if let Some(filestorage_obj) = self.file_get_id(feach) {
+                let fileinfo = match filestorage_obj {
+                    sharedtypes::DbFileStorage::Exist(file) => file,
+                    _ => {
+                        panic!("Pulled item that shouldnt exist: {:?}", filestorage_obj);
+                    }
+                };
                 if !loc_vec.lock().unwrap().contains(&fileinfo.location) {
                     loc_vec.lock().unwrap().push(fileinfo.location.clone());
                 }
@@ -363,9 +375,7 @@ impl Main {
                         if !hinfo.1 {
                             dbg!(format!(
                                 "BAD HASH: ID: {}  HASH: {}   2ND HASH: {}",
-                                fileinfo.id.unwrap(),
-                                fileinfo.hash,
-                                hinfo.0
+                                fileinfo.id, fileinfo.hash, hinfo.0
                             ));
                         }
                     }
@@ -755,13 +765,6 @@ impl Main {
             Some("Where plugins get loaded into.".to_string()),
             None,
             Some("./Plugins/".to_string()),
-            true,
-        );
-        self.setting_add(
-            "DBCOMMITNUM".to_string(),
-            Some("Number of transactional items before pushing to db.".to_string()),
-            Some(3000),
-            None,
             true,
         );
         self.transaction_flush();
@@ -1341,20 +1344,7 @@ impl Main {
     ///
     /// Adds file into Memdb instance.
     ///
-    pub fn file_add_db(
-        &mut self,
-        id_insert: Option<usize>,
-        hash_insert: String,
-        extension_insert: String,
-        location_insert: String,
-    ) -> usize {
-        let file = sharedtypes::DbFileObj {
-            id: id_insert,
-            hash: hash_insert,
-            ext: extension_insert,
-            location: location_insert,
-        };
-
+    pub fn file_add_db(&mut self, file: sharedtypes::DbFileStorage) -> usize {
         self._inmemdb.file_put(file)
     }
 
@@ -1373,18 +1363,29 @@ impl Main {
         if let Ok(mut con) = temp {
             let files = con
                 .query_map([], |row| {
-                    Ok(sharedtypes::DbFileObj {
-                        id: row.get(0).unwrap(),
-                        hash: row.get(1).unwrap(),
-                        ext: row.get(2).unwrap(),
-                        location: row.get(3).unwrap(),
-                    })
+                    let id: Option<usize> = row.get(0).unwrap();
+                    let hash: Option<String> = row.get(1).unwrap();
+                    let ext: Option<String> = row.get(2).unwrap();
+                    let location: Option<String> = row.get(3).unwrap();
+                    if id.is_some() && hash.is_some() && ext.is_some() && location.is_some() {
+                        Ok(sharedtypes::DbFileStorage::Exist(sharedtypes::DbFileObj {
+                            id: row.get(0).unwrap(),
+                            hash: row.get(1).unwrap(),
+                            ext: row.get(2).unwrap(),
+                            location: row.get(3).unwrap(),
+                        }))
+                    } else if id.is_some() && hash.is_none() && ext.is_none() && location.is_none()
+                    {
+                        Ok(sharedtypes::DbFileStorage::NoExist(id.unwrap()))
+                    } else {
+                        panic!("Error on: {:?} {:?} {:?} {:?}", id, hash, ext, location);
+                    }
                 })
                 .unwrap();
 
             for each in files {
                 if let Ok(res) = each {
-                    self.file_add_db(res.id, res.hash, res.ext, res.location);
+                    self.file_add_db(res);
                 } else {
                     error!("Bad File cant load {:?}", each);
                 }
@@ -1698,9 +1699,9 @@ impl Main {
     ///
     fn file_add_sql(
         &mut self,
-        hash: &String,
-        extension: &String,
-        location: &String,
+        hash: &Option<String>,
+        extension: &Option<String>,
+        location: &Option<String>,
         file_id: &usize,
     ) {
         //println!("FILE_SQL {} {} {} {}", hash, extension, location, file_id);
@@ -1718,32 +1719,56 @@ impl Main {
     /// Adds a file into the db sqlite.
     /// Do this first.
     ///
-    pub fn file_add(
-        &mut self,
-        id: Option<usize>,
-        hash: &String,
-        extension: &String,
-        location: &String,
-        addtodb: bool,
-    ) -> usize {
-        let file_grab = self.file_get_hash(hash);
-
-        match file_grab {
-            None => {
-                let file_id = self.file_add_db(
-                    id.to_owned(),
-                    hash.to_owned(),
-                    extension.to_owned(),
-                    location.to_owned(),
-                );
-                if addtodb {
-                    self.file_add_sql(hash, extension, location, &file_id);
-                    file_id
+    pub fn file_add(&mut self, file: sharedtypes::DbFileStorage, addtodb: bool) -> usize {
+        match file {
+            sharedtypes::DbFileStorage::Exist(ref file_obj) => {
+                if self.file_get_hash(&file_obj.hash).is_none() {
+                    let id = self.file_add_db(file.clone());
+                    if addtodb {
+                        self.file_add_sql(
+                            &Some(file_obj.hash.clone()),
+                            &Some(file_obj.ext.clone()),
+                            &Some(file_obj.location.clone()),
+                            &file_obj.id,
+                        );
+                    }
+                    id
                 } else {
-                    file_id
+                    file_obj.id
                 }
             }
-            Some(file_id) => file_id.to_owned(),
+            sharedtypes::DbFileStorage::NoIdExist(ref noid_obj) => {
+                if self.file_get_hash(&noid_obj.hash).is_none() {
+                    let id = self.file_add_db(file.clone());
+                    if addtodb {
+                        self.file_add_sql(
+                            &Some(noid_obj.hash.clone()),
+                            &Some(noid_obj.ext.clone()),
+                            &Some(noid_obj.location.clone()),
+                            &id,
+                        );
+                    }
+                    id
+                } else {
+                    self.file_get_hash(&noid_obj.hash).unwrap().clone()
+                }
+            }
+            sharedtypes::DbFileStorage::NoExist(_) => {
+                panic!();
+                let id = self.file_add_db(file.clone());
+                if addtodb {
+                    self.file_add_sql(&None, &None, &None, &id);
+                }
+                id
+            }
+            sharedtypes::DbFileStorage::NoExistUnknown => {
+                panic!();
+                let id = self.file_add_db(file.clone());
+                if addtodb {
+                    self.file_add_sql(&None, &None, &None, &id);
+                }
+                id
+            }
         }
     }
 
@@ -1752,7 +1777,7 @@ impl Main {
     /// Returns info for file in Option
     // DO NOT USE UNLESS NECISSARY. LOG(n2) * 3
     ///
-    pub fn file_get_id(&self, fileid: &usize) -> Option<&sharedtypes::DbFileObj> {
+    pub fn file_get_id(&self, fileid: &usize) -> Option<&sharedtypes::DbFileStorage> {
         self._inmemdb.file_get_id(fileid)
     }
 
@@ -2611,7 +2636,7 @@ impl Main {
     ///
     /// Returns all file objects in db.
     ///
-    pub fn file_get_list_all(&self) -> &HashMap<usize, sharedtypes::DbFileObj> {
+    pub fn file_get_list_all(&self) -> &HashMap<usize, sharedtypes::DbFileStorage> {
         use std::time::Instant;
         let now = Instant::now();
 

@@ -17,6 +17,7 @@ use async_std::task;
 
 //use log::{error, info};
 use ratelimit::Ratelimiter;
+use reqwest::blocking::Client;
 use std::collections::BTreeSet;
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -349,47 +350,11 @@ return;
 
                                     // Get's the hash & file ext for the file.
                                      let fileid = match url_tag {
-                                        None => {download::ratelimiter_wait(
-                                &ratelimiter_obj,
-                            );
-
-                                            // Download file doesn't exist.
-                                                                        
-                                            // URL doesn't exist in DB Will download
-                                            info_log(&format!(
-                                                "Downloading: {} to: {}",
-                                                &source, &location
-                                            ));
-                                            let blopt;
-                                            {
-                                                blopt = download::dlfile_new(
-                                                    &client,
-                                                    &file,
-                                                    &location,
-                                                    Some(manageeplugin)
-                                                );
-                                            }
-                                            let (hash, file_ext) = match blopt {
-                                                None => {
-                                                    return;
-                                                }
-                                                Some(blo) => blo,
-                                            };
-                                            {
-                                                let unwrappydb = &mut db.lock().unwrap();
-                                                let fileid = unwrappydb.file_add(
-                                                    None, &hash, &file_ext, &location, true,
-                                                );
-                                                let tagid = unwrappydb.tag_add(
-                                                    source,
-                                                    source_url_id,
-                                                    true,
-                                                    None,
-                                                );
-                                                unwrappydb
-                                                    .relationship_add(fileid, tagid, true);
-                                                fileid.clone()
-                                            }
+                                        None => {
+                                            match download_add_to_db( ratelimiter_obj, source, location, manageeplugin, &client, db.clone(), &file, source_url_id) {
+                                                None => return,
+                                                Some(id) =>id,
+}
                                         }
                                         Some(url_id) => {
                                             let file_id;
@@ -411,50 +376,11 @@ return;
                                             ));
 
                                                 file_id
-                                            } else {
-                                                // Fixes the link between file and url
-                                                // tag.
-                                                                        download::ratelimiter_wait(
-                                &ratelimiter_obj,
-                            );
+                                            } else {match download_add_to_db( ratelimiter_obj, source, location, manageeplugin, &client, db.clone(), &file, source_url_id) {
+                                                None => return,
+                                                Some(id) =>id,
+}
 
-
-                                                // URL doesn't exist in DB Will download
-                                                info_log(&format!(
-                                                    "Downloading: {} to: {}",
-                                                    &source, &location
-                                                ));
-                                                let blopt;
-                                                {
-                                                    blopt = download::dlfile_new(
-                                                        &client,
-                                                        &file,
-                                                        &location,
-                                                        Some(manageeplugin)
-                                                    );
-                                                }
-                                                let (hash, file_ext) = match blopt {
-                                                    None => {
-                                                        return;
-                                                    }
-                                                    Some(blo) => blo,
-                                                };
-                                                let fileid;
-                                                {
-                                                    let unwrappydb = &mut db.lock().unwrap();
-                                                    fileid = unwrappydb.file_add(
-                                                        None, &hash, &file_ext, &location, true,
-                                                    );
-                                                    let tagid = unwrappydb.tag_add(
-                                                        source,
-                                                        source_url_id,
-                                                        true,
-                                                        None,
-                                                    );
-                                                    unwrappydb
-                                                        .relationship_add(fileid, tagid, true);
-                                                }
-                                                fileid
                                             }
                                         }
                                     };
@@ -651,4 +577,51 @@ fn parse_tags(
             url_return
         }
     }
+}
+
+fn download_add_to_db(ratelimiter_obj: Arc<Mutex<Ratelimiter>>, source: &String, location: String, manageeplugin: Arc<Mutex<PluginManager>>, client: &Client, db: Arc<Mutex<database::Main>>, file: &sharedtypes::FileObject, source_url_id: usize) -> Option<usize> {
+download::ratelimiter_wait(
+                                &ratelimiter_obj,
+                            );
+
+                                            // Download file doesn't exist.
+                                                                        
+                                            // URL doesn't exist in DB Will download
+                                            info_log(&format!(
+                                                "Downloading: {} to: {}",
+                                                &source, &location
+                                            ));
+                                            let blopt;
+                                            {
+                                                blopt = download::dlfile_new(
+                                                    &client,
+                                                    &file,
+                                                    &location,
+                                                    Some(manageeplugin)
+                                                );
+                                            }
+                                            match blopt {
+                                                None => {
+                                                    return None;
+                                                }
+                                                Some((hash, file_ext)) => {
+                                                    let file = sharedtypes::DbFileStorage::NoIdExist(sharedtypes::DbFileObjNoId { hash, ext: file_ext, location } );
+let unwrappydb = &mut db.lock().unwrap();
+                                                let fileid = unwrappydb.file_add(
+                                                    file, true,
+                                                );
+                                                let tagid = unwrappydb.tag_add(
+                                                    source,
+                                                    source_url_id,
+                                                    true,
+                                                    None,
+                                                );
+                                                unwrappydb
+                                                    .relationship_add(fileid, tagid, true);
+                                                Some(fileid.clone())
+
+
+
+                                                },
+                                            }
 }

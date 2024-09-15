@@ -201,14 +201,16 @@ fn check_existing_db() {
         }
 
         for item in &total {
-            match modernstorage.get_mut(item.1) {
-                None => {
-                    modernstorage.insert(item.1.clone(), vec![table]);
-                    *utable_count.get_mut(&table).unwrap() += 1;
-                }
-                Some(intf) => {
-                    intf.push(table);
-                    *utable_count.get_mut(&table).unwrap() += 1;
+            if let Some(fileobj) = item.1 {
+                match modernstorage.get_mut(fileobj) {
+                    None => {
+                        modernstorage.insert(fileobj.clone(), vec![table]);
+                        *utable_count.get_mut(&table).unwrap() += 1;
+                    }
+                    Some(intf) => {
+                        intf.push(table);
+                        *utable_count.get_mut(&table).unwrap() += 1;
+                    }
                 }
             }
         }
@@ -251,19 +253,17 @@ fn check_existing_db() {
 
     // Main loop paralel iterated for each file.
     modernstorage.par_iter().for_each(|modern| {
-        if let Some(fbyte) = client::get_file(modern.0.id.unwrap()) {
+        if let Some(fbyte) = client::get_file(modern.0.id) {
             let byte = std::fs::read(fbyte).unwrap();
             for hashtype in modern.1 {
                 if let Some(hash) = hash_file(*hashtype, &byte) {
                     client::log_no_print(format!(
                         "FileHash - Hashtype: {:?} Hash: {} Fileid: {}",
-                        &hashtype,
-                        &hash,
-                        modern.0.id.unwrap()
+                        &hashtype, &hash, modern.0.id
                     ));
                     let tid =
                         client::tag_add(hash, *utable_storage.get(&hashtype).unwrap(), true, None);
-                    client::relationship_add(modern.0.id.unwrap(), tid, true);
+                    client::relationship_add(modern.0.id, tid, true);
                 }
             }
         }

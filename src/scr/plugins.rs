@@ -1,3 +1,4 @@
+use fast_log::plugin::file;
 use libloading::{self, Library};
 use log::{error, info, warn};
 use std::collections::HashMap;
@@ -379,21 +380,23 @@ impl PluginManager {
                                     if files.location.is_none() {
                                         //let string_dlpath = download::getfinpath(&loc, &files.hash.as_ref().unwrap());
                                         let location = unwrappy.location_get();
-                                        unwrappy.file_add(
-                                            None,
-                                            &files.hash.unwrap(),
-                                            &files.ext.unwrap(),
-                                            &location,
-                                            true,
+                                        let file = sharedtypes::DbFileStorage::NoIdExist(
+                                            sharedtypes::DbFileObjNoId {
+                                                hash: files.hash.unwrap(),
+                                                ext: files.ext.unwrap(),
+                                                location,
+                                            },
                                         );
+                                        unwrappy.file_add(file, true);
                                     } else {
-                                        unwrappy.file_add(
-                                            files.id,
-                                            &files.hash.unwrap(),
-                                            &files.ext.unwrap(),
-                                            &files.location.unwrap(),
-                                            true,
+                                        let file = sharedtypes::DbFileStorage::NoIdExist(
+                                            sharedtypes::DbFileObjNoId {
+                                                hash: files.hash.unwrap(),
+                                                ext: files.ext.unwrap(),
+                                                location: files.location.unwrap(),
+                                            },
                                         );
+                                        unwrappy.file_add(file, true);
                                     }
                                 }
                             }
@@ -492,6 +495,14 @@ impl PluginManager {
         }
     }
 }
+
+/*fn plugin_on_download(manager: PluginManager, cursorpass: &[u8], hash: &String, ext: &String) {
+    if !manager._callback.contains_key(&sharedtypes::PluginCallback::OnDownload){return;}
+
+    for plugin in manager._callback[&sharedtypes::PluginCallback::OnDownload].iter() {
+        let lib =
+    }
+}*/
 
 ///
 /// Starts running the onstart plugin.

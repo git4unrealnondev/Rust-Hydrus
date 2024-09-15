@@ -109,7 +109,12 @@ pub fn import_files(
 
         dbg!(&hash, &row);
         // Adds into DB
-        let file_id = db.file_add(None, &hash, &file_ext, &location, true);
+        let file = sharedtypes::DbFileStorage::NoIdExist(sharedtypes::DbFileObjNoId {
+            hash,
+            ext: file_ext,
+            location: location.clone(),
+        });
+        let file_id = db.file_add(file, true);
         let namespace_id = db.namespace_add(row.namespace, None, true);
         let tag_id = db.tag_add(&row.tag, namespace_id, true, Some(row.id));
 
