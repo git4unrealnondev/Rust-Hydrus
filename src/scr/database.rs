@@ -2298,6 +2298,36 @@ impl Main {
     }
 
     ///
+    /// Removes a job from the database by id.
+    /// Removes from both memdb and sql.
+    ///
+    pub fn del_from_jobs_byid(&mut self, id: &usize) {
+        self.del_from_jobs_inmemdb(id);
+        self.del_from_jobs_table_sql_better(id);
+    }
+
+    ///
+    /// Removes job from inmemdb
+    /// Removes by id
+    ///
+    fn del_from_jobs_inmemdb(&mut self, id: &usize) {
+        self._inmemdb.jobref_remove(id)
+    }
+
+    ///
+    /// Removes a job from sql table by id
+    ///
+    fn del_from_jobs_table_sql_better(&mut self, id: &usize) {
+        let inp = "DELETE FROM Jobs WHERE id = ?";
+        self._conn
+            .borrow_mut()
+            .lock()
+            .unwrap()
+            .execute(inp, params![id.to_string(),])
+            .unwrap();
+    }
+
+    ///
     /// Removes a job from the sql table
     ///
     fn del_from_jobs_table_sql(&mut self, site: &String, param: &String) {

@@ -342,167 +342,161 @@ impl PluginManager {
             self.load_plugin_from_path(Path::new(&plugin.1));
         }
     }
+}
+///
+/// Parses output from plugin.
+///
+fn parse_plugin_output(
+    plugin_data: Vec<sharedtypes::DBPluginOutputEnum>,
+    unwrappy_locked: Arc<Mutex<Main>>,
+) {
+    let mut unwrappy = unwrappy_locked.lock().unwrap();
+    //let mut unwrappy = self._database.lock().unwrap();
 
-    ///
-    /// Parses output from plugin.
-    ///
-    fn parse_plugin_output(
-        &self,
-        plugin_data: Vec<sharedtypes::DBPluginOutputEnum>,
-        unwrappy_locked: Arc<Mutex<Main>>,
-    ) {
-        let mut unwrappy = unwrappy_locked.lock().unwrap();
-        //let mut unwrappy = self._database.lock().unwrap();
+    for each in plugin_data {
+        match each {
+            sharedtypes::DBPluginOutputEnum::Add(name) => {
+                for names in name {
+                    let mut namespace_id: Option<usize> = Some(0); // holder of namespace
 
-        for each in plugin_data {
-            match each {
-                sharedtypes::DBPluginOutputEnum::Add(name) => {
-                    for names in name {
-                        let mut namespace_id: Option<usize> = Some(0); // holder of namespace
-
-                        // Loops through the namespace objects and selects the last one that's valid.
-                        // IF ONE IS NOT VALID THEN THEIR WILL NOT BE ONE ADDED INTO THE DB
-                        if let Some(temp) = names.namespace {
-                            for namespace in temp {
-                                // IF Valid ID && Name && Description info are valid then we have a valid namespace id to pull
-                                // dbg!(&namespace);
-                                namespace_id = Some(unwrappy.namespace_add(
-                                    namespace.name,
-                                    namespace.description,
-                                    true,
-                                ));
-                            }
+                    // Loops through the namespace objects and selects the last one that's valid.
+                    // IF ONE IS NOT VALID THEN THEIR WILL NOT BE ONE ADDED INTO THE DB
+                    if let Some(temp) = names.namespace {
+                        for namespace in temp {
+                            // IF Valid ID && Name && Description info are valid then we have a valid namespace id to pull
+                            // dbg!(&namespace);
+                            namespace_id = Some(unwrappy.namespace_add(
+                                namespace.name,
+                                namespace.description,
+                                true,
+                            ));
                         }
-                        if let Some(temp) = names.file {
-                            for files in temp {
-                                if files.id.is_none() && files.hash.is_some() && files.ext.is_some()
-                                {
-                                    if files.location.is_none() {
-                                        //let string_dlpath = download::getfinpath(&loc, &files.hash.as_ref().unwrap());
-                                        let location = unwrappy.location_get();
-                                        let file = sharedtypes::DbFileStorage::NoIdExist(
-                                            sharedtypes::DbFileObjNoId {
-                                                hash: files.hash.unwrap(),
-                                                ext: files.ext.unwrap(),
-                                                location,
-                                            },
-                                        );
-                                        unwrappy.file_add(file, true);
-                                    } else {
-                                        let file = sharedtypes::DbFileStorage::NoIdExist(
-                                            sharedtypes::DbFileObjNoId {
-                                                hash: files.hash.unwrap(),
-                                                ext: files.ext.unwrap(),
-                                                location: files.location.unwrap(),
-                                            },
-                                        );
-                                        unwrappy.file_add(file, true);
-                                    }
-                                }
-                            }
-                        }
-                        if let Some(temp) = names.tag {
-                            for tags in temp {
-                                let namespace_id = unwrappy.namespace_get(&tags.namespace).cloned();
-                                //match namespace_id {}
-                                //dbg!(&tags);
-                                if tags.parents.is_none() && namespace_id.is_some() {
-                                    unwrappy.tag_add(&tags.name, namespace_id.unwrap(), true, None);
-                                //                                    println!("plugins323 making tag: {}", tags.name);
-                                } else {
-                                    for _parents_obj in tags.parents.unwrap() {
-                                        unwrappy.tag_add(
-                                            &tags.name,
-                                            namespace_id.unwrap(),
-                                            true,
-                                            None,
-                                        );
-                                    }
-                                }
-                            }
-                        }
-                        if let Some(temp) = names.setting {
-                            for settings in temp {
-                                unwrappy.setting_add(
-                                    settings.name,
-                                    settings.pretty,
-                                    settings.num,
-                                    settings.param,
-                                    true,
-                                );
-                            }
-                        }
-
-                        if let Some(_temp) = names.jobs {}
-                        if let Some(temp) = names.relationship {
-                            for relations in temp {
-                                let file_id = unwrappy.file_get_hash(&relations.file_hash).cloned();
-                                let namespace_id = unwrappy.namespace_get(&relations.tag_namespace);
-                                let tag_id = unwrappy
-                                    .tag_get_name(
-                                        relations.tag_name.clone(),
-                                        *namespace_id.unwrap(),
-                                    )
-                                    .cloned();
-                                /*println!(
-                                    "plugins356 relating: file id {:?} to {:?}",
-                                    file_id, relations.tag_name
-                                );*/
-                                unwrappy.relationship_add(file_id.unwrap(), tag_id.unwrap(), true);
-                                //unwrappy.relationship_add(file, tag, addtodb)
-                            }
-                        }
-                        if let Some(_temp) = names.parents {}
                     }
-                }
-                sharedtypes::DBPluginOutputEnum::Del(name) => for _names in name {},
-                sharedtypes::DBPluginOutputEnum::None => {}
-            }
-        }
-    }
-    //
-    /// Runs plugin and
-    ///
-    pub fn plugin_on_download(&mut self, cursorpass: &[u8], hashs: &String, exts: &String) {
-        if !self
-            ._callback
-            .contains_key(&sharedtypes::PluginCallback::OnDownload)
-        {
-            return;
-        }
+                    if let Some(temp) = names.file {
+                        for files in temp {
+                            if files.id.is_none() && files.hash.is_some() && files.ext.is_some() {
+                                if files.location.is_none() {
+                                    //let string_dlpath = download::getfinpath(&loc, &files.hash.as_ref().unwrap());
+                                    let location = unwrappy.location_get();
+                                    let file = sharedtypes::DbFileStorage::NoIdExist(
+                                        sharedtypes::DbFileObjNoId {
+                                            hash: files.hash.unwrap(),
+                                            ext: files.ext.unwrap(),
+                                            location,
+                                        },
+                                    );
+                                    unwrappy.file_add(file, true);
+                                } else {
+                                    let file = sharedtypes::DbFileStorage::NoIdExist(
+                                        sharedtypes::DbFileObjNoId {
+                                            hash: files.hash.unwrap(),
+                                            ext: files.ext.unwrap(),
+                                            location: files.location.unwrap(),
+                                        },
+                                    );
+                                    unwrappy.file_add(file, true);
+                                }
+                            }
+                        }
+                    }
+                    if let Some(temp) = names.tag {
+                        for tags in temp {
+                            let namespace_id = unwrappy.namespace_get(&tags.namespace).cloned();
+                            //match namespace_id {}
+                            //dbg!(&tags);
+                            if tags.parents.is_none() && namespace_id.is_some() {
+                                unwrappy.tag_add(&tags.name, namespace_id.unwrap(), true, None);
+                            //                                    println!("plugins323 making tag: {}", tags.name);
+                            } else {
+                                for _parents_obj in tags.parents.unwrap() {
+                                    unwrappy.tag_add(&tags.name, namespace_id.unwrap(), true, None);
+                                }
+                            }
+                        }
+                    }
+                    if let Some(temp) = names.setting {
+                        for settings in temp {
+                            unwrappy.setting_add(
+                                settings.name,
+                                settings.pretty,
+                                settings.num,
+                                settings.param,
+                                true,
+                            );
+                        }
+                    }
 
-        for plugin in self._callback[&sharedtypes::PluginCallback::OnDownload].clone() {
-            if !self._plugin.contains_key(&plugin) {
-                error!("Could not call Plugin-OnDownload");
-                continue;
+                    if let Some(_temp) = names.jobs {}
+                    if let Some(temp) = names.relationship {
+                        for relations in temp {
+                            let file_id = unwrappy.file_get_hash(&relations.file_hash).cloned();
+                            let namespace_id = unwrappy.namespace_get(&relations.tag_namespace);
+                            let tag_id = unwrappy
+                                .tag_get_name(relations.tag_name.clone(), *namespace_id.unwrap())
+                                .cloned();
+                            /*println!(
+                                "plugins356 relating: file id {:?} to {:?}",
+                                file_id, relations.tag_name
+                            );*/
+                            unwrappy.relationship_add(file_id.unwrap(), tag_id.unwrap(), true);
+                            //unwrappy.relationship_add(file, tag, addtodb)
+                        }
+                    }
+                    if let Some(_temp) = names.parents {}
+                }
             }
-            let lib = self._plugin.get_mut(&plugin).unwrap();
-            let output;
-            unsafe {
-                let plugindatafunc: libloading::Symbol<
-                    unsafe extern "C" fn(
-                        &[u8],
-                        &String,
-                        &String,
-                    )
-                        -> Vec<sharedtypes::DBPluginOutputEnum>,
-                    //unsafe extern "C" fn(Cursor<Bytes>, &String, &String, Arc<Mutex<database::Main>>),
-                > = lib.get(b"on_download").unwrap();
-                //unwrappy.
-                output = plugindatafunc(cursorpass, hashs, exts);
-            }
-            self.parse_plugin_output(output, self._database.clone());
+            sharedtypes::DBPluginOutputEnum::Del(name) => for _names in name {},
+            sharedtypes::DBPluginOutputEnum::None => {}
         }
     }
 }
 
-/*fn plugin_on_download(manager: PluginManager, cursorpass: &[u8], hash: &String, ext: &String) {
-    if !manager._callback.contains_key(&sharedtypes::PluginCallback::OnDownload){return;}
+///
+/// Hopefully a thread-safe way to call plugins per thread avoiding a lock.
+///
+pub fn plugin_on_download(
+    manager_arc: Arc<Mutex<PluginManager>>,
+    cursorpass: &[u8],
+    hash: &String,
+    ext: &String,
+) {
+    let callback;
 
-    for plugin in manager._callback[&sharedtypes::PluginCallback::OnDownload].iter() {
-        let lib =
+    {
+        let temp = manager_arc.lock().unwrap();
+        callback = temp._callback.clone();
     }
-}*/
+
+    if !callback.contains_key(&sharedtypes::PluginCallback::OnDownload) {
+        return;
+    }
+
+    for plugin in callback[&sharedtypes::PluginCallback::OnDownload].clone() {
+        if !manager_arc.lock().unwrap()._plugin.contains_key(&plugin) {
+            error!("Could not call Plugin-OnDownload");
+            continue;
+        }
+        let lib;
+        unsafe {
+            let mgr = manager_arc.lock().unwrap();
+            lib = libloading::Library::new(mgr._thread_path.get(&plugin).unwrap()).unwrap();
+        }
+        let output;
+        unsafe {
+            let plugindatafunc: libloading::Symbol<
+                unsafe extern "C" fn(
+                    &[u8],
+                    &String,
+                    &String,
+                ) -> Vec<sharedtypes::DBPluginOutputEnum>,
+                //unsafe extern "C" fn(Cursor<Bytes>, &String, &String, Arc<Mutex<database::Main>>),
+            > = lib.get(b"on_download").unwrap();
+            //unwrappy.
+            output = plugindatafunc(cursorpass, hash, ext);
+        }
+        parse_plugin_output(output, manager_arc.lock().unwrap()._database.clone());
+    }
+}
 
 ///
 /// Starts running the onstart plugin.

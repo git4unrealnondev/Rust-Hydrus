@@ -14,6 +14,7 @@ use log::info;
 
 use rusqlite::Connection;
 use std::collections::hash_map::Entry;
+use std::collections::HashMap;
 use std::sync::Arc;
 //use std::sync::{Arc, Mutex};
 use std::sync::Mutex;
@@ -57,39 +58,48 @@ impl Jobs {
     ///
     /// Loads jobs to run into _jobref
     ///
-    pub fn jobs_get(&mut self, db: &mut database::Main) {
-        let mut jobvec = Vec::new();
-        let mut invalidjobvec = Vec::new();
-        let mut duplicatejobvec = Vec::new();
+    pub fn jobs_load(&mut self, db: &mut database::Main) {
+        let mut scraper_site_map = HashMap::new();
+        let mut query_scraper_map = HashMap::new();
+
         self._secs = time_func::time_secs();
         //let _ttl = db.jobs_get_max();
         let hashjobs = db.jobs_get_all();
         let beans = self.scrapermanager.scraper_get();
-        for each in hashjobs {
+
+        for scraper in beans.into_iter() {
+            for site in scraper._sites.clone() {
+                scraper_site_map.insert(site, scraper.clone());
+            }
+        }
+        let mut flushdb_flag = false;
+        for (id, jobsobj) in hashjobs.clone() {
             // If our time is greater then time created + offset then run job.
             // Hella basic but it works need to make this better.
-            if time_func::time_secs() >= each.1.time.unwrap() + each.1.reptime.unwrap() {
-                for eacha in beans {
-                    if eacha._sites.contains(&each.1.site.to_owned()) {
-                        // If we already have the job and it's scraper then don't add job.
-                        // Helps with deduplication can move this out of the jobs stuff
-                        if !jobvec.contains(each.1) {
-                            self._jobref
-                                .insert(*each.0, (each.1.to_owned(), eacha.to_owned()));
-                            jobvec.push(each.1.to_owned());
-                        } else {
-                            duplicatejobvec.push(each.1.to_owned());
-                        }
+            if time_func::time_secs() >= jobsobj.time.unwrap() + jobsobj.reptime.unwrap() {
+                if let Some(scraper) = scraper_site_map.get(&jobsobj.site) {
+                    if !query_scraper_map
+                        .contains_key(&(jobsobj.site.clone(), jobsobj.param.clone()))
+                    {
+                        query_scraper_map.insert(
+                            (jobsobj.site.clone(), jobsobj.param.clone()),
+                            jobsobj.clone(),
+                        );
+
+                        self._jobref.insert(id, (jobsobj.clone(), scraper.clone()));
                     } else {
-                        invalidjobvec.push(each.1.to_owned());
+                        dbg!("Dupe for job: {}", jobsobj, id);
+                        db.del_from_jobs_byid(&id);
+                        flushdb_flag = true;
                     }
                 }
             }
         }
-        //dbg!(&self._jobref);
-        for (each, _) in self._jobref.iter() {
-            db.jobs_flip_inmemdb(each);
+        // Flushes DB if we've deleted dupe jobs
+        if flushdb_flag {
+            db.transaction_flush();
         }
+
         //dbg!(db.jobs_get_isrunning());
         //dbg!(&invalidjobvec);
         //dbg!(&duplicatejobvec);
@@ -132,7 +142,6 @@ impl Jobs {
         // Appends ratelimited into hashmap for multithread scraper.
         for scrape in self.scrapermanager.scraper_get() {
             let name_result = db.settings_get_name(&format!("{:?}_{}", scrape._type, scrape._name));
-            let _info = String::new();
 
             // Handles loading of settings into DB.Either Manual or Automatic to describe the functionallity
             match name_result {

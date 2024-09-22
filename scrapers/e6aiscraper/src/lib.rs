@@ -1,4 +1,5 @@
 use chrono::DateTime;
+use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::io;
@@ -11,6 +12,8 @@ use std::time::Duration;
 #[path = "../../../src/scr/sharedtypes.rs"]
 mod sharedtypes;
 
+#[path = "../../../src/scr/intcoms/client.rs"]
+mod client;
 #[macro_export]
 macro_rules! vec_of_strings {
     ($($x:expr),*) => (vec![$($x.to_string()),*]);
@@ -68,14 +71,21 @@ fn scraper_file_return(inp: &sharedtypes::ScraperFileInput) -> sharedtypes::SubT
         },
         tag: url,
         tag_type: sharedtypes::TagType::Normal,
+        limit_to: None,
     }
 }
 
-fn subgen(name: &NsIdent, tag: String, ttype: sharedtypes::TagType) -> sharedtypes::SubTag {
+fn subgen(
+    name: &NsIdent,
+    tag: String,
+    ttype: sharedtypes::TagType,
+    limit_to: Option<sharedtypes::Tag>,
+) -> sharedtypes::SubTag {
     sharedtypes::SubTag {
         namespace: nsobjplg(name),
         tag: tag,
         tag_type: ttype,
+        limit_to,
     }
 }
 
@@ -349,14 +359,17 @@ pub fn url_get(params: &Vec<sharedtypes::ScraperParam>) -> Vec<String> {
 /// Dumps a list of urls to scrape
 ///
 #[no_mangle]
-pub fn url_dump(params: &Vec<sharedtypes::ScraperParam>) -> Vec<String> {
+pub fn url_dump(
+    params: &Vec<sharedtypes::ScraperParam>,
+    scraperdata: &sharedtypes::ScraperData,
+) -> (Vec<String>, sharedtypes::ScraperData) {
     let mut ret = Vec::new();
     let hardlimit = 751;
     for i in 1..hardlimit {
         let a = build_url(params, i);
         ret.push(a);
     }
-    ret
+    (ret, scraperdata.clone())
 }
 ///
 /// Returns bool true or false if a cookie is needed. If so return the cookie name in storage
@@ -424,7 +437,8 @@ fn json_sub_tag(
 
 fn parse_pools(
     js: &json::JsonValue,
-) -> Result<sharedtypes::ScraperObject, sharedtypes::ScraperReturn> {
+    scraperdata: &sharedtypes::ScraperData,
+) -> Result<(sharedtypes::ScraperObject, sharedtypes::ScraperData), sharedtypes::ScraperReturn> {
     let mut files: HashSet<sharedtypes::FileObject> = HashSet::default();
     let mut tag: HashSet<sharedtypes::TagObject> = HashSet::default();
     let mut cnttotal = 0;
@@ -453,6 +467,7 @@ fn parse_pools(
                 &NsIdent::PoolId,
                 multpool["id"].to_string(),
                 sharedtypes::TagType::Normal,
+                None,
             )),
             tag: multpool["creator_name"].to_string(),
             tag_type: sharedtypes::TagType::Normal,
@@ -465,6 +480,7 @@ fn parse_pools(
                 &NsIdent::PoolCreator,
                 multpool["creator_name"].to_string(),
                 sharedtypes::TagType::Normal,
+                None,
             )),
             tag: multpool["creator_id"].to_string(),
             tag_type: sharedtypes::TagType::Normal,
@@ -477,6 +493,7 @@ fn parse_pools(
                 &NsIdent::PoolId,
                 multpool["id"].to_string(),
                 sharedtypes::TagType::Normal,
+                None,
             )),
             tag: multpool["name"].to_string(),
             tag_type: sharedtypes::TagType::Normal,
@@ -489,6 +506,7 @@ fn parse_pools(
                 &NsIdent::PoolId,
                 multpool["id"].to_string(),
                 sharedtypes::TagType::Normal,
+                None,
             )),
             tag: multpool["description"].to_string(),
             tag_type: sharedtypes::TagType::Normal,
@@ -516,6 +534,7 @@ fn parse_pools(
                 &NsIdent::PoolId,
                 multpool["id"].to_string(),
                 sharedtypes::TagType::Normal,
+                None,
             )),
             tag: created_at,
             tag_type: sharedtypes::TagType::Normal,
@@ -527,6 +546,7 @@ fn parse_pools(
                 &NsIdent::PoolId,
                 multpool["id"].to_string(),
                 sharedtypes::TagType::Normal,
+                None,
             )),
             tag: updated_at,
             tag_type: sharedtypes::TagType::Normal,
@@ -538,11 +558,18 @@ fn parse_pools(
                 relates_to: None,
                 tag: multpool["id"].to_string(),
                 tag_type: sharedtypes::TagType::ParseUrl((
-                    (sharedtypes::JobScraper {
-                        site: "e6ai".to_string(),
-                        param: Vec::new(),
-                        original_param: format!("https://e6ai.net/posts.json?tags=id:{}", postids),
-                        job_type: sharedtypes::DbJobType::Scraper,
+                    (sharedtypes::ScraperData {
+                        job: sharedtypes::JobScraper {
+                            site: "e6ai".to_string(),
+                            param: Vec::new(),
+                            original_param: format!(
+                                "https://e6ai.net/posts.json?tags=id:{}",
+                                postids
+                            ),
+                            job_type: sharedtypes::DbJobType::Scraper,
+                        },
+                        system_data: BTreeMap::new(),
+                        user_data: BTreeMap::new(),
                     }),
                     sharedtypes::SkipIf::Tag(sharedtypes::Tag {
                         tag: postids.to_string(),
@@ -550,38 +577,22 @@ fn parse_pools(
                         needsrelationship: true,
                     }),
                 )),
-            }); // Relates the file id to pool
-            tag.insert(sharedtypes::TagObject {
-                namespace: nsobjplg(&NsIdent::PoolId),
-                relates_to: Some(subgen(
-                    &NsIdent::FileId,
-                    postids.to_string(),
-                    sharedtypes::TagType::Normal,
-                )),
-                tag: multpool["id"].to_string(),
-                tag_type: sharedtypes::TagType::Normal,
             });
 
-            // TODO need to fix the pool positing. Needs to relate the pool position with the ID better.
+            // Relates fileid to position in table with the restriction of the poolid
             tag.insert(sharedtypes::TagObject {
                 namespace: nsobjplg(&NsIdent::PoolPosition),
                 relates_to: Some(subgen(
                     &NsIdent::FileId,
                     postids.to_string(),
                     sharedtypes::TagType::Normal,
+                    Some(sharedtypes::Tag {
+                        tag: multpool["id"].to_string(),
+                        namespace: nsobjplg(&NsIdent::PoolId),
+                        needsrelationship: false,
+                    }),
                 )),
                 tag: cnt.to_string(),
-                tag_type: sharedtypes::TagType::Normal,
-            });
-
-            tag.insert(sharedtypes::TagObject {
-                namespace: nsobjplg(&NsIdent::PoolId),
-                relates_to: Some(subgen(
-                    &NsIdent::PoolPosition,
-                    multpool["id"].to_string(),
-                    sharedtypes::TagType::Normal,
-                )),
-                tag: multpool["id"].to_string(),
                 tag_type: sharedtypes::TagType::Normal,
             });
 
@@ -589,22 +600,29 @@ fn parse_pools(
         }
         files.insert(sharedtypes::FileObject {
             source_url: None,
-            hash: None,
+            hash: sharedtypes::HashesSupported::None,
             tag_list: tags_list,
+            skip_if: Vec::new(),
         });
     }
 
-    Ok(sharedtypes::ScraperObject {
-        file: files,
-        tag: tag,
-    })
+    Ok((
+        sharedtypes::ScraperObject {
+            file: files,
+            tag: tag,
+        },
+        scraperdata.clone(),
+    ))
 }
 
 ///
 /// Parses return from download.
 ///
 #[no_mangle]
-pub fn parser(params: &String) -> Result<sharedtypes::ScraperObject, sharedtypes::ScraperReturn> {
+pub fn parser(
+    params: &String,
+    scraperdata: &sharedtypes::ScraperData,
+) -> Result<(sharedtypes::ScraperObject, sharedtypes::ScraperData), sharedtypes::ScraperReturn> {
     //let vecvecstr: AHashMap<String, AHashMap<String, Vec<String>>> = AHashMap::new();
 
     let mut files: HashSet<sharedtypes::FileObject> = HashSet::default();
@@ -632,7 +650,7 @@ pub fn parser(params: &String) -> Result<sharedtypes::ScraperObject, sharedtypes
     if js["posts"].is_empty() & !js["posts"].is_null() {
         return Err(sharedtypes::ScraperReturn::Nothing);
     } else if js["posts"].is_null() {
-        let pool = parse_pools(&js);
+        let pool = parse_pools(&js, scraperdata);
         return pool;
     }
 
@@ -712,7 +730,7 @@ pub fn parser(params: &String) -> Result<sharedtypes::ScraperObject, sharedtypes
                     None,
                     sharedtypes::TagType::Normal,
                 );*/
-                let parse_url = format!("https://e6ai.net/pools?format=json&search[id={}]", each);
+                let parse_url = format!("https://e6ai.net/pools?format=json&search[id]={}", each);
                 tags_list.push(sharedtypes::TagObject {
                     namespace: sharedtypes::GenericNamespaceObj {
                         name: "Do Not Add".to_string(),
@@ -721,11 +739,15 @@ pub fn parser(params: &String) -> Result<sharedtypes::ScraperObject, sharedtypes
                     relates_to: None,
                     tag: parse_url.clone(),
                     tag_type: sharedtypes::TagType::ParseUrl((
-                        sharedtypes::JobScraper {
-                            site: "e6".to_string(),
-                            param: Vec::new(),
-                            original_param: parse_url,
-                            job_type: sharedtypes::DbJobType::Scraper,
+                        sharedtypes::ScraperData {
+                            job: sharedtypes::JobScraper {
+                                site: "e6ai".to_string(),
+                                param: Vec::new(),
+                                original_param: parse_url,
+                                job_type: sharedtypes::DbJobType::Scraper,
+                            },
+                            system_data: BTreeMap::new(),
+                            user_data: BTreeMap::new(),
                         },
                         sharedtypes::SkipIf::None,
                     )),
@@ -741,6 +763,7 @@ pub fn parser(params: &String) -> Result<sharedtypes::ScraperObject, sharedtypes
                 &NsIdent::FileId,
                 js["posts"][inc]["id"].to_string(),
                 sharedtypes::TagType::Normal,
+                None,
             )),
             sharedtypes::TagType::Normal,
         );
@@ -774,6 +797,7 @@ pub fn parser(params: &String) -> Result<sharedtypes::ScraperObject, sharedtypes
                     &NsIdent::FileId,
                     js["posts"][inc]["id"].to_string(),
                     sharedtypes::TagType::Normal,
+                    None,
                 )),
 
                 tag: js["posts"][inc]["relationships"]["parent_id"].to_string(),
@@ -787,6 +811,7 @@ pub fn parser(params: &String) -> Result<sharedtypes::ScraperObject, sharedtypes
                     &NsIdent::FileId,
                     js["posts"][inc]["id"].to_string(),
                     sharedtypes::TagType::Normal,
+                    None,
                 )),
                 sharedtypes::TagType::Normal,
             );
@@ -803,18 +828,20 @@ pub fn parser(params: &String) -> Result<sharedtypes::ScraperObject, sharedtypes
         };
         let file: sharedtypes::FileObject = sharedtypes::FileObject {
             source_url: Some(url),
-            hash: Some(sharedtypes::HashesSupported::Md5(
-                js["posts"][inc]["file"]["md5"].to_string(),
-            )),
+            hash: sharedtypes::HashesSupported::Md5(js["posts"][inc]["file"]["md5"].to_string()),
             tag_list: tags_list,
+            skip_if: Vec::new(),
         };
         files.insert(file);
     }
 
-    Ok(sharedtypes::ScraperObject {
-        file: files,
-        tag: HashSet::new(),
-    })
+    Ok((
+        sharedtypes::ScraperObject {
+            file: files,
+            tag: HashSet::new(),
+        },
+        scraperdata.clone(),
+    ))
     //return Ok(vecvecstr);
 }
 ///
@@ -829,4 +856,234 @@ fn gen_source_from_md5_ext(md5: &String, ext: &String) -> String {
     let base = "https://static1.e6ai.net/data";
 
     format!("{}/{}/{}/{}.{}", base, &md5[0..2], &md5[2..4], &md5, ext)
+}
+
+pub fn db_upgrade_call_3() {
+    dbg!("E6ai GOING TO LOCK DB DOES THIS WORKY");
+    client::load_table(sharedtypes::LoadDBTable::All);
+
+    // Loads all fileids into memory
+    let mut file_ids = client::file_get_list_all();
+
+    // Gets namespace id from poolid
+    let pool_nsid = match client::namespace_get(nsobjplg(&NsIdent::PoolId).name) {
+        Some(id) => id,
+        None => client::namespace_put(
+            nsobjplg(&NsIdent::PoolId).name,
+            nsobjplg(&NsIdent::PoolId).description,
+            true,
+        ),
+    };
+    // Gets namespace id from poolid
+    let poolposition_nsid = match client::namespace_get(nsobjplg(&NsIdent::PoolPosition).name) {
+        Some(id) => id,
+        None => client::namespace_put(
+            nsobjplg(&NsIdent::PoolPosition).name,
+            nsobjplg(&NsIdent::PoolPosition).description,
+            true,
+        ),
+    };
+
+    // Gets e6id from db
+    let fileid_nsid = match client::namespace_get(nsobjplg(&NsIdent::FileId).name) {
+        Some(id) => id,
+        None => client::namespace_put(
+            nsobjplg(&NsIdent::FileId).name,
+            nsobjplg(&NsIdent::FileId).description,
+            true,
+        ),
+    }; // Gets e6's parent ids from db
+    let parent_nsid = match client::namespace_get(nsobjplg(&NsIdent::Parent).name) {
+        Some(id) => id,
+        None => client::namespace_put(
+            nsobjplg(&NsIdent::Parent).name,
+            nsobjplg(&NsIdent::Parent).description,
+            true,
+        ),
+    }; // Gets e6's children id's from db
+    let children_nsid = match client::namespace_get(nsobjplg(&NsIdent::Children).name) {
+        Some(id) => id,
+        None => client::namespace_put(
+            nsobjplg(&NsIdent::Children).name,
+            nsobjplg(&NsIdent::Children).description,
+            true,
+        ),
+    };
+
+    // Loads all tagid's that are attached to the pool
+    let pool_table = match client::namespace_get_tagids(pool_nsid) {
+        None => HashSet::new(),
+        Some(out) => out,
+    };
+    // Gets namespace id from source urls ensures that we're only working on e621 files
+    let sourceurl_nsid = match client::namespace_get("source_url".to_string()) {
+        Some(id) => id,
+        None => client::namespace_put("source_url".to_string(), None, true),
+    };
+
+    // Loads all tagid's that are attached to the e621 sources
+    let sourceurl_table = match client::namespace_get_tagids(sourceurl_nsid) {
+        None => HashSet::new(),
+        Some(out) => out,
+    };
+
+    // Loads all tagid's that are attached to the parents sources
+    let parent_table = match client::namespace_get_tagids(parent_nsid) {
+        None => HashSet::new(),
+        Some(out) => out,
+    }; // Loads all tagid's that are attached to the children sources
+    let children_table = match client::namespace_get_tagids(children_nsid) {
+        None => HashSet::new(),
+        Some(out) => out,
+    }; // Loads all tagid's that are attached to the position
+    let position_table = match client::namespace_get_tagids(poolposition_nsid) {
+        None => HashSet::new(),
+        Some(out) => out,
+    };
+
+    client::log(format!(
+        "E6 Scraper-Starting to strip: {} fileids from processing list",
+        file_ids.len()
+    ));
+    let mut cnt = 0;
+    // Removes all fileids where the source is not e621
+    for each in sourceurl_table {
+        if let Some(tag) = client::tag_get_id(each) {
+            if !tag.name.contains("e621.net") {
+                if let Some(fids) = client::relationship_get_fileid(each) {
+                    for fid in fids.iter() {
+                        file_ids.remove(fid);
+                        cnt += 1;
+                    }
+                }
+            }
+        }
+    }
+
+    client::log(format!(
+        "E6 Scraper-Stripped: {} fileids from processing list",
+        cnt
+    ));
+    for (each, _) in file_ids {
+        if let Some(tids) = client::relationship_get_tagid(each) {
+            for tid in tids.intersection(&pool_table) {
+                if let Some(tag_rels) =
+                    client::parents_get(crate::client::types::ParentsType::Tag, tid.clone())
+                {
+                    dbg!(tid, &tag_rels);
+                    let mut vec_poolpos = Vec::new();
+                    let mut hashset_fileid = HashSet::new();
+                    for each in tag_rels {
+                        if let Some(tag_nns) = client::tag_get_id(each) {
+                            // Removes the spare poolid tag as a position that I added for some
+                            // reason. lol
+                            if tag_nns.namespace == poolposition_nsid {
+                                /*client::parents_delete(sharedtypes::DbParentsObj {
+                                    tag_id: *tid,
+                                    relate_tag_id: each.clone(),
+                                    limit_to: None,
+                                });*/
+
+                                vec_poolpos.push(each);
+                            } else if tag_nns.namespace == fileid_nsid {
+                                hashset_fileid.insert(each);
+                            }
+                        }
+                    }
+
+                    for position in vec_poolpos.iter() {
+                        if let Some(tag_id) =
+                            client::parents_get(crate::client::types::ParentsType::Rel, *position)
+                        {
+                            //dbg!("FID'S POSITION", &tag_id, tid, &tag_id.len());
+                        }
+                    }
+                    for fid in hashset_fileid.iter() {
+                        if let Some(mut tag_id) =
+                            client::parents_get(crate::client::types::ParentsType::Rel, *fid)
+                        {
+                            // Removes the parents and children from tag_ids
+                            for tid_iter in tag_id.clone().iter() {
+                                if parent_table.contains(tid_iter)
+                                    || children_table.contains(tid_iter)
+                                {
+                                    tag_id.remove(tid_iter);
+                                }
+                            }
+                            if tag_id.len() < 2 {
+                                dbg!("LESS 2 ITEMS IN HERE", tag_id);
+                                dbg!(&fid, tid);
+                            } else if tag_id.len() > 2 {
+                                // Clears sub items and add job to db to
+                                // scrape
+                                dbg!("MORE THEN 2 ITEMS IN HERE", &tag_id);
+                                dbg!(&fid, tid);
+                                for tid_iter in tag_id.iter() {
+                                    if pool_table.contains(&tid_iter) {
+                                        client::job_add(
+                                            None,
+                                            0,
+                                            0,
+                                            "e6".to_string(),
+                                            format!(
+                                                "https://e621.net/pools.json?search[id]={}",
+                                                client::tag_get_id(*tid_iter).unwrap().name
+                                            ),
+                                            true,
+                                            sharedtypes::CommitType::StopOnNothing,
+                                            sharedtypes::DbJobType::Scraper,
+                                            BTreeMap::new(),
+                                            BTreeMap::new(),
+                                        );
+                                    }
+                                    client::parents_delete(sharedtypes::DbParentsObj {
+                                        tag_id: *tid_iter,
+                                        relate_tag_id: *fid,
+                                        limit_to: None,
+                                    });
+                                }
+                            } else {
+                                let mut pos = None;
+                                // Updates the pool position.
+                                // Clears out relations not including children and parents
+                                // Adds relation if it exists properly
+                                for tid_iter in tag_id.iter() {
+                                    client::parents_delete(sharedtypes::DbParentsObj {
+                                        tag_id: *tid_iter,
+                                        relate_tag_id: *fid,
+                                        limit_to: None,
+                                    });
+                                    if position_table.contains(&tid_iter) {
+                                        pos = Some(sharedtypes::DbParentsObj {
+                                            tag_id: *tid_iter,
+                                            relate_tag_id: *fid,
+                                            limit_to: Some(*tid),
+                                        });
+                                    }
+                                }
+                                if let Some(pos) = pos {
+                                    client::parents_put(pos);
+                                }
+                                dbg!("FID TO REMOVE FROM TAG_ID", &fid, tid, &tag_id);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    client::transaction_flush();
+}
+
+#[no_mangle]
+pub fn db_upgrade_call(db_version: &usize) {
+    match db_version {
+        3 => {
+            //db_upgrade_call_3();
+        }
+        _ => {
+            client::log_no_print(format!("E621 No upgrade for version: {}", db_version));
+        }
+    }
 }

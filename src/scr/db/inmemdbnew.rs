@@ -174,8 +174,18 @@ impl NewinMemDB {
     /// Adds jobs into internal db.
     ///
     pub fn jobref_new(&mut self, job: sharedtypes::DbJobsObj) {
-        self._jobs_id_data.insert(self._jobs_max, job);
-        self._jobs_max += 1;
+        if self._jobs_max >= job.id {
+            self._jobs_max = job.id;
+            self._jobs_max += 1;
+        }
+
+        match self._jobs_id_data.get(&job.id) {
+            Some(_) => {}
+            None => {
+                self._jobs_id_data.insert(job.id, job);
+                self._jobs_max += 1;
+            }
+        }
     }
 
     ///

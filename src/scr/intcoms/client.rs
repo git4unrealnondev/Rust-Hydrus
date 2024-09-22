@@ -213,7 +213,7 @@ pub fn tag_get_name(tag: String, namespaceid: usize) -> Option<usize> {
 /// See the database reference for this function.
 /// I'm a lazy turd just check it their
 ///
-pub fn file_get_list_all() -> HashMap<usize, Option<sharedtypes::DbFileObj>> {
+pub fn file_get_list_all() -> HashMap<usize, sharedtypes::DbFileStorage> {
     init_data_request(&types::SupportedRequests::Database(
         types::SupportedDBRequests::GetFileListAll(),
     ))

@@ -259,10 +259,7 @@ pub fn dlfile_new(
     // Useful for if doing something that we CANNOT allow plugins to run.
     {
         if let Some(pluginmanager) = pluginmanager {
-            pluginmanager
-                .lock()
-                .unwrap()
-                .plugin_on_download(bytes.as_ref(), &hash, &file_ext);
+                crate::plugins::plugin_on_download(pluginmanager, bytes.as_ref(), &hash, &file_ext);
         }
     }
 

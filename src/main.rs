@@ -203,7 +203,7 @@ fn main() {
 
     arc.lock().unwrap().transaction_flush();
 
-    jobmanager.jobs_get(&mut arc.lock().unwrap());
+    jobmanager.jobs_load(&mut arc.lock().unwrap());
 
     // Calls the on_start func for the plugins
     pluginmanager.lock().unwrap().plugin_on_start();
@@ -219,7 +219,7 @@ fn main() {
     // Jobs run in OS threads
 
     // Waits until all threads have closed.
-    let one_sec = time::Duration::from_millis(100);
+    let one_sec = time::Duration::from_millis(500);
     loop {
         let brk;
         {
@@ -229,7 +229,6 @@ fn main() {
         if brk {
             break;
         }
-        dbg!("Sleep");
         thread::sleep(one_sec);
     }
     arc.lock().unwrap().transaction_flush();

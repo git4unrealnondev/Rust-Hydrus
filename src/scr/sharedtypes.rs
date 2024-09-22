@@ -601,7 +601,7 @@ pub enum AllFields {
 ///
 /// Plugin Callable actions for callbacks
 ///
-#[derive(Debug, PartialEq, Eq, Hash)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub enum PluginCallback {
     OnDownload,               // Ran when a file is downloaded
     OnStart,                  // Starts when the software start

@@ -177,6 +177,8 @@ fn check_existing_db() {
 
         let table_temp = sharedtypes::LoadDBTable::Files;
         client::load_table(table_temp);
+        let table_temp = sharedtypes::LoadDBTable::All;
+        client::load_table(table_temp);
 
         let file_ids = client::file_get_list_all();
         let mut total = file_ids.clone();
@@ -201,17 +203,20 @@ fn check_existing_db() {
         }
 
         for item in &total {
-            if let Some(fileobj) = item.1 {
-                match modernstorage.get_mut(fileobj) {
-                    None => {
-                        modernstorage.insert(fileobj.clone(), vec![table]);
-                        *utable_count.get_mut(&table).unwrap() += 1;
-                    }
-                    Some(intf) => {
-                        intf.push(table);
-                        *utable_count.get_mut(&table).unwrap() += 1;
+            match item.1 {
+                sharedtypes::DbFileStorage::Exist(fileobj) => {
+                    match modernstorage.get_mut(fileobj) {
+                        None => {
+                            modernstorage.insert(fileobj.clone(), vec![table]);
+                            *utable_count.get_mut(&table).unwrap() += 1;
+                        }
+                        Some(intf) => {
+                            intf.push(table);
+                            *utable_count.get_mut(&table).unwrap() += 1;
+                        }
                     }
                 }
+                _ => {}
             }
         }
         client::log(format!("Ended table loop for table: {:?}", &table));
@@ -266,6 +271,11 @@ fn check_existing_db() {
                     client::relationship_add(modern.0.id, tid, true);
                 }
             }
+        } else {
+            client::log(format!(
+                "FileHash - Couldn't find: {}   {}",
+                modern.0.id, modern.0.hash
+            ));
         }
     });
     client::transaction_flush();
