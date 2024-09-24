@@ -1024,7 +1024,7 @@ pub fn db_upgrade_call_3() {
                                             None,
                                             0,
                                             0,
-                                            "e6".to_string(),
+                                            "e6ai".to_string(),
                                             format!(
                                                 "https://e621.net/pools.json?search[id]={}",
                                                 client::tag_get_id(*tid_iter).unwrap().name

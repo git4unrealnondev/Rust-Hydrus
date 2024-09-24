@@ -42,7 +42,7 @@ pub fn info_log(info: &String) {
 }
 
 ///
-/// Dumps info to log and DOES NOTprints it.
+/// Dumps info to log and DOES NOT prints it.
 ///
 pub fn log(info: &String) {
     info!("{}", info);

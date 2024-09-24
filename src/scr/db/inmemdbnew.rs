@@ -625,6 +625,15 @@ impl NewinMemDB {
     }
 
     fn insert_tag_nns(&mut self, tag_info: sharedtypes::DbTagObjCompatability) {
+        if self._tag_nns_id_data.contains_key(&tag_info.id) {
+            logging::log(&format!(
+                "INMEMDB: Already has key {} replacing {:?} with {}.",
+                tag_info.id,
+                self._tag_nns_id_data.get(&tag_info.id).unwrap(),
+                tag_info.name
+            ));
+        }
+
         self._tag_nns_id_data.insert(
             tag_info.id,
             sharedtypes::DbTagNNS {

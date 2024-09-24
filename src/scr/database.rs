@@ -8,6 +8,7 @@ use crate::sharedtypes::CommitType;
 use crate::sharedtypes::DbJobsObj;
 use crate::time_func;
 
+use eta::{Eta, TimeAcc};
 use log::{error, info};
 use rayon::prelude::*;
 pub use rusqlite::types::ToSql;
@@ -16,7 +17,6 @@ use std::borrow::BorrowMut;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::collections::HashSet;
-
 use std::panic;
 use std::path::Path;
 use std::sync::Arc;
@@ -1323,6 +1323,7 @@ impl Main {
                     self.load_tags();
                 }
                 sharedtypes::LoadDBTable::All => {
+                    self.load_table(&sharedtypes::LoadDBTable::Tags);
                     self.load_table(&sharedtypes::LoadDBTable::Files);
 
                     self.load_table(&sharedtypes::LoadDBTable::Jobs);
@@ -1331,8 +1332,6 @@ impl Main {
 
                     self.load_table(&sharedtypes::LoadDBTable::Relationship);
                     self.load_table(&sharedtypes::LoadDBTable::Settings);
-
-                    self.load_table(&sharedtypes::LoadDBTable::Tags);
                 }
             }
 
@@ -1594,36 +1593,84 @@ impl Main {
     ///
     fn load_tags(&mut self) {
         logging::info_log(&"Database is Loading: Tags".to_string());
+        //let mut delete_tags = HashSet::new();
+        {
+            let binding = self._conn.clone();
 
-        let binding = self._conn.clone();
+            let temp_test = binding.lock().unwrap();
+            let temp = temp_test.prepare("SELECT * FROM Tags");
+            if let Ok(mut con) = temp {
+                let tag = con.query_map([], |row| {
+                    Ok(sharedtypes::DbTagObjCompatability {
+                        id: row.get(0).unwrap(),
+                        name: row.get(1).unwrap(),
+                        namespace: row.get(2).unwrap(),
+                    })
+                });
 
-        let temp_test = binding.lock().unwrap();
-        let temp = temp_test.prepare("SELECT * FROM Tags");
+                match tag {
+                    Ok(tags) => {
+                        for each in tags {
+                            if let Ok(res) = each {
+                                /*if let Some(id) = self._inmemdb.tags_get_data(&res.id) {
+                                    logging::info_log(&format!(
+                                        "Already have tag {:?} adding {} {} {}",
+                                        id, res.name, res.namespace, res.id
+                                    ));
+                                    continue;
+                                    delete_tags.insert((res.name.clone(), res.namespace.clone()));
+                                }*/
 
-        if let Ok(mut con) = temp {
-            let tag = con.query_map([], |row| {
-                Ok(sharedtypes::DbTagObjCompatability {
-                    id: row.get(0).unwrap(),
-                    name: row.get(1).unwrap(),
-                    namespace: row.get(2).unwrap(),
-                })
-            });
-
-            match tag {
-                Ok(tags) => {
-                    for each in tags {
-                        if let Ok(res) = each {
-                            self.tag_add(&res.name, res.namespace, false, Some(res.id));
-                        } else {
-                            error!("Bad Tag cant load {:?}", each);
+                                self.tag_add(&res.name, res.namespace, false, Some(res.id));
+                            } else {
+                                error!("Bad Tag cant load {:?}", each);
+                            }
                         }
                     }
-                }
-                Err(errer) => {
-                    error!("WARNING COULD NOT LOAD TAG: {:?} DUE TO ERROR", errer);
+                    Err(errer) => {
+                        error!("WARNING COULD NOT LOAD TAG: {:?} DUE TO ERROR", errer);
+                    }
                 }
             }
         }
+
+        /*if self.check_table_exists("Tags_New".to_string()) {
+            self.db_drop_table(&"Tags_New".to_string());
+            self.transaction_flush();
+        }
+        self.table_create(
+            &"Tags_New".to_string(),
+            &[
+                "id".to_string(),
+                "name".to_string(),
+                "namespace".to_string(),
+            ]
+            .to_vec(),
+            &[
+                "INTEGER".to_string(),
+                "TEXT".to_string(),
+                "INTEGER".to_string(),
+            ]
+            .to_vec(),
+        );
+        {
+            let conn = self._conn.lock().unwrap();
+            let mut stmt = conn
+                .prepare("INSERT INTO Tags_New (id,name,namespace) VALUES (?1,?2,?3)")
+                .unwrap();
+
+            for i in 0..self._inmemdb.tags_max_return() {
+                if let Some(taginfo) = self._inmemdb.tags_get_data(&i) {
+                    stmt.execute((i, taginfo.name.clone(), taginfo.namespace))
+                        .unwrap();
+                }
+            }
+        }
+        self.db_drop_table(&"Tags".to_string());
+        if !self.check_table_exists("Tags".to_string()) {
+            self.alter_table(&"Tags_New".to_string(), &"Tags".to_string());
+        }
+        self.transaction_flush();*/
     }
 
     ///
@@ -1631,6 +1678,12 @@ impl Main {
     /// NOTE Experimental badness
     ///
     pub fn db_open(&mut self) {
+        self._conn
+            .borrow_mut()
+            .lock()
+            .unwrap()
+            .execute(&"PRAGMA secure_delete = 0;", params![]);
+
         //self.execute("PRAGMA journal_mode = MEMORY".to_string());
         //self.execute("PRAGMA synchronous = OFF".to_string());
         //info!("Setting synchronous = OFF");
@@ -1931,7 +1984,7 @@ impl Main {
     }
 
     ///
-    /// prints db info
+    /// Prints db info
     ///
     pub fn debugdb(&self) {
         self._inmemdb.dumpe_data();
@@ -1967,7 +2020,7 @@ impl Main {
                     Some(tag_id) => tag_id,
                 }
             }
-            Some(_) => {
+            Some(id_some) => {
                 // We've got an ID coming in will check if it exists.
                 let tag_id = self.tag_add_db(tags, &namespace, id);
                 /* println!(
@@ -2324,6 +2377,20 @@ impl Main {
             .lock()
             .unwrap()
             .execute(inp, params![id.to_string(),])
+            .unwrap();
+    }
+
+    ///
+    /// Removes a tag from sql table by name and namespace
+    ///
+    fn del_from_tags_by_name_and_namespace(&mut self, name: &String, namespace: &String) {
+        dbg!("Deleting", name, namespace);
+        let inp = "DELETE FROM Tags WHERE name = ? AND namespace = ?";
+        self._conn
+            .borrow_mut()
+            .lock()
+            .unwrap()
+            .execute(inp, params![name, namespace])
             .unwrap();
     }
 

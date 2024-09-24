@@ -90,6 +90,7 @@ enum Supset {
     SHA256,
     SHA512,
     IPFSCID,
+    IPFSCID1,
 }
 ///
 /// Holder for data
@@ -123,7 +124,11 @@ fn get_set(inp: Supset) -> SettingInfo {
         Supset::IPFSCID => SettingInfo {
             name: "FileHash-IPFSCID".to_string(),
             description: Some("From plugin FileHash. IPFS Content ID of the file for usage with the IPFS network.".to_string()),
+        },Supset::IPFSCID1 => SettingInfo {
+            name: "FileHash-IPFSCID1".to_string(),
+            description: Some("From plugin FileHash. IPFS Content ID of the file for usage with the IPFS network. Version 1 more modern".to_string()),
         },
+
     }
 }
 ///
@@ -316,7 +321,14 @@ fn hash_file(hashtype: Supset, byte: &[u8]) -> Option<String> {
             return Some(hash);
         }
         Supset::IPFSCID => {
-            if let Ok(cid) = ipfs_cid::generate_cid_hash(byte) {
+            if let Ok(cid) = ipfs_cid::generate_cid_v0(byte) {
+                return Some(cid);
+            }
+
+            return None;
+        }
+        Supset::IPFSCID1 => {
+            if let Ok(cid) = ipfs_cid::generate_cid_v1(byte) {
                 return Some(cid);
             }
 

@@ -490,7 +490,16 @@ pub fn plugin_on_download(
                     &String,
                 ) -> Vec<sharedtypes::DBPluginOutputEnum>,
                 //unsafe extern "C" fn(Cursor<Bytes>, &String, &String, Arc<Mutex<database::Main>>),
-            > = lib.get(b"on_download").unwrap();
+            > = match lib.get(b"on_download") {
+                Ok(lib) => lib,
+                Err(_) => {
+                    logging::info_log(&format!(
+                        "Could not find on_download for plugin: {}",
+                        plugin
+                    ));
+                    continue;
+                }
+            };
             //unwrappy.
             output = plugindatafunc(cursorpass, hash, ext);
         }
