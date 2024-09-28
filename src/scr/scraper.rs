@@ -2,8 +2,8 @@
 #![allow(unused_variables)]
 
 use crate::{logging, sharedtypes};
-use ahash::AHashMap;
 use log::{error, info, warn};
+use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 use std::time::Duration;
@@ -66,16 +66,29 @@ pub struct ScraperManager {
     _string: Vec<String>,
     _sites: Vec<Vec<String>>,
     _loaded: Vec<bool>,
-    pub _library: AHashMap<InternalScraper, libloading::Library>,
+    pub _library: HashMap<InternalScraper, libloading::Library>,
     _scraper: Vec<InternalScraper>,
 }
+
+impl Drop for ScraperManager {
+    fn drop(&mut self) {
+        self._scraper.clear();
+        self._sites.clear();
+        self._loaded.clear();
+        self._scraper.clear();
+        for (scraper, lib) in self._library.drain().take(1) {
+            lib.close();
+        }
+    }
+}
+
 impl ScraperManager {
     pub fn new() -> Self {
         ScraperManager {
             _string: Vec::new(),
             _sites: Vec::new(),
             _loaded: Vec::new(),
-            _library: AHashMap::new(),
+            _library: HashMap::new(),
             _scraper: Vec::new(),
         }
     }
@@ -88,7 +101,7 @@ impl ScraperManager {
         &self._scraper
     }
 
-    pub fn library_get(&self) -> &AHashMap<InternalScraper, libloading::Library> {
+    pub fn library_get(&self) -> &HashMap<InternalScraper, libloading::Library> {
         &self._library
     }
 
@@ -111,8 +124,17 @@ impl ScraperManager {
 
             if Path::new(&path).exists() {
                 self._string.push(path.to_string());
+                let lib;
+                let pulled_successfully;
+                unsafe {
+                    lib = libloading::Library::new(&path).unwrap();
+                    let plugindatafunc: libloading::Symbol<
+                        unsafe extern "C" fn() -> InternalScraper,
+                    > = lib.get(b"new").unwrap();
+                    pulled_successfully = plugindatafunc();
+                }
 
-                let lib = unsafe { libloading::Library::new(&path).unwrap() };
+                /*let lib = unsafe { libloading::Library::new(&path).unwrap() };
 
                 let funtwo: Result<
                     libloading::Symbol<unsafe extern "C" fn() -> InternalScraper>,
@@ -120,6 +142,8 @@ impl ScraperManager {
                 > = unsafe { lib.get(b"new") };
 
                 let pulled_successfully = unsafe { funtwo.unwrap()() };
+                lib.close();*/
+
                 // Loads version in memsafe way from scraper
                 //let scraper = unsafe { funtwo.as_ref().unwrap()() };
                 self._library.insert(pulled_successfully, lib);

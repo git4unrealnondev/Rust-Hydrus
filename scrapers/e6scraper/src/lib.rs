@@ -346,6 +346,11 @@ fn build_url(params: &Vec<sharedtypes::ScraperParam>, pagenum: u64) -> String {
 pub fn new() -> InternalScraper {
     InternalScraper::new()
 }
+#[no_mangle]
+pub fn test() -> u8 {
+    0
+}
+
 ///
 /// Returns one url from the parameters.
 ///

@@ -174,7 +174,7 @@ impl NewinMemDB {
     /// Adds jobs into internal db.
     ///
     pub fn jobref_new(&mut self, job: sharedtypes::DbJobsObj) {
-        if self._jobs_max >= job.id {
+        if job.id >= self._jobs_max {
             self._jobs_max = job.id;
             self._jobs_max += 1;
         }
@@ -340,6 +340,23 @@ impl NewinMemDB {
         self._tag_nns_id_data.get(id)
     }
 
+    pub fn clear_all(&mut self) {
+        self.tags_clear();
+        self.parents_clear();
+        self.relationships_clear();
+        self.clear_files();
+    }
+
+    ///
+    /// Cleares inmemdb files structure
+    ///
+    pub fn clear_files(&mut self) {
+        self._file_id_data.clear();
+        self._file_location_usize.clear();
+        self._file_location_string.clear();
+        self._file_name_id.clear();
+    }
+
     ///
     /// Clears inmemdb tags structures
     ///
@@ -355,6 +372,8 @@ impl NewinMemDB {
     pub fn parents_clear(&mut self) {
         self._parents_max = 0;
         self._parents_dual.clear();
+        self._parents_cantor_limitto.clear();
+        self._parents_limitto_cantor.clear();
         self._parents_rel_tag.clear();
         self._parents_tag_rel.clear();
     }

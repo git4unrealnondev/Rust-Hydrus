@@ -9,11 +9,11 @@ use reqwest::blocking::Client;
 use reqwest::cookie;
 use sha2::Digest as sha2Digest;
 use sha2::Sha512;
-use url::Url;
 use std::io::BufReader;
 use std::io::Cursor;
 use std::io::Read;
 use std::time::Duration;
+use url::Url;
 extern crate reqwest;
 use crate::helpers;
 use async_std::task;
@@ -41,20 +41,20 @@ pub fn ratelimiter_create(number: u64, duration: Duration) -> Ratelimiter {
         .unwrap()
 }
 
-pub fn ratelimiter_wait(
-    ratelimit_object: &Arc<Mutex<Ratelimiter>>,
-) {loop {
-    let limit;
-    {
-        let hold = ratelimit_object.lock().unwrap();
-        limit = hold.try_wait();
-    }
-    match limit {
-        Ok(_) => {break}
-        Err(sleep) => {
-            std::thread::sleep(sleep);
+pub fn ratelimiter_wait(ratelimit_object: &Arc<Mutex<Ratelimiter>>) {
+    loop {
+        let limit;
+        {
+            let hold = ratelimit_object.lock().unwrap();
+            limit = hold.try_wait();
         }
-    }}
+        match limit {
+            Ok(_) => break,
+            Err(sleep) => {
+                std::thread::sleep(sleep);
+            }
+        }
+    }
 }
 
 ///
@@ -63,7 +63,7 @@ pub fn ratelimiter_wait(
 pub fn client_create() -> Client {
     let useragent = "RustHydrusV1 0".to_string();
 
-let jar = cookie::Jar::default();
+    let jar = cookie::Jar::default();
     // The client that does the downloading
     reqwest::blocking::ClientBuilder::new()
         .user_agent(useragent)
@@ -182,10 +182,8 @@ pub fn dlfile_new(
                 }
             }
 
-            let byte = 
-                // Downloads file into byte memory buffer
-                futureresult.unwrap().bytes()
-            ;
+            // Downloads file into byte memory buffer
+            let byte = futureresult.unwrap().bytes();
 
             // Error handling for dling a file.
             // Waits 10 secs to retry
@@ -218,29 +216,26 @@ pub fn dlfile_new(
                 //panic!("DlFileNew: Cannot parse hash info : {:?}", &file);
             }
             _ => {
-
                 // Check and compare  to what the scraper wants
-        let status = hash_bytes(&bytes, &file.hash);
+                let status = hash_bytes(&bytes, &file.hash);
 
-        // Logging
-        if !status.1 {
-            error!(
-                "Parser file: {} FAILED HASHCHECK: {} {}",
-                &file.hash, status.0, status.1
-            );
-            cnt += 1;
-        } else {
-            //dbg!("Parser returned: {} Got: {}", &file.hash, status.0);
-        }
-        if cnt >= 3 {
-            return None;
-        }
-        boolloop = !status.1;
-
-            },
-        };
-
+                // Logging
+                if !status.1 {
+                    error!(
+                        "Parser file: {} FAILED HASHCHECK: {} {}",
+                        &file.hash, status.0, status.1
+                    );
+                    cnt += 1;
+                } else {
+                    //dbg!("Parser returned: {} Got: {}", &file.hash, status.0);
+                }
+                if cnt >= 3 {
+                    return None;
+                }
+                boolloop = !status.1;
             }
+        };
+    }
 
     let final_loc = helpers::getfinpath(location, &hash);
 
@@ -259,7 +254,7 @@ pub fn dlfile_new(
     // Useful for if doing something that we CANNOT allow plugins to run.
     {
         if let Some(pluginmanager) = pluginmanager {
-                crate::plugins::plugin_on_download(pluginmanager, bytes.as_ref(), &hash, &file_ext);
+            crate::plugins::plugin_on_download(pluginmanager, bytes.as_ref(), &hash, &file_ext);
         }
     }
 

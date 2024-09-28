@@ -127,6 +127,13 @@ impl Main {
     }
 
     ///
+    /// Clears in memdb structures
+    ///
+    pub fn clear_cache(&mut self) {
+        self._inmemdb.clear_all();
+    }
+
+    ///
     /// Backs up the DB file.
     ///
     pub fn backup_db(&mut self) {

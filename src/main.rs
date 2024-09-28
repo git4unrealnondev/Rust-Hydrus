@@ -1,6 +1,7 @@
 //use crate::scr::sharedtypes::jobs_add;
 //use crate::scr::sharedtypes::AllFields::EJobsAdd;
 //use crate::scr::tasks;
+use libc;
 use log::{error, warn};
 use scraper::db_upgrade_call;
 
@@ -229,9 +230,11 @@ fn main() {
         if brk {
             break;
         }
+        dbg!("Sleep");
         thread::sleep(one_sec);
     }
     arc.lock().unwrap().transaction_flush();
+
     /* pluginmanager.lock().unwrap().thread_finish_closed();
     while !pluginmanager.lock().unwrap().return_thread() {
         let one_sec = time::Duration::from_secs(1);
@@ -245,4 +248,6 @@ fn main() {
     std::thread::sleep(mills_fifty);
     logging::info_log(&"UNLOADING".to_string());
     log::logger().flush();
+    //drop(pluginmanager.lock().unwrap());
+    //unsafe { libc::malloc_trim(0) };
 }

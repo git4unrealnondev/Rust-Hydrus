@@ -47,15 +47,14 @@ impl PluginManager {
         // Needed for thread move because it moves the value
         let threa = reftoself.clone();
 
-        let (snd, _rcv) = mpsc::channel();
         logging::log(&"Starting IPC Server.".to_string());
-        let _srv = std::thread::spawn(move || {
+        /*let srv = std::thread::spawn(move || {
             let mut ipc_coms = server::PluginIpcInteract::new(main_db.clone(), threa);
             //let _ = rcv.recv();
 
             //println!("v");
-            ipc_coms.spawn_listener(snd)
-        });
+            ipc_coms.spawn_listener()
+        });*/
         reftoself
     }
 
@@ -504,6 +503,7 @@ pub fn plugin_on_download(
             output = plugindatafunc(cursorpass, hash, ext);
         }
         parse_plugin_output(output, manager_arc.lock().unwrap()._database.clone());
+        lib.close();
     }
 }
 

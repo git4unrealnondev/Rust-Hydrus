@@ -92,9 +92,9 @@ struct Worker {
 impl Drop for Worker {
     fn drop(&mut self) {
         if let Some(thread) = self.thread.take() {
+            futures::executor::block_on(async { thread.join().unwrap() });
             info_log(&format!("Shutting Down Worker from Worker: {}", self.id));
             println!("Shutting Down Worker from Worker: {}", self.id);
-            futures::executor::block_on(async { thread.join().unwrap() });
         }
     }
 }
@@ -119,7 +119,10 @@ impl Worker {
         let mut jblist = jobs.clone();
         let manageeplugin = pluginmanager.clone();
         let scrap = scraper.clone();
-                            let ratelimiter_main = Arc::new(Mutex::new(download::ratelimiter_create(scrap._ratelimit.0, scrap._ratelimit.1)));
+        let ratelimiter_main = Arc::new(Mutex::new(download::ratelimiter_create(
+            scrap._ratelimit.0,
+            scrap._ratelimit.1,
+        )));
         let thread = thread::spawn(move || {
             let ratelimiter_obj = ratelimiter_main.clone();
             let mut job_params: Arc<Mutex<BTreeSet<ScraperData>>> =
@@ -130,7 +133,7 @@ impl Worker {
 
             let mut rate_limit_store: Arc<Mutex<HashMap<String, Ratelimiter>>> =
                 Arc::new(Mutex::new(HashMap::new()));
-                    let mut client = download::client_create();
+            let mut client = download::client_create();
 
             // Main loop for processing
             // All queries have been deduplicated.
@@ -240,9 +243,7 @@ impl Worker {
 
                     'urlloop: for urll in urlload {
                         'errloop: loop {
-                            download::ratelimiter_wait(
-                                &ratelimiter_obj,
-                            );
+                            download::ratelimiter_wait(&ratelimiter_obj);
                             let resp =
                                 task::block_on(download::dltext_new(urll.to_string(), &mut client));
                             let st = match resp {
@@ -308,7 +309,7 @@ impl Worker {
                             let pool = ThreadPool::default();
                             // Parses files from urls
                             for file in out_st.file {
-            let ratelimiter_obj = ratelimiter_main.clone();
+                                let ratelimiter_obj = ratelimiter_main.clone();
                                 let manageeplugin = manageeplugin.clone();
                                 let mut db = db.clone();
                                 let job_params = job_params.clone();
@@ -336,16 +337,11 @@ impl Worker {
                                     for file_tag in file.skip_if.iter() {
                                         let unwrappydb = db.lock().unwrap();
                                         if let Some(nsid) = unwrappydb.namespace_get(&file_tag.namespace.name){
-if let Some(_)=unwrappydb.tag_get_name(file_tag.tag.to_string(), *nsid){ 
-info_log(&format!(
-                                                "Skipping file: {} Due to skip tag {} already existing in Tags Table.",
-                                                &source, file_tag.tag
-                                            ));
+if let Some(_)=unwrappydb.tag_get_name(file_tag.tag.to_string(), *nsid){info_log(&format!("Skipping file: {} Due to skip tag {} already existing in Tags Table.",&source, file_tag.tag));
 return;
 }
 
                                         }
-                                        
                                     }
 
                                     // Get's the hash & file ext for the file.
@@ -579,49 +575,41 @@ fn parse_tags(
     }
 }
 
-fn download_add_to_db(ratelimiter_obj: Arc<Mutex<Ratelimiter>>, source: &String, location: String, manageeplugin: Arc<Mutex<PluginManager>>, client: &Client, db: Arc<Mutex<database::Main>>, file: &sharedtypes::FileObject, source_url_id: usize) -> Option<usize> {
-download::ratelimiter_wait(
-                                &ratelimiter_obj,
-                            );
+fn download_add_to_db(
+    ratelimiter_obj: Arc<Mutex<Ratelimiter>>,
+    source: &String,
+    location: String,
+    manageeplugin: Arc<Mutex<PluginManager>>,
+    client: &Client,
+    db: Arc<Mutex<database::Main>>,
+    file: &sharedtypes::FileObject,
+    source_url_id: usize,
+) -> Option<usize> {
+    download::ratelimiter_wait(&ratelimiter_obj);
 
-                                            // Download file doesn't exist.
-                                                                        
-                                            // URL doesn't exist in DB Will download
-                                            info_log(&format!(
-                                                "Downloading: {} to: {}",
-                                                &source, &location
-                                            ));
-                                            let blopt;
-                                            {
-                                                blopt = download::dlfile_new(
-                                                    &client,
-                                                    &file,
-                                                    &location,
-                                                    Some(manageeplugin)
-                                                );
-                                            }
-                                            match blopt {
-                                                None => {
-                                                    return None;
-                                                }
-                                                Some((hash, file_ext)) => {
-                                                    let file = sharedtypes::DbFileStorage::NoIdExist(sharedtypes::DbFileObjNoId { hash, ext: file_ext, location } );
-let unwrappydb = &mut db.lock().unwrap();
-                                                let fileid = unwrappydb.file_add(
-                                                    file, true,
-                                                );
-                                                let tagid = unwrappydb.tag_add(
-                                                    source,
-                                                    source_url_id,
-                                                    true,
-                                                    None,
-                                                );
-                                                unwrappydb
-                                                    .relationship_add(fileid, tagid, true);
-                                                Some(fileid.clone())
+    // Download file doesn't exist.
 
-
-
-                                                },
-                                            }
+    // URL doesn't exist in DB Will download
+    info_log(&format!("Downloading: {} to: {}", &source, &location));
+    let blopt;
+    {
+        blopt = download::dlfile_new(&client, &file, &location, Some(manageeplugin));
+    }
+    match blopt {
+        None => {
+            return None;
+        }
+        Some((hash, file_ext)) => {
+            let file = sharedtypes::DbFileStorage::NoIdExist(sharedtypes::DbFileObjNoId {
+                hash,
+                ext: file_ext,
+                location,
+            });
+            let unwrappydb = &mut db.lock().unwrap();
+            let fileid = unwrappydb.file_add(file, true);
+            let tagid = unwrappydb.tag_add(source, source_url_id, true, None);
+            unwrappydb.relationship_add(fileid, tagid, true);
+            Some(fileid.clone())
+        }
+    }
 }

@@ -160,7 +160,7 @@ impl PluginIpcInteract {
     ///
     /// Spawns a listener for events.
     ///
-    pub fn spawn_listener(&mut self, notify: Sender<()>) -> anyhow::Result<()> {
+    pub fn spawn_listener(&mut self) -> anyhow::Result<()> {
         // Define a function that checks for errors in incoming connections. We'll use this to filter
         // through connections that fail on initialization for one reason or another.
         fn handle_error(conn: io::Result<LocalSocketStream>) -> Option<LocalSocketStream> {
@@ -207,7 +207,7 @@ another process and try again.",
         };
 
         println!("Server running at {}", types::SOCKET_NAME); // Stand-in for the syncronization used, if any, between the client and the server.
-        let _ = notify.send(());
+                                                              //let _ = notify.send(());
 
         // Main Plugin interaction loop
         for conn in listener.incoming().filter_map(handle_error) {

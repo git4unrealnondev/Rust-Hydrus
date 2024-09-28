@@ -1,5 +1,4 @@
 use crate::database;
-
 use crate::logging;
 use crate::plugins::PluginManager;
 use crate::scraper;
@@ -144,25 +143,19 @@ impl Jobs {
             let name_result = db.settings_get_name(&format!("{:?}_{}", scrape._type, scrape._name));
 
             // Handles loading of settings into DB.Either Manual or Automatic to describe the functionallity
-            match name_result {
-                Some(_) => {
-                    //dbg!(name_result);
-                    //&name_result.unwrap().name
-                }
-                None => {
-                    let isolatedtitle = format!("{:?}_{}", scrape._type, scrape._name);
+            if name_result.is_none() {
+                let isolatedtitle = format!("{:?}_{}", scrape._type, scrape._name);
 
-                    let (_cookie, cookie_name) = self.library_cookie_needed(scrape);
+                let (_cookie, cookie_name) = self.library_cookie_needed(scrape);
 
-                    db.setting_add(
-                        isolatedtitle,
-                        Some("Automatic Scraper".to_owned()),
-                        None,
-                        Some(cookie_name),
-                        true,
-                    );
-                }
-            };
+                db.setting_add(
+                    isolatedtitle,
+                    Some("Automatic Scraper".to_owned()),
+                    None,
+                    Some(cookie_name),
+                    true,
+                );
+            }
             // Loops through all jobs in the ref. Adds ref into
             for each in &self._jobref {
                 let job = each.1;

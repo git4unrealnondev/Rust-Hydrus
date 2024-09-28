@@ -12,8 +12,6 @@ pub struct SqliteSearchStructs {
 
 impl SqliteSearchStructs {
     pub fn new(db_type: CacheType) -> Self {
-        
-
         SqliteSearchStructs {
             conn: make_connection(db_type.clone()),
             conn_type: db_type,
