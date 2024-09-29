@@ -183,7 +183,7 @@ pub fn relationship_get_fileid(id: usize) -> Option<HashSet<usize>> {
 ///
 /// Gets a file based on their ID
 ///
-pub fn file_get_id(fid: usize) -> Option<sharedtypes::DbFileObj> {
+pub fn file_get_id(fid: usize) -> Option<sharedtypes::DbFileStorage> {
     init_data_request(&types::SupportedRequests::Database(
         types::SupportedDBRequests::GetFile(fid),
     ))

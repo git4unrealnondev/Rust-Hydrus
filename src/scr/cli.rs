@@ -5,15 +5,15 @@ use std::path::Path;
 use std::{collections::HashSet, io::Write};
 use strfmt::Format;
 //use std::str::pattern::Searcher;
-use file_format::FileFormat;
-use std::str::FromStr;
-
 use crate::download;
 use crate::{
     database, logging, pause, scraper,
     sharedtypes::{self},
 };
 use clap::Parser;
+use file_format::FileFormat;
+use std::str::FromStr;
+use std::sync::{Arc, Mutex};
 
 //use super::sharedtypes::;
 
@@ -358,6 +358,13 @@ pub fn main(data: &mut database::Main, scraper: &mut scraper::ScraperManager) {
                                 nsid = Some(*ns);
                             }
                         }
+
+                        // Spawn default ratelimiter of 1 item per second
+                        let ratelimiter_obj = Arc::new(Mutex::new(download::ratelimiter_create(
+                            1,
+                            std::time::Duration::from_secs(1),
+                        )));
+
                         lis.par_iter().for_each(|(fid, storage)| {
                             if fiexist.lock().unwrap().contains(fid) {
                                 return;
@@ -404,6 +411,7 @@ pub fn main(data: &mut database::Main, scraper: &mut scraper::ScraperManager) {
                                                     file,
                                                     &data.location_get(),
                                                     None,
+                                                    &ratelimiter_obj,
                                                 );
                                             }
                                         }
@@ -444,6 +452,7 @@ pub fn main(data: &mut database::Main, scraper: &mut scraper::ScraperManager) {
                                                         file,
                                                         &data.location_get(),
                                                         None,
+                                                        &ratelimiter_obj,
                                                     );
                                                 }
                                             }

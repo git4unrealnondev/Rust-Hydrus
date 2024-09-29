@@ -48,13 +48,13 @@ impl PluginManager {
         let threa = reftoself.clone();
 
         logging::log(&"Starting IPC Server.".to_string());
-        /*let srv = std::thread::spawn(move || {
+        let srv = std::thread::spawn(move || {
             let mut ipc_coms = server::PluginIpcInteract::new(main_db.clone(), threa);
             //let _ = rcv.recv();
 
             //println!("v");
             ipc_coms.spawn_listener()
-        });*/
+        });
         reftoself
     }
 

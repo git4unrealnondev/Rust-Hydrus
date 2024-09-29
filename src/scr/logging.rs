@@ -3,7 +3,7 @@
 use std::fs;
 use std::path::Path;
 
-use log::{error, info};
+use log::{error, info, LevelFilter};
 
 /// TODO Needs to make check if I have access to folder before I write db.
 pub fn main(log_location: &String) {
@@ -13,7 +13,11 @@ pub fn main(log_location: &String) {
         fs::remove_file(log_location).unwrap();
     }
 
-    fast_log::init(fast_log::Config::new().file(log_location)).unwrap();
+    let fastlog = fast_log::Config::new()
+        .file(log_location)
+        .level(LevelFilter::Info);
+
+    fast_log::init(fastlog).unwrap();
     info!("Initing Logger.");
     log::logger().flush();
 }

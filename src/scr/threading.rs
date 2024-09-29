@@ -243,9 +243,11 @@ impl Worker {
 
                     'urlloop: for urll in urlload {
                         'errloop: loop {
-                            download::ratelimiter_wait(&ratelimiter_obj);
-                            let resp =
-                                task::block_on(download::dltext_new(urll.to_string(), &mut client));
+                            let resp = task::block_on(download::dltext_new(
+                                urll.to_string(),
+                                &mut client,
+                                &ratelimiter_obj,
+                            ));
                             let st = match resp {
                                 Ok(respstring) => {
                                     scraper::parser_call(&libloading, &respstring, &scraper_data)
@@ -547,10 +549,10 @@ fn parse_tags(
                                         break 'tag;
                                     }
                                     Some(_) => {
-                                        println!(
+                                        info_log(&format!(
                                             "Skipping because this already has a relationship. {}",
                                             taginfo.tag
-                                        );
+                                        ));
 
                                         //println!("Will download from: {}", taginfo.tag);
                                         //url_return.insert(jobscraped);
@@ -585,15 +587,18 @@ fn download_add_to_db(
     file: &sharedtypes::FileObject,
     source_url_id: usize,
 ) -> Option<usize> {
-    download::ratelimiter_wait(&ratelimiter_obj);
-
     // Download file doesn't exist.
 
     // URL doesn't exist in DB Will download
-    info_log(&format!("Downloading: {} to: {}", &source, &location));
     let blopt;
     {
-        blopt = download::dlfile_new(&client, &file, &location, Some(manageeplugin));
+        blopt = download::dlfile_new(
+            &client,
+            &file,
+            &location,
+            Some(manageeplugin),
+            &ratelimiter_obj,
+        );
     }
     match blopt {
         None => {

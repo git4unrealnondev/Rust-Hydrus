@@ -1,9 +1,9 @@
 use super::plugins::PluginManager;
 //extern crate urlparse;
 use super::sharedtypes;
+use crate::logging;
 use bytes::Bytes;
 use file_format::FileFormat;
-use http::header;
 use log::{error, info};
 use reqwest::blocking::Client;
 use reqwest::cookie;
@@ -81,28 +81,43 @@ pub fn client_create() -> Client {
 ///
 /// Downloads text into db as responses. Filters responses by default limit if their's anything wrong with request.
 ///
-pub async fn dltext_new(url_string: String, client: &Client) -> Result<String, reqwest::Error> {
+pub async fn dltext_new(
+    url_string: String,
+    client: &Client,
+    ratelimiter_obj: &Arc<Mutex<Ratelimiter>>,
+) -> Result<String, reqwest::Error> {
     //let mut ret: Vec<AHashMap<String, AHashMap<String, Vec<String>>>> = Vec::new();
     //let ex = Executor::new();
 
-    let url = Url::parse(&url_string).unwrap();
     //let url = Url::parse("http://www.google.com").unwrap();
+    loop {
+        let url = Url::parse(&url_string).unwrap();
+        //let requestit = Request::new(Method::GET, url);
+        //fut.push();
+        logging::info_log(&format!("Spawned web reach to: {}", &url_string));
+        //let futureresult = futures::executor::block_on(ratelimit_object.ready())
+        //    .unwrap()
+        ratelimiter_wait(ratelimiter_obj);
+        let futureresult = client.get(url).send();
 
-    //let requestit = Request::new(Method::GET, url);
-    //fut.push();
-    println!("Spawned web reach to: {}", &url_string);
-    //let futureresult = futures::executor::block_on(ratelimit_object.ready())
-    //    .unwrap()
-    let futureresult = client.get(url).send();
+        //let test = reqwest::get(url).await.unwrap().text();
 
-    //let test = reqwest::get(url).await.unwrap().text();
+        //let futurez = futures::executor::block_on(futureresult);
+        //dbg!(&futureresult);
 
-    //let futurez = futures::executor::block_on(futureresult);
-    //dbg!(&futureresult);
-
-    match futureresult {
-        Ok(_) => Ok(futureresult.unwrap().text().unwrap()),
-        Err(_) => Err(futureresult.err().unwrap()),
+        match futureresult {
+            Ok(res) => match res.text() {
+                Ok(text) => {
+                    return Ok(text);
+                }
+                Err(_) => {
+                    continue;
+                }
+            },
+            Err(_) => {
+                return Err(futureresult.err().unwrap());
+            }
+        }
     }
 }
 
@@ -145,6 +160,7 @@ pub fn dlfile_new(
     file: &sharedtypes::FileObject,
     location: &String,
     pluginmanager: Option<Arc<Mutex<PluginManager>>>,
+    ratelimiter_obj: &Arc<Mutex<Ratelimiter>>,
 ) -> Option<(String, String)> {
     let mut boolloop = true;
     let mut hash = String::new();
@@ -165,6 +181,10 @@ pub fn dlfile_new(
             };
 
             let url = Url::parse(fileurlmatch).unwrap();
+
+            ratelimiter_wait(&ratelimiter_obj);
+
+            logging::info_log(&format!("Downloading: {} to: {}", &fileurlmatch, &location));
 
             let mut futureresult = client.get(url.as_ref()).send();
             loop {
@@ -258,7 +278,7 @@ pub fn dlfile_new(
         }
     }
 
-    println!("Downloaded hash: {}", &hash);
+    logging::info_log(&format!("Downloaded hash: {}", &hash));
 
     Some((hash, file_ext))
 }

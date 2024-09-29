@@ -55,9 +55,9 @@ libloading = "0.8.5"
 opt-level = 3
 lto=true
 codegenunits=1
-strip = false
+strip = true
 panic = "abort"
-debug = true
+debug = false
 
 [build-dependencies]
 walkdir = "2.4.0"

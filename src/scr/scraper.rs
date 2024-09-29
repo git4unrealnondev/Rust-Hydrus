@@ -70,18 +70,6 @@ pub struct ScraperManager {
     _scraper: Vec<InternalScraper>,
 }
 
-impl Drop for ScraperManager {
-    fn drop(&mut self) {
-        self._scraper.clear();
-        self._sites.clear();
-        self._loaded.clear();
-        self._scraper.clear();
-        for (scraper, lib) in self._library.drain().take(1) {
-            lib.close();
-        }
-    }
-}
-
 impl ScraperManager {
     pub fn new() -> Self {
         ScraperManager {
