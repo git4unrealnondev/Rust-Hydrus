@@ -200,11 +200,11 @@ fn main() {
     arc.lock()
         .unwrap()
         .load_table(&sharedtypes::LoadDBTable::Jobs);
-    let mut jobmanager = jobs::Jobs::new(scraper_manager);
+    let mut jobmanager = jobs::Jobs::new(arc.clone());
 
     arc.lock().unwrap().transaction_flush();
 
-    jobmanager.jobs_load(&mut arc.lock().unwrap());
+    jobmanager.jobs_load(&scraper_manager);
 
     // Calls the on_start func for the plugins
     pluginmanager.lock().unwrap().plugin_on_start();
@@ -213,9 +213,21 @@ fn main() {
     jobmanager.jobs_run_new(
         &mut arc,
         &mut threadhandler,
-        &mut alt_connection,
         &mut pluginmanager,
+        &scraper_manager,
     );
+    let arc_jobmanager = Arc::new(Mutex::new(jobmanager));
+    for (scraper, _) in arc_jobmanager.lock().unwrap()._jobref.clone() {
+        let scraper_library = scraper_manager._library.remove(&scraper).unwrap();
+        threadhandler.startwork(
+            arc_jobmanager.clone(),
+            &mut arc,
+            scraper,
+            &mut pluginmanager,
+            scraper_library,
+        );
+    }
+
     // Anything below here will run automagically.
     // Jobs run in OS threads
 

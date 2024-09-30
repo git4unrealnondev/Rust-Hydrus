@@ -393,58 +393,6 @@ impl Main {
         });
     }
 
-    /*///
-    /// Adds job to system.
-    /// Will not add job to system if time is now.
-    ///
-    pub fn jobs_add_main_OLD(
-        &mut self,
-        jobs_time: String,
-        jobs_rep: &str,
-        jobs_site: String,
-        jobs_param: String,
-        does_loop: bool,
-        jobs_commit: String,
-        jobs_todo: sharedtypes::CommitType,
-        jobtype: sharedtypes::DbJobType,
-    ) {
-        //let time_offset: usize = time::time_conv(jobs_rep);
-
-        /*self._inmemdb.jobs_add(
-            jobs_time.parse::<usize>().unwrap(),
-            time_offset,
-            jobs_site.to_string(),
-            jobs_param.to_string(),
-        );*/
-        let a1: String = jobs_time.to_string();
-        let a: usize = a1.parse::<usize>().unwrap();
-        let com: bool = jobs_commit.parse::<bool>().unwrap();
-        if &jobs_time != "now" && does_loop {
-            let b: usize = jobs_rep.parse::<usize>().unwrap();
-            self.jobs_add(
-                a,
-                b,
-                &jobs_site,
-                &jobs_param,
-                com,
-                true,
-                &jobs_todo,
-                jobtype,
-            );
-        } else {
-            self.jobs_add(
-                a,
-                0,
-                &jobs_site,
-                &jobs_param,
-                com,
-                false,
-                &jobs_todo,
-                jobtype,
-            );
-        }
-    }*/
-
     ///
     /// Handles the searching of the DB dynamically.
     /// Returns the file id's associated with the search.
@@ -2102,7 +2050,7 @@ impl Main {
         dbjobtype: &sharedtypes::DbJobType,
         system_data: BTreeMap<String, String>,
         user_data: BTreeMap<String, String>,
-    ) {
+    ) -> usize {
         let id = match id {
             None => self._inmemdb.jobs_get_max().clone(),
             Some(id) => id,
@@ -2147,6 +2095,8 @@ impl Main {
         };
 
         self.jobs_add_db(jobs_obj);
+
+        id
     }
 
     ///

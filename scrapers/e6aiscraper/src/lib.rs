@@ -365,7 +365,7 @@ pub fn url_dump(
 ) -> (Vec<String>, sharedtypes::ScraperData) {
     let mut ret = Vec::new();
     let hardlimit = 751;
-    for i in 1..hardlimit {
+    for i in 0..hardlimit {
         let a = build_url(params, i);
         ret.push(a);
     }

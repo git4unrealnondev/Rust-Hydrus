@@ -129,7 +129,9 @@ pub fn hash_bytes(bytes: &Bytes, hash: &sharedtypes::HashesSupported) -> (String
         sharedtypes::HashesSupported::Md5(hash) => {
             let digest = md5::compute(bytes);
             //let sharedtypes::HashesSupported(hashe, _) => hash;
-            info!("Parser returned: {} Got: {:?}", &hash, &digest);
+            if &format!("{:x}", digest) != hash {
+                info!("Parser returned: {} Got: {:?}", &hash, &digest);
+            }
             (format!("{:x}", digest), &format!("{:x}", digest) == hash)
         }
         sharedtypes::HashesSupported::Sha1(hash) => {
@@ -137,7 +139,9 @@ pub fn hash_bytes(bytes: &Bytes, hash: &sharedtypes::HashesSupported) -> (String
             hasher.update(bytes);
             let hastring = format!("{:X}", hasher.finalize());
             let dune = &hastring == hash;
-            info!("Parser returned: {} Got: {}", &hash, &hastring);
+            if !dune {
+                info!("Parser returned: {} Got: {}", &hash, &hastring);
+            }
             (hastring, dune)
         }
         sharedtypes::HashesSupported::Sha256(hash) => {
@@ -145,7 +149,9 @@ pub fn hash_bytes(bytes: &Bytes, hash: &sharedtypes::HashesSupported) -> (String
             hasher.update(bytes);
             let hastring = format!("{:X}", hasher.finalize());
             let dune = &hastring == hash;
-            info!("Parser returned: {} Got: {}", &hash, &hastring);
+            if !dune {
+                info!("Parser returned: {} Got: {}", &hash, &hastring);
+            }
             (hastring, dune)
         }
         sharedtypes::HashesSupported::None => ("".to_string(), false),
