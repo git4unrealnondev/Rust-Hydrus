@@ -314,6 +314,7 @@ pub fn job_add(
     dbjobtype: sharedtypes::DbJobType,
     system_data: BTreeMap<String, String>,
     user_data: BTreeMap<String, String>,
+    jobsmanager: sharedtypes::DbJobsManager,
 ) -> bool {
     init_data_request(&types::SupportedRequests::Database(
         types::SupportedDBRequests::PutJob((
@@ -327,6 +328,7 @@ pub fn job_add(
             dbjobtype,
             system_data,
             user_data,
+            jobsmanager,
         )),
     ))
 }

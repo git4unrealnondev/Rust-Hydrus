@@ -308,7 +308,7 @@ impl Main {
         );*/
     }
 
-    fn jobs_add_new_sql(
+    /*fn jobs_add_new_sql(
         &mut self,
         site: &String,
         query: &String,
@@ -331,7 +331,7 @@ impl Main {
             ],
         );
         self.db_commit_man();
-    }
+    }*/
 
     ///
     /// Flips the status of if a job is running
@@ -869,7 +869,7 @@ impl Main {
                             serde_json::to_string(&sharedtypes::DbJobsManager {
                                 jobtype: sharedtypes::DbJobType::Params,
                                 recreation: None,
-                                additionaldata: None,
+                                //additionaldata: None,
                             })
                             .unwrap(),
                             site,
@@ -2035,7 +2035,30 @@ impl Main {
     }
 
     fn jobs_add_db(&mut self, jobs_obj: sharedtypes::DbJobsObj) {
-        self._inmemdb.jobs_add(jobs_obj);
+        self._inmemdb.jobref_new(jobs_obj);
+    }
+
+    ///
+    /// Updates job by id
+    ///
+    pub fn jobs_update_by_id(&mut self, data: &sharedtypes::DbJobsObj) {
+        let inp = "UPDATE Jobs VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?) WHERE id = (?)";
+        let _out = self._conn.borrow_mut().lock().unwrap().execute(
+            inp,
+            params![
+                data.id.to_string(),
+                data.time.unwrap().to_string(),
+                data.reptime.unwrap().to_string(),
+                serde_json::to_string(&data.jobmanager).unwrap(),
+                data.site,
+                data.param,
+                data.committype.unwrap().to_string(),
+                serde_json::to_string(&data.system_data).unwrap(),
+                serde_json::to_string(&data.user_data).unwrap(),
+                data.id.to_string(),
+            ],
+        );
+        self.db_commit_man();
     }
 
     pub fn jobs_add(
@@ -2050,17 +2073,37 @@ impl Main {
         dbjobtype: &sharedtypes::DbJobType,
         system_data: BTreeMap<String, String>,
         user_data: BTreeMap<String, String>,
+        jobsmanager: sharedtypes::DbJobsManager,
     ) -> usize {
         let id = match id {
             None => self._inmemdb.jobs_get_max().clone(),
             Some(id) => id,
         };
+        let params = if param.is_empty() {
+            None
+        } else {
+            Some(param.clone())
+        };
+        let jobs_obj: sharedtypes::DbJobsObj = sharedtypes::DbJobsObj {
+            id,
+            time: Some(time),
+            reptime: Some(reptime),
+            site: site.clone(),
+            param: params.clone(),
+            jobmanager: jobsmanager.clone(),
+            committype: Some(committype),
+            isrunning: false,
+            system_data: system_data.clone(),
+            user_data: user_data.clone(),
+        };
 
-        let jobsmanager = sharedtypes::DbJobsManager {
+        self.jobs_add_db(jobs_obj);
+
+        /*let jobsmanager = sharedtypes::DbJobsManager {
             jobtype: *dbjobtype,
             recreation: None,
             additionaldata: None,
-        };
+        };*/
 
         if addtodb {
             let inp = "INSERT INTO Jobs VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)";
@@ -2080,21 +2123,6 @@ impl Main {
             );
             self.db_commit_man();
         }
-        let params = if param.is_empty() { None } else { Some(param) };
-        let jobs_obj: sharedtypes::DbJobsObj = sharedtypes::DbJobsObj {
-            id,
-            time: Some(time),
-            reptime: Some(reptime),
-            site,
-            param: params,
-            jobmanager: jobsmanager,
-            committype: Some(committype),
-            isrunning: false,
-            system_data,
-            user_data,
-        };
-
-        self.jobs_add_db(jobs_obj);
 
         id
     }

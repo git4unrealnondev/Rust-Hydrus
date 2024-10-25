@@ -195,7 +195,7 @@ fn main() {
 
     //TODO Put code here
 
-    cli::main(&mut arc.lock().unwrap(), &mut scraper_manager);
+    cli::main(arc.clone(), &mut scraper_manager);
 
     arc.lock()
         .unwrap()
@@ -217,14 +217,15 @@ fn main() {
         &scraper_manager,
     );
     let arc_jobmanager = Arc::new(Mutex::new(jobmanager));
+    let arc_scrapermanager = Arc::new(Mutex::new(scraper_manager));
     for (scraper, _) in arc_jobmanager.lock().unwrap()._jobref.clone() {
-        let scraper_library = scraper_manager._library.remove(&scraper).unwrap();
+        //let scraper_library = scraper_manager._library.get(&scraper).unwrap();
         threadhandler.startwork(
             arc_jobmanager.clone(),
             &mut arc,
             scraper,
             &mut pluginmanager,
-            scraper_library,
+            arc_scrapermanager.clone(),
         );
     }
 
@@ -244,6 +245,23 @@ fn main() {
         }
         dbg!("Sleep");
         thread::sleep(one_sec);
+        {
+            let mut jobmanager = arc_jobmanager.lock().unwrap();
+            if jobmanager.jobs_empty() {
+                jobmanager.jobs_load(&arc_scrapermanager.lock().unwrap());
+            }
+        }
+        threadhandler.check_threads();
+        for (scraper, _) in arc_jobmanager.lock().unwrap()._jobref.clone() {
+            //let scraper_library = scraper_manager._library.get(&scraper).unwrap();
+            threadhandler.startwork(
+                arc_jobmanager.clone(),
+                &mut arc,
+                scraper,
+                &mut pluginmanager,
+                arc_scrapermanager.clone(),
+            );
+        }
     }
     arc.lock().unwrap().transaction_flush();
 

@@ -455,6 +455,7 @@ fn parse_plugin_output(
 ///
 pub fn plugin_on_download(
     manager_arc: Arc<Mutex<PluginManager>>,
+    db: Arc<Mutex<Main>>,
     cursorpass: &[u8],
     hash: &String,
     ext: &String,
@@ -502,7 +503,7 @@ pub fn plugin_on_download(
             //unwrappy.
             output = plugindatafunc(cursorpass, hash, ext);
         }
-        parse_plugin_output(output, manager_arc.lock().unwrap()._database.clone());
+        parse_plugin_output(output, db.clone());
         lib.close();
     }
 }

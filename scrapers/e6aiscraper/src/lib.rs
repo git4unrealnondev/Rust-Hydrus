@@ -626,7 +626,7 @@ pub fn parser(
     //let vecvecstr: AHashMap<String, AHashMap<String, Vec<String>>> = AHashMap::new();
 
     let mut files: HashSet<sharedtypes::FileObject> = HashSet::default();
-    if let Err(_) = json::parse(params) {
+    if let Err(err) = json::parse(params) {
         if params.contains("Please confirm you are not a robot.") {
             return Err(sharedtypes::ScraperReturn::Timeout(20));
         } else if params.contains("502: Bad gateway") {
@@ -636,9 +636,10 @@ pub fn parser(
         } else if params.contains("e6ai Maintenance") {
             return Err(sharedtypes::ScraperReturn::Timeout(240));
         }
-        return Err(sharedtypes::ScraperReturn::EMCStop(
-            "Unknown Error".to_string(),
-        ));
+        return Err(sharedtypes::ScraperReturn::Stop(format!(
+            "Unknown Error {}",
+            err
+        )));
     }
     let js = json::parse(params).unwrap();
 
@@ -647,7 +648,7 @@ pub fn parser(
     // Write a &str in the file (ignoring the result).
     //writeln!(&mut file, "{}", js.to_string()).unwrap();
     //println!("Parsing");
-    if js["posts"].is_empty() & !js["posts"].is_null() {
+    if js["posts"].is_empty() & js["posts"].is_array() {
         return Err(sharedtypes::ScraperReturn::Nothing);
     } else if js["posts"].is_null() {
         let pool = parse_pools(&js, scraperdata);
@@ -1034,6 +1035,10 @@ pub fn db_upgrade_call_3() {
                                             sharedtypes::DbJobType::Scraper,
                                             BTreeMap::new(),
                                             BTreeMap::new(),
+                                            sharedtypes::DbJobsManager {
+                                                jobtype: sharedtypes::DbJobType::Scraper,
+                                                recreation: None,
+                                            },
                                         );
                                     }
                                     client::parents_delete(sharedtypes::DbParentsObj {

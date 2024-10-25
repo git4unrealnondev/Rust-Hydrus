@@ -1,4 +1,5 @@
 use super::plugins::PluginManager;
+use crate::database::Main;
 //extern crate urlparse;
 use super::sharedtypes;
 use crate::logging;
@@ -90,6 +91,7 @@ pub async fn dltext_new(
     //let ex = Executor::new();
 
     //let url = Url::parse("http://www.google.com").unwrap();
+    let mut cnt = 0;
     loop {
         let url = Url::parse(&url_string).unwrap();
         //let requestit = Request::new(Method::GET, url);
@@ -104,7 +106,10 @@ pub async fn dltext_new(
 
         //let futurez = futures::executor::block_on(futureresult);
         //dbg!(&futureresult);
-
+        if cnt == 3 {
+            return Err(futureresult.err().unwrap());
+        }
+        cnt += 1;
         match futureresult {
             Ok(res) => match res.text() {
                 Ok(text) => {
@@ -163,6 +168,7 @@ pub fn hash_bytes(bytes: &Bytes, hash: &sharedtypes::HashesSupported) -> (String
 ///
 pub fn dlfile_new(
     client: &Client,
+    db: Arc<Mutex<Main>>,
     file: &sharedtypes::FileObject,
     location: &String,
     pluginmanager: Option<Arc<Mutex<PluginManager>>>,
@@ -280,7 +286,7 @@ pub fn dlfile_new(
     // Useful for if doing something that we CANNOT allow plugins to run.
     {
         if let Some(pluginmanager) = pluginmanager {
-            crate::plugins::plugin_on_download(pluginmanager, bytes.as_ref(), &hash, &file_ext);
+            crate::plugins::plugin_on_download(pluginmanager, db, bytes.as_ref(), &hash, &file_ext);
         }
     }
 

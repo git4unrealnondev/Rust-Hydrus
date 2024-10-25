@@ -6,6 +6,7 @@ use log::{error, info, warn};
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 static SUPPORTED_VERS: usize = 0;
@@ -237,26 +238,33 @@ pub fn url_load(
     unsafe { temp(params) }
 }
 pub fn url_dump(
-    libloading: &libloading::Library,
     params: &Vec<sharedtypes::ScraperParam>,
     scraperdata: &sharedtypes::ScraperData,
+    arc_scrapermanager: Arc<Mutex<ScraperManager>>,
+    scraper: &InternalScraper,
 ) -> (Vec<String>, sharedtypes::ScraperData) {
+    let scrapermanager = arc_scrapermanager.lock().unwrap();
+    let scraper_library = scrapermanager.library_get().get(&scraper).unwrap().clone();
     let temp: libloading::Symbol<
         unsafe extern "C" fn(
             &Vec<sharedtypes::ScraperParam>,
             &sharedtypes::ScraperData,
         ) -> (Vec<String>, sharedtypes::ScraperData),
-    > = unsafe { libloading.get(b"url_dump\0").unwrap() };
+    > = unsafe { scraper_library.get(b"url_dump\0").unwrap() };
     unsafe { temp(params, scraperdata) }
 }
 ///
 /// Calls a parser. Gives the HTML to the parser to parse.
 ///
 pub fn parser_call(
-    libloading: &libloading::Library,
     url_output: &String,
     actual_params: &sharedtypes::ScraperData,
+    arc_scrapermanager: Arc<Mutex<ScraperManager>>,
+    scraper: &InternalScraper,
 ) -> Result<(sharedtypes::ScraperObject, sharedtypes::ScraperData), sharedtypes::ScraperReturn> {
+    let scrapermanager = arc_scrapermanager.lock().unwrap();
+    let scraper_library = scrapermanager.library_get().get(&scraper).unwrap().clone();
+
     let temp: libloading::Symbol<
         unsafe extern "C" fn(
             &String,
@@ -265,7 +273,7 @@ pub fn parser_call(
             (sharedtypes::ScraperObject, sharedtypes::ScraperData),
             sharedtypes::ScraperReturn,
         >,
-    > = unsafe { libloading.get(b"parser\0").unwrap() };
+    > = unsafe { scraper_library.get(b"parser\0").unwrap() };
     unsafe { temp(url_output, actual_params) }
 } //ScraperObject
 

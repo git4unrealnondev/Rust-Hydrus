@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 #![allow(unused_variables)]
-
+use clap::Parser;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashSet};
 
@@ -327,7 +327,8 @@ pub struct DbJobsObj {
 pub struct DbJobsManager {
     pub jobtype: DbJobType,
     pub recreation: Option<DbJobRecreation>,
-    pub additionaldata: Option<(Vec<String>, Vec<String>)>,
+    // #[arg(long)]
+    // pub additionaldata: Option<(Vec<String>, Vec<String>)>,
 }
 
 ///
@@ -335,8 +336,10 @@ pub struct DbJobsManager {
 ///
 #[derive(Debug, Hash, Eq, PartialEq, Clone, Serialize, Deserialize, Ord, PartialOrd)]
 pub enum DbJobRecreation {
-    OnTagId(usize),
-    OnTag(String, usize),
+    OnTagId(usize, Option<usize>),
+    OnTag(String, usize, Option<usize>),
+    //Runs x seconds after processing
+    AlwaysTime((usize, usize)),
 }
 
 ///

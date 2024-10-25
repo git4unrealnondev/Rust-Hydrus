@@ -125,6 +125,7 @@ pub enum SupportedDBRequests {
             sharedtypes::DbJobType,
             BTreeMap<String, String>,
             BTreeMap<String, String>,
+            sharedtypes::DbJobsManager,
         ),
     ),
     GetJob(usize),

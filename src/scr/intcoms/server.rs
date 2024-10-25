@@ -274,6 +274,7 @@ impl DbInteract {
                 dbjobtype,
                 system_data,
                 user_data,
+                dbjobsmanager,
             )) => {
                 let mut unwrappy = self._database.lock().unwrap();
                 &unwrappy.jobs_add(
@@ -287,6 +288,7 @@ impl DbInteract {
                     &dbjobtype,
                     system_data,
                     user_data,
+                    dbjobsmanager,
                 );
                 Self::data_size_to_b(&true)
             }

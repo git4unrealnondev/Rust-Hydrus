@@ -590,31 +590,69 @@ fn parse_pools(
         });
         let mut cnt = 0;
         for postids in multpool["post_ids"].members() {
-            tag.insert(sharedtypes::TagObject {
-                namespace: nsobjplg(&NsIdent::PoolId),
-                relates_to: None,
-                tag: multpool["id"].to_string(),
-                tag_type: sharedtypes::TagType::ParseUrl((
-                    (sharedtypes::ScraperData {
-                        job: sharedtypes::JobScraper {
-                            site: "e6".to_string(),
-                            param: Vec::new(),
-                            original_param: format!(
-                                "https://e621.net/posts.json?tags=id:{}",
-                                postids
-                            ),
-                            job_type: sharedtypes::DbJobType::Scraper,
-                        },
-                        system_data: BTreeMap::new(),
-                        user_data: BTreeMap::new(),
-                    }),
-                    sharedtypes::SkipIf::Tag(sharedtypes::Tag {
-                        tag: postids.to_string(),
-                        namespace: nsobjplg(&NsIdent::FileId),
-                        needsrelationship: true,
-                    }),
-                )),
-            });
+            dbg!(&scraperdata.system_data);
+            if let Some(recursion) = scraperdata.system_data.get("recursion") {
+                if recursion == "false" {
+                    tag.insert(sharedtypes::TagObject {
+                        namespace: nsobjplg(&NsIdent::PoolId),
+                        relates_to: None,
+                        tag: multpool["id"].to_string(),
+                        tag_type: sharedtypes::TagType::Normal,
+                    });
+                } else {
+                    tag.insert(sharedtypes::TagObject {
+                        namespace: nsobjplg(&NsIdent::PoolId),
+                        relates_to: None,
+                        tag: multpool["id"].to_string(),
+                        tag_type: sharedtypes::TagType::ParseUrl((
+                            (sharedtypes::ScraperData {
+                                job: sharedtypes::JobScraper {
+                                    site: "e6".to_string(),
+                                    param: Vec::new(),
+                                    original_param: format!(
+                                        "https://e621.net/posts.json?tags=id:{}",
+                                        postids
+                                    ),
+                                    job_type: sharedtypes::DbJobType::Scraper,
+                                },
+                                system_data: BTreeMap::new(),
+                                user_data: BTreeMap::new(),
+                            }),
+                            sharedtypes::SkipIf::Tag(sharedtypes::Tag {
+                                tag: postids.to_string(),
+                                namespace: nsobjplg(&NsIdent::FileId),
+                                needsrelationship: true,
+                            }),
+                        )),
+                    });
+                }
+            } else {
+                tag.insert(sharedtypes::TagObject {
+                    namespace: nsobjplg(&NsIdent::PoolId),
+                    relates_to: None,
+                    tag: multpool["id"].to_string(),
+                    tag_type: sharedtypes::TagType::ParseUrl((
+                        (sharedtypes::ScraperData {
+                            job: sharedtypes::JobScraper {
+                                site: "e6".to_string(),
+                                param: Vec::new(),
+                                original_param: format!(
+                                    "https://e621.net/posts.json?tags=id:{}",
+                                    postids
+                                ),
+                                job_type: sharedtypes::DbJobType::Scraper,
+                            },
+                            system_data: BTreeMap::new(),
+                            user_data: BTreeMap::new(),
+                        }),
+                        sharedtypes::SkipIf::Tag(sharedtypes::Tag {
+                            tag: postids.to_string(),
+                            namespace: nsobjplg(&NsIdent::FileId),
+                            needsrelationship: true,
+                        }),
+                    )),
+                });
+            }
 
             // Relates fileid to position in table with the restriction of the poolid
             tag.insert(sharedtypes::TagObject {
@@ -674,7 +712,7 @@ pub fn parser(
             } else if params.contains("e621 Maintenance") {
                 return Err(sharedtypes::ScraperReturn::Timeout(240));
             }
-            return Err(sharedtypes::ScraperReturn::EMCStop(format!(
+            return Err(sharedtypes::ScraperReturn::Stop(format!(
                 "Unknown Error: {}",
                 err
             )));
@@ -687,7 +725,8 @@ pub fn parser(
     // Write a &str in the file (ignoring the result).
     //writeln!(&mut file, "{}", js.to_string()).unwrap();
     //println!("Parsing");
-    if js["posts"].is_empty() & !js["posts"].is_null() {
+
+    if js["posts"].is_empty() & js["posts"].is_array() {
         return Err(sharedtypes::ScraperReturn::Nothing);
     } else if js["posts"].is_null() {
         let pool = parse_pools(&js, scraperdata);
@@ -771,29 +810,41 @@ pub fn parser(
                     sharedtypes::TagType::Normal,
                 );*/
                 //let parse_url = format!("https://e621.net/pools?format=json&search[id={}]", each);
-                let parse_url = format!("https://e621.net/pools.json?search[id]={}", each);
-                tags_list.push(sharedtypes::TagObject {
-                    namespace: sharedtypes::GenericNamespaceObj {
-                        name: "Do Not Add".to_string(),
-                        description: Some("DO NOT PARSE ME".to_string()),
-                    },
-                    relates_to: None,
-                    tag: parse_url.clone(),
-                    tag_type: sharedtypes::TagType::ParseUrl((
-                        sharedtypes::ScraperData {
-                            job: sharedtypes::JobScraper {
-                                site: "e6".to_string(),
-                                param: Vec::new(),
-                                original_param: parse_url,
-                                job_type: sharedtypes::DbJobType::Scraper,
-                            },
-
-                            system_data: BTreeMap::new(),
-                            user_data: BTreeMap::new(),
+                let shouldparse = if let Some(recursion) = scraperdata.system_data.get("recursion")
+                {
+                    if recursion == "false" {
+                        false
+                    } else {
+                        true
+                    }
+                } else {
+                    true
+                };
+                if shouldparse {
+                    let parse_url = format!("https://e621.net/pools.json?search[id]={}", each);
+                    tags_list.push(sharedtypes::TagObject {
+                        namespace: sharedtypes::GenericNamespaceObj {
+                            name: "Do Not Add".to_string(),
+                            description: Some("DO NOT PARSE ME".to_string()),
                         },
-                        sharedtypes::SkipIf::None,
-                    )),
-                });
+                        relates_to: None,
+                        tag: parse_url.clone(),
+                        tag_type: sharedtypes::TagType::ParseUrl((
+                            sharedtypes::ScraperData {
+                                job: sharedtypes::JobScraper {
+                                    site: "e6".to_string(),
+                                    param: Vec::new(),
+                                    original_param: parse_url,
+                                    job_type: sharedtypes::DbJobType::Scraper,
+                                },
+
+                                system_data: BTreeMap::new(),
+                                user_data: BTreeMap::new(),
+                            },
+                            sharedtypes::SkipIf::None,
+                        )),
+                    });
+                }
             }
         }
 
@@ -1077,6 +1128,10 @@ pub fn db_upgrade_call_3() {
                                             sharedtypes::DbJobType::Scraper,
                                             BTreeMap::new(),
                                             BTreeMap::new(),
+                                            sharedtypes::DbJobsManager {
+                                                jobtype: sharedtypes::DbJobType::Scraper,
+                                                recreation: None,
+                                            },
                                         );
                                     }
                                     client::parents_delete(sharedtypes::DbParentsObj {

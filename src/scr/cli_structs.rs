@@ -1,6 +1,6 @@
-use clap::{arg, Parser, Subcommand, ValueEnum};
-
 use crate::sharedtypes;
+use clap::{arg, Parser, Subcommand, ValueEnum};
+use std::collections::BTreeMap;
 
 ///
 /// From: git4unrealnondev
@@ -156,11 +156,68 @@ pub struct JobBulkAddStruct {
     pub committype: sharedtypes::CommitType,
     /// Job type to run
     #[arg(exclusive = false, required = true)]
-    pub jobtype: sharedtypes::DbJobType,
+    pub jobtype: Option<sharedtypes::DbJobType>,
     /// Loops through all items have a , to seperate the items currently injects into the query
     /// parameter of the job using {inject} as the injection point
     #[arg(value_delimiter = ',', exclusive = false, required = true)]
     pub bulkadd: Vec<String>,
+
+    #[clap(subcommand)]
+    pub recursion: Option<DbJobRecreationClap>,
+
+    #[arg(
+        exclusive = false,
+        required = true,
+        num_args = 2,
+        value_terminator = ";"
+    )]
+    pub system_data: Option<Vec<String>>,
+}
+
+///
+/// Manager on job type and logic
+///
+#[derive(Debug, Hash, Eq, PartialEq, Clone)]
+pub struct DbJobsManagerClap {
+    pub jobtype: DbJobType,
+    pub recreation: Option<DbJobRecreationClap>,
+    // #[arg(long)]
+    // pub additionaldata: Option<(Vec<String>, Vec<String>)>,
+}
+
+#[derive(Debug, Hash, Eq, PartialEq, Clone, Subcommand)]
+pub enum DbJobRecreationClap {
+    OnTagId(Id_Timestamp),
+    OnTagExist(TagClap),
+    /// Spawns the job after processing
+    AlwaysTime(Timestamp),
+}
+#[derive(Debug, Parser, Clone, Eq, PartialEq, Hash)]
+pub struct Id_Timestamp {
+    #[arg(required = true, exclusive = true)]
+    pub id: usize,
+    #[arg(exclusive = false, required = true)]
+    pub timestamp: Option<usize>,
+}
+#[derive(Debug, Parser, Clone, Eq, PartialEq, Hash)]
+pub struct Timestamp {
+    // Timestamp in seconds to start another job
+    #[arg(exclusive = false, required = true)]
+    pub timestamp: usize,
+    /// Number of times to run a job
+    #[arg(exclusive = false, required = true)]
+    pub count: usize,
+}
+
+#[derive(Debug, Hash, Eq, PartialEq, Clone, Parser)]
+pub struct TagClap {
+    #[arg(exclusive = false, required = true)]
+    pub name: String,
+    #[arg(exclusive = false, required = true)]
+    pub namespace: usize,
+
+    #[arg(exclusive = false, required = true)]
+    pub timestamp: Option<usize>,
 }
 
 /// Holder of job adding.
@@ -179,8 +236,17 @@ pub struct JobAddStruct {
     #[arg(exclusive = false, required = true)]
     pub committype: sharedtypes::CommitType,
     /// Job type to run
-    #[arg(exclusive = false, required = true)]
-    pub jobtype: sharedtypes::DbJobType,
+    #[arg(exclusive = false, required = false)]
+    pub jobtype: Option<sharedtypes::DbJobType>,
+    #[arg(
+        exclusive = false,
+        required = false,
+        //value_terminator = ";",
+        long="system"
+    )]
+    pub system_data: Vec<String>,
+    #[clap(subcommand)]
+    pub recursion: Option<DbJobRecreationClap>,
 }
 
 /// Holder of job removal.
@@ -233,7 +299,7 @@ pub struct Tag {
     #[arg(required = true, exclusive = false)]
     pub namespace: String,
 }
-#[derive(Debug, Parser)]
+#[derive(Debug, Parser, Clone, Eq, PartialEq, Hash)]
 pub struct Id {
     #[arg(required = true, exclusive = true)]
     pub id: usize,

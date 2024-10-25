@@ -12,19 +12,85 @@ use crate::{
 };
 use clap::Parser;
 use file_format::FileFormat;
-use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 
-//use super::sharedtypes::;
-
-use strum::IntoEnumIterator;
-
 mod cli_structs;
+
+fn return_jobtypemanager(
+    jobtype: Option<sharedtypes::DbJobType>,
+    recursion: Option<&cli_structs::DbJobRecreationClap>,
+) -> (sharedtypes::DbJobType, sharedtypes::DbJobsManager) {
+    let jobtype = match jobtype {
+        None => sharedtypes::DbJobType::Params,
+        Some(out) => out,
+    };
+
+    let jobsmanager = match recursion {
+        None => sharedtypes::DbJobsManager {
+            jobtype: jobtype,
+            recreation: None,
+        },
+        Some(recursion) => match recursion {
+            cli_structs::DbJobRecreationClap::OnTagId(id) => sharedtypes::DbJobsManager {
+                jobtype: jobtype,
+                recreation: Some(sharedtypes::DbJobRecreation::OnTagId(id.id, id.timestamp)),
+            },
+            cli_structs::DbJobRecreationClap::OnTagExist(tagclap) => sharedtypes::DbJobsManager {
+                jobtype: jobtype,
+                recreation: Some(sharedtypes::DbJobRecreation::OnTag(
+                    tagclap.name.clone(),
+                    tagclap.namespace,
+                    tagclap.timestamp,
+                )),
+            },
+            cli_structs::DbJobRecreationClap::AlwaysTime(timestamp) => sharedtypes::DbJobsManager {
+                jobtype: jobtype,
+                recreation: Some(sharedtypes::DbJobRecreation::AlwaysTime((
+                    timestamp.timestamp,
+                    timestamp.count,
+                ))),
+            },
+        },
+    };
+
+    (jobtype, jobsmanager)
+}
+fn return_jobtypemanager_old(
+    jobtype: Option<sharedtypes::DbJobType>,
+    recursion: &cli_structs::DbJobRecreationClap,
+) -> (sharedtypes::DbJobType, sharedtypes::DbJobsManager) {
+    let jobtype = match jobtype {
+        None => sharedtypes::DbJobType::Params,
+        Some(out) => out,
+    };
+    let jobsmanager = match recursion {
+        cli_structs::DbJobRecreationClap::OnTagId(id) => sharedtypes::DbJobsManager {
+            jobtype: jobtype,
+            recreation: Some(sharedtypes::DbJobRecreation::OnTagId(id.id, id.timestamp)),
+        },
+        cli_structs::DbJobRecreationClap::OnTagExist(tagclap) => sharedtypes::DbJobsManager {
+            jobtype: jobtype,
+            recreation: Some(sharedtypes::DbJobRecreation::OnTag(
+                tagclap.name.clone(),
+                tagclap.namespace,
+                tagclap.timestamp,
+            )),
+        },
+        cli_structs::DbJobRecreationClap::AlwaysTime(timestamp) => sharedtypes::DbJobsManager {
+            jobtype: jobtype,
+            recreation: Some(sharedtypes::DbJobRecreation::AlwaysTime((
+                timestamp.timestamp,
+                timestamp.count,
+            ))),
+        },
+    };
+    (jobtype, jobsmanager)
+}
 
 ///
 /// Returns the main argument and parses data.
 ///
-pub fn main(data: &mut database::Main, scraper: &mut scraper::ScraperManager) {
+pub fn main(data: Arc<Mutex<database::Main>>, scraper: &mut scraper::ScraperManager) {
     let args = cli_structs::MainWrapper::parse();
 
     if args.a.is_none() {
@@ -32,58 +98,79 @@ pub fn main(data: &mut database::Main, scraper: &mut scraper::ScraperManager) {
     }
 
     // Loads settings into DB.
-    data.load_table(&sharedtypes::LoadDBTable::Settings);
+    {
+        let mut data = data.lock().unwrap();
+
+        data.load_table(&sharedtypes::LoadDBTable::Settings);
+    }
 
     match &args.a.as_ref().unwrap() {
-        cli_structs::test::Job(jobstruct) => match jobstruct {
-            cli_structs::JobStruct::Add(addstruct) => {
-                data.load_table(&sharedtypes::LoadDBTable::Jobs);
-                data.jobs_add(
-                    None,
-                    crate::time_func::time_secs(),
-                    crate::time_func::time_conv(&addstruct.time),
-                    addstruct.site.clone(),
-                    addstruct.query.clone(),
-                    true,
-                    addstruct.committype,
-                    &addstruct.jobtype,
-                    BTreeMap::new(),
-                    BTreeMap::new(),
-                );
-            }
-            cli_structs::JobStruct::AddBulk(addstruct) => {
-                data.load_table(&sharedtypes::LoadDBTable::Jobs);
-                for bulk in addstruct.bulkadd.iter() {
-                    let mut vars = HashMap::new();
-                    vars.insert("inject".to_string(), bulk.to_string());
-                    let temp = addstruct.query.format(&vars);
-                    if let Ok(ins) = temp {
-                        data.jobs_add(
-                            None,
-                            crate::time_func::time_secs(),
-                            crate::time_func::time_conv(&addstruct.time),
-                            addstruct.site.clone(),
-                            ins,
-                            true,
-                            addstruct.committype,
-                            &addstruct.jobtype,
-                            BTreeMap::new(),
-                            BTreeMap::new(),
-                        );
+        cli_structs::test::Job(jobstruct) => {
+            match jobstruct {
+                cli_structs::JobStruct::Add(addstruct) => {
+                    dbg!(&addstruct);
+                    let mut system_data = BTreeMap::new();
+                    for each in addstruct.system_data.chunks(2) {
+                        system_data.insert(each[0].clone(), each[1].clone());
+                    }
+                    let (jobtype, jobsmanager) =
+                        return_jobtypemanager(addstruct.jobtype, addstruct.recursion.as_ref());
+                    let mut data = data.lock().unwrap();
+                    data.load_table(&sharedtypes::LoadDBTable::Jobs);
+                    data.jobs_add(
+                        None,
+                        crate::time_func::time_secs(),
+                        crate::time_func::time_conv(&addstruct.time),
+                        addstruct.site.clone(),
+                        addstruct.query.clone(),
+                        true,
+                        addstruct.committype,
+                        &jobtype,
+                        system_data,
+                        BTreeMap::new(),
+                        jobsmanager.clone(),
+                    );
+                }
+                cli_structs::JobStruct::AddBulk(addstruct) => {
+                    let (jobtype, jobsmanager) =
+                        return_jobtypemanager(addstruct.jobtype, addstruct.recursion.as_ref());
+                    let mut data = data.lock().unwrap();
+                    data.load_table(&sharedtypes::LoadDBTable::Jobs);
+
+                    for bulk in addstruct.bulkadd.iter() {
+                        let mut vars = HashMap::new();
+                        vars.insert("inject".to_string(), bulk.to_string());
+                        let temp = addstruct.query.format(&vars);
+                        if let Ok(ins) = temp {
+                            data.jobs_add(
+                                None,
+                                crate::time_func::time_secs(),
+                                crate::time_func::time_conv(&addstruct.time),
+                                addstruct.site.clone(),
+                                ins,
+                                true,
+                                addstruct.committype,
+                                &jobtype,
+                                BTreeMap::new(),
+                                BTreeMap::new(),
+                                jobsmanager.clone(),
+                            );
+                        }
                     }
                 }
-            }
 
-            cli_structs::JobStruct::Remove(_remove) => {
-                /*return sharedtypes::AllFields::JobsRemove(sharedtypes::JobsRemove {
-                    site: remove.site.to_string(),
-                    query: remove.query.to_string(),
-                    time: remove.time.to_string(),
-                })*/
+                cli_structs::JobStruct::Remove(_remove) => {
+                    /*return sharedtypes::AllFields::JobsRemove(sharedtypes::JobsRemove {
+                        site: remove.site.to_string(),
+                        query: remove.query.to_string(),
+                        time: remove.time.to_string(),
+                    })*/
+                }
             }
-        },
+        }
         cli_structs::test::Search(searchstruct) => match searchstruct {
             cli_structs::SearchStruct::Parent(parent) => {
+                let mut data = data.lock().unwrap();
                 data.load_table(&sharedtypes::LoadDBTable::Parents);
                 data.load_table(&sharedtypes::LoadDBTable::Tags);
                 match data.tag_get_name(parent.tag.clone(), parent.namespace) {
@@ -111,6 +198,7 @@ pub fn main(data: &mut database::Main, scraper: &mut scraper::ScraperManager) {
                 }
             }
             cli_structs::SearchStruct::Fid(id) => {
+                let mut data = data.lock().unwrap();
                 data.load_table(&sharedtypes::LoadDBTable::All);
                 let hstags = data.relationship_get_tagid(&id.id);
                 match hstags {
@@ -142,6 +230,7 @@ pub fn main(data: &mut database::Main, scraper: &mut scraper::ScraperManager) {
                 }
             }
             cli_structs::SearchStruct::Tid(id) => {
+                let mut data = data.lock().unwrap();
                 data.load_table(&sharedtypes::LoadDBTable::All);
                 let fids = data.relationship_get_fileid(&id.id);
                 if let Some(goodfid) = fids {
@@ -152,6 +241,7 @@ pub fn main(data: &mut database::Main, scraper: &mut scraper::ScraperManager) {
                 }
             }
             cli_structs::SearchStruct::Tag(tag) => {
+                let mut data = data.lock().unwrap();
                 data.load_table(&sharedtypes::LoadDBTable::All);
                 let nsid = data.namespace_get(&tag.namespace);
                 if let Some(nsid) = nsid {
@@ -177,6 +267,7 @@ pub fn main(data: &mut database::Main, scraper: &mut scraper::ScraperManager) {
                 }
             }
             cli_structs::SearchStruct::Hash(hash) => {
+                let mut data = data.lock().unwrap();
                 data.load_table(&sharedtypes::LoadDBTable::All);
                 let file_id = data.file_get_hash(&hash.hash);
                 match file_id {
@@ -235,6 +326,7 @@ pub fn main(data: &mut database::Main, scraper: &mut scraper::ScraperManager) {
             },
             cli_structs::TasksStruct::Reimport(reimp) => match reimp {
                 cli_structs::Reimport::DirectoryLocation(loc) => {
+                    let mut data = data.lock().unwrap();
                     if !Path::new(&loc.location).exists() {
                         println!("Couldn't find location: {}", &loc.location);
                         return;
@@ -314,15 +406,18 @@ pub fn main(data: &mut database::Main, scraper: &mut scraper::ScraperManager) {
             },
             cli_structs::TasksStruct::Database(db) => {
                 use crate::helpers;
+                let dbstore = data.clone();
 
                 match db {
                     cli_structs::Database::BackupDB => {
                         // backs up the db. check the location in setting or code if I change
                         // anything lol
+                        let mut data = data.lock().unwrap();
                         data.backup_db();
                     }
 
                     cli_structs::Database::CheckFiles => {
+                        let mut data = data.lock().unwrap();
                         // This will check files in the database and will see if they even exist.
                         let db_location = data.location_get();
 
@@ -408,6 +503,7 @@ pub fn main(data: &mut database::Main, scraper: &mut scraper::ScraperManager) {
                                                 };
                                                 download::dlfile_new(
                                                     &client,
+                                                    dbstore.clone(),
                                                     file,
                                                     &data.location_get(),
                                                     None,
@@ -449,6 +545,7 @@ pub fn main(data: &mut database::Main, scraper: &mut scraper::ScraperManager) {
                                                     };
                                                     download::dlfile_new(
                                                         &client,
+                                                        dbstore.clone(),
                                                         file,
                                                         &data.location_get(),
                                                         None,
@@ -467,15 +564,18 @@ pub fn main(data: &mut database::Main, scraper: &mut scraper::ScraperManager) {
                         let _ = std::fs::remove_file("fileexists.txt");
                     }
                     cli_structs::Database::CheckInMemdb => {
+                        let mut data = data.lock().unwrap();
                         data.load_table(&sharedtypes::LoadDBTable::Tags);
                         pause();
                     }
 
                     cli_structs::Database::CompressDatabase => {
+                        let mut data = data.lock().unwrap();
                         data.condese_relationships_tags();
                     }
 
                     cli_structs::Database::RemoveWhereNot(db_n_rmv) => {
+                        let mut data = data.lock().unwrap();
                         let ns_id = match db_n_rmv {
                             cli_structs::NamespaceInfo::NamespaceString(ns) => {
                                 data.load_table(&sharedtypes::LoadDBTable::Namespace);
@@ -516,6 +616,7 @@ pub fn main(data: &mut database::Main, scraper: &mut scraper::ScraperManager) {
 
                     // Removing db namespace. Will get id to remove then remove it.
                     cli_structs::Database::Remove(db_rmv) => {
+                        let mut data = data.lock().unwrap();
                         data.load_table(&sharedtypes::LoadDBTable::Namespace);
                         let ns_id = match db_rmv {
                             cli_structs::NamespaceInfo::NamespaceString(ns) => {
