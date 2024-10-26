@@ -498,6 +498,7 @@ joblock = jobstorage.lock().unwrap();for urlz in urls_scrap {
                 }
                 let joblock = jobstorage.lock().unwrap();
                 if joblock.jobs_get(&scraper).is_empty() {
+                    threadflagcontrol.stop();
                     break 'bigloop;
                 }
             }

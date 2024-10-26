@@ -63,3 +63,7 @@ debug = false
 [build-dependencies]
 walkdir = "2.4.0"
 
+
+[profile.release-with-debug]
+inherits = "release"
+debug = true
