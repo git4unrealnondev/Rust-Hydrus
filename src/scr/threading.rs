@@ -259,23 +259,25 @@ impl Worker {
                                 &scraper,
                             );
                             //job = temp.1;
-                            temp.0
+                            temp
                         }
                         sharedtypes::DbJobType::Plugin => {
                             continue;
                         }
-                        sharedtypes::DbJobType::FileUrl => {
-                            let parpms: Vec<String> = job
-                                .param
-                                .clone()
-                                .unwrap()
-                                .split_whitespace()
-                                .map(str::to_string)
-                                .collect();
+                        /*sharedtypes::DbJobType::FileUrl => {
+                            let parpms: Vec<(String, ScraperData)> = (
+                                job.param
+                                    .clone()
+                                    .unwrap()
+                                    .split_whitespace()
+                                    .map(str::to_string)
+                                    .collect(),
+                                scraper_data_holder,
+                            );
                             parpms
-                        }
+                        }*/
                         sharedtypes::DbJobType::Scraper => {
-                            vec![job.param.clone().unwrap()]
+                            vec![(job.param.clone().unwrap(), scraper_data_holder)]
                         }
                     };
                     let scraper_library;
@@ -285,7 +287,7 @@ impl Worker {
                             scrapermanager.library_get().get(&scraper).unwrap().clone();
                     }
 
-                    'urlloop: for urll in urlload {
+                    'urlloop: for (urll, scraperdata) in urlload {
                         'errloop: loop {
                             let resp = task::block_on(download::dltext_new(
                                 urll.to_string(),
@@ -296,7 +298,7 @@ impl Worker {
                             let st = match resp {
                                 Ok(respstring) => scraper::parser_call(
                                     &respstring,
-                                    &scraper_data_holder,
+                                    &scraperdata,
                                     arc_scrapermanager.clone(),
                                     &scraper,
                                 ),
@@ -334,6 +336,7 @@ impl Worker {
                                 let mut joblock;
                                 joblock = jobstorage.lock().unwrap();
                                 for urlz in to_parse {
+                                    dbg!(format!("Adding job: {:?}", &urlz));
                                     joblock.jobs_add(&scraper, urlz, true, true);
                                 }
                                 //let url_job = JobScraper {};
@@ -387,16 +390,66 @@ impl Worker {
                                                         .tag_get_name(source.clone(), source_url_id)
                                                         .cloned();
                                                 };
-
                                                 for file_tag in file.skip_if.iter() {
-                                                    let unwrappydb = db.lock().unwrap();
-                                                    if let Some(nsid) = unwrappydb.namespace_get(&file_tag.namespace.name){
-            if let Some(_)=unwrappydb.tag_get_name(file_tag.tag.to_string(), *nsid){info_log(&format!("Skipping file: {} Due to skip tag {} already existing in Tags Table.",&source, file_tag.tag));
+                                                    match file_tag {
+                                                sharedtypes::SkipIf::FileNamespaceNumber((
+                            unique_tag,
+                            namespace_filter,
+                            filter_number,
+                        )) => {
+let unwrappydb = db.lock().unwrap();
+                            let mut cnt = 0;
+
+                                                            dbg!("z");
+                            if let Some(nidf) = unwrappydb.namespace_get(&namespace_filter.name) {
+                                                            dbg!("a");
+                            if let Some(nid) = unwrappydb.namespace_get(&namespace_filter.name) {
+                                if let Some(tid) =
+                                    unwrappydb.tag_get_name(unique_tag.tag.clone(), *nid)
+                                {
+                                                            dbg!("b");
+                                    if let Some(fids) = unwrappydb.relationship_get_fileid(tid) {
+                                                            dbg!("c");
+                                        if fids.len() == 1 {
+                                                            dbg!("d");
+                                            let fid = fids.iter().next().unwrap();
+                                            for tidtofilter in
+                                                unwrappydb.relationship_get_tagid(fid).unwrap().iter()
+                                            {
+                                                            dbg!("e");
+                                                if unwrappydb.namespace_contains_id(nidf, tidtofilter)
+                                                {
+                                                            dbg!("f");
+                                                    cnt += 1;
+                                                }
+                                            }}
+                                        }
+                                    }
+                                }
+                            }
+                                dbg!(&cnt, &filter_number);
+                                                        return;
+                            if cnt > *filter_number {
+                                info_log(&format!(
+                                            "Not downloading because unique namespace is greater then limit number. {}",
+                                            unique_tag.tag
+                                        ));
+                                                            return;
+                            } else {
+                                info_log(&format!("Downloading due to unique namespace not existing or number less then limit number."));
+                            }
+                        }
+
+                                                        sharedtypes::SkipIf::FileTagRelationship(tag) => {
+let unwrappydb = db.lock().unwrap();
+                                                    if let Some(nsid) = unwrappydb.namespace_get(&tag.namespace.name){
+            if let Some(_)=unwrappydb.tag_get_name(tag.tag.to_string(), *nsid){info_log(&format!("Skipping file: {} Due to skip tag {} already existing in Tags Table.",&source, tag.tag));
             return;
-            }
+            }}
 
                                                     }
                                                 }
+                                                                                            }
 
                                                 // Get's the hash & file ext for the file.
                                                  let fileid = match url_tag {
@@ -575,53 +628,96 @@ fn parse_tags(
         }
         sharedtypes::TagType::ParseUrl((jobscraped, skippy)) => {
             match skippy {
-                sharedtypes::SkipIf::None => {
+                None => {
                     url_return.insert(jobscraped);
                 }
-                sharedtypes::SkipIf::Tag(taginfo) => 'tag: {
-                    let nid = unwrappy.namespace_get(&taginfo.namespace.name);
-                    let id = match nid {
-                        None => {
-                            println!("Namespace does not exist: {:?}", taginfo.namespace);
-                            url_return.insert(jobscraped);
-                            break 'tag;
-                        }
-                        Some(id) => id,
-                    };
-
-                    match unwrappy.tag_get_name(taginfo.tag.clone(), *id) {
-                        None => {
-                            println!("WillDownload: {}", taginfo.tag);
-                            url_return.insert(jobscraped);
-                        }
-                        Some(tag_id) => {
-                            if taginfo.needsrelationship {
-                                let rel_hashset = unwrappy.relationship_get_fileid(tag_id);
-                                match rel_hashset {
-                                    None => {
-                                        println!(
-                                            "Downloading: {} because no relationship",
-                                            taginfo.tag
-                                        );
-                                        println!("Will download from: {}", taginfo.tag);
-                                        url_return.insert(jobscraped);
-                                        break 'tag;
+                Some(skip_if) => {
+                    match skip_if {
+                        sharedtypes::SkipIf::FileNamespaceNumber((
+                            unique_tag,
+                            namespace_filter,
+                            filter_number,
+                        )) => {
+                            let mut cnt = 0;
+                            if let Some(nidf) = unwrappy.namespace_get(&namespace_filter.name) {
+                                if let Some(nid) =
+                                    unwrappy.namespace_get(&unique_tag.namespace.name)
+                                {
+                                    if let Some(tid) =
+                                        unwrappy.tag_get_name(unique_tag.tag.clone(), *nid)
+                                    {
+                                        if let Some(fids) = unwrappy.relationship_get_fileid(tid) {
+                                            if fids.len() == 1 {
+                                                let fid = fids.iter().next().unwrap();
+                                                for tidtofilter in unwrappy
+                                                    .relationship_get_tagid(fid)
+                                                    .unwrap()
+                                                    .iter()
+                                                {
+                                                    if unwrappy
+                                                        .namespace_contains_id(nidf, tidtofilter)
+                                                    {
+                                                        cnt += 1;
+                                                    }
+                                                }
+                                            }
+                                        }
                                     }
-                                    Some(_) => {
-                                        info_log(&format!(
+                                }
+                            }
+                            if cnt >= filter_number {
+                                dbg!(&cnt, &filter_number);
+                                info_log(&format!(
+                                            "Not downloading because unique namespace is greater then limit number. {}",
+                                            unique_tag.tag
+                                        ));
+                            } else {
+                                info_log(&format!("Downloading due to unique namespace not existing or number less then limit number."));
+                                url_return.insert(jobscraped);
+                            }
+                        }
+                        sharedtypes::SkipIf::FileTagRelationship(taginfo) => 'tag: {
+                            let nid = unwrappy.namespace_get(&taginfo.namespace.name);
+                            let id = match nid {
+                                None => {
+                                    println!("Namespace does not exist: {:?}", taginfo.namespace);
+                                    url_return.insert(jobscraped);
+                                    break 'tag;
+                                }
+                                Some(id) => id,
+                            };
+
+                            match unwrappy.tag_get_name(taginfo.tag.clone(), *id) {
+                                None => {
+                                    println!("WillDownload: {}", taginfo.tag);
+                                    url_return.insert(jobscraped);
+                                }
+                                Some(tag_id) => {
+                                    let rel_hashset = unwrappy.relationship_get_fileid(tag_id);
+                                    match rel_hashset {
+                                        None => {
+                                            println!(
+                                                "Downloading: {} because no relationship",
+                                                taginfo.tag
+                                            );
+                                            println!("Will download from: {}", taginfo.tag);
+                                            url_return.insert(jobscraped);
+                                        }
+                                        Some(_) => {
+                                            info_log(&format!(
                                             "Skipping because this already has a relationship. {}",
                                             taginfo.tag
                                         ));
 
-                                        //println!("Will download from: {}", taginfo.tag);
-                                        //url_return.insert(jobscraped);
-                                        break 'tag;
+                                            //println!("Will download from: {}", taginfo.tag);
+                                            //url_return.insert(jobscraped);
+                                        }
                                     }
+                                    println!("Ignoring: {}", taginfo.tag);
+
+                                    break 'tag;
                                 }
                             }
-                            println!("Ignoring: {}", taginfo.tag);
-
-                            break 'tag;
                         }
                     }
                 }

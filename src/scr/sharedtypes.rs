@@ -368,7 +368,7 @@ pub enum DbJobType {
     /// Runs a plugin directly (don't use plz).
     Plugin,
     /// Signifies that this is a FileUrl.
-    FileUrl,
+    //FileUrl,
     /// Something else sends to scraper.
     Scraper,
 }
@@ -498,7 +498,7 @@ pub struct FileObject {
     pub source_url: Option<String>,
     pub hash: HashesSupported, // Hash of file
     pub tag_list: Vec<TagObject>,
-    pub skip_if: Vec<TagObject>, // Skips downloading the file if a tag matches this.
+    pub skip_if: Vec<SkipIf>, // Skips downloading the file if a tag matches this.
 }
 
 ///
@@ -534,8 +534,8 @@ pub struct GenericNamespaceObj {
 #[allow(dead_code)]
 #[derive(Eq, Hash, PartialEq)]
 pub enum TagType {
-    Normal,                          // Normal tag.
-    ParseUrl((ScraperData, SkipIf)), // Scraper to download and parse a new url.
+    Normal,                                  // Normal tag.
+    ParseUrl((ScraperData, Option<SkipIf>)), // Scraper to download and parse a new url.
     Special, // Probably will add support for something like file descriptors or plugin specific things.
              //
 }
@@ -544,7 +544,7 @@ pub enum TagType {
 pub struct Tag {
     pub tag: String,
     pub namespace: GenericNamespaceObj,
-    pub needsrelationship: bool, // If theirs a relationship then we will not add it to the checkers.
+    //pub needsrelationship: bool, // If theirs a relationship then we will not add it to the checkers.
 }
 
 ///
@@ -552,8 +552,10 @@ pub struct Tag {
 ///
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum SkipIf {
-    Tag(Tag),
-    None,
+    FileTagRelationship(Tag), // If a relationship between any file and tag exists.
+    // The tag is qnique and if their are X number or more of GenericNamespaceObj associated with the file
+    // Then we'll skip it
+    FileNamespaceNumber((Tag, GenericNamespaceObj, usize)),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Ord, PartialOrd)]

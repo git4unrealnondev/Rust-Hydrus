@@ -284,7 +284,14 @@ pub fn main(data: Arc<Mutex<database::Main>>, scraper: &mut scraper::ScraperMana
                                 );
                             }
                             Some(tags) => {
+                                let mut tvec = Vec::new();
                                 for tid in tags.iter() {
+                                    if let Some(tag) = data.tag_id_get(tid) {
+                                        tvec.push(tid)
+                                    }
+                                }
+                                tvec.sort();
+                                for tid in tvec.iter() {
                                     let tag = data.tag_id_get(tid);
                                     match tag {
                                         None => {
