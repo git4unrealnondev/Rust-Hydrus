@@ -400,26 +400,19 @@ impl Worker {
 let unwrappydb = db.lock().unwrap();
                             let mut cnt = 0;
 
-                                                            dbg!("z");
                             if let Some(nidf) = unwrappydb.namespace_get(&namespace_filter.name) {
-                                                            dbg!("a");
-                            if let Some(nid) = unwrappydb.namespace_get(&namespace_filter.name) {
+                            if let Some(nid) = unwrappydb.namespace_get(&unique_tag.namespace.name) {
                                 if let Some(tid) =
                                     unwrappydb.tag_get_name(unique_tag.tag.clone(), *nid)
                                 {
-                                                            dbg!("b");
                                     if let Some(fids) = unwrappydb.relationship_get_fileid(tid) {
-                                                            dbg!("c");
                                         if fids.len() == 1 {
-                                                            dbg!("d");
                                             let fid = fids.iter().next().unwrap();
                                             for tidtofilter in
                                                 unwrappydb.relationship_get_tagid(fid).unwrap().iter()
                                             {
-                                                            dbg!("e");
                                                 if unwrappydb.namespace_contains_id(nidf, tidtofilter)
                                                 {
-                                                            dbg!("f");
                                                     cnt += 1;
                                                 }
                                             }}
@@ -427,8 +420,6 @@ let unwrappydb = db.lock().unwrap();
                                     }
                                 }
                             }
-                                dbg!(&cnt, &filter_number);
-                                                        return;
                             if cnt > *filter_number {
                                 info_log(&format!(
                                             "Not downloading because unique namespace is greater then limit number. {}",

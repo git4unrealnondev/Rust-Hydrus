@@ -282,24 +282,44 @@ pub fn parser(
                             tag_type: sharedtypes::TagType::Normal,
                             limit_to: None,
                         };
+                        let tagthread = sharedtypes::Tag {
+                            namespace: nsout(&Nsid::ThreadId),
+                            tag: actual_params.user_data.get("ThreadID").unwrap().to_string(),
+                        };
 
                         for each in chjson["posts"].members() {
                             // Gets information about post associates it to the thread
-                            if let Some(comment) = each["com"].as_str() {
-                                out.tag.insert(sharedtypes::TagObject {
-                                    namespace: nsout(&Nsid::PostComment),
+                            if let Some(comment) = each["no"].as_usize() {
+                                let com = sharedtypes::SubTag {
+                                    namespace: nsout(&Nsid::PostId),
                                     tag: comment.to_string(),
                                     tag_type: sharedtypes::TagType::Normal,
-                                    relates_to: Some(subthread.clone()),
-                                });
-                            }
-                            if let Some(comment) = each["no"].as_usize() {
+                                    limit_to: Some(tagthread.clone()),
+                                };
+                                if let Some(comment) = each["com"].as_str() {
+                                    out.tag.insert(sharedtypes::TagObject {
+                                        namespace: nsout(&Nsid::PostComment),
+                                        tag: comment.to_string(),
+                                        tag_type: sharedtypes::TagType::Normal,
+                                        relates_to: Some(com),
+                                    });
+                                }
+
                                 out.tag.insert(sharedtypes::TagObject {
                                     namespace: nsout(&Nsid::PostId),
                                     tag: comment.to_string(),
                                     tag_type: sharedtypes::TagType::Normal,
                                     relates_to: Some(subthread.clone()),
                                 });
+                            } else {
+                                if let Some(comment) = each["com"].as_str() {
+                                    out.tag.insert(sharedtypes::TagObject {
+                                        namespace: nsout(&Nsid::PostComment),
+                                        tag: comment.to_string(),
+                                        tag_type: sharedtypes::TagType::Normal,
+                                        relates_to: Some(subthread.clone()),
+                                    });
+                                }
                             }
                             if let Some(comment) = each["time"].as_usize() {
                                 out.tag.insert(sharedtypes::TagObject {
@@ -340,15 +360,15 @@ pub fn parser(
                                                 tag_type: sharedtypes::TagType::Normal,
                                                 relates_to: Some(post_tag.clone()),
                                             });
-                                            ret.push(sharedtypes::TagObject {
-                                                namespace: sharedtypes::GenericNamespaceObj {
-                                                    name: "FileHash-MD5".to_string(),
-                                                    description: None,
+                                            ret.push(sharedtypes::SkipIf::FileTagRelationship(
+                                                sharedtypes::Tag {
+                                                    namespace: sharedtypes::GenericNamespaceObj {
+                                                        name: "FileHash-MD5".to_string(),
+                                                        description: None,
+                                                    },
+                                                    tag: md5_hash,
                                                 },
-                                                tag: md5_hash,
-                                                tag_type: sharedtypes::TagType::Normal,
-                                                relates_to: None,
-                                            });
+                                            ));
 
                                             ret
                                         }
@@ -435,7 +455,7 @@ pub fn parser(
                                             system_data: scraper_data.system_data.clone(),
                                             user_data: usr_data,
                                         },
-                                        sharedtypes::SkipIf::None,
+                                        None,
                                     )),
                                     relates_to: None,
                                 });

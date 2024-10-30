@@ -618,11 +618,10 @@ fn parse_pools(
                                 system_data: BTreeMap::new(),
                                 user_data: BTreeMap::new(),
                             }),
-                            sharedtypes::SkipIf::Tag(sharedtypes::Tag {
+                            Some(sharedtypes::SkipIf::FileTagRelationship(sharedtypes::Tag {
                                 tag: postids.to_string(),
                                 namespace: nsobjplg(&NsIdent::FileId),
-                                needsrelationship: true,
-                            }),
+                            })),
                         )),
                     });
                 }
@@ -645,11 +644,10 @@ fn parse_pools(
                             system_data: BTreeMap::new(),
                             user_data: BTreeMap::new(),
                         }),
-                        sharedtypes::SkipIf::Tag(sharedtypes::Tag {
+                        Some(sharedtypes::SkipIf::FileTagRelationship(sharedtypes::Tag {
                             tag: postids.to_string(),
                             namespace: nsobjplg(&NsIdent::FileId),
-                            needsrelationship: true,
-                        }),
+                        })),
                     )),
                 });
             }
@@ -664,7 +662,6 @@ fn parse_pools(
                     Some(sharedtypes::Tag {
                         tag: multpool["id"].to_string(),
                         namespace: nsobjplg(&NsIdent::PoolId),
-                        needsrelationship: false,
                     }),
                 )),
                 tag: cnt.to_string(),
@@ -841,7 +838,7 @@ pub fn parser(
                                 system_data: BTreeMap::new(),
                                 user_data: BTreeMap::new(),
                             },
-                            sharedtypes::SkipIf::None,
+                            None,
                         )),
                     });
                 }

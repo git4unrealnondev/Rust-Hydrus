@@ -665,9 +665,13 @@ pub fn model_data_parsing(
     }
     let data = unchecked.unwrap();
     let djson = &data["result"]["data"]["json"];
-
-    let modelidtemp = djson["id"].as_number().unwrap().to_string();
-    let modelid = modelidtemp.as_str();
+    let modelidtemp = match djson["id"].as_usize() {
+        Some(modelid) => modelid,
+        None => {
+            return;
+        }
+    };
+    let modelid = &modelidtemp.to_string();
 
     let modelloop = [
         ("description", nsobjplg(&NsIdent::CivitModelDescription)),
@@ -777,7 +781,6 @@ pub fn model_data_parsing(
             }
         }
     }
-    dbg!(&tags);
 }
 
 pub fn get_votable_tags_url(imageid: usize, datatype: VotableTagsType) -> String {
@@ -922,8 +925,16 @@ pub fn image_infinite_parsing(
             file_tags.push(username);
         }
 
+        let file_name = match file_item["name"].as_str() {
+            Some(name) => name,
+            None => {
+                let tmep = &file_item["id"].as_usize().unwrap();
+                &tmep.to_string()
+            }
+        };
+
         let file_source_url = image_gen_url(
-            &file_item["name"].as_str().unwrap().to_string(),
+            &file_name.to_string(),
             &file_item["url"].as_str().unwrap().to_string(),
         );
 
