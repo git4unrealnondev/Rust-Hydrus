@@ -264,7 +264,6 @@ pub fn parser_call(
 ) -> Result<(sharedtypes::ScraperObject, sharedtypes::ScraperData), sharedtypes::ScraperReturn> {
     let scrapermanager = arc_scrapermanager.lock().unwrap();
     let scraper_library = scrapermanager.library_get().get(&scraper).unwrap();
-
     let temp: libloading::Symbol<
         unsafe extern "C" fn(
             &String,

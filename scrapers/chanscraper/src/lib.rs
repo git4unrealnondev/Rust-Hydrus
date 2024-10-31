@@ -114,14 +114,14 @@ pub fn url_get(_params: &Vec<sharedtypes::ScraperParam>) -> Vec<String> {
 pub fn url_dump(
     params: &Vec<sharedtypes::ScraperParam>,
     scraperdata: &sharedtypes::ScraperData,
-) -> (Vec<String>, sharedtypes::ScraperData) {
+) -> Vec<(String, sharedtypes::ScraperData)> {
     if scraperdata.user_data.contains_key("Stop") {
-        return (Vec::new(), scraperdata.clone());
+        return Vec::new();
     }
 
     let mut scraper_data = scraperdata.clone();
 
-    let mut catalog_urls = Vec::new();
+    let mut out = Vec::new();
 
     if let Some(site) = get_site(&scraperdata.job.site) {
         let site = site;
@@ -134,12 +134,11 @@ pub fn url_dump(
                     format!("key_search_{cnt}"),
                     search_term.get(cnt).unwrap().to_string(),
                 );
-                catalog_urls.push(catalog[cnt].to_string());
+                out.push((catalog[cnt].to_string(), scraper_data.clone()))
             }
-            return (catalog_urls, scraper_data);
         }
     }
-    (Vec::new(), scraper_data)
+    out
     //(gen_url_catalog(params), scraper_data)
 }
 
@@ -245,7 +244,6 @@ pub fn parser(
         file: HashSet::new(),
         tag: HashSet::new(),
     };
-    dbg!(&params);
 
     let site = get_site(&actual_params.job.site);
 

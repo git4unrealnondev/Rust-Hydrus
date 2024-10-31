@@ -365,14 +365,14 @@ pub fn url_get(params: &Vec<sharedtypes::ScraperParam>) -> Vec<String> {
 pub fn url_dump(
     params: &Vec<sharedtypes::ScraperParam>,
     scraperdata: &sharedtypes::ScraperData,
-) -> (Vec<String>, sharedtypes::ScraperData) {
+) -> Vec<(String, sharedtypes::ScraperData)> {
     let mut ret = Vec::new();
     let hardlimit = 751;
     for i in 0..hardlimit {
         let a = build_url(params, i);
-        ret.push(a);
+        ret.push((a, scraperdata.clone()));
     }
-    (ret, scraperdata.clone())
+    ret
 }
 ///
 /// Returns bool true or false if a cookie is needed. If so return the cookie name in storage

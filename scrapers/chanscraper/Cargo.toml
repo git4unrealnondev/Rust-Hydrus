@@ -14,7 +14,7 @@ debug=false
 
 [lib]
 doc=true
-name = "fourchan"
+name = "chanscraper"
 path = "src/lib.rs"
 crate-type = ["dylib"]
 
