@@ -10,7 +10,7 @@ reqwest = { version = "0.12.4", features = ["cookies", "gzip", "brotli", "defaul
 #tokio = { version = "1", features = ["full"] }
 url = "2.3.1"
 http = "1.1.0"
-ratelimit = "0.9.1"
+ratelimit = "0.10.0"
 async-std = { version = "1", features = ["attributes", "tokio1"] }
 rusqlite = {version = "0.32.1", features=["modern_sqlite", "bundled", "column_decltype"] }
 fast_log = "1.5.25"
