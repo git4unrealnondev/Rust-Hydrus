@@ -42,7 +42,6 @@ impl Jobs {
     /// Returns a list of all jobs associated with a scraper
     ///
     pub fn jobs_get(&self, scraper: &scraper::InternalScraper) -> HashSet<sharedtypes::DbJobsObj> {
-        dbg!(self._jobref.get(scraper));
         match self._jobref.get(scraper) {
             Some(jobs) => jobs.clone(),
             None => HashSet::new(),
