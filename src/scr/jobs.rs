@@ -7,6 +7,7 @@ use crate::sharedtypes;
 use crate::sharedtypes::ScraperType;
 use crate::threading;
 use crate::time_func;
+use crate::time_func::time_secs;
 use std::collections::{HashMap, HashSet};
 
 use std::sync::Arc;
@@ -41,6 +42,7 @@ impl Jobs {
     /// Returns a list of all jobs associated with a scraper
     ///
     pub fn jobs_get(&self, scraper: &scraper::InternalScraper) -> HashSet<sharedtypes::DbJobsObj> {
+        dbg!(self._jobref.get(scraper));
         match self._jobref.get(scraper) {
             Some(jobs) => jobs.clone(),
             None => HashSet::new(),
@@ -51,14 +53,17 @@ impl Jobs {
         &mut self,
         scraper: &scraper::InternalScraper,
         data: &sharedtypes::DbJobsObj,
+        del_from_db: bool,
     ) {
         match self._jobref.get_mut(scraper) {
             None => {}
             Some(joblist) => {
-                crate::logging::info_log(&format!("Removing job {:?}", &data));
+                crate::logging::info_log(&format!("Removing job jobs{:?}", &data));
                 joblist.remove(data);
-                let mut db = self.db.lock().unwrap();
-                db.del_from_jobs_byid(&data.id);
+                if del_from_db {
+                    let mut db = self.db.lock().unwrap();
+                    db.del_from_jobs_byid(&data.id);
+                }
             }
         }
     }
@@ -72,15 +77,19 @@ impl Jobs {
             match recreation {
                 sharedtypes::DbJobRecreation::AlwaysTime((timestamp, count)) => {
                     if *count <= 1 {
-                        self.jobs_remove_dbjob(scraper, &data);
+                        self.jobs_remove_dbjob(scraper, &data, true);
                     } else {
+                        let original_data = data.clone();
                         let mut data = data.clone();
                         data.jobmanager.recreation = Some(
                             sharedtypes::DbJobRecreation::AlwaysTime((*timestamp, count - 1)),
                         );
-                        self.jobs_add_jobsobj(scraper, data.clone(), true, false, None);
+                        data.time = Some(time_secs());
+                        data.reptime = Some(timestamp.clone());
+                        self.update_job(&scraper, &data, &original_data);
+                        self.jobs_add_jobsobj(scraper, data.clone(), true, false, Some(data.id));
                         let mut db = self.db.lock().unwrap();
-                        db.jobs_update_by_id(&data);
+                        db.jobs_update_db(data);
                         db.transaction_flush();
                     }
                 }
@@ -250,6 +259,27 @@ impl Jobs {
         }
 
         JobAddOutput::NoOperation
+    }
+
+    fn update_job(
+        &mut self,
+        scraper: &scraper::InternalScraper,
+        data: &sharedtypes::DbJobsObj,
+        orig_data: &sharedtypes::DbJobsObj,
+    ) {
+        let mut add = false;
+        if let Some(joblist) = self._jobref.get_mut(scraper) {
+            for job in joblist.clone().iter() {
+                if job.id == orig_data.id {
+                    dbg!(&data, orig_data);
+                    joblist.remove(job);
+                    add = true;
+                }
+            }
+        }
+        if add {
+            self.jobs_add_jobsobj(scraper, data.clone(), true, true, Some(data.id));
+        }
     }
 
     ///

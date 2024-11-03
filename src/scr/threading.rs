@@ -176,6 +176,8 @@ impl Worker {
                 Arc::new(Mutex::new(HashMap::new()));
             let mut client = download::client_create();
 
+            let mut should_remove_original_job = true;
+
             'bigloop: loop {
                 let jobsstorage;
                 {
@@ -231,6 +233,7 @@ impl Worker {
                                 data.time = Some(crate::time_func::time_secs());
                                 data.reptime = Some(*timestamp);
                                 temp.jobs_decrement_count(&data, &scraper);
+                                should_remove_original_job = false;
                             }
                             _ => {}
                         }
@@ -524,26 +527,35 @@ joblock = jobstorage.lock().unwrap();for urlz in urls_scrap {
                         //unwrappydb.del_from_jobs_byid(&job.id);
                     }
                     {
-                        let mut joblock = jobstorage.lock().unwrap();
-                        joblock.jobs_remove_dbjob(&scraper, &currentjob);
+                        if should_remove_original_job {
+                            let mut joblock = jobstorage.lock().unwrap();
+                            joblock.jobs_remove_dbjob(
+                                &scraper,
+                                &currentjob,
+                                should_remove_original_job,
+                            );
 
-                        let mut db = db.lock().unwrap();
-                        db.transaction_flush();
-                    }
-
-                    {
-                        let joblock = jobstorage.lock().unwrap();
-                        if joblock.jobs_get(&scraper).is_empty() {
                             let mut db = db.lock().unwrap();
                             db.transaction_flush();
-                            break 'bigloop;
+                        }
+                    }
+                    {
+                        if should_remove_original_job {
+                            let joblock = jobstorage.lock().unwrap();
+                            if joblock.jobs_get(&scraper).is_empty() {
+                                let mut db = db.lock().unwrap();
+                                db.transaction_flush();
+                                break 'bigloop;
+                            }
                         }
                     }
                 }
-                let joblock = jobstorage.lock().unwrap();
-                if joblock.jobs_get(&scraper).is_empty() {
-                    threadflagcontrol.stop();
-                    break 'bigloop;
+                if should_remove_original_job {
+                    let joblock = jobstorage.lock().unwrap();
+                    if joblock.jobs_get(&scraper).is_empty() {
+                        threadflagcontrol.stop();
+                        break 'bigloop;
+                    }
                 }
             }
             threadflagcontrol.stop();

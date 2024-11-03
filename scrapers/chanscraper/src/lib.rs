@@ -196,6 +196,7 @@ enum Nsid {
     AttachmentName,
     OriginalMD5,
     ThreadSite,
+    BoardCode,
 }
 
 fn nsout(inp: &Nsid) -> sharedtypes::GenericNamespaceObj {
@@ -226,7 +227,11 @@ fn nsout(inp: &Nsid) -> sharedtypes::GenericNamespaceObj {
         Nsid::ThreadSite => sharedtypes::GenericNamespaceObj {
             name: "Thread_Site".to_string(),
             description: Some("Site that the thread was scraped from.".to_string())
+        },Nsid::BoardCode => sharedtypes::GenericNamespaceObj {
+            name: "Chan_Board_Code".to_string(),
+            description: Some("The board and code that the thread is from.".to_string())
         }
+
 
     }
 }
@@ -261,17 +266,26 @@ pub fn parser(
                             tag_type: sharedtypes::TagType::Normal,
                             relates_to: None,
                         });
-                        let thread_site = sharedtypes::SubTag {
+                        let board_code = sharedtypes::Tag {
+                            namespace: nsout(&Nsid::BoardCode),
+                            tag: bcode.to_string(),
+                        };
+
+                        let thread_site = sharedtypes::Tag {
                             namespace: nsout(&Nsid::ThreadSite),
                             tag: site.site_get().to_string(),
+                        };
+                        let boatd = sharedtypes::SubTag {
+                            namespace: nsout(&Nsid::BoardCode),
+                            tag: format!("{}-{}", site.site_get().to_string(), bcode),
                             tag_type: sharedtypes::TagType::Normal,
-                            limit_to: None,
+                            limit_to: Some(thread_site),
                         };
                         let thread = sharedtypes::TagObject {
                             namespace: nsout(&Nsid::ThreadId),
                             tag: actual_params.user_data.get("ThreadID").unwrap().to_string(),
                             tag_type: sharedtypes::TagType::Normal,
-                            relates_to: Some(thread_site),
+                            relates_to: Some(boatd),
                         };
                         out.tag.insert(thread);
                         let subthread = sharedtypes::SubTag {

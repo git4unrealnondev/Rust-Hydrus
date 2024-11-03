@@ -2034,15 +2034,44 @@ impl Main {
         //println!("relationship complete : {} {}", file, tag);
     }
 
-    fn jobs_add_db(&mut self, jobs_obj: sharedtypes::DbJobsObj) {
-        self._inmemdb.jobref_new(jobs_obj);
+    ///
+    /// Updates the database for inmemdb and sql
+    ///
+    pub fn jobs_update_db(&mut self, jobs_obj: sharedtypes::DbJobsObj) {
+        if self._inmemdb.jobref_new(jobs_obj.clone()) {
+            self.jobs_update_by_id(&jobs_obj);
+        } else {
+            self.jobs_add_sql(&jobs_obj)
+        }
+    }
+
+    ///
+    /// Adds a job to sql
+    ///
+    fn jobs_add_sql(&mut self, data: &sharedtypes::DbJobsObj) {
+        let inp = "INSERT INTO Jobs VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        let _out = self._conn.borrow_mut().lock().unwrap().execute(
+            inp,
+            params![
+                data.id.to_string(),
+                data.time.unwrap().to_string(),
+                data.reptime.unwrap().to_string(),
+                serde_json::to_string(&data.jobmanager).unwrap(),
+                data.site,
+                data.param,
+                data.committype.unwrap().to_string(),
+                serde_json::to_string(&data.system_data).unwrap(),
+                serde_json::to_string(&data.user_data).unwrap(),
+            ],
+        );
+        self.db_commit_man();
     }
 
     ///
     /// Updates job by id
     ///
-    pub fn jobs_update_by_id(&mut self, data: &sharedtypes::DbJobsObj) {
-        let inp = "UPDATE Jobs VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?) WHERE id = (?)";
+    fn jobs_update_by_id(&mut self, data: &sharedtypes::DbJobsObj) {
+        let inp = "UPDATE Jobs SET id=?, time=?, reptime=?, Manager=?, site=?, param=?, CommitType=?, SystemData=?, UserData=? WHERE id = ?";
         let _out = self._conn.borrow_mut().lock().unwrap().execute(
             inp,
             params![
@@ -2097,32 +2126,13 @@ impl Main {
             user_data: user_data.clone(),
         };
 
-        self.jobs_add_db(jobs_obj);
+        self.jobs_update_db(jobs_obj.clone());
 
         /*let jobsmanager = sharedtypes::DbJobsManager {
             jobtype: *dbjobtype,
             recreation: None,
             additionaldata: None,
         };*/
-
-        if addtodb {
-            let inp = "INSERT INTO Jobs VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)";
-            let _out = self._conn.borrow_mut().lock().unwrap().execute(
-                inp,
-                params![
-                    id.to_string(),
-                    time.to_string(),
-                    reptime.to_string(),
-                    serde_json::to_string(&jobsmanager).unwrap(),
-                    site,
-                    param,
-                    committype.to_string(),
-                    serde_json::to_string(&system_data).unwrap(),
-                    serde_json::to_string(&user_data).unwrap()
-                ],
-            );
-            self.db_commit_man();
-        }
 
         id
     }
