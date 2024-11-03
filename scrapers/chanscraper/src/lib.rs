@@ -67,7 +67,7 @@ impl InternalScraper {
             _version: 0,
             _name: "4chan".to_string(),
             _sites: vec_of_strings!("4chan", "lulz"),
-            _ratelimit: (1, Duration::from_secs(1)),
+            _ratelimit: (1, Duration::from_secs(2)),
             _type: sharedtypes::ScraperType::Automatic,
         }
     }
