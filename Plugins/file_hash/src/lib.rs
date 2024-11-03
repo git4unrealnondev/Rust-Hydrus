@@ -91,6 +91,7 @@ enum Supset {
     SHA512,
     IPFSCID,
     IPFSCID1,
+    IMAGEHASH,
 }
 ///
 /// Holder for data
@@ -128,6 +129,10 @@ fn get_set(inp: Supset) -> SettingInfo {
             name: "FileHash-IPFSCID1".to_string(),
             description: Some("From plugin FileHash. IPFS Content ID of the file for usage with the IPFS network. Version 1 more modern".to_string()),
         },
+            Supset::IMAGEHASH => SettingInfo {
+            name: "FileHash-ImageHash".to_string(),
+            description: Some("From plugin FileHash. PHash of the image. Used to deduplicate similar images if the hashes aren't the same".to_string())
+        }
 
     }
 }
@@ -333,6 +338,23 @@ fn hash_file(hashtype: Supset, byte: &[u8]) -> Option<String> {
             }
 
             return None;
+        }
+        Supset::IMAGEHASH => {
+            use image_hasher::BitOrder;
+            use image_hasher::{HasherConfig, ImageHash};
+            use std::io::Cursor;
+
+            let hasher = HasherConfig::new()
+                .hash_alg(image_hasher::HashAlg::Median)
+                .bit_order(BitOrder::MsbFirst)
+                .preproc_dct()
+                .to_hasher();
+            if let Ok(img) = image::ImageReader::new(Cursor::new(byte)).with_guessed_format() {
+                if let Ok(decode) = img.decode() {
+                    return Some(hasher.hash_image(&decode).to_base64());
+                }
+            }
+            None
         }
     }
 }
