@@ -553,30 +553,66 @@ fn parse_pools(
         });
         let mut cnt = 0;
         for postids in multpool["post_ids"].members() {
-            tag.insert(sharedtypes::TagObject {
-                namespace: nsobjplg(&NsIdent::PoolId),
-                relates_to: None,
-                tag: multpool["id"].to_string(),
-                tag_type: sharedtypes::TagType::ParseUrl((
-                    (sharedtypes::ScraperData {
-                        job: sharedtypes::JobScraper {
-                            site: "e6ai".to_string(),
-                            param: Vec::new(),
-                            original_param: format!(
-                                "https://e6ai.net/posts.json?tags=id:{}",
-                                postids
-                            ),
-                            job_type: sharedtypes::DbJobType::Scraper,
-                        },
-                        system_data: BTreeMap::new(),
-                        user_data: BTreeMap::new(),
-                    }),
-                    Some(sharedtypes::SkipIf::FileTagRelationship(sharedtypes::Tag {
-                        tag: postids.to_string(),
-                        namespace: nsobjplg(&NsIdent::FileId),
-                    })),
-                )),
-            });
+            if let Some(recursion) = scraperdata.system_data.get("recursion") {
+                if recursion == "false" {
+                    tag.insert(sharedtypes::TagObject {
+                        namespace: nsobjplg(&NsIdent::PoolId),
+                        relates_to: None,
+                        tag: multpool["id"].to_string(),
+                        tag_type: sharedtypes::TagType::Normal,
+                    });
+                } else {
+                    tag.insert(sharedtypes::TagObject {
+                        namespace: nsobjplg(&NsIdent::PoolId),
+                        relates_to: None,
+                        tag: multpool["id"].to_string(),
+                        tag_type: sharedtypes::TagType::ParseUrl((
+                            (sharedtypes::ScraperData {
+                                job: sharedtypes::JobScraper {
+                                    site: "e6ai".to_string(),
+                                    param: Vec::new(),
+                                    original_param: format!(
+                                        "https://e6ai.net/posts.json?tags=id:{}",
+                                        postids
+                                    ),
+                                    job_type: sharedtypes::DbJobType::Scraper,
+                                },
+                                system_data: BTreeMap::new(),
+                                user_data: BTreeMap::new(),
+                            }),
+                            Some(sharedtypes::SkipIf::FileTagRelationship(sharedtypes::Tag {
+                                tag: postids.to_string(),
+                                namespace: nsobjplg(&NsIdent::FileId),
+                            })),
+                        )),
+                    });
+                }
+            } else {
+                tag.insert(sharedtypes::TagObject {
+                    namespace: nsobjplg(&NsIdent::PoolId),
+                    relates_to: None,
+                    tag: multpool["id"].to_string(),
+                    tag_type: sharedtypes::TagType::ParseUrl((
+                        (sharedtypes::ScraperData {
+                            job: sharedtypes::JobScraper {
+                                site: "e6".to_string(),
+                                param: Vec::new(),
+                                original_param: format!(
+                                    "https://e6ai.net/posts.json?tags=id:{}",
+                                    postids
+                                ),
+                                job_type: sharedtypes::DbJobType::Scraper,
+                            },
+                            system_data: BTreeMap::new(),
+                            user_data: BTreeMap::new(),
+                        }),
+                        Some(sharedtypes::SkipIf::FileTagRelationship(sharedtypes::Tag {
+                            tag: postids.to_string(),
+                            namespace: nsobjplg(&NsIdent::FileId),
+                        })),
+                    )),
+                });
+            }
 
             // Relates fileid to position in table with the restriction of the poolid
             tag.insert(sharedtypes::TagObject {
@@ -729,28 +765,41 @@ pub fn parser(
                     None,
                     sharedtypes::TagType::Normal,
                 );*/
-                let parse_url = format!("https://e6ai.net/pools?format=json&search[id]={}", each);
-                tags_list.push(sharedtypes::TagObject {
-                    namespace: sharedtypes::GenericNamespaceObj {
-                        name: "Do Not Add".to_string(),
-                        description: Some("DO NOT PARSE ME".to_string()),
-                    },
-                    relates_to: None,
-                    tag: parse_url.clone(),
-                    tag_type: sharedtypes::TagType::ParseUrl((
-                        sharedtypes::ScraperData {
-                            job: sharedtypes::JobScraper {
-                                site: "e6ai".to_string(),
-                                param: Vec::new(),
-                                original_param: parse_url,
-                                job_type: sharedtypes::DbJobType::Scraper,
-                            },
-                            system_data: BTreeMap::new(),
-                            user_data: BTreeMap::new(),
+                let shouldparse = if let Some(recursion) = scraperdata.system_data.get("recursion")
+                {
+                    if recursion == "false" {
+                        false
+                    } else {
+                        true
+                    }
+                } else {
+                    true
+                };
+                if shouldparse {
+                    let parse_url =
+                        format!("https://e6ai.net/pools?format=json&search[id]={}", each);
+                    tags_list.push(sharedtypes::TagObject {
+                        namespace: sharedtypes::GenericNamespaceObj {
+                            name: "Do Not Add".to_string(),
+                            description: Some("DO NOT PARSE ME".to_string()),
                         },
-                        None,
-                    )),
-                });
+                        relates_to: None,
+                        tag: parse_url.clone(),
+                        tag_type: sharedtypes::TagType::ParseUrl((
+                            sharedtypes::ScraperData {
+                                job: sharedtypes::JobScraper {
+                                    site: "e6ai".to_string(),
+                                    param: Vec::new(),
+                                    original_param: parse_url,
+                                    job_type: sharedtypes::DbJobType::Scraper,
+                                },
+                                system_data: BTreeMap::new(),
+                                user_data: BTreeMap::new(),
+                            },
+                            None,
+                        )),
+                    });
+                }
             }
         }
 
