@@ -58,7 +58,11 @@ impl Jobs {
             None => {}
             Some(joblist) => {
                 crate::logging::info_log(&format!("Removing job jobs{:?}", &data));
-                joblist.remove(data);
+                for job in joblist.clone().iter() {
+                    if job.id == data.id {
+                        joblist.remove(job);
+                    }
+                }
                 if del_from_db {
                     let mut db = self.db.lock().unwrap();
                     db.del_from_jobs_byid(&data.id);
