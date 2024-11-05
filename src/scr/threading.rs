@@ -185,6 +185,7 @@ impl Worker {
                     jobsstorage = temp.jobs_get(&scraper).clone();
                 }
                 for job in jobsstorage {
+                    should_remove_original_job = true;
                     let currentjob = job.clone();
                     let mut par_vec: Vec<sharedtypes::ScraperParam> = Vec::new();
                     {
