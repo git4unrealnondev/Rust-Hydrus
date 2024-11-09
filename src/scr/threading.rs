@@ -560,6 +560,8 @@ joblock = jobstorage.lock().unwrap();for urlz in urls_scrap {
                 }
             }
             threadflagcontrol.stop();
+            let mut joblock = jobstorage.lock().unwrap();
+            joblock.reset_previously_seen_cache();
         });
         Worker {
             id,

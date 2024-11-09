@@ -188,6 +188,14 @@ impl Jobs {
         self._jobref.get_mut(scraper).unwrap().insert(jobs_obj);
     }
 
+    ///
+    /// Clears deduplication cache for jobs manager.
+    /// Once cleared jobs that were previously seen can be reran
+    ///
+    pub fn reset_previously_seen_cache(&mut self) {
+        self.previously_seen.clear();
+    }
+
     pub fn jobs_add_jobsobj(
         &mut self,
         scraper: &scraper::InternalScraper,
