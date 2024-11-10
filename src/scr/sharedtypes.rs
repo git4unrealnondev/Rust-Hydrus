@@ -73,7 +73,7 @@ pub enum CsvCopyMvHard {
 ///
 /// Tells DB which table to load.
 ///
-#[derive(EnumIter, PartialEq, Debug, Serialize, Deserialize, Clone, Copy)]
+#[derive(EnumIter, PartialEq, Debug, Serialize, Deserialize, Clone, Copy, ValueEnum)]
 pub enum LoadDBTable {
     Files,        // Files table
     Jobs,         // Jobs table
