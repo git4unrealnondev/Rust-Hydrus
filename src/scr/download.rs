@@ -278,10 +278,6 @@ pub fn dlfile_new(
     let orig_path = format!("{}/{}", &final_loc, &hash);
     let mut file_path = std::fs::File::create(&orig_path).unwrap();
 
-    let mut content = Cursor::new(bytes.clone());
-    // Copies file from memory to disk
-    std::io::copy(&mut content, &mut file_path).unwrap();
-
     // If the plugin manager is None then don't do anything plugin wise.
     // Useful for if doing something that we CANNOT allow plugins to run.
     {
@@ -289,6 +285,10 @@ pub fn dlfile_new(
             crate::plugins::plugin_on_download(pluginmanager, db, bytes.as_ref(), &hash, &file_ext);
         }
     }
+
+    let mut content = Cursor::new(bytes);
+    // Copies file from memory to disk
+    std::io::copy(&mut content, &mut file_path).unwrap();
 
     logging::info_log(&format!("Downloaded hash: {}", &hash));
 
