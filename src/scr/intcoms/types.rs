@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 #![allow(unused_variables)]
+
 use crate::sharedtypes;
 use anyhow::Context;
 use interprocess::local_socket::prelude::LocalSocketStream;
@@ -22,62 +23,42 @@ pub enum EComType {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum EControlSigs {
-    Send,  // Sending data to and fro
-    Halt,  // Come to a stop naturally
-    Break, // STOP NOW PANIC
+    // Sending data to and fro
+    Send,
+    // Come to a stop naturally
+    Halt,
+    // STOP NOW PANIC
+    Break,
 }
 
-///
 /// Main communication block structure.
-///
-
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Coms {
     pub com_type: EComType,
     pub control: EControlSigs,
 }
-/*pub fn x_to_bytes<T: Sized>(input_generic: &T) -> &[u8] {
-    unsafe { any_as_u8_slice(input_generic) }
-}
 
-///
-/// Turns a generic into bytes
-///
-unsafe fn any_as_u8_slice<T: Sized>(p: &T) -> &[u8] {
-    ::core::slice::from_raw_parts((p as *const T) as *const u8, ::core::mem::size_of::<T>())
-}
-
-///
-/// Turns bytes into a coms structure.
-///
-pub fn con_coms(input: &mut [u8; 2]) -> Coms {
-    unsafe { std::mem::transmute(*input) }
-}
-
-///
-/// Turns bytes into a controlsig structure.
-///
-pub fn con_econtrolsigs(input: &mut [u8; 1]) -> EControlSigs {
-    unsafe { std::mem::transmute(*input) }
-}
-
-///
-/// Turns bytes into a uszie structure.
-///
-pub fn con_usize(input: &mut [u8; 8]) -> usize {
-    unsafe { std::mem::transmute(*input) }
-}
-
-///
-/// Turns bytes into a SupportedRequests structure.
-///
-//pub fn con_supportedrequests(input: &mut [u8; 56]) -> SupportedRequests {
-//    unsafe { std::mem::transmute(*input) }
-//}
-*/
-///
+// pub fn x_to_bytes<T: Sized>(input_generic: &T) -> &[u8] { unsafe {
+// any_as_u8_slice(input_generic) } }
+//
+// /// /// Turns a generic into bytes /// unsafe fn any_as_u8_slice<T: Sized>(p:
+// &T) -> &[u8] { ::core::slice::from_raw_parts((p as *const T) as *const u8,
+// ::core::mem::size_of::`<T>`()) }
+//
+// /// /// Turns bytes into a coms structure. /// pub fn con_coms(input: &mut [u8;
+// 2]) -> Coms { unsafe { std::mem::transmute(*input) } }
+//
+// /// /// Turns bytes into a controlsig structure. /// pub fn
+// con_econtrolsigs(input: &mut [u8; 1]) -> EControlSigs { unsafe {
+// std::mem::transmute(*input) } }
+//
+// /// /// Turns bytes into a uszie structure. /// pub fn con_usize(input: &mut
+// [u8; 8]) -> usize { unsafe { std::mem::transmute(*input) } }
+//
+// /// /// Turns bytes into a SupportedRequests structure. /// //pub fn
+// con_supportedrequests(input: &mut [u8; 56]) -> SupportedRequests { //    unsafe
+// { std::mem::transmute(*input) } //}
 /// Supported Database operations.
-///
 #[derive(Debug, Serialize, Deserialize)]
 pub enum SupportedDBRequests {
     GetTagId(usize),
@@ -131,33 +112,27 @@ pub enum SupportedDBRequests {
     GetJob(usize),
 }
 
-///
 /// A descriptor for the parents and the type of data that we're sending
-///
 #[derive(Debug, Serialize, Deserialize)]
 pub enum ParentsType {
     Tag,
     Rel,
 }
 
-///
 /// Actions for Database
 ///
-
-///
 /// Returns all data, general structure.
-///
 #[derive(Debug)]
 pub enum AllReturns {
     DB(DBReturns),
     Plugin(SupportedPluginRequests),
-    Nune, // Placeholder don't actually use. I'm using it lazizly because I'm a shitter. Keep it
-          // here for handling edge cases or nothing needs to get sent. lol
+    // Placeholder don't actually use. I'm using it lazizly because I'm a shitter.
+    // Keep it
+    Nune,
+    // here for handling edge cases or nothing needs to get sent. lol
 }
 
-///
 /// Returns the db data
-///
 #[derive(Debug)]
 pub enum DBReturns {
     GetTagId(Option<sharedtypes::DbTagNNS>),
@@ -178,16 +153,12 @@ pub enum EfficientDataReturn {
     Nothing,
 }
 
-///
 /// Supported cross talks between plugins.
-///
 #[derive(Debug, Deserialize, Serialize)]
 pub enum SupportedPluginRequests {}
 
-///
-/// Supported enum requests for the transaction.
-/// Will get sent over to sever / client to determine what data will be sent back and forth.
-///
+/// Supported enum requests for the transaction. Will get sent over to sever /
+/// client to determine what data will be sent back and forth.
 #[derive(Debug, Deserialize, Serialize)]
 pub enum SupportedRequests {
     Database(SupportedDBRequests),
@@ -200,9 +171,7 @@ struct Effdata {
     byte_buf: Vec<u8>,
 }
 
-///
 /// Writes all data into buffer.
-///
 pub fn send<T: Sized + Serialize>(inp: T, conn: &mut BufReader<LocalSocketStream>) {
     let byte_buf = bincode::serialize(&inp).unwrap();
     let size = &byte_buf.len();
@@ -215,11 +184,10 @@ pub fn send<T: Sized + Serialize>(inp: T, conn: &mut BufReader<LocalSocketStream
         .context("Socket send failed")
         .unwrap();
 }
-///
-/// Writes all data into buffer.
-/// Assumes data is preserialzied from data generic function.
-/// Can be hella dangerous. Types going in and recieved have to match EXACTLY.
-///
+
+/// Writes all data into buffer. Assumes data is preserialzied from data generic
+/// function. Can be hella dangerous. Types going in and recieved have to match
+/// EXACTLY.
 pub fn send_preserialize(inp: &Vec<u8>, conn: &mut BufReader<LocalSocketStream>) {
     let mut temp = inp.len().to_ne_bytes().to_vec();
     temp.extend(inp);
@@ -229,9 +197,7 @@ pub fn send_preserialize(inp: &Vec<u8>, conn: &mut BufReader<LocalSocketStream>)
         .context("Socket send failed");
 }
 
-///
 /// Returns a vec of bytes that represent an object
-///
 pub fn recieve<T: serde::de::DeserializeOwned>(
     conn: &mut BufReader<LocalSocketStream>,
 ) -> Result<T, anyhow::Error> {
@@ -240,9 +206,7 @@ pub fn recieve<T: serde::de::DeserializeOwned>(
         .get_mut()
         .read_exact(&mut usize_b[..])
         .context("Socket send failed");
-
     let size_of_data: usize = usize::from_ne_bytes(usize_b);
-
     let mut data_b = vec![0; size_of_data];
     let _ = conn
         .get_mut()

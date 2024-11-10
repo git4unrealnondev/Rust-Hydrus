@@ -9,7 +9,7 @@ pub fn size_eq(input: String, inint: u64) -> std::io::Result<()> {
     } else {
         Err(Error::last_os_error())
     }
-    //assert_eq!(inint, size.len());
+    // assert_eq!(inint, size.len());
 }
 
 /// Removes a file from the folder.
@@ -18,9 +18,7 @@ pub fn remove_file(input: String) -> std::io::Result<()> {
     Ok(())
 }
 
-///
 /// Make Folder
-///
 pub fn folder_make(location: &String) {
     std::fs::create_dir_all(location).unwrap();
 }

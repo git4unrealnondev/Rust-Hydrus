@@ -1,29 +1,28 @@
 use crate::database;
 use crate::download;
+use crate::logging;
 use crate::scraper::ScraperManager;
 use crate::sharedtypes::ScraperData;
 use std::collections::BTreeMap;
 
-use crate::logging;
-//use crate::jobs::JobsRef;
+// use crate::jobs::JobsRef;
 use crate::logging::info_log;
 use crate::plugins::PluginManager;
 use crate::scraper;
-
 use crate::sharedtypes;
 use crate::sharedtypes::JobScraper;
 use crate::sharedtypes::ScraperReturn;
-
 use async_std::task;
 
-//use log::{error, info};
+// use log::{error, info};
 use ratelimit::Ratelimiter;
 use reqwest::blocking::Client;
 use std::collections::BTreeSet;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::sync::Arc;
-//use std::sync::Mutex;
+
+// use std::sync::Mutex;
 use rusty_pool::Builder;
 use rusty_pool::ThreadPool;
 use std::sync::Mutex;
@@ -38,14 +37,10 @@ pub struct Threads {
     scraper_storage: HashMap<scraper::InternalScraper, usize>,
 }
 
-///
-/// Holder for workers.
-/// Workers manage their own threads.
-///
+/// Holder for workers. Workers manage their own threads.
 impl Threads {
     pub fn new() -> Self {
         let workers = 0;
-
         Threads {
             _workers: workers,
             worker: HashMap::new(),
@@ -54,9 +49,7 @@ impl Threads {
         }
     }
 
-    ///
     /// Adds a worker to the threadvec.
-    ///
     pub fn startwork(
         &mut self,
         jobstorage: Arc<Mutex<crate::jobs::Jobs>>,
@@ -82,13 +75,10 @@ impl Threads {
             self.worker.insert(self._workers, worker);
             self._workers += 1;
         }
-
-        //self._workers.push(worker);
+        // self._workers.push(worker);
     }
 
-    ///
     /// Checks and clears the worker pools & long stored data
-    ///
     pub fn check_threads(&mut self) {
         let mut temp = Vec::new();
 
@@ -100,7 +90,7 @@ impl Threads {
             }
         }
 
-        //Removing the data from thread handler
+        // Removing the data from thread handler
         for id in temp {
             self.worker_control.remove(&id);
             self.worker.remove(&id);
@@ -111,25 +101,21 @@ impl Threads {
             }
         }
 
-        //Reset counter
+        // Reset counter
         if self.worker.is_empty() {
             self._workers = 0;
         }
     }
 }
-///
+
 /// Worker holder for data. Will add a scraper processor soon tm.
-///
 struct Worker {
     id: usize,
     thread: Option<std::thread::JoinHandle<()>>,
 }
 
-///
-/// closes the thread that the worker contains.
-/// Used in easy thread handeling
-/// Only reason to do this over doing this with default drop behaviour is the logging.
-///
+/// closes the thread that the worker contains. Used in easy thread handeling Only
+/// reason to do this over doing this with default drop behaviour is the logging.
 impl Drop for Worker {
     fn drop(&mut self) {
         if let Some(thread) = self.thread.take() {
@@ -150,16 +136,10 @@ impl Worker {
         threadflagcontrol: Control,
         arc_scrapermanager: Arc<Mutex<ScraperManager>>,
     ) -> Worker {
-        /*info_log(&format!(
-            "Creating Worker for id: {} Scraper Name: {} With a jobs length of: {}",
-            &id,
-            &scraper._name,
-            &jobstorage..len()
-        ));*/
+        // info_log(&format!( "Creating Worker for id: {} Scraper Name: {} With a jobs
+        // length of: {}", &id, &scraper._name, &jobstorage..len() ));
         let mut db = dba.clone();
-
         let manageeplugin = pluginmanager.clone();
-
         let ratelimiter_main = Arc::new(Mutex::new(download::ratelimiter_create(
             scraper._ratelimit.0,
             scraper._ratelimit.1,
@@ -171,13 +151,10 @@ impl Worker {
             let mut job_ref_hash: BTreeMap<ScraperData, sharedtypes::DbJobsObj> = BTreeMap::new();
             let mut rate_limit_vec: Vec<Ratelimiter> = Vec::new();
             let mut rate_limit_key: HashMap<String, usize> = HashMap::new();
-
             let mut rate_limit_store: Arc<Mutex<HashMap<String, Ratelimiter>>> =
                 Arc::new(Mutex::new(HashMap::new()));
             let mut client = download::client_create();
-
             let mut should_remove_original_job = true;
-
             'bigloop: loop {
                 let jobsstorage;
                 {
@@ -203,7 +180,6 @@ impl Worker {
                             };
                             par_vec.push(temp)
                         }
-
                         let unwrappydb = &mut db.lock().unwrap();
                         let datafromdb = unwrappydb
                             .settings_get_name(&format!("{}_{}", scraper._type, &scraper._name));
@@ -218,14 +194,12 @@ impl Worker {
                                             param_data: param.clone(),
                                             param_type: sharedtypes::ScraperParamType::Database,
                                         };
-
                                         par_vec.push(scrap_data);
                                     }
                                 }
                             }
                         }
                     }
-
                     if let Some(recursion) = &job.jobmanager.recreation {
                         match recursion {
                             sharedtypes::DbJobRecreation::AlwaysTime((timestamp, count)) => {
@@ -247,13 +221,13 @@ impl Worker {
                         original_param: job.param.clone().unwrap(),
                         job_type: job.jobmanager.jobtype,
                     };
+
                     // Legacy data holder obj for plguins
                     let scraper_data_holder = sharedtypes::ScraperData {
                         job: job_holder_legacy.clone(),
                         system_data: job.system_data,
                         user_data: job.user_data,
                     };
-
                     let urlload = match job.jobmanager.jobtype {
                         sharedtypes::DbJobType::Params => {
                             let temp = scraper::url_dump(
@@ -262,24 +236,19 @@ impl Worker {
                                 arc_scrapermanager.clone(),
                                 &scraper,
                             );
-                            //job = temp.1;
+
+                            // job = temp.1;
                             temp
                         }
                         sharedtypes::DbJobType::Plugin => {
                             continue;
                         }
-                        /*sharedtypes::DbJobType::FileUrl => {
-                            let parpms: Vec<(String, ScraperData)> = (
-                                job.param
-                                    .clone()
-                                    .unwrap()
-                                    .split_whitespace()
-                                    .map(str::to_string)
-                                    .collect(),
-                                scraper_data_holder,
-                            );
-                            parpms
-                        }*/
+                        sharedtypes::DbJobType::NoScrape => {
+                            vec![(job.param.clone().unwrap(), scraper_data_holder)]
+                        }
+                        // sharedtypes::DbJobType::FileUrl => { let parpms: Vec<(String, ScraperData)> = (
+                        // job.param .clone() .unwrap() .split_whitespace() .map(str::to_string)
+                        // .collect(), scraper_data_holder, ); parpms }
                         sharedtypes::DbJobType::Scraper => {
                             vec![(job.param.clone().unwrap(), scraper_data_holder)]
                         }
@@ -287,10 +256,8 @@ impl Worker {
                     let scraper_library;
                     {
                         let scrapermanager = arc_scrapermanager.lock().unwrap();
-                        scraper_library =
-                            scrapermanager.library_get().get(&scraper).unwrap().clone();
+                        scraper_library = scrapermanager.library_get().get(&scraper).unwrap();
                     }
-
                     'urlloop: for (urll, scraperdata) in urlload {
                         'errloop: loop {
                             let resp = task::block_on(download::dltext_new(
@@ -298,7 +265,6 @@ impl Worker {
                                 &mut client,
                                 &ratelimiter_obj,
                             ));
-
                             let st = match resp {
                                 Ok(respstring) => scraper::parser_call(
                                     &respstring,
@@ -308,11 +274,10 @@ impl Worker {
                                 ),
                                 Err(_) => continue,
                             };
-
                             let (out_st, scraper_data_parser) = match st {
                                 Ok(objectscraper) => objectscraper,
                                 Err(ScraperReturn::Nothing) => {
-                                    //job_params.lock().unwrap().remove(&scraper_data);
+                                    // job_params.lock().unwrap().remove(&scraper_data);
                                     dbg!("Exiting loop due to nothing.");
                                     break 'urlloop;
                                 }
@@ -320,9 +285,8 @@ impl Worker {
                                     panic!("EMC STOP DUE TO: {}", emc);
                                 }
                                 Err(ScraperReturn::Stop(stop)) => {
-                                    //let temp = scraper_data.clone().job;
-                                    //job_params.lock().unwrap().remove(&scraper_data);
-
+                                    // let temp = scraper_data.clone().job;
+                                    // job_params.lock().unwrap().remove(&scraper_data);
                                     logging::error_log(&format!("Stopping job: {:?}", stop));
                                     continue;
                                 }
@@ -333,8 +297,7 @@ impl Worker {
                                 }
                             };
 
-                            //scraper_data = scraper_data_parser;
-                            //Parses tags from urls
+                            // scraper_data = scraper_data_parser; Parses tags from urls
                             for tag in out_st.tag {
                                 let to_parse = parse_tags(&db, tag, None);
                                 let mut joblock;
@@ -343,17 +306,10 @@ impl Worker {
                                     dbg!(format!("Adding job: {:?}", &urlz));
                                     joblock.jobs_add(&scraper, urlz, true, true);
                                 }
-                                //let url_job = JobScraper {};
-                                //dbg!(&urlz);
-                                //job_params.lock().unwrap().insert(urlz);
-
-                                //      job_ref_hash.insert(urlz, job);
-
-                                //for each in to_parse {
-                                //    job_params.lock().unwrap().insert(each);
-                                //}
+                                // let url_job = JobScraper {}; dbg!(&urlz);
+                                // job_params.lock().unwrap().insert(urlz); job_ref_hash.insert(urlz, job); for
+                                // each in to_parse { job_params.lock().unwrap().insert(each); }
                             }
-
                             let source_url_id = {
                                 let unwrappydb = &mut db.lock().unwrap();
                                 match unwrappydb.namespace_get(&"source_url".to_string()).cloned() {
@@ -368,8 +324,8 @@ impl Worker {
                                 }
                                 // defaults to 0 due to unknown.
                             };
-
                             let pool = ThreadPool::default();
+
                             // Parses files from urls
                             for file in out_st.file {
                                 let ratelimiter_obj = ratelimiter_main.clone();
@@ -382,150 +338,169 @@ impl Worker {
                                     let unwrappydb = &mut db.lock().unwrap();
                                     unwrappydb.location_get()
                                 };
-
                                 pool.execute(move || {
-                                                if let Some(ref source) = file.source_url {
-                                                // If url exists in db then don't download
-                                                //thread::sleep(Duration::from_secs(10));
-                                                let url_tag;
-                                                {
+                                    if let Some(ref source) = file.source_url {
+                                        // If url exists in db then don't download thread::sleep(Duration::from_secs(10));
+                                        let url_tag;
+                                        {
+                                            let unwrappydb = db.lock().unwrap();
+                                            url_tag = unwrappydb.tag_get_name(source.clone(), source_url_id).cloned();
+                                        };
+                                        for file_tag in file.skip_if.iter() {
+                                            match file_tag {
+                                                sharedtypes::SkipIf::FileNamespaceNumber(
+                                                    (unique_tag, namespace_filter, filter_number),
+                                                ) => {
                                                     let unwrappydb = db.lock().unwrap();
-                                                    url_tag = unwrappydb
-                                                        .tag_get_name(source.clone(), source_url_id)
-                                                        .cloned();
-                                                };
-                                                for file_tag in file.skip_if.iter() {
-                                                    match file_tag {
-                                                sharedtypes::SkipIf::FileNamespaceNumber((
-                            unique_tag,
-                            namespace_filter,
-                            filter_number,
-                        )) => {
-let unwrappydb = db.lock().unwrap();
-                            let mut cnt = 0;
-
-                            if let Some(nidf) = unwrappydb.namespace_get(&namespace_filter.name) {
-                            if let Some(nid) = unwrappydb.namespace_get(&unique_tag.namespace.name) {
-                                if let Some(tid) =
-                                    unwrappydb.tag_get_name(unique_tag.tag.clone(), *nid)
-                                {
-                                    if let Some(fids) = unwrappydb.relationship_get_fileid(tid) {
-                                        if fids.len() == 1 {
-                                            let fid = fids.iter().next().unwrap();
-                                            for tidtofilter in
-                                                unwrappydb.relationship_get_tagid(fid).unwrap().iter()
-                                            {
-                                                if unwrappydb.namespace_contains_id(nidf, tidtofilter)
-                                                {
-                                                    cnt += 1;
-                                                }
-                                            }}
-                                        }
-                                    }
-                                }
-                            }
-                            if cnt > *filter_number {
-                                info_log(&format!(
-                                            "Not downloading because unique namespace is greater then limit number. {}",
-                                            unique_tag.tag
-                                        ));
-                                                            return;
-                            } else {
-                                info_log(&format!("Downloading due to unique namespace not existing or number less then limit number."));
-                            }
-                        }
-
-                                                        sharedtypes::SkipIf::FileTagRelationship(tag) => {
-let unwrappydb = db.lock().unwrap();
-                                                    if let Some(nsid) = unwrappydb.namespace_get(&tag.namespace.name){
-            if let Some(_)=unwrappydb.tag_get_name(tag.tag.to_string(), *nsid){info_log(&format!("Skipping file: {} Due to skip tag {} already existing in Tags Table.",&source, tag.tag));
-            return;
-            }}
-
-                                                    }
-                                                }
-                                                                                            }
-
-                                                // Get's the hash & file ext for the file.
-                                                 let fileid = match url_tag {
-                                                    None => {
-                                                        match download_add_to_db( ratelimiter_obj, source, location, manageeplugin, &client, db.clone(), &file, source_url_id) {
-                                                            None => return,
-                                                            Some(id) =>id,
-            }
-                                                    }
-                                                    Some(url_id) => {
-                                                        let file_id;
-                                                        {
-                                                            // We've already got a valid relationship
-                                                            let unwrappydb = &mut db.lock().unwrap();
-                                                            file_id = unwrappydb
-                                                                .relationship_get_one_fileid(&url_id)
-                                                                .copied();
-                                                            if let Some(fid) = file_id {
-                                                                unwrappydb.file_get_id(&fid).unwrap();
+                                                    let mut cnt = 0;
+                                                    if let Some(nidf) =
+                                                        unwrappydb.namespace_get(&namespace_filter.name) {
+                                                        if let Some(nid) =
+                                                            unwrappydb.namespace_get(&unique_tag.namespace.name) {
+                                                            if let Some(tid) =
+                                                                unwrappydb.tag_get_name(
+                                                                    unique_tag.tag.clone(),
+                                                                    *nid,
+                                                                ) {
+                                                                if let Some(fids) =
+                                                                    unwrappydb.relationship_get_fileid(tid) {
+                                                                    if fids.len() == 1 {
+                                                                        let fid = fids.iter().next().unwrap();
+                                                                        for tidtofilter in unwrappydb
+                                                                            .relationship_get_tagid(fid)
+                                                                            .unwrap()
+                                                                            .iter() {
+                                                                            if unwrappydb.namespace_contains_id(
+                                                                                nidf,
+                                                                                tidtofilter,
+                                                                            ) {
+                                                                                cnt += 1;
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                }
                                                             }
                                                         }
-                                                        // fixes busted links.
-                                                        if let Some(file_id) = file_id {
-                                                            info_log(&format!(
-                                                            "Skipping file: {} Due to already existing in Tags Table.",
-                                                            &source
-                                                        ));
-
-                                                            file_id
-                                                        } else {match download_add_to_db( ratelimiter_obj, source, location, manageeplugin, &client, db.clone(), &file, source_url_id) {
-                                                            None => return,
-                                                            Some(id) =>id,
-            }
-
+                                                    }
+                                                    if cnt > *filter_number {
+                                                        info_log(
+                                                            &format!(
+                                                                "Not downloading because unique namespace is greater then limit number. {}",
+                                                                unique_tag.tag
+                                                            ),
+                                                        );
+                                                        return;
+                                                    } else {
+                                                        info_log(
+                                                            &format!(
+                                                                "Downloading due to unique namespace not existing or number less then limit number."
+                                                            ),
+                                                        );
+                                                    }
+                                                },
+                                                sharedtypes::SkipIf::FileTagRelationship(tag) => {
+                                                    let unwrappydb = db.lock().unwrap();
+                                                    if let Some(nsid) =
+                                                        unwrappydb.namespace_get(&tag.namespace.name) {
+                                                        if let Some(_) =
+                                                            unwrappydb.tag_get_name(tag.tag.to_string(), *nsid) {
+                                                            info_log(
+                                                                &format!(
+                                                                    "Skipping file: {} Due to skip tag {} already existing in Tags Table.",
+                                                                    &source,
+                                                                    tag.tag
+                                                                ),
+                                                            );
+                                                            return;
                                                         }
                                                     }
-                                                };
-
-                                                // We've got valid fileid for reference.
-
-                                                for taz in file.tag_list {
-                                                    //dbg!(&taz);
-                                                    let tag = taz;
-
-                                                    let urls_scrap = parse_tags(&db, tag, Some(fileid));
-
-                                            {
-
-                                            let mut joblock;
-joblock = jobstorage.lock().unwrap();for urlz in urls_scrap {
-                                                joblock.jobs_add(&scraper, urlz, true, true);
-                                                        //let url_job = JobScraper {};
-                                                        //dbg!(&urlz);
-                                                        //job_params.lock().unwrap().insert(urlz);
-
-
-                                                        //      job_ref_hash.insert(urlz, job);
-                                                    }
-
+                                                },
                                             }
+                                        }
 
-                                                                                                    }
+                                        // Get's the hash & file ext for the file.
+                                        let fileid = match url_tag {
+                                            None => {
+                                                match download_add_to_db(
+                                                    ratelimiter_obj,
+                                                    source,
+                                                    location,
+                                                    manageeplugin,
+                                                    &client,
+                                                    db.clone(),
+                                                    &file,
+                                                    source_url_id,
+                                                ) {
+                                                    None => return,
+                                                    Some(id) => id,
                                                 }
-                                            });
-                                // End of err catching loop.
-                                // break 'errloop;
+                                            },
+                                            Some(url_id) => {
+                                                let file_id;
+                                                {
+                                                    // We've already got a valid relationship
+                                                    let unwrappydb = &mut db.lock().unwrap();
+                                                    file_id =
+                                                        unwrappydb.relationship_get_one_fileid(&url_id).copied();
+                                                    if let Some(fid) = file_id {
+                                                        unwrappydb.file_get_id(&fid).unwrap();
+                                                    }
+                                                }
+
+                                                // fixes busted links.
+                                                if let Some(file_id) = file_id {
+                                                    info_log(
+                                                        &format!(
+                                                            "Skipping file: {} Due to already existing in Tags Table.",
+                                                            &source
+                                                        ),
+                                                    );
+                                                    file_id
+                                                } else {
+                                                    match download_add_to_db(
+                                                        ratelimiter_obj,
+                                                        source,
+                                                        location,
+                                                        manageeplugin,
+                                                        &client,
+                                                        db.clone(),
+                                                        &file,
+                                                        source_url_id,
+                                                    ) {
+                                                        None => return,
+                                                        Some(id) => id,
+                                                    }
+                                                }
+                                            },
+                                        };
+
+                                        // We've got valid fileid for reference.
+                                        for taz in file.tag_list {
+                                            // dbg!(&taz);
+                                            let tag = taz;
+                                            let urls_scrap = parse_tags(&db, tag, Some(fileid));
+                                            {
+                                                let mut joblock;
+                                                joblock = jobstorage.lock().unwrap();
+                                                for urlz in urls_scrap {
+                                                    joblock.jobs_add(&scraper, urlz, true, true);
+                                                    // let url_job = JobScraper {}; dbg!(&urlz);
+                                                    // job_params.lock().unwrap().insert(urlz); job_ref_hash.insert(urlz, job);
+                                                }
+                                            }
+                                        }
+                                    }
+                                });
+                                // End of err catching loop. break 'errloop;
                             }
                             pool.join();
                             break 'errloop;
                         }
-
-                        /*{
-                            let mut joblock = jobstorage.lock().unwrap();
-                            joblock.jobs_remove_dbjob(&scraper, &currentjob);
-
-                            let mut db = db.lock().unwrap();
-                            db.transaction_flush();
-                        }*/
-
-                        //let unwrappydb = &mut db.lock().unwrap();
-                        //unwrappydb.del_from_jobs_byid(&job.id);
+                        // { let mut joblock = jobstorage.lock().unwrap();
+                        // joblock.jobs_remove_dbjob(&scraper, &currentjob);
+                        //
+                        // let mut db = db.lock().unwrap(); db.transaction_flush(); } let unwrappydb =
+                        // &mut db.lock().unwrap(); unwrappydb.del_from_jobs_byid(&job.id);
                     }
                     {
                         if should_remove_original_job {
@@ -535,7 +510,6 @@ joblock = jobstorage.lock().unwrap();for urlz in urls_scrap {
                                 &currentjob,
                                 should_remove_original_job,
                             );
-
                             let mut db = db.lock().unwrap();
                             db.transaction_flush();
                         }
@@ -570,35 +544,27 @@ joblock = jobstorage.lock().unwrap();for urlz in urls_scrap {
     }
 }
 
-///
 /// Parses tags and adds the tags into the db.
-///
 fn parse_tags(
     db: &Arc<Mutex<database::Main>>,
     tag: sharedtypes::TagObject,
     file_id: Option<usize>,
 ) -> BTreeSet<sharedtypes::ScraperData> {
     let mut url_return: BTreeSet<sharedtypes::ScraperData> = BTreeSet::new();
-
     let unwrappy = &mut db.lock().unwrap();
 
-    //dbg!(&tag);
-
+    // dbg!(&tag);
     match tag.tag_type {
         sharedtypes::TagType::Normal => {
-            //println!("Adding tag: {} {:?}", tag.tag, &file_id);
-            // We've recieved a normal tag. Will parse.
-
+            // println!("Adding tag: {} {:?}", tag.tag, &file_id); We've recieved a normal
+            // tag. Will parse.
             let namespace_id =
                 unwrappy.namespace_add(tag.namespace.name, tag.namespace.description, true);
             let tag_id = unwrappy.tag_add(&tag.tag, namespace_id, true, None);
             match tag.relates_to {
                 None => {
-                    /*let relate_ns_id = unwrappy.namespace_add(
-                        relate.namespace.name.clone(),
-                        relate.namespace.description,
-                        true,
-                    );*/
+                    // let relate_ns_id = unwrappy.namespace_add( relate.namespace.name.clone(),
+                    // relate.namespace.description, true, );
                 }
                 Some(relate) => {
                     let relate_ns_id = unwrappy.namespace_add(
@@ -614,7 +580,6 @@ fn parse_tags(
                                 tag.namespace.description,
                                 true,
                             );
-
                             let tid = unwrappy.tag_add(&tag.tag, namespace_id, true, None);
                             Some(tid)
                         }
@@ -623,7 +588,6 @@ fn parse_tags(
                     unwrappy.parents_add(tag_id, relate_tag_id, limit_to, true);
                 }
             }
-
             match file_id {
                 None => {}
                 Some(id) => {
@@ -673,12 +637,18 @@ fn parse_tags(
                             }
                             if cnt >= filter_number {
                                 dbg!(&cnt, &filter_number);
-                                info_log(&format!(
-                                            "Not downloading because unique namespace is greater then limit number. {}",
-                                            unique_tag.tag
-                                        ));
+                                info_log(
+                                    &format!(
+                                        "Not downloading because unique namespace is greater then limit number. {}",
+                                        unique_tag.tag
+                                    ),
+                                );
                             } else {
-                                info_log(&format!("Downloading due to unique namespace not existing or number less then limit number."));
+                                info_log(
+                                    &format!(
+                                        "Downloading due to unique namespace not existing or number less then limit number."
+                                    ),
+                                );
                                 url_return.insert(jobscraped);
                             }
                         }
@@ -692,7 +662,6 @@ fn parse_tags(
                                 }
                                 Some(id) => id,
                             };
-
                             match unwrappy.tag_get_name(taginfo.tag.clone(), *id) {
                                 None => {
                                     println!("WillDownload: {}", taginfo.tag);
@@ -710,17 +679,16 @@ fn parse_tags(
                                             url_return.insert(jobscraped);
                                         }
                                         Some(_) => {
-                                            info_log(&format!(
-                                            "Skipping because this already has a relationship. {}",
-                                            taginfo.tag
-                                        ));
-
-                                            //println!("Will download from: {}", taginfo.tag);
-                                            //url_return.insert(jobscraped);
+                                            info_log(
+                                                &format!(
+                                                    "Skipping because this already has a relationship. {}",
+                                                    taginfo.tag
+                                                ),
+                                            );
+                                            // println!("Will download from: {}", taginfo.tag); url_return.insert(jobscraped);
                                         }
                                     }
                                     println!("Ignoring: {}", taginfo.tag);
-
                                     break 'tag;
                                 }
                             }
@@ -728,6 +696,7 @@ fn parse_tags(
                     }
                 }
             }
+
             // Returns the url that we need to parse.
             url_return
         }
@@ -748,9 +717,7 @@ fn download_add_to_db(
     file: &sharedtypes::FileObject,
     source_url_id: usize,
 ) -> Option<usize> {
-    // Download file doesn't exist.
-
-    // URL doesn't exist in DB Will download
+    // Download file doesn't exist. URL doesn't exist in DB Will download
     let blopt;
     {
         blopt = download::dlfile_new(

@@ -1,6 +1,7 @@
 use super::plugins::PluginManager;
 use crate::database::Main;
-//extern crate urlparse;
+
+// extern crate urlparse;
 use super::sharedtypes;
 use crate::logging;
 use bytes::Bytes;
@@ -15,19 +16,21 @@ use std::io::Cursor;
 use std::io::Read;
 use std::time::Duration;
 use url::Url;
+
 extern crate reqwest;
+
 use crate::helpers;
 use async_std::task;
 use ratelimit::Ratelimiter;
 use std::fs::File;
-//use std::sync::{Arc, Mutex};
+
+// use std::sync::{Arc, Mutex};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::thread;
-///
+
 /// Makes ratelimiter and example
-///
 pub fn ratelimiter_create(number: u64, duration: Duration) -> Ratelimiter {
     println!(
         "Making ratelimiter with: {} Request Per: {:?}",
@@ -58,19 +61,17 @@ pub fn ratelimiter_wait(ratelimit_object: &Arc<Mutex<Ratelimiter>>) {
     }
 }
 
-///
 /// Creates Client that the downloader will use.
-///
 pub fn client_create() -> Client {
     let useragent = "RustHydrusV1 0".to_string();
-
     let jar = cookie::Jar::default();
+
     // The client that does the downloading
     reqwest::blocking::ClientBuilder::new()
         .user_agent(useragent)
         .cookie_provider(jar.into())
-        //.brotli(true)
-        //.deflate(true)
+        //. brotli(true)
+        //. deflate(true)
         .gzip(true)
         .brotli(true)
         .deflate(true)
@@ -79,33 +80,30 @@ pub fn client_create() -> Client {
         .unwrap()
 }
 
-///
-/// Downloads text into db as responses. Filters responses by default limit if their's anything wrong with request.
-///
+/// Downloads text into db as responses. Filters responses by default limit if
+/// their's anything wrong with request.
 pub async fn dltext_new(
     url_string: String,
     client: &Client,
     ratelimiter_obj: &Arc<Mutex<Ratelimiter>>,
 ) -> Result<String, reqwest::Error> {
-    //let mut ret: Vec<AHashMap<String, AHashMap<String, Vec<String>>>> = Vec::new();
-    //let ex = Executor::new();
-
-    //let url = Url::parse("http://www.google.com").unwrap();
+    // let mut ret: Vec<AHashMap<String, AHashMap<String, Vec`<String>`>>> =
+    // Vec::new(); let ex = Executor::new(); let url =
+    // Url::parse("http://www.google.com").unwrap();
     let mut cnt = 0;
     loop {
         let url = Url::parse(&url_string).unwrap();
-        //let requestit = Request::new(Method::GET, url);
-        //fut.push();
+
+        // let requestit = Request::new(Method::GET, url); fut.push();
         logging::info_log(&format!("Spawned web reach to: {}", &url_string));
-        //let futureresult = futures::executor::block_on(ratelimit_object.ready())
-        //    .unwrap()
+
+        // let futureresult = futures::executor::block_on(ratelimit_object.ready())
+        // .unwrap()
         ratelimiter_wait(ratelimiter_obj);
         let futureresult = client.get(url).send();
 
-        //let test = reqwest::get(url).await.unwrap().text();
-
-        //let futurez = futures::executor::block_on(futureresult);
-        //dbg!(&futureresult);
+        // let test = reqwest::get(url).await.unwrap().text(); let futurez =
+        // futures::executor::block_on(futureresult); dbg!(&futureresult);
         if cnt == 3 {
             return Err(futureresult.err().unwrap());
         }
@@ -126,14 +124,13 @@ pub async fn dltext_new(
     }
 }
 
-///
 /// Hashes the bytes and compares it to what the scraper should of recieved.
-///
 pub fn hash_bytes(bytes: &Bytes, hash: &sharedtypes::HashesSupported) -> (String, bool) {
     match hash {
         sharedtypes::HashesSupported::Md5(hash) => {
             let digest = md5::compute(bytes);
-            //let sharedtypes::HashesSupported(hashe, _) => hash;
+
+            // let sharedtypes::HashesSupported(hashe, _) => hash;
             if &format!("{:x}", digest) != hash {
                 info!("Parser returned: {} Got: {:?}", &hash, &digest);
             }
@@ -163,9 +160,7 @@ pub fn hash_bytes(bytes: &Bytes, hash: &sharedtypes::HashesSupported) -> (String
     }
 }
 
-///
 /// Downloads file to position
-///
 pub fn dlfile_new(
     client: &Client,
     db: Arc<Mutex<Main>>,
@@ -180,7 +175,6 @@ pub fn dlfile_new(
     let mut cnt = 0;
     while boolloop {
         let mut hasher = Sha512::new();
-
         loop {
             let fileurlmatch = match &file.source_url {
                 None => {
@@ -191,13 +185,9 @@ pub fn dlfile_new(
                 }
                 Some(fileurl) => fileurl,
             };
-
             let url = Url::parse(fileurlmatch).unwrap();
-
             ratelimiter_wait(&ratelimiter_obj);
-
             logging::info_log(&format!("Downloading: {} to: {}", &fileurlmatch, &location));
-
             let mut futureresult = client.get(url.as_ref()).send();
             loop {
                 match futureresult {
@@ -217,8 +207,7 @@ pub fn dlfile_new(
             // Downloads file into byte memory buffer
             let byte = futureresult.unwrap().bytes();
 
-            // Error handling for dling a file.
-            // Waits 10 secs to retry
+            // Error handling for dling a file. Waits 10 secs to retry
             match byte {
                 Ok(_) => {
                     bytes = byte.unwrap();
@@ -236,16 +225,14 @@ pub fn dlfile_new(
             }
             cnt += 1;
         }
-
         hasher.update(bytes.as_ref());
 
         // Final Hash
         hash = format!("{:X}", hasher.finalize());
-
         match &file.hash {
             sharedtypes::HashesSupported::None => {
                 boolloop = false;
-                //panic!("DlFileNew: Cannot parse hash info : {:?}", &file);
+                // panic!("DlFileNew: Cannot parse hash info : {:?}", &file);
             }
             _ => {
                 // Check and compare  to what the scraper wants
@@ -259,7 +246,7 @@ pub fn dlfile_new(
                     );
                     cnt += 1;
                 } else {
-                    //dbg!("Parser returned: {} Got: {}", &file.hash, status.0);
+                    // dbg!("Parser returned: {} Got: {}", &file.hash, status.0);
                 }
                 if cnt >= 3 {
                     return None;
@@ -268,7 +255,6 @@ pub fn dlfile_new(
             }
         };
     }
-
     let final_loc = helpers::getfinpath(location, &hash);
 
     // Gives file extension
@@ -278,34 +264,28 @@ pub fn dlfile_new(
     let orig_path = format!("{}/{}", &final_loc, &hash);
     let mut file_path = std::fs::File::create(&orig_path).unwrap();
 
-    // If the plugin manager is None then don't do anything plugin wise.
-    // Useful for if doing something that we CANNOT allow plugins to run.
+    // If the plugin manager is None then don't do anything plugin wise. Useful for if
+    // doing something that we CANNOT allow plugins to run.
     {
         if let Some(pluginmanager) = pluginmanager {
             crate::plugins::plugin_on_download(pluginmanager, db, bytes.as_ref(), &hash, &file_ext);
         }
     }
-
     let mut content = Cursor::new(bytes);
+
     // Copies file from memory to disk
     std::io::copy(&mut content, &mut file_path).unwrap();
-
     logging::info_log(&format!("Downloaded hash: {}", &hash));
-
     Some((hash, file_ext))
 }
 
-///
 /// Hashes file from location string with specified hash into the hash of the file.
-///
 pub fn hash_file(filename: &String, hash: &sharedtypes::HashesSupported) -> (String, Bytes) {
     let f = File::open(filename).unwrap();
     let mut reader = BufReader::new(f);
     let mut buf = Vec::new();
-
     reader.read_to_end(&mut buf).unwrap();
     let b = Bytes::from(buf);
     let hash_self = hash_bytes(&b, hash);
-
     (hash_self.0, b)
 }

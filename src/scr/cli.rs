@@ -1,10 +1,12 @@
 extern crate clap;
+
 use rayon::prelude::*;
 use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
 use std::{collections::HashSet, io::Write};
 use strfmt::Format;
-//use std::str::pattern::Searcher;
+
+// use std::str::pattern::Searcher;
 use crate::download;
 use crate::{
     database, logging, pause, scraper,
@@ -24,7 +26,6 @@ fn return_jobtypemanager(
         None => sharedtypes::DbJobType::Params,
         Some(out) => out,
     };
-
     let jobsmanager = match recursion {
         None => sharedtypes::DbJobsManager {
             jobtype: jobtype,
@@ -52,9 +53,9 @@ fn return_jobtypemanager(
             },
         },
     };
-
     (jobtype, jobsmanager)
 }
+
 fn return_jobtypemanager_old(
     jobtype: Option<sharedtypes::DbJobType>,
     recursion: &cli_structs::DbJobRecreationClap,
@@ -87,12 +88,9 @@ fn return_jobtypemanager_old(
     (jobtype, jobsmanager)
 }
 
-///
 /// Returns the main argument and parses data.
-///
 pub fn main(data: Arc<Mutex<database::Main>>, scraper: &mut scraper::ScraperManager) {
     let args = cli_structs::MainWrapper::parse();
-
     if args.a.is_none() {
         return;
     }
@@ -100,10 +98,8 @@ pub fn main(data: Arc<Mutex<database::Main>>, scraper: &mut scraper::ScraperMana
     // Loads settings into DB.
     {
         let mut data = data.lock().unwrap();
-
         data.load_table(&sharedtypes::LoadDBTable::Settings);
     }
-
     match &args.a.as_ref().unwrap() {
         cli_structs::test::Job(jobstruct) => {
             match jobstruct {
@@ -136,7 +132,6 @@ pub fn main(data: Arc<Mutex<database::Main>>, scraper: &mut scraper::ScraperMana
                         return_jobtypemanager(addstruct.jobtype, addstruct.recursion.as_ref());
                     let mut data = data.lock().unwrap();
                     data.load_table(&sharedtypes::LoadDBTable::Jobs);
-
                     for bulk in addstruct.bulkadd.iter() {
                         let mut vars = HashMap::new();
                         vars.insert("inject".to_string(), bulk.to_string());
@@ -158,13 +153,10 @@ pub fn main(data: Arc<Mutex<database::Main>>, scraper: &mut scraper::ScraperMana
                         }
                     }
                 }
-
                 cli_structs::JobStruct::Remove(_remove) => {
-                    /*return sharedtypes::AllFields::JobsRemove(sharedtypes::JobsRemove {
-                        site: remove.site.to_string(),
-                        query: remove.query.to_string(),
-                        time: remove.time.to_string(),
-                    })*/
+                    // return sharedtypes::AllFields::JobsRemove(sharedtypes::JobsRemove { site:
+                    // remove.site.to_string(), query: remove.query.to_string(), time:
+                    // remove.time.to_string(), })
                 }
             }
         }
@@ -179,16 +171,14 @@ pub fn main(data: Arc<Mutex<database::Main>>, scraper: &mut scraper::ScraperMana
                     }
                     Some(tid) => {
                         dbg!("rel_get");
-                        //let mut col = Vec::new();
-                        //let mut ucol = Vec::new();
+
+                        // let mut col = Vec::new(); let mut ucol = Vec::new();
                         if let Some(rel) = data.parents_rel_get(tid) {
                             for each in rel.iter() {
                                 dbg!(each, data.tag_id_get(each).unwrap());
                             }
                         }
-
                         dbg!("tag_get");
-
                         if let Some(rel) = data.parents_tag_get(tid) {
                             for each in rel.iter() {
                                 dbg!(each, data.tag_id_get(each).unwrap());
@@ -338,6 +328,7 @@ pub fn main(data: Arc<Mutex<database::Main>>, scraper: &mut scraper::ScraperMana
                         println!("Couldn't find location: {}", &loc.location);
                         return;
                     }
+
                     // Loads the scraper info for parsing.
                     let scraperlibrary = scraper.return_libloading_string(&loc.site);
                     let libload = match scraperlibrary {
@@ -348,45 +339,42 @@ pub fn main(data: Arc<Mutex<database::Main>>, scraper: &mut scraper::ScraperMana
                         Some(load) => load,
                     };
                     data.load_table(&sharedtypes::LoadDBTable::All);
-
                     let failedtoparse: HashSet<String> = HashSet::new();
-
                     let file_regen = crate::scraper::scraper_file_regen(libload);
-
                     std::env::set_var("RAYON_NUM_THREADS", "50");
-
                     println!("Found location: {} Starting to process.", &loc.location);
-                    //dbg!(&loc.site, &loc.location);
+
+                    // dbg!(&loc.site, &loc.location);
                     for each in jwalk::WalkDir::new(&loc.location)
                         .into_iter()
                         .filter_map(|e| e.ok())
                         .filter(|z| z.file_type().is_file())
                     {
-                        //println!("{}", each.path().display());
-                        //println!("On file: {}", cnt);
+                        // println!("{}", each.path().display()); println!("On file: {}", cnt);
                         let (fhist, b) = download::hash_file(
                             &each.path().display().to_string(),
                             &file_regen.hash,
                         );
-
                         println!("File Hash: {}", &fhist);
-                        // Tries to infer the type from the ext.
 
+                        // Tries to infer the type from the ext.
                         let ext = FileFormat::from_bytes(&b).extension().to_string();
-                        // Error handling if we can't parse the filetyp
-                        // parses the info into something the we can use for the scraper
+
+                        // Error handling if we can't parse the filetyp parses the info into something the
+                        // we can use for the scraper
                         let scraperinput = sharedtypes::ScraperFileInput {
                             hash: Some(fhist),
                             ext: Some(ext.clone()),
                         };
-
                         let tag = crate::scraper::scraper_file_return(libload, &scraperinput);
+
                         // gets sha 256 from the file.
                         let (sha2, _a) = download::hash_bytes(
                             &b,
                             &sharedtypes::HashesSupported::Sha256("".to_string()),
                         );
                         let filesloc = data.location_get();
+
                         // Adds data into db
                         let file =
                             sharedtypes::DbFileStorage::NoIdExist(sharedtypes::DbFileObjNoId {
@@ -399,7 +387,7 @@ pub fn main(data: Arc<Mutex<database::Main>>, scraper: &mut scraper::ScraperMana
                             data.namespace_add(tag.namespace.name, tag.namespace.description, true);
                         let tid = data.tag_add(&tag.tag, nid, true, None);
                         data.relationship_add(fid, tid, true);
-                        //println!("FIle: {}", each.path().display());
+                        // println!("FIle: {}", each.path().display());
                     }
                     data.transaction_flush();
                     println!("done");
@@ -413,35 +401,34 @@ pub fn main(data: Arc<Mutex<database::Main>>, scraper: &mut scraper::ScraperMana
             },
             cli_structs::TasksStruct::Database(db) => {
                 use crate::helpers;
-                let dbstore = data.clone();
 
+                let dbstore = data.clone();
                 match db {
                     cli_structs::Database::BackupDB => {
-                        // backs up the db. check the location in setting or code if I change
-                        // anything lol
+                        // backs up the db. check the location in setting or code if I change anything lol
                         let mut data = data.lock().unwrap();
                         data.backup_db();
                     }
-
                     cli_structs::Database::CheckFiles => {
                         let mut data = data.lock().unwrap();
+
                         // This will check files in the database and will see if they even exist.
                         let db_location = data.location_get();
-
                         let cnt: std::sync::Arc<std::sync::Mutex<usize>> =
                             std::sync::Arc::new(std::sync::Mutex::new(0));
-
                         data.load_table(&sharedtypes::LoadDBTable::All);
-
                         if !Path::new("fileexists.txt").exists() {
                             let _ = std::fs::File::create("fileexists.txt");
                         }
                         let fiexist: std::sync::Arc<std::sync::Mutex<HashSet<usize>>> =
                             std::sync::Arc::new(std::sync::Mutex::new(
                                 std::fs::read_to_string("fileexists.txt")
-                                    .unwrap() // panic on possible file-reading errors
-                                    .lines() // split the string into an iterator of string slices
-                                    .map(|x| x.parse::<usize>().unwrap()) // make each slice into a string
+                                    // panic on possible file-reading errors
+                                    .unwrap()
+                                    // split the string into an iterator of string slices
+                                    .lines()
+                                    // make each slice into a string
+                                    .map(|x| x.parse::<usize>().unwrap())
                                     .collect(),
                             ));
                         let f = std::sync::Arc::new(std::sync::Mutex::new(
@@ -451,7 +438,6 @@ pub fn main(data: Arc<Mutex<database::Main>>, scraper: &mut scraper::ScraperMana
                                 .unwrap(),
                         ));
                         let lis = data.file_get_list_all();
-
                         println!("Files do not exist:");
                         let mut nsid: Option<usize> = None;
                         {
@@ -466,12 +452,10 @@ pub fn main(data: Arc<Mutex<database::Main>>, scraper: &mut scraper::ScraperMana
                             1,
                             std::time::Duration::from_secs(1),
                         )));
-
                         lis.par_iter().for_each(|(fid, storage)| {
                             if fiexist.lock().unwrap().contains(fid) {
                                 return;
                             }
-
                             let file = match storage {
                                 sharedtypes::DbFileStorage::NoExistUnknown => return,
                                 sharedtypes::DbFileStorage::NoExist(_) => return,
@@ -481,12 +465,10 @@ pub fn main(data: Arc<Mutex<database::Main>>, scraper: &mut scraper::ScraperMana
                             let loc = helpers::getfinpath(&db_location, &file.hash);
                             let lispa = format!("{}/{}", loc, file.hash);
                             *cnt.lock().unwrap() += 1;
-
                             if *cnt.lock().unwrap() == 1000 {
                                 let _ = f.lock().unwrap().flush();
                                 *cnt.lock().unwrap() = 0;
                             }
-
                             if !Path::new(&lispa).exists() {
                                 println!("{}", &file.hash);
                                 if nsid.is_some() {
@@ -504,7 +486,6 @@ pub fn main(data: Arc<Mutex<database::Main>>, scraper: &mut scraper::ScraperMana
                                                     hash: sharedtypes::HashesSupported::Sha256(
                                                         file.hash.clone(),
                                                     ),
-
                                                     tag_list: Vec::new(),
                                                     skip_if: Vec::new(),
                                                 };
@@ -546,7 +527,6 @@ pub fn main(data: Arc<Mutex<database::Main>>, scraper: &mut scraper::ScraperMana
                                                         hash: sharedtypes::HashesSupported::Sha256(
                                                             file.hash.clone(),
                                                         ),
-
                                                         tag_list: Vec::new(),
                                                         skip_if: Vec::new(),
                                                     };
@@ -575,12 +555,10 @@ pub fn main(data: Arc<Mutex<database::Main>>, scraper: &mut scraper::ScraperMana
                         data.load_table(&sharedtypes::LoadDBTable::Tags);
                         pause();
                     }
-
                     cli_structs::Database::CompressDatabase => {
                         let mut data = data.lock().unwrap();
                         data.condese_relationships_tags();
                     }
-
                     cli_structs::Database::RemoveWhereNot(db_n_rmv) => {
                         let mut data = data.lock().unwrap();
                         let ns_id = match db_n_rmv {
@@ -608,19 +586,16 @@ pub fn main(data: Arc<Mutex<database::Main>>, scraper: &mut scraper::ScraperMana
                         data.load_table(&sharedtypes::LoadDBTable::Tags);
                         data.load_table(&sharedtypes::LoadDBTable::Relationship);
                         data.load_table(&sharedtypes::LoadDBTable::Parents);
-                        //data.namespace_get(inp)
 
+                        // data.namespace_get(inp)
                         let mut key = data.namespace_keys();
                         key.retain(|x| *x != ns_id);
                         for each in key {
                             data.delete_namespace_sql(&each);
                         }
-
                         data.drop_recreate_ns(&ns_id);
-
                         panic!();
                     }
-
                     // Removing db namespace. Will get id to remove then remove it.
                     cli_structs::Database::Remove(db_rmv) => {
                         let mut data = data.lock().unwrap();
@@ -653,5 +628,5 @@ pub fn main(data: Arc<Mutex<database::Main>>, scraper: &mut scraper::ScraperMana
             cli_structs::TasksStruct::Csv(_csvstruct) => {}
         },
     }
-    //AllFields::Nothing
+    // AllFields::Nothing
 }

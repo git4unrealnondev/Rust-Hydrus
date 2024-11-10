@@ -2,10 +2,7 @@ use crate::sharedtypes;
 use clap::{arg, Parser, Subcommand, ValueEnum};
 use std::collections::BTreeMap;
 
-///
-/// From: git4unrealnondev
-/// Das code sucks.
-///
+/// From: git4unrealnondev Das code sucks.
 #[derive(Parser, Debug)]
 #[clap(author, version, about)]
 pub struct MainWrapper {
@@ -41,10 +38,8 @@ pub enum TasksStruct {
     #[clap(subcommand)]
     Scraper(ScraperAction),
 }
-///
-/// Type of job in db.
-/// Will be used to confirm what the scraping logic should work.
-///
+
+/// Type of job in db. Will be used to confirm what the scraping logic should work.
 #[derive(Debug, Copy, Hash, Eq, PartialEq, Clone, ValueEnum)]
 #[clap(rename_all = "kebab_case")]
 pub enum DbJobType {
@@ -63,6 +58,7 @@ pub enum ScraperAction {
     /// Tests a scraper
     Test(ScraperTest),
 }
+
 #[derive(Debug, Parser)]
 pub struct ScraperTest {
     /// Scraper to call
@@ -83,6 +79,7 @@ pub struct DirectoryLocation {
 pub enum Reimport {
     DirectoryLocation(DirectoryLocation),
 }
+
 #[derive(Debug, Subcommand)]
 pub enum Database {
     #[clap(subcommand)]
@@ -93,8 +90,8 @@ pub enum Database {
     CompressDatabase,
     /// Checks the in memory DB
     CheckInMemdb,
-    /// Checks the files on the filesystem.
-    /// Warning is hella slow uses multithreading to make this go faster but still...
+    /// Checks the files on the filesystem. Warning is hella slow uses multithreading
+    /// to make this go faster but still...
     CheckFiles,
     /// Backs up the database to a folder defined in settings.
     BackupDB,
@@ -157,14 +154,12 @@ pub struct JobBulkAddStruct {
     /// Job type to run
     #[arg(exclusive = false, required = true)]
     pub jobtype: Option<sharedtypes::DbJobType>,
-    /// Loops through all items have a , to seperate the items currently injects into the query
-    /// parameter of the job using {inject} as the injection point
+    /// Loops through all items have a , to seperate the items currently injects into
+    /// the query parameter of the job using {inject} as the injection point
     #[arg(value_delimiter = ',', exclusive = false, required = true)]
     pub bulkadd: Vec<String>,
-
     #[clap(subcommand)]
     pub recursion: Option<DbJobRecreationClap>,
-
     #[arg(
         exclusive = false,
         required = true,
@@ -174,15 +169,12 @@ pub struct JobBulkAddStruct {
     pub system_data: Option<Vec<String>>,
 }
 
-///
 /// Manager on job type and logic
-///
 #[derive(Debug, Hash, Eq, PartialEq, Clone)]
 pub struct DbJobsManagerClap {
     pub jobtype: DbJobType,
     pub recreation: Option<DbJobRecreationClap>,
-    // #[arg(long)]
-    // pub additionaldata: Option<(Vec<String>, Vec<String>)>,
+    // #[arg(long)] pub additionaldata: Option<(Vec`<String>`, Vec`<String>`)>,
 }
 
 #[derive(Debug, Hash, Eq, PartialEq, Clone, Subcommand)]
@@ -192,6 +184,7 @@ pub enum DbJobRecreationClap {
     /// Spawns the job after processing
     AlwaysTime(Timestamp),
 }
+
 #[derive(Debug, Parser, Clone, Eq, PartialEq, Hash)]
 pub struct Id_Timestamp {
     #[arg(required = true, exclusive = true)]
@@ -199,6 +192,7 @@ pub struct Id_Timestamp {
     #[arg(exclusive = false, required = true)]
     pub timestamp: Option<usize>,
 }
+
 #[derive(Debug, Parser, Clone, Eq, PartialEq, Hash)]
 pub struct Timestamp {
     // Timestamp in seconds to start another job
@@ -215,7 +209,6 @@ pub struct TagClap {
     pub name: String,
     #[arg(exclusive = false, required = true)]
     pub namespace: usize,
-
     #[arg(exclusive = false, required = true)]
     pub timestamp: Option<usize>,
 }
@@ -241,8 +234,8 @@ pub struct JobAddStruct {
     #[arg(
         exclusive = false,
         required = false,
-        //value_terminator = ";",
-        long="system"
+        // value_terminator = ";",
+        long = "system"
     )]
     pub system_data: Vec<String>,
     #[clap(subcommand)]
@@ -270,13 +263,13 @@ pub struct JobRemovalStruct {
 #[derive(Debug, Subcommand)]
 pub enum SearchStruct {
     /// Searches By File ID.
-    //#[arg(exclusive = true, required = false, long)]
+    // #[arg(exclusive = true, required = false, long)]
     Fid(Id),
     /// Searches By Tag Id.
-    //#[arg(exclusive = true, required = false, long)]
+    // #[arg(exclusive = true, required = false, long)]
     Tid(Id),
     /// Searches By Tag name needs namespace.
-    //#[arg(exclusive = true, required = false, long)]
+    // #[arg(exclusive = true, required = false, long)]
     Tag(Tag),
     /// Searches By Hash.
     Hash(Hashy),
@@ -299,11 +292,13 @@ pub struct Tag {
     #[arg(required = true, exclusive = false)]
     pub namespace: String,
 }
+
 #[derive(Debug, Parser, Clone, Eq, PartialEq, Hash)]
 pub struct Id {
     #[arg(required = true, exclusive = true)]
     pub id: usize,
 }
+
 #[derive(Parser, Debug)]
 pub struct Hashy {
     #[arg(required = true, exclusive = true)]

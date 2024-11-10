@@ -9,12 +9,13 @@ use crate::threading;
 use crate::time_func;
 use crate::time_func::time_secs;
 use std::collections::{HashMap, HashSet};
-
 use std::sync::Arc;
-//use std::sync::{Arc, Mutex};
+
+// use std::sync::{Arc, Mutex};
 use std::sync::Mutex;
+
 pub struct Jobs {
-    //References jobid in _inmemdb hashmap :D
+    // References jobid in _inmemdb hashmap :D
     pub _jobref: HashMap<scraper::InternalScraper, HashSet<sharedtypes::DbJobsObj>>,
     pub previously_seen: HashSet<(String, String, usize, usize)>,
     pub db: Arc<Mutex<database::Main>>,
@@ -26,9 +27,7 @@ pub enum JobAddOutput {
     NoOperation,
 }
 
-///
 /// Jobs manager creates & manages jobs
-///
 impl Jobs {
     pub fn new(db: Arc<Mutex<database::Main>>) -> Self {
         Jobs {
@@ -38,9 +37,7 @@ impl Jobs {
         }
     }
 
-    ///
     /// Returns a list of all jobs associated with a scraper
-    ///
     pub fn jobs_get(&self, scraper: &scraper::InternalScraper) -> HashSet<sharedtypes::DbJobsObj> {
         match self._jobref.get(scraper) {
             Some(jobs) => jobs.clone(),
@@ -101,9 +98,7 @@ impl Jobs {
         }
     }
 
-    ///
     /// jobs_remove removes job from DB & from
-    ///
     pub fn jobs_remove(
         &mut self,
         scraper: &scraper::InternalScraper,
@@ -119,21 +114,17 @@ impl Jobs {
         }
     }
 
-    ///
     /// Adds jobs to db and to previosuly seen hashset
-    ///
     pub fn jobs_add(
         &mut self,
         scraper: &scraper::InternalScraper,
         data: sharedtypes::ScraperData,
-
         addtodb: bool,
         deduplicate: bool,
     ) {
         if let None = self._jobref.get(scraper) {
             return;
         }
-
         if self.previously_seen.contains(&(
             data.job.site.clone(),
             data.job.original_param.clone(),
@@ -150,14 +141,12 @@ impl Jobs {
                 0,
             ));
         }
-
         let mut db = self.db.lock().unwrap();
         let jobsmanager = sharedtypes::DbJobsManager {
             jobtype: data.job.job_type,
             recreation: None,
-            //additionaldata: None,
+            // additionaldata: None,
         };
-
         let jobid = db.jobs_add(
             None,
             0,
@@ -171,7 +160,6 @@ impl Jobs {
             data.user_data.clone(),
             jobsmanager.clone(),
         );
-
         let jobs_obj: sharedtypes::DbJobsObj = sharedtypes::DbJobsObj {
             id: jobid,
             time: Some(0),
@@ -188,10 +176,8 @@ impl Jobs {
         self._jobref.get_mut(scraper).unwrap().insert(jobs_obj);
     }
 
-    ///
-    /// Clears deduplication cache for jobs manager.
-    /// Once cleared jobs that were previously seen can be reran
-    ///
+    /// Clears deduplication cache for jobs manager. Once cleared jobs that were
+    /// previously seen can be reran
     pub fn reset_previously_seen_cache(&mut self) {
         self.previously_seen.clear();
     }
@@ -214,7 +200,6 @@ impl Jobs {
             return JobAddOutput::NoOperation;
         }
         let mut db = self.db.lock().unwrap();
-
         let jobnumber = db.jobs_add(
             id,
             data.time.unwrap(),
@@ -241,9 +226,8 @@ impl Jobs {
             user_data: data.user_data,
         };
 
-        // self._jobref.get_mut(scraper).unwrap().insert(data);
-        // Inserts job into scraper's job list
-
+        // self._jobref.get_mut(scraper).unwrap().insert(data); Inserts job into scraper's
+        // job list
         if time_func::time_secs() >= jobs_obj.time.unwrap() + jobs_obj.reptime.unwrap() {
             crate::logging::info_log(&format!("Adding job: {:?}", &jobs_obj));
             match self._jobref.get_mut(scraper) {
@@ -262,13 +246,11 @@ impl Jobs {
                 data.time.unwrap(),
                 data.reptime.unwrap(),
             ));
-
             return JobAddOutput::LoadedJob;
         }
         if let None = self._jobref.get(scraper) {
             return JobAddOutput::RemoveJob;
         }
-
         JobAddOutput::NoOperation
     }
 
@@ -293,21 +275,17 @@ impl Jobs {
         }
     }
 
-    ///
     /// Loads jobs to run into _jobref
-    ///
     pub fn jobs_load(&mut self, scrapermanager: &scraper::ScraperManager) {
         let mut scraper_site_map = HashMap::new();
 
-        //self._secs = time_func::time_secs();
-        //let _ttl = db.jobs_get_max();
+        // self._secs = time_func::time_secs(); let _ttl = db.jobs_get_max();
         let hashjobs;
         {
             let mut db = self.db.lock().unwrap();
             hashjobs = db.jobs_get_all().clone();
         }
         let beans = scrapermanager.scraper_get();
-
         for scraper in beans.into_iter() {
             for site in scraper._sites.clone() {
                 scraper_site_map.insert(site, scraper.clone());
@@ -315,12 +293,10 @@ impl Jobs {
         }
         let mut flushdb_flag = false;
         let mut print_loaded_flag = false;
-
         let mut cnt = 0;
-
         for (id, jobsobj) in hashjobs.clone() {
-            // If our time is greater then time created + offset then run job.
-            // Hella basic but it works need to make this better.
+            // If our time is greater then time created + offset then run job. Hella basic but
+            // it works need to make this better.
             if let Some(scraper) = scraper_site_map.get(&jobsobj.site) {
                 if !self.jobs_get(scraper).contains(&jobsobj) {
                     match self.jobs_add_jobsobj(
@@ -338,15 +314,16 @@ impl Jobs {
                         JobAddOutput::RemoveJob => {
                             dbg!("Dupe for job: {}", jobsobj, id);
                             let mut db = self.db.lock().unwrap();
-                            //db.del_from_jobs_byid(&id);
+
+                            // db.del_from_jobs_byid(&id);
                             flushdb_flag = true;
                         }
                     }
                 }
             }
         }
-
         let mut db = self.db.lock().unwrap();
+
         // Flushes DB if we've deleted dupe jobs
         if flushdb_flag {
             {
@@ -354,17 +331,15 @@ impl Jobs {
             }
         }
 
-        //dbg!(db.jobs_get_isrunning());
-        //dbg!(&invalidjobvec);
-        //dbg!(&duplicatejobvec);
+        // dbg!(db.jobs_get_isrunning()); dbg!(&invalidjobvec); dbg!(&duplicatejobvec);
         if print_loaded_flag {
-            let msg = format!(
-            "Loaded {} jobs out of {} jobs. Didn't load {} Jobs due to lack of scrapers or timing.",
-            &cnt,
-            db.jobs_get_max(),
-            db.jobs_get_max() - cnt,
-        );
-
+            let msg =
+                format!(
+                    "Loaded {} jobs out of {} jobs. Didn't load {} Jobs due to lack of scrapers or timing.",
+                    &cnt,
+                    db.jobs_get_max(),
+                    db.jobs_get_max() - cnt
+                );
             logging::info_log(&msg);
         }
     }
@@ -379,9 +354,7 @@ impl Jobs {
         out
     }
 
-    ///
     /// Runs jobs in a much more sane matter
-    ///
     pub fn jobs_run_new(
         &mut self,
         adb: &mut Arc<Mutex<database::Main>>,
@@ -392,12 +365,12 @@ impl Jobs {
         let dba = adb.clone();
         let mut db = dba.lock().unwrap();
 
-        //let mut name_ratelimited: HashMap<String, (u64, Duration)> = AHashMap::new();
+        // let mut name_ratelimited: HashMap<String, (u64, Duration)> = AHashMap::new();
         let mut scraper_and_job: HashMap<InternalScraper, Vec<sharedtypes::DbJobsObj>> =
             HashMap::new();
-        //let mut job_plus_storeddata: HashMap<String, String> = AHashMap::new();
 
-        // Checks if their are no jobs to run.
+        // let mut job_plus_storeddata: HashMap<String, String> = AHashMap::new(); Checks
+        // if their are no jobs to run.
         if scrapermanager.scraper_get().is_empty() || self._jobref.is_empty() {
             println!("No jobs to run...");
             return;
@@ -405,65 +378,37 @@ impl Jobs {
             // Loads DB into memory. Everything that hasn't been loaded already
             db.load_table(&sharedtypes::LoadDBTable::All);
         }
-
-        /*// Appends ratelimited into hashmap for multithread scraper.
-        for scrape in self.scrapermanager.scraper_get() {
-            let name_result = db.settings_get_name(&format!("{:?}_{}", scrape._type, scrape._name));
-
-            // Handles loading of settings into DB.Either Manual or Automatic to describe the functionallity
-            if name_result.is_none() {
-                let isolatedtitle = format!("{:?}_{}", scrape._type, scrape._name);
-
-                let (_cookie, cookie_name) = self.library_cookie_needed(scrape);
-
-                db.setting_add(
-                    isolatedtitle,
-                    Some("Automatic Scraper".to_owned()),
-                    None,
-                    Some(cookie_name),
-                    true,
-                );
-            }
-            // Loops through all jobs in the ref. Adds ref into
-            for each in &self._jobref {
-                let job = each.1;
-
-                // Checks job type. If manual then scraper handles ALL calls from here on.
-                // If Automatic then jobs will handle it.
-                match job.1._type {
-                    ScraperType::Manual => {}
-                    ScraperType::Automatic => {
-                        // Checks if InternalScraper types are the same data.
-                        if &job.1 == scrape {
-                            match scraper_and_job.entry(job.1.clone()) {
-                                Entry::Vacant(e) => {
-                                    e.insert(vec![job.0.clone()]);
-                                }
-                                Entry::Occupied(mut e) => {
-                                    e.get_mut().push(job.0.clone());
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }*/
-
-        /* // Loops through each InternalScraper and creates a thread for it.
-        for each in scraper_and_job {
-            let scraper = each.0;
-
-            // Captures the libloading library from the _library.
-            // Removes item from hashmap so the thread can have ownership of libloaded scraper.
-            let scrap = self.scrapermanager._library.remove(&scraper).unwrap();
-            let jobs = each.1;
-
-            thread.startwork(scraper, jobs, adb, scrap, pluginmanager);
-        }*/
+        // // Appends ratelimited into hashmap for multithread scraper. for scrape in
+        // self.scrapermanager.scraper_get() { let name_result =
+        // db.settings_get_name(&format!("{:?}_{}", scrape._type, scrape._name));
+        //
+        // // Handles loading of settings into DB.Either Manual or Automatic to describe
+        // the functionallity if name_result.is_none() { let isolatedtitle =
+        // format!("{:?}_{}", scrape._type, scrape._name);
+        //
+        // let (_cookie, cookie_name) = self.library_cookie_needed(scrape);
+        //
+        // db.setting_add( isolatedtitle, Some("Automatic Scraper".to_owned()), None,
+        // Some(cookie_name), true, ); } // Loops through all jobs in the ref. Adds ref
+        // into for each in &self._jobref { let job = each.1;
+        //
+        // // Checks job type. If manual then scraper handles ALL calls from here on. //
+        // If Automatic then jobs will handle it. match job.1._type { ScraperType::Manual
+        // => {} ScraperType::Automatic => { // Checks if InternalScraper types are the
+        // same data. if &job.1 == scrape { match scraper_and_job.entry(job.1.clone()) {
+        // Entry::Vacant(e) => { e.insert(vec![job.0.clone()]); } Entry::Occupied(mut e)
+        // => { e.get_mut().push(job.0.clone()); } } } } } } } // Loops through each
+        // InternalScraper and creates a thread for it. for each in scraper_and_job { let
+        // scraper = each.0;
+        //
+        // // Captures the libloading library from the _library. // Removes item from
+        // hashmap so the thread can have ownership of libloaded scraper. let scrap =
+        // self.scrapermanager._library.remove(&scraper).unwrap(); let jobs = each.1;
+        //
+        // thread.startwork(scraper, jobs, adb, scrap, pluginmanager); }
     }
-    ///
+
     /// pub fn cookie_needed(&mut self, id: usize, params: String) -> (bool, String)
-    ///
     pub fn library_cookie_needed(
         &self,
         memid: &InternalScraper,
@@ -471,6 +416,6 @@ impl Jobs {
     ) -> (ScraperType, String) {
         let libloading = scrapermanager.returnlibloading(memid);
         scraper::cookie_need(libloading)
-        //self.scrapermanager.cookie_needed(memid)
+        // self.scrapermanager.cookie_needed(memid)
     }
 }

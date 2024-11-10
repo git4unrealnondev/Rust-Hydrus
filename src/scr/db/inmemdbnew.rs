@@ -6,6 +6,7 @@ use fnv::{FnvHashMap, FnvHashSet};
 use std::clone;
 use std::collections::{HashMap, HashSet};
 use std::hash::Hash;
+
 pub enum TagRelateConjoin {
     Tag,
     Error,
@@ -14,15 +15,17 @@ pub enum TagRelateConjoin {
     TagAndRelate,
     None,
 }
+
 pub struct tes {
     test: HashSet<usize>,
 }
+
 impl tes {
     pub fn new() -> tes {
         let te = HashSet::default();
-
         tes { test: te }
     }
+
     pub fn inc(&mut self, i: usize) {
         self.test.insert(i);
     }
@@ -31,32 +34,25 @@ impl tes {
 pub struct NewinMemDB {
     _tag_nns_id_data: FnvHashMap<usize, sharedtypes::DbTagNNS>,
     _tag_nns_data_id: HashMap<sharedtypes::DbTagNNS, usize>,
-
     _settings_id_data: HashMap<usize, sharedtypes::DbSettingObj>,
     _settings_name_id: HashMap<String, usize>,
-
     _parents_dual: HashSet<usize>,
-
     _parents_tag_rel: HashMap<usize, HashSet<usize>>,
     _parents_rel_tag: HashMap<usize, HashSet<usize>>,
     _parents_cantor_limitto: HashMap<usize, HashSet<usize>>,
     _parents_limitto_cantor: HashMap<usize, HashSet<usize>>,
-
     _jobs_id_data: HashMap<usize, sharedtypes::DbJobsObj>,
-    //_jobs_name_id: HashMap<String, usize>,
+    // _jobs_name_id: HashMap<String, usize>,
     _namespace_id_data: HashMap<usize, sharedtypes::DbNamespaceObj>,
     _namespace_name_id: HashMap<String, usize>,
     _namespace_id_tag: HashMap<usize, HashSet<usize>>,
-
     _file_id_data: HashMap<usize, sharedtypes::DbFileStorage>,
     _file_location_usize: FnvHashMap<usize, String>,
     _file_location_string: FnvHashMap<String, usize>,
     _file_name_id: HashMap<String, usize>,
-
     _relationship_file_tag: FnvHashMap<usize, FnvHashSet<usize>>,
     _relationship_tag_file: FnvHashMap<usize, FnvHashSet<usize>>,
     _relationship_dual: FnvHashSet<usize>,
-
     _file_location_count: usize,
     _tag_max: usize,
     _relationship_max: usize,
@@ -72,31 +68,25 @@ impl NewinMemDB {
         NewinMemDB {
             _tag_nns_id_data: HashMap::default(),
             _tag_nns_data_id: HashMap::new(),
-
             _jobs_id_data: HashMap::default(),
             _file_id_data: HashMap::default(),
             _file_location_usize: HashMap::default(),
             _file_location_string: HashMap::default(),
-            //_jobs_name_id: HashMap::new(),
+            // _jobs_name_id: HashMap::new(),
             _file_name_id: HashMap::new(),
             _parents_dual: HashSet::default(),
-
             _parents_rel_tag: HashMap::default(),
             _parents_tag_rel: HashMap::default(),
             _parents_cantor_limitto: HashMap::default(),
             _parents_limitto_cantor: HashMap::default(),
-
             _settings_name_id: HashMap::new(),
             _settings_id_data: HashMap::default(),
-
             _namespace_name_id: HashMap::new(),
             _namespace_id_data: HashMap::default(),
             _namespace_id_tag: HashMap::default(),
-
             _relationship_tag_file: HashMap::default(),
             _relationship_file_tag: HashMap::default(),
             _relationship_dual: HashSet::default(),
-
             _file_location_count: 0,
             _tag_max: 0,
             _settings_max: 0,
@@ -108,16 +98,14 @@ impl NewinMemDB {
         }
     }
 
-    ///
     /// Dumps db data
-    ///
     pub fn dumpe_data(&self) {
         use crate::pause;
 
         dbg!(&self._tag_nns_id_data, &self._tag_nns_data_id);
         pause();
 
-        //&self. , &self. , &self. , &self. , &self. , &self.
+        // &self. , &self. , &self. , &self. , &self. , &self.
         dbg!(&self._file_name_id, &self._file_id_data);
         pause();
         dbg!(&self._relationship_tag_file);
@@ -126,10 +114,7 @@ impl NewinMemDB {
         pause();
     }
 
-    ///
-    /// Adds setting into internal DB.
-    /// Updates setting if it doesn't exist.
-    ///
+    /// Adds setting into internal DB. Updates setting if it doesn't exist.
     pub fn settings_add(
         &mut self,
         name: String,
@@ -170,15 +155,12 @@ impl NewinMemDB {
         }
     }
 
-    ///
     /// Adds jobs into internal db.
-    ///
     pub fn jobref_new(&mut self, job: sharedtypes::DbJobsObj) -> bool {
         if job.id >= self._jobs_max {
             self._jobs_max = job.id;
             self._jobs_max += 1;
         }
-
         match self._jobs_id_data.get(&job.id) {
             Some(_) => {
                 self._jobs_id_data.insert(job.id, job);
@@ -192,18 +174,14 @@ impl NewinMemDB {
         }
     }
 
-    ///
-    /// Removes a job from the internal db.
-    /// Dont want to remove from the _jobs_max count because all ID's should be unique
-    /// (ensures consistency between caches of data)
-    ///
+    /// Removes a job from the internal db. Dont want to remove from the _jobs_max
+    /// count because all ID's should be unique (ensures consistency between caches of
+    /// data)
     pub fn jobref_remove(&mut self, id: &usize) {
         let _ = self._jobs_id_data.remove(id);
     }
 
-    ///
     /// Job flip is running
-    ///
     pub fn jobref_flip_isrunning(&mut self, id: &usize) -> Option<bool> {
         match self._jobs_id_data.get_mut(id) {
             Some(job) => match job.isrunning {
@@ -220,9 +198,7 @@ impl NewinMemDB {
         }
     }
 
-    ///
     /// Gets all running jobs
-    ///
     pub fn jobref_get_isrunning(&self) -> HashSet<&sharedtypes::DbJobsObj> {
         let mut out = HashSet::new();
         for each in self._jobs_id_data.values() {
@@ -233,9 +209,7 @@ impl NewinMemDB {
         out
     }
 
-    ///
     /// Returns tag by ID.
-    ///
     pub fn settings_get_name(&self, name: &String) -> Option<&sharedtypes::DbSettingObj> {
         match self._settings_name_id.get(name) {
             None => None,
@@ -243,9 +217,7 @@ impl NewinMemDB {
         }
     }
 
-    ///
     /// Returns namespace id by string
-    ///
     pub fn namespace_get(&self, inp: &String) -> Option<&usize> {
         match self._namespace_name_id.get(inp) {
             None => None,
@@ -253,18 +225,14 @@ impl NewinMemDB {
         }
     }
 
-    ///
     /// Returns namespace obj by id
-    ///
     pub fn namespace_id_get(&self, id: &usize) -> Option<&sharedtypes::DbNamespaceObj> {
         self._namespace_id_data.get(id)
     }
 
-    ///
     /// Retuns raw namespace id's
-    ///
     pub fn namespace_keys(&self) -> Vec<usize> {
-        //let test= self._namespace_id_data;
+        // let test= self._namespace_id_data;
         let mut temp: Vec<usize> = Vec::new();
         for each in self._namespace_id_data.keys() {
             temp.push(*each);
@@ -272,16 +240,12 @@ impl NewinMemDB {
         temp
     }
 
-    ///
     /// Returns tag id's based on namespace id.
-    ///
     pub fn namespace_get_tagids(&self, id: &usize) -> Option<&HashSet<usize>> {
         self._namespace_id_tag.get(id)
     }
 
-    ///
     /// Returns a list of file id's based on a tag id.
-    ///
     pub fn relationship_get_fileid(&self, tag: &usize) -> Option<HashSet<usize>> {
         match self._relationship_tag_file.get(tag) {
             None => None,
@@ -295,9 +259,7 @@ impl NewinMemDB {
         }
     }
 
-    ///
     /// Returns a list of tag id's based on a file id
-    ///
     pub fn relationship_get_tagid(&self, file: &usize) -> Option<HashSet<usize>> {
         match self._relationship_file_tag.get(file) {
             None => None,
@@ -307,9 +269,7 @@ impl NewinMemDB {
         }
     }
 
-    ///
     /// relationship gets only one fileid
-    ///
     pub fn relationship_get_one_fileid(&self, tag: &usize) -> Option<&usize> {
         match self._relationship_tag_file.get(tag) {
             None => None,
@@ -324,22 +284,18 @@ impl NewinMemDB {
                         break;
                     }
                     Some(temp_int)
-                    //return Some(&relref.take(&0).unwrap());
+                    // return Some(&relref.take(&0).unwrap());
                 }
             }
         }
     }
 
-    ///
     /// Returns the tag id of the nns
-    ///
     pub fn tags_get_id(&self, tagobj: &sharedtypes::DbTagNNS) -> Option<&usize> {
         self._tag_nns_data_id.get(tagobj)
     }
 
-    ///
     /// Returns the tag from id
-    ///
     pub fn tags_get_data(&self, id: &usize) -> Option<&sharedtypes::DbTagNNS> {
         self._tag_nns_id_data.get(id)
     }
@@ -351,9 +307,7 @@ impl NewinMemDB {
         self.clear_files();
     }
 
-    ///
     /// Cleares inmemdb files structure
-    ///
     pub fn clear_files(&mut self) {
         self._file_id_data.clear();
         self._file_location_usize.clear();
@@ -361,18 +315,14 @@ impl NewinMemDB {
         self._file_name_id.clear();
     }
 
-    ///
     /// Clears inmemdb tags structures
-    ///
     pub fn tags_clear(&mut self) {
         self._tag_max = 0;
         self._tag_nns_id_data.clear();
         self._tag_nns_data_id.clear();
     }
 
-    ///
     /// Clears inmemdb parents structures
-    ///
     pub fn parents_clear(&mut self) {
         self._parents_max = 0;
         self._parents_dual.clear();
@@ -382,9 +332,7 @@ impl NewinMemDB {
         self._parents_tag_rel.clear();
     }
 
-    ///
     /// Clears inmemdb relationships structures
-    ///
     pub fn relationships_clear(&mut self) {
         self._relationship_max = 0;
         self._relationship_file_tag.clear();
@@ -392,9 +340,6 @@ impl NewinMemDB {
         self._relationship_dual.clear();
     }
 
-    ///
-    ///
-    ///
     pub fn tags_get_list_id(&self) -> HashSet<usize> {
         let mut temp: HashSet<usize> = HashSet::new();
         for each in self._tag_nns_id_data.keys() {
@@ -403,9 +348,7 @@ impl NewinMemDB {
         temp
     }
 
-    ///
     /// Removes tag from db.
-    ///
     pub fn tag_remove(&mut self, id: &usize) -> Option<()> {
         let rmove = self._tag_nns_id_data.remove(id);
         match rmove {
@@ -424,36 +367,25 @@ impl NewinMemDB {
         }
     }
 
-    ///
     /// Removes relationship from db
-    ///
     pub fn relationship_remove(&mut self, file_id: &usize, tag_id: &usize) {
         let cantor = &self.cantor_pair(file_id, tag_id);
-
         self._relationship_dual.remove(cantor);
-
         self._relationship_file_tag.remove(file_id);
-
         self._relationship_tag_file.remove(tag_id);
     }
 
-    ///
     /// Returns the max id in db
-    ///
     pub fn tags_max_return(&self) -> usize {
         self._tag_max
     }
 
-    ///
     /// Resets the tag counter to 0.
-    ///
     pub fn tags_max_reset(&mut self) {
         self._tag_max = 0;
     }
 
-    ///
     /// inserts file into db returns file id
-    ///
     pub fn file_put(&mut self, file: sharedtypes::DbFileStorage) -> usize {
         match file {
             sharedtypes::DbFileStorage::Exist(file) => {
@@ -461,11 +393,9 @@ impl NewinMemDB {
                     self._file_max = file.id;
                     self._file_max += 1;
                 }
-
                 self._file_name_id.insert(file.hash.clone(), file.id);
                 self._file_id_data
                     .insert(file.id, sharedtypes::DbFileStorage::Exist(file.clone()));
-
                 file.id
             }
             sharedtypes::DbFileStorage::NoIdExist(file_noid) => {
@@ -476,11 +406,9 @@ impl NewinMemDB {
                     location: file_noid.location,
                 };
                 self._file_max += 1;
-
                 self._file_name_id.insert(file.hash.clone(), file.id);
                 self._file_id_data
                     .insert(file.id, sharedtypes::DbFileStorage::Exist(file.clone()));
-
                 file.id
             }
             sharedtypes::DbFileStorage::NoExist(fid) => {
@@ -500,9 +428,7 @@ impl NewinMemDB {
         }
     }
 
-    ///
     /// Gets location id from string
-    ///
     fn file_location_get_id(&mut self, loc: String) -> usize {
         match self._file_location_string.get(&loc) {
             Some(num) => *num,
@@ -517,30 +443,22 @@ impl NewinMemDB {
         }
     }
 
-    ///
     /// Gets location string from id
-    ///
     fn file_location_get_string(&self, id: &usize) -> Option<String> {
         self._file_location_usize.get(id).map(|num| num.to_string())
     }
 
-    ///
     /// Returns a file based on ID
-    ///
     pub fn file_get_id(&self, id: &usize) -> Option<&sharedtypes::DbFileStorage> {
         self._file_id_data.get(id)
     }
 
-    ///
     /// get's file if from db hash
-    ///
     pub fn file_get_hash(&self, hash: &String) -> Option<&usize> {
         self._file_name_id.get(hash)
     }
 
-    ///
     /// Returns the file id's in db
-    ///
     pub fn file_get_list_id(&self) -> HashSet<usize> {
         let mut temp: HashSet<usize> = HashSet::default();
         for each in self._file_id_data.keys() {
@@ -549,15 +467,12 @@ impl NewinMemDB {
         temp
     }
 
-    ///
     /// Returns all file objects in db
-    ///
     pub fn file_get_list_all(&self) -> &HashMap<usize, sharedtypes::DbFileStorage> {
         &self._file_id_data
     }
-    ///
+
     /// Inserts namespace into db
-    ///
     pub fn namespace_put(&mut self, namespace_obj: sharedtypes::DbNamespaceObj) -> usize {
         let namespace_exist = self
             ._namespace_name_id
@@ -573,9 +488,7 @@ impl NewinMemDB {
         }
     }
 
-    ///
     /// Deletes a namespace from db
-    ///
     pub fn namespace_delete(&mut self, namepsace_id: &usize) {
         let namespace_data = self._namespace_id_data.remove(namepsace_id);
         match namespace_data {
@@ -587,19 +500,14 @@ impl NewinMemDB {
         }
     }
 
-    ///
     /// Returns the max id of namespaces
-    ///
     pub fn namespace_get_max(&self) -> usize {
         self._namespace_max
     }
 
-    ///
     /// Adds a tag into db
-    ///
     pub fn tags_put(&mut self, tag_info: &sharedtypes::DbTagNNS, id: Option<usize>) -> usize {
         let temp = self._tag_nns_data_id.get(tag_info);
-
         match temp {
             None => {
                 let working_id = match id {
@@ -607,9 +515,7 @@ impl NewinMemDB {
                     Some(tid) => tid,
                 };
 
-                //let working_id = self._tag_max;
-
-                // Inserts the tagid into namespace.
+                // let working_id = self._tag_max; Inserts the tagid into namespace.
                 let namespace_opt = self._namespace_id_tag.get_mut(&tag_info.namespace);
                 match namespace_opt {
                     None => {
@@ -617,6 +523,7 @@ impl NewinMemDB {
                             "Making namespace with id : {}",
                             &tag_info.namespace
                         ));
+
                         // Gets called when the namespace id wasn't found as a key
                         let mut idset = HashSet::new();
                         idset.insert(working_id);
@@ -626,7 +533,6 @@ impl NewinMemDB {
                         namespace.insert(working_id);
                     }
                 };
-
                 self.insert_tag_nns(sharedtypes::DbTagObjCompatability {
                     id: working_id,
                     name: tag_info.name.clone(),
@@ -656,7 +562,6 @@ impl NewinMemDB {
                 tag_info.name
             ));
         }
-
         self._tag_nns_id_data.insert(
             tag_info.id,
             sharedtypes::DbTagNNS {
@@ -673,9 +578,7 @@ impl NewinMemDB {
         );
     }
 
-    ///
     /// checks if parents exist
-    ///
     pub fn parents_get(&self, parent: &sharedtypes::DbParentsObj) -> Option<&usize> {
         let cantor = &self.cantor_pair(&parent.tag_id, &parent.relate_tag_id);
         match parent.limit_to {
@@ -693,9 +596,7 @@ impl NewinMemDB {
         }
     }
 
-    ///
     /// Returns the list of relationships assicated with tag
-    ///
     pub fn parents_rel_get(
         &self,
         relate_tag_id: &usize,
@@ -723,9 +624,7 @@ impl NewinMemDB {
         None
     }
 
-    ///
     /// Returns the list of tags assicated with relationship
-    ///
     pub fn parents_tag_get(
         &self,
         tag_id: &usize,
@@ -753,14 +652,11 @@ impl NewinMemDB {
         None
     }
 
-    ///
     /// Removes parent's from internal db based on tag id
-    ///
     #[inline(never)]
     pub fn parents_remove(&mut self, tag_id: &usize) -> HashSet<(usize, usize)> {
         let mut ret: HashSet<(usize, usize)> = HashSet::new();
         let rel_op = self.parents_rel_get(tag_id, None);
-
         match rel_op {
             None => return ret,
             Some(rel_hs) => {
@@ -778,11 +674,8 @@ impl NewinMemDB {
         ret
     }
 
-    ///
-    /// Removes a list of parents based on relational tag id
-    /// Returns a list of tag id's that were removed
-    /// DANGEROUS AVOID TO USE IF POSSIBLE
-    ///
+    /// Removes a list of parents based on relational tag id Returns a list of tag id's
+    /// that were removed DANGEROUS AVOID TO USE IF POSSIBLE
     pub fn parents_reltagid_remove(&mut self, relate_tag_id: &usize) -> HashSet<usize> {
         let mut out = HashSet::new();
         match self.parents_rel_get(relate_tag_id, None) {
@@ -801,11 +694,8 @@ impl NewinMemDB {
         out
     }
 
-    ///
-    /// Removes a list of parents based on tag id
-    /// Returns a list of relational tag id's that were removed
-    /// DANGEROUS AVOID TO USE IF POSSIBLE
-    ///
+    /// Removes a list of parents based on tag id Returns a list of relational tag id's
+    /// that were removed DANGEROUS AVOID TO USE IF POSSIBLE
     pub fn parents_tagid_remove(&mut self, tag_id: &usize) -> HashSet<usize> {
         let mut out = HashSet::new();
         match self.parents_tag_get(tag_id, None) {
@@ -824,10 +714,7 @@ impl NewinMemDB {
         out
     }
 
-    ///
-    /// Removes a parent selectivly from the Db
-    /// USE THIS IF POSSIBLE
-    ///
+    /// Removes a parent selectivly from the Db USE THIS IF POSSIBLE
     pub fn parents_selective_remove(&mut self, parentobj: &sharedtypes::DbParentsObj) {
         let cantor = self.cantor_pair(&parentobj.tag_id, &parentobj.relate_tag_id);
         match self._parents_dual.remove(&cantor) {
@@ -844,14 +731,12 @@ impl NewinMemDB {
                         }
                     }
                 }
-
                 match self._parents_rel_tag.get_mut(&parentobj.relate_tag_id) {
                     None => {}
                     Some(relset) => {
                         relset.remove(&parentobj.tag_id);
                     }
                 }
-
                 match self._parents_tag_rel.get_mut(&parentobj.tag_id) {
                     None => {}
                     Some(tagset) => {
@@ -862,13 +747,11 @@ impl NewinMemDB {
         }
     }
 
-    ///
-    /// Puts a parent into db
-    /// NOTE: If limit_to is set and their was a previous parent that didn't have a limit_to it
-    /// will be overwritten.
-    ///
+    /// Puts a parent into db NOTE: If limit_to is set and their was a previous parent
+    /// that didn't have a limit_to it will be overwritten.
     pub fn parents_put(&mut self, parent: sharedtypes::DbParentsObj) -> usize {
         let mut increment_parents = false;
+
         // Catch to prevent further processing.
         match self.parents_get(&parent) {
             None => {
@@ -876,7 +759,6 @@ impl NewinMemDB {
             }
             Some(id) => return id.to_owned(),
         }
-
         let cantor = self.cantor_pair(&parent.tag_id, &parent.relate_tag_id);
         self._parents_dual.insert(cantor);
         let par = self._parents_max;
@@ -894,7 +776,6 @@ impl NewinMemDB {
                     parentcantor.insert(limitto);
                 }
             }
-
             match self._parents_limitto_cantor.get_mut(&limitto) {
                 None => {
                     increment_parents = false;
@@ -908,7 +789,7 @@ impl NewinMemDB {
             }
         }
 
-        //Manages the relations and tags between parents
+        // Manages the relations and tags between parents
         let rel = self._parents_rel_tag.get_mut(&parent.relate_tag_id);
         match rel {
             None => {
@@ -917,10 +798,10 @@ impl NewinMemDB {
                 self._parents_rel_tag.insert(parent.relate_tag_id, temp);
             }
             Some(rel_id) => {
-                rel_id.insert(parent.tag_id); //parents_tag_get
+                // parents_tag_get
+                rel_id.insert(parent.tag_id);
             }
         }
-
         let tag = self._parents_tag_rel.get_mut(&parent.tag_id);
         match tag {
             None => {
@@ -932,6 +813,7 @@ impl NewinMemDB {
                 tag_id.insert(parent.relate_tag_id);
             }
         }
+
         // If we've been setup to increment then we should have this in the parents list
         if increment_parents {
             par
@@ -940,9 +822,7 @@ impl NewinMemDB {
         }
     }
 
-    ///
     /// Removes a parent from the internal db
-    ///
     pub fn parents_remove_id(&mut self, parent_id: &usize) {
         if let Some(pid) = self._parents_dual.get(parent_id) {
             let lim = self._parents_cantor_limitto.remove(parent_id);
@@ -963,16 +843,12 @@ impl NewinMemDB {
         }
     }
 
-    ///
     /// Gets a unique value based on two inputs
-    ///
     fn cantor_pair(&self, n: &usize, m: &usize) -> usize {
         (n + m) * (n + m + 1) / 2 + m
     }
 
-    ///
     /// Gets the unique inputs from a cantor number
-    ///
     fn cantor_unpair(&self, z: &usize) -> (usize, usize) {
         let w64 = (8 * z + 1) as f64;
         let w64two = ((w64.sqrt() - 1.0) / 2.0).floor() as usize;
@@ -982,37 +858,21 @@ impl NewinMemDB {
         return (n, m);
     }
 
-    ///
     /// Checks if relationship exists
-    ///
     pub fn relationship_get(&self, file: &usize, tag: &usize) -> bool {
-        //let utotal: usize = [file.to_string(), tag.to_string()].concat().parse::<usize>().unwrap();
-        //let relate_f = self._relationship_dual.get(&(*file, *tag));
+        // let utotal: usize = [file.to_string(),
+        // tag.to_string()].concat().parse::`<usize>`().unwrap(); let relate_f =
+        // self._relationship_dual.get(&(*file, *tag));
         let relate = self._relationship_dual.get(&self.cantor_pair(file, tag));
         relate.is_some()
-        /*
-        let tag_file = self._relationship_tag_file.get(tag);
-        match tag_file {
-            None => false,
-            Some(tag_hash) => {
-                let file_tag = self._relationship_file_tag.get(file);
-                match file_tag {
-                    None => false,
-                    Some(file_hash) => {
-                        if tag_hash.get(file).is_some() & file_hash.get(tag).is_some() {
-                            true
-                        } else {
-                            false
-                        }
-                    }
-                }
-            }
-        }*/
+        // let tag_file = self._relationship_tag_file.get(tag); match tag_file { None =>
+        // false, Some(tag_hash) => { let file_tag =
+        // self._relationship_file_tag.get(file); match file_tag { None => false,
+        // Some(file_hash) => { if tag_hash.get(file).is_some() &
+        // file_hash.get(tag).is_some() { true } else { false } } } } }
     }
 
-    ///
     /// Adds relationship between db
-    ///
     #[inline(always)]
     pub fn relationship_add(&mut self, file: usize, tag: usize) {
         let cantor = self.cantor_pair(&file, &tag);
@@ -1023,7 +883,6 @@ impl NewinMemDB {
                 temp.insert(file);
                 self._relationship_tag_file.insert(tag, temp);
             }
-
             Some(rel_tag) => {
                 rel_tag.insert(file);
             }
@@ -1040,31 +899,23 @@ impl NewinMemDB {
         }
     }
 
-    ///
     /// Adds job into internal db
-    ///
     pub fn jobs_add(&mut self, job: DbJobsObj) {
         self._jobs_id_data.insert(self._jobs_max, job);
         self._jobs_max += 1;
     }
 
-    ///
     /// Gets a job by id
-    ///
     pub fn jobs_get(&self, id: &usize) -> Option<&sharedtypes::DbJobsObj> {
         self._jobs_id_data.get(id)
     }
 
-    ///
     /// Get max of job
-    ///
     pub fn jobs_get_max(&self) -> &usize {
         &self._jobs_max
     }
 
-    ///
     /// Get all jobs
-    ///
     pub fn jobs_get_all(&self) -> &HashMap<usize, sharedtypes::DbJobsObj> {
         &self._jobs_id_data
     }
@@ -1072,27 +923,21 @@ impl NewinMemDB {
 
 #[cfg(test)]
 mod inmemdb {
-    use std::collections::BTreeMap;
-
-    use sharedtypes::DbParentsObj;
-
     use super::*;
+    use sharedtypes::DbParentsObj;
+    use std::collections::BTreeMap;
 
     fn setup_db() -> NewinMemDB {
         inmemdb::NewinMemDB::new()
     }
 
-    ///
     /// Tests if we can setup the db.
-    ///
     #[test]
     fn test_setup_db() {
         let _ = setup_db();
     }
 
-    ///
     /// Tests if the integration with putting parents are deduplicated properly
-    ///
     #[test]
     fn parents_add() {
         let mut db = setup_db();
@@ -1121,9 +966,7 @@ mod inmemdb {
         assert_eq!(db._parents_max, 3);
     }
 
-    ///
     /// Tests if integration with getting works
-    ///
     #[test]
     fn parents_get() {
         let mut db = setup_db();
@@ -1138,14 +981,12 @@ mod inmemdb {
             relate_tag_id: 0,
             limit_to: None,
         });
-
         assert_eq!(rela, Some(&0));
         let rela = db.parents_get(&DbParentsObj {
             tag_id: 0,
             relate_tag_id: 0,
             limit_to: Some(3),
         });
-
         assert_eq!(rela, None);
         db.parents_put(sharedtypes::DbParentsObj {
             tag_id: 0,
@@ -1164,7 +1005,6 @@ mod inmemdb {
             limit_to: None,
         });
         assert_eq!(rela, Some(&0));
-
         assert_eq!(db._parents_max, 2);
         db.parents_put(sharedtypes::DbParentsObj {
             tag_id: 1,
@@ -1176,7 +1016,6 @@ mod inmemdb {
             relate_tag_id: 0,
             limit_to: None,
         });
-
         assert_eq!(rela, Some(db.cantor_pair(&1, &0)).as_ref());
     }
 
@@ -1198,13 +1037,11 @@ mod inmemdb {
             relate_tag_id: 0,
             limit_to: Some(2),
         });
-
         let ll = db.parents_rel_get(&0, None).unwrap();
         assert_eq!(ll.len(), 2);
         let ll = db.parents_rel_get(&0, Some(1)).unwrap();
         assert_eq!(ll.len(), 1);
         assert_eq!(db.parents_rel_get(&0, Some(4)), None);
-
         dbg!(
             &db._parents_dual,
             &db._parents_limitto_cantor,
@@ -1233,7 +1070,6 @@ mod inmemdb {
             relate_tag_id: 0,
             limit_to: Some(2),
         });
-
         assert_eq!(db._parents_max, 2);
         db.parents_put(sharedtypes::DbParentsObj {
             tag_id: 0,
@@ -1241,7 +1077,6 @@ mod inmemdb {
             limit_to: None,
         });
         assert_eq!(db._parents_max, 2);
-
         let rela = db.parents_get(&DbParentsObj {
             tag_id: 0,
             relate_tag_id: 0,
@@ -1274,19 +1109,16 @@ mod inmemdb {
             relate_tag_id: 100,
             limit_to: Some(50),
         });
-
         db.parents_put(sharedtypes::DbParentsObj {
             tag_id: 100,
             relate_tag_id: 101,
             limit_to: Some(50),
         });
-
         let rela = db.parents_get(&DbParentsObj {
             tag_id: 1,
             relate_tag_id: 0,
             limit_to: None,
         });
-
         assert_ne!(rela, Some(db.cantor_pair(&1, &0)).as_ref());
         db.parents_selective_remove(&DbParentsObj {
             tag_id: 100,
@@ -1298,11 +1130,8 @@ mod inmemdb {
             relate_tag_id: 101,
             limit_to: None,
         });
-
         assert_eq!(db._parents_max, 11);
-
         assert_ne!(rela, Some(db.cantor_pair(&100, &101)).as_ref());
-
         dbg!(
             &db._parents_dual,
             &db._parents_limitto_cantor,
@@ -1318,7 +1147,6 @@ mod inmemdb {
         let mut db = setup_db();
         let none = db.jobs_get(&0);
         assert_eq!(None, none);
-
         let jobobj = sharedtypes::DbJobsObj {
             id: *db.jobs_get_max(),
             time: None,
@@ -1334,26 +1162,20 @@ mod inmemdb {
             system_data: BTreeMap::new(),
             user_data: BTreeMap::new(),
         };
-
         db.jobs_add(jobobj.clone());
         assert_eq!(db.jobs_get(&0).unwrap(), &jobobj);
     }
 
     #[test]
-    ///
     /// Checks the file adding feature
-    ///
     fn file_add() {
         let mut db = setup_db();
-
         dbg!(&db._file_id_data, &db._file_name_id, &db._file_max);
         let init = db.file_put(sharedtypes::DbFileStorage::NoExistUnknown);
         assert_eq!(init, 0);
-
         dbg!(&db._file_id_data, &db._file_name_id, &db._file_max);
         let init = db.file_put(sharedtypes::DbFileStorage::NoExistUnknown);
         assert_eq!(init, 1);
-
         dbg!(&db._file_id_data, &db._file_name_id, &db._file_max);
         let file = sharedtypes::DbFileObj {
             id: 1,
@@ -1363,7 +1185,6 @@ mod inmemdb {
         };
         let init = db.file_put(sharedtypes::DbFileStorage::Exist(file));
         dbg!(&db._file_id_data, &db._file_name_id, &db._file_max);
-
         assert_eq!(init, 1);
         let init = db.file_put(sharedtypes::DbFileStorage::NoExistUnknown);
         assert_eq!(init, 2);
@@ -1376,7 +1197,6 @@ mod inmemdb {
         dbg!(&db._file_id_data, &db._file_name_id, &db._file_max);
         let init = db.file_put(sharedtypes::DbFileStorage::Exist(file));
         assert_eq!(init, 10);
-
         dbg!(&db._file_id_data, &db._file_name_id, &db._file_max);
         let init = db.file_put(sharedtypes::DbFileStorage::NoExistUnknown);
         assert_eq!(init, 11);
@@ -1388,7 +1208,6 @@ mod inmemdb {
         dbg!(&db._file_id_data, &db._file_name_id, &db._file_max);
         let init = db.file_put(sharedtypes::DbFileStorage::NoIdExist(file));
         assert_eq!(init, 12);
-
         dbg!(&db._file_id_data, &db._file_name_id, &db._file_max);
         let init = db.file_put(sharedtypes::DbFileStorage::NoExistUnknown);
         assert_eq!(init, 13);
@@ -1409,7 +1228,6 @@ mod inmemdb {
         };
         dbg!(&db._file_id_data, &db._file_name_id, &db._file_max);
         let init = db.file_put(sharedtypes::DbFileStorage::Exist(file));
-
         assert_eq!(init, 13);
         let file = sharedtypes::DbFileObjNoId {
             hash: "None".to_owned(),
@@ -1418,7 +1236,6 @@ mod inmemdb {
         };
         dbg!(&db._file_id_data, &db._file_name_id, &db._file_max);
         let init = db.file_put(sharedtypes::DbFileStorage::NoIdExist(file));
-
         assert_eq!(init, 14);
     }
 }

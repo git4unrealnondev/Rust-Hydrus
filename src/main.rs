@@ -1,14 +1,14 @@
-//use crate::scr::sharedtypes::jobs_add;
-//use crate::scr::sharedtypes::AllFields::EJobsAdd;
-//use crate::scr::tasks;
+// use crate::scr::sharedtypes::jobs_add; use
+// crate::scr::sharedtypes::AllFields::EJobsAdd; use crate::scr::tasks;
 use libc;
 use log::{error, warn};
 use scraper::db_upgrade_call;
-
 use std::sync::Arc;
 use std::sync::Mutex;
-//use std::sync::{Arc, Mutex};
+
+// use std::sync::{Arc, Mutex};
 use std::{thread, time};
+
 extern crate ratelimit;
 
 #[path = "./scr/cli.rs"]
@@ -37,6 +37,7 @@ mod tasks;
 mod threading;
 #[path = "./scr/time_func.rs"]
 mod time_func;
+
 // Needed for the plugin coms system.
 #[path = "./scr/intcoms/client.rs"]
 mod client;
@@ -47,30 +48,14 @@ mod os;
 #[path = "./scr/intcoms/server.rs"]
 mod server;
 
-/*
-mod scr {
-    pub mod cli;
-    pub mod database;
-    pub mod download;
-    pub mod file;
-    pub mod jobs;
-    pub mod logging;
-    pub mod plugins;
-    pub mod scraper;
-    pub mod sharedtypes;
-    pub mod tasks;
-    pub mod threading;
-    pub mod time;
-}*/
-
-///
-/// This code is trash. lmao.
-/// Has threading and plugins soon tm
-/// Will probably work :D
-///
-
+// mod scr { pub mod cli; pub mod database; pub mod download; pub mod file; pub
+// mod jobs; pub mod logging; pub mod plugins; pub mod scraper; pub mod
+// sharedtypes; pub mod tasks; pub mod threading; pub mod time; }
+/// This code is trash. lmao. Has threading and plugins soon tm Will probably work
+/// :D
 fn pause() {
     use std::io::{stdin, stdout, Read, Write};
+
     let mut stdout = stdout();
     stdout.write_all(b"Press Enter to continue...").unwrap();
     stdout.flush().unwrap();
@@ -83,27 +68,14 @@ fn makedb(dbloc: &str) -> database::Main {
     let path = dbloc.to_string();
     let vers: usize = 4;
 
-    //let dbexist = Path::new(&path).exists();
-
-    // dbcon is database connector
-
-    //let mut dbcon = scr::database::dbinit(&path);
-
+    // let dbexist = Path::new(&path).exists(); dbcon is database connector let mut
+    // dbcon = scr::database::dbinit(&path);
     database::Main::new(path, vers)
-
-    //let dbcon =
-    //data.load_mem(&mut data._conn);
+    // let dbcon = data.load_mem(&mut data._conn);
 }
-/*
-opt-level = 3
-lto="fat"
-codegenunits=1
-strip = true
-panic = "abort"
-*/
 
-/// Gets file setup out of main.
-/// Checks if null data was written to data.
+// opt-level = 3 lto="fat" codegenunits=1 strip = true panic = "abort"
+/// Gets file setup out of main. Checks if null data was written to data.
 fn db_file_sanity(dbloc: &str) {
     let _dbzero = file::size_eq(dbloc.to_string(), 0);
     match _dbzero {
@@ -130,9 +102,7 @@ fn main() {
 
     // Makes Logging work
     logging::main(&logloc.to_string());
-
     os::check_os_compatibility();
-
     let mut scraper_manager = scraper::ScraperManager::new();
 
     // Makes new scraper manager.
@@ -142,20 +112,17 @@ fn main() {
         "so".to_string(),
     );
 
-    //TODO NEEDS MAIN INFO PULLER HERE. PULLS IN EVERYTHING INTO DB.
-
-    //if let scr::sharedtypes::AllFields::EJobsAdd(ref tempe) = all_field {
-    //    dbg!(tempe);
-    //    dbg!(&tempe.site);
-    //}
-    // Checks main.db log location.
+    // TODO NEEDS MAIN INFO PULLER HERE. PULLS IN EVERYTHING INTO DB. if let
+    // scr::sharedtypes::AllFields::EJobsAdd(ref tempe) = all_field { dbg!(tempe);
+    // dbg!(&tempe.site); } Checks main.db log location.
     db_file_sanity(dbloc);
 
-    //Inits Database.
+    // Inits Database.
     let mut data = makedb(dbloc);
-    let mut alt_connection = database::dbinit(&dbloc.to_string()); // NOTE ONLY USER FOR LOADING DB DYNAMICALLY
-    data.load_table(&sharedtypes::LoadDBTable::Settings);
 
+    // NOTE ONLY USER FOR LOADING DB DYNAMICALLY
+    let mut alt_connection = database::dbinit(&dbloc.to_string());
+    data.load_table(&sharedtypes::LoadDBTable::Settings);
     let plugin_option = data.settings_get_name(&"pluginloadloc".to_string());
     let plugin_loc = match plugin_option {
         None => "".to_string(),
@@ -164,14 +131,12 @@ fn main() {
 
     // Converts db into Arc for multithreading
     let mut arc = Arc::new(Mutex::new(data));
-
     let mut pluginmanager = plugins::PluginManager::new(plugin_loc.to_string(), arc.clone());
 
-    // Putting this down here after plugin manager because that's when the IPC server starts and we
-    // can then inside of the scraper start calling IPC functions
+    // Putting this down here after plugin manager because that's when the IPC server
+    // starts and we can then inside of the scraper start calling IPC functions
     'upgradeloop: loop {
         let repeat;
-
         {
             repeat = arc
                 .lock()
@@ -185,7 +150,6 @@ fn main() {
                     "Starting scraper upgrade: {}",
                     internal_scraper._name
                 ));
-
                 let db_vers = {
                     let lck = arc.lock().unwrap();
                     lck.db_vers_get()
@@ -201,21 +165,18 @@ fn main() {
     let location = arc.lock().unwrap().location_get();
     file::folder_make(&location.to_string());
 
-    //TODO Put code here
-
+    // TODO Put code here
     cli::main(arc.clone(), &mut scraper_manager);
-
     arc.lock()
         .unwrap()
         .load_table(&sharedtypes::LoadDBTable::Jobs);
     let mut jobmanager = jobs::Jobs::new(arc.clone());
-
     arc.lock().unwrap().transaction_flush();
-
     jobmanager.jobs_load(&scraper_manager);
 
     // Calls the on_start func for the plugins
     pluginmanager.lock().unwrap().plugin_on_start();
+
     // Creates a threadhandler that manages callable threads.
     let mut threadhandler = threading::Threads::new();
     jobmanager.jobs_run_new(
@@ -227,7 +188,7 @@ fn main() {
     let arc_jobmanager = Arc::new(Mutex::new(jobmanager));
     let arc_scrapermanager = Arc::new(Mutex::new(scraper_manager));
     for (scraper, _) in arc_jobmanager.lock().unwrap()._jobref.clone() {
-        //let scraper_library = scraper_manager._library.get(&scraper).unwrap();
+        // let scraper_library = scraper_manager._library.get(&scraper).unwrap();
         threadhandler.startwork(
             arc_jobmanager.clone(),
             &mut arc,
@@ -237,10 +198,8 @@ fn main() {
         );
     }
 
-    // Anything below here will run automagically.
-    // Jobs run in OS threads
-
-    // Waits until all threads have closed.
+    // Anything below here will run automagically. Jobs run in OS threads Waits until
+    // all threads have closed.
     let one_sec = time::Duration::from_millis(100);
     loop {
         let brk;
@@ -260,7 +219,7 @@ fn main() {
         }
         threadhandler.check_threads();
         for (scraper, _) in arc_jobmanager.lock().unwrap()._jobref.clone() {
-            //let scraper_library = scraper_manager._library.get(&scraper).unwrap();
+            // let scraper_library = scraper_manager._library.get(&scraper).unwrap();
             threadhandler.startwork(
                 arc_jobmanager.clone(),
                 &mut arc,
@@ -272,19 +231,15 @@ fn main() {
     }
     arc.lock().unwrap().transaction_flush();
 
-    /* pluginmanager.lock().unwrap().thread_finish_closed();
-    while !pluginmanager.lock().unwrap().return_thread() {
-        let one_sec = time::Duration::from_secs(1);
-        pluginmanager.lock().unwrap().thread_finish_closed();
-        thread::sleep(one_sec);
-    }*/
-
-    // This wait is done for allowing any thread to "complete"
-    // Shouldn't be nessisary but hey. :D
+    // pluginmanager.lock().unwrap().thread_finish_closed(); while
+    // !pluginmanager.lock().unwrap().return_thread() { let one_sec =
+    // time::Duration::from_secs(1);
+    // pluginmanager.lock().unwrap().thread_finish_closed(); thread::sleep(one_sec); }
+    // This wait is done for allowing any thread to "complete" Shouldn't be nessisary
+    // but hey. :D
     let mills_fifty = time::Duration::from_millis(5);
     std::thread::sleep(mills_fifty);
     logging::info_log(&"UNLOADING".to_string());
     log::logger().flush();
-    //drop(pluginmanager.lock().unwrap());
-    //unsafe { libc::malloc_trim(0) };
+    // drop(pluginmanager.lock().unwrap()); unsafe { libc::malloc_trim(0) };
 }

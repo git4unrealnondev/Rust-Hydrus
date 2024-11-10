@@ -3,6 +3,7 @@ use log::error;
 pub use rusqlite::Connection;
 use std::sync::Arc;
 use std::sync::Mutex;
+
 pub trait SqliteConnection {}
 
 pub struct SqliteSearchStructs {
@@ -18,6 +19,7 @@ impl SqliteSearchStructs {
         }
     }
 }
+
 fn make_connection(conntype: CacheType) -> Arc<Mutex<Connection>> {
     match conntype {
         CacheType::InMemory => Arc::new(Mutex::new(Connection::open_in_memory().unwrap())),
@@ -29,7 +31,7 @@ fn make_connection(conntype: CacheType) -> Arc<Mutex<Connection>> {
     }
 }
 
-//impl DBTraits for SqliteSearchStructs {
+// impl DBTraits for SqliteSearchStructs {
 impl SqliteSearchStructs {
     fn parents_put(
         &mut self,
