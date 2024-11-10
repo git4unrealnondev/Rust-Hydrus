@@ -204,7 +204,6 @@ pub fn dlfile_new(
 
             // Downloads file into byte memory buffer
             let byte = futureresult.unwrap().bytes();
-
             // Error handling for dling a file. Waits 10 secs to retry
             match byte {
                 Ok(_) => {
@@ -257,7 +256,7 @@ pub fn dlfile_new(
 
     // Gives file extension
     let file_ext = FileFormat::from_bytes(&bytes).extension().to_string();
-
+    dbg!(&file_ext);
     // Gets final path of file.
     let orig_path = format!("{}/{}", &final_loc, &hash);
     let mut file_path = std::fs::File::create(&orig_path).unwrap();
