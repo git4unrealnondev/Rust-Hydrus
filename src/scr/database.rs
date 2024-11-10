@@ -1555,7 +1555,6 @@ impl Main {
 
     /// Wrapper for inmemdb function: file_get_id Returns info for file in Option
     // DO NOT USE UNLESS NECISSARY. LOG(n2) * 3
-
     pub fn file_get_id(&self, fileid: &usize) -> Option<&sharedtypes::DbFileStorage> {
         self._inmemdb.file_get_id(fileid)
     }

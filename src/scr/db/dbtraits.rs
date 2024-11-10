@@ -73,7 +73,6 @@ pub trait DBTraits {
 
     /// Removes tag from db.
     fn tag_remove(&mut self, id: &usize) -> Option<()>;
-
     fn tags_get_list_id(&self) -> HashSet<usize>;
 
     /// Clears inmemdb relationships structures

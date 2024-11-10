@@ -190,7 +190,7 @@ fn main() {
     for (scraper, _) in arc_jobmanager.lock().unwrap()._jobref.clone() {
         // let scraper_library = scraper_manager._library.get(&scraper).unwrap();
         threadhandler.startwork(
-            arc_jobmanager.clone(),
+            &mut arc_jobmanager.clone(),
             &mut arc,
             scraper,
             &mut pluginmanager,
@@ -221,7 +221,7 @@ fn main() {
         for (scraper, _) in arc_jobmanager.lock().unwrap()._jobref.clone() {
             // let scraper_library = scraper_manager._library.get(&scraper).unwrap();
             threadhandler.startwork(
-                arc_jobmanager.clone(),
+                &mut arc_jobmanager.clone(),
                 &mut arc,
                 scraper,
                 &mut pluginmanager,
