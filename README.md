@@ -18,3 +18,6 @@ I'm active on github mostly so make an issue if you have one.
 docs folder has more info coming soon. :D
 
 WEBUI not yet finished still need to workout how to make (leptos? and actix?) work properly.
+
+Needs OpenSSL installed and pkg-config
+libssl-dev pkg-config

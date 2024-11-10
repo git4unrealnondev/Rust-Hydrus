@@ -170,7 +170,15 @@ fn main() {
     // Putting this down here after plugin manager because that's when the IPC server starts and we
     // can then inside of the scraper start calling IPC functions
     'upgradeloop: loop {
-        let repeat = arc.lock().unwrap().check_version(&mut scraper_manager);
+        let repeat;
+
+        {
+            repeat = arc
+                .lock()
+                .unwrap()
+                .check_version(&mut scraper_manager)
+                .clone();
+        }
         if repeat {
             for (internal_scraper, scraper_library) in scraper_manager.library_get().iter() {
                 logging::info_log(&format!(
@@ -233,7 +241,7 @@ fn main() {
     // Jobs run in OS threads
 
     // Waits until all threads have closed.
-    let one_sec = time::Duration::from_millis(500);
+    let one_sec = time::Duration::from_millis(100);
     loop {
         let brk;
         {
@@ -243,7 +251,6 @@ fn main() {
         if brk {
             break;
         }
-        dbg!("Sleep");
         thread::sleep(one_sec);
         {
             let mut jobmanager = arc_jobmanager.lock().unwrap();
