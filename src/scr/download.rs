@@ -20,12 +20,10 @@ use url::Url;
 extern crate reqwest;
 
 use crate::helpers;
-use async_std::task;
 use ratelimit::Ratelimiter;
 use std::fs::File;
 
 // use std::sync::{Arc, Mutex};
-use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::thread;

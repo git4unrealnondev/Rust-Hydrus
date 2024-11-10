@@ -4,7 +4,6 @@
 use crate::database;
 use crate::logging;
 use crate::plugins::PluginManager;
-use crate::sharedtypes;
 use anyhow::Context;
 
 // use interprocess::local_socket::traits::tokio::Listener;

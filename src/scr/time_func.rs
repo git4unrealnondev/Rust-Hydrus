@@ -32,7 +32,7 @@ pub fn time_conv(inp: &String) -> usize {
         "s".to_string(),
     ];
     let nums = [year, month, week, day, hour, minute, second];
-    let mut combine: usize = 0;
+    let combine: usize = 0;
     let mut st = inp.clone();
     let mut cnt = 0;
     let mut ttl = 0;

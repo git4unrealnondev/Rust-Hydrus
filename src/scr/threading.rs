@@ -3,15 +3,12 @@ use crate::download;
 use crate::logging;
 use crate::scraper::InternalScraper;
 use crate::scraper::ScraperManager;
-use crate::sharedtypes::ScraperData;
-use std::collections::BTreeMap;
 
 // use crate::jobs::JobsRef;
 use crate::logging::info_log;
 use crate::plugins::PluginManager;
 use crate::scraper;
 use crate::sharedtypes;
-use crate::sharedtypes::JobScraper;
 use crate::sharedtypes::ScraperReturn;
 use async_std::task;
 
@@ -20,11 +17,9 @@ use ratelimit::Ratelimiter;
 use reqwest::blocking::Client;
 use std::collections::BTreeSet;
 use std::collections::HashMap;
-use std::collections::HashSet;
 use std::sync::Arc;
 
 // use std::sync::Mutex;
-use rusty_pool::Builder;
 use rusty_pool::ThreadPool;
 use std::sync::Mutex;
 use std::thread;

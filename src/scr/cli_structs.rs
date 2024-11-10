@@ -1,6 +1,5 @@
 use crate::sharedtypes;
 use clap::{arg, Parser, Subcommand, ValueEnum};
-use std::collections::BTreeMap;
 
 /// From: git4unrealnondev Das code sucks.
 #[derive(Parser, Debug)]

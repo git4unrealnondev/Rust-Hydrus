@@ -1,9 +1,8 @@
-use fast_log::plugin::file;
 use libloading::{self, Library};
 use log::{error, info, warn};
 use std::collections::HashMap;
 use std::path::Path;
-use std::sync::{mpsc, Arc};
+use std::sync::Arc;
 //use std::sync::{mpsc, Arc, Mutex};
 use std::sync::Mutex;
 use std::thread::JoinHandle;

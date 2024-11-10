@@ -1,7 +1,6 @@
 #![allow(dead_code)]
 #![allow(unused_variables)]
 
-use clap::Parser;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashSet};
 use std::fmt;

@@ -282,7 +282,7 @@ impl Jobs {
         // self._secs = time_func::time_secs(); let _ttl = db.jobs_get_max();
         let hashjobs;
         {
-            let mut db = self.db.lock().unwrap();
+            let db = self.db.lock().unwrap();
             hashjobs = db.jobs_get_all().clone();
         }
         let beans = scrapermanager.scraper_get();
@@ -313,7 +313,7 @@ impl Jobs {
                         }
                         JobAddOutput::RemoveJob => {
                             dbg!("Dupe for job: {}", jobsobj, id);
-                            let mut db = self.db.lock().unwrap();
+                            let db = self.db.lock().unwrap();
 
                             // db.del_from_jobs_byid(&id);
                             flushdb_flag = true;
@@ -366,7 +366,7 @@ impl Jobs {
         let mut db = dba.lock().unwrap();
 
         // let mut name_ratelimited: HashMap<String, (u64, Duration)> = AHashMap::new();
-        let mut scraper_and_job: HashMap<InternalScraper, Vec<sharedtypes::DbJobsObj>> =
+        let scraper_and_job: HashMap<InternalScraper, Vec<sharedtypes::DbJobsObj>> =
             HashMap::new();
 
         // let mut job_plus_storeddata: HashMap<String, String> = AHashMap::new(); Checks

@@ -1,6 +1,5 @@
 // use crate::scr::sharedtypes::jobs_add; use
 // crate::scr::sharedtypes::AllFields::EJobsAdd; use crate::scr::tasks;
-use libc;
 use log::{error, warn};
 use scraper::db_upgrade_call;
 use std::sync::Arc;
@@ -121,7 +120,7 @@ fn main() {
     let mut data = makedb(dbloc);
 
     // NOTE ONLY USER FOR LOADING DB DYNAMICALLY
-    let mut alt_connection = database::dbinit(&dbloc.to_string());
+    let alt_connection = database::dbinit(&dbloc.to_string());
     data.load_table(&sharedtypes::LoadDBTable::Settings);
     let plugin_option = data.settings_get_name(&"pluginloadloc".to_string());
     let plugin_loc = match plugin_option {

@@ -1,9 +1,7 @@
 use crate::logging;
 use crate::sharedtypes;
-use crate::sharedtypes::DbFileObj;
 use crate::sharedtypes::DbJobsObj;
 use fnv::{FnvHashMap, FnvHashSet};
-use std::clone;
 use std::collections::{HashMap, HashSet};
 use std::hash::Hash;
 

@@ -3,10 +3,6 @@
 use crate::logging;
 use crate::scraper::ScraperManager;
 use crate::sharedtypes;
-use crate::sharedtypes::CommitType;
-use crate::sharedtypes::DbJobsObj;
-use crate::time_func;
-use eta::{Eta, TimeAcc};
 use log::{error, info};
 use rayon::prelude::*;
 pub use rusqlite::types::ToSql;

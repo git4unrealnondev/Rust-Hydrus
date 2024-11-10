@@ -242,14 +242,14 @@ pub fn url_dump(
     scraperdata: &sharedtypes::ScraperData,
     arc_scrapermanager: Arc<Mutex<ScraperManager>>,
     scraper: &InternalScraper,
-) -> (Vec<(String, sharedtypes::ScraperData)>) {
+) -> Vec<(String, sharedtypes::ScraperData)> {
     let scrapermanager = arc_scrapermanager.lock().unwrap();
-    let scraper_library = scrapermanager.library_get().get(&scraper).unwrap().clone();
+    let scraper_library = scrapermanager.library_get().get(&scraper).unwrap();
     let temp: libloading::Symbol<
         unsafe extern "C" fn(
             &Vec<sharedtypes::ScraperParam>,
             &sharedtypes::ScraperData,
-        ) -> (Vec<(String, sharedtypes::ScraperData)>),
+        ) -> Vec<(String, sharedtypes::ScraperData)>,
     > = unsafe { scraper_library.get(b"url_dump\0").unwrap() };
     unsafe { temp(params, scraperdata) }
 }
