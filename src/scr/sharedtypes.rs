@@ -204,7 +204,7 @@ pub struct ScraperObject {
 }
 
 /// Shared data to be passed for jobs
-#[derive(Debug, Clone, Eq, PartialEq, Hash, Ord, PartialOrd)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash, Ord, PartialOrd, Deserialize, Serialize)]
 pub struct ScraperData {
     pub job: JobScraper,
     pub system_data: BTreeMap<String, String>,
@@ -448,7 +448,7 @@ pub struct DBPluginOutput {
 }
 
 /// Represents one file
-#[derive(Debug, Eq, Hash, PartialEq)]
+#[derive(Debug, Eq, Hash, PartialEq, Deserialize, Serialize)]
 pub struct FileObject {
     pub source_url: Option<String>,
     // Hash of file
@@ -459,7 +459,7 @@ pub struct FileObject {
 }
 
 /// Holder of Tag info. Keeps relationalship info into account.
-#[derive(Debug, Eq, PartialEq, Hash, Clone)]
+#[derive(Debug, Eq, PartialEq, Hash, Clone, Deserialize, Serialize)]
 pub struct TagObject {
     pub namespace: GenericNamespaceObj,
     pub tag: String,
@@ -467,7 +467,7 @@ pub struct TagObject {
     pub relates_to: Option<SubTag>,
 }
 
-#[derive(Debug, Eq, PartialEq, Hash, Clone)]
+#[derive(Debug, Eq, PartialEq, Hash, Clone, Deserialize, Serialize)]
 pub struct SubTag {
     pub namespace: GenericNamespaceObj,
     pub tag: String,
@@ -475,7 +475,7 @@ pub struct SubTag {
     pub tag_type: TagType,
 }
 
-#[derive(Debug, Eq, PartialEq, Hash, Clone)]
+#[derive(Debug, Eq, PartialEq, Hash, Clone, Deserialize, Serialize)]
 pub struct GenericNamespaceObj {
     pub name: String,
     pub description: Option<String>,
@@ -484,7 +484,7 @@ pub struct GenericNamespaceObj {
 /// Tag Type object. Represents metadata for parser.
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
-#[derive(Eq, Hash, PartialEq)]
+#[derive(Eq, Hash, PartialEq, Deserialize, Serialize)]
 pub enum TagType {
     // Normal tag.
     Normal,
@@ -495,7 +495,7 @@ pub enum TagType {
     Special,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Deserialize, Serialize)]
 pub struct Tag {
     pub tag: String,
     pub namespace: GenericNamespaceObj,
@@ -504,7 +504,7 @@ pub struct Tag {
 }
 
 /// Used for skipping a ParseUrl in TagType if a tag exists.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Deserialize, Serialize)]
 pub enum SkipIf {
     // If a relationship between any file and tag exists.
     FileTagRelationship(Tag),
@@ -513,7 +513,7 @@ pub enum SkipIf {
     FileNamespaceNumber((Tag, GenericNamespaceObj, usize)),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Ord, PartialOrd)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Ord, PartialOrd, Deserialize, Serialize)]
 pub struct JobScraper {
     pub site: String,
     pub param: Vec<ScraperParam>,
@@ -522,7 +522,7 @@ pub struct JobScraper {
 }
 
 /// Supported types of hashes in Rust Hydrus
-#[derive(Debug, Clone, Display)]
+#[derive(Debug, Clone, Display, Deserialize, Serialize)]
 #[allow(dead_code)]
 #[derive(Eq, Hash, PartialEq)]
 pub enum HashesSupported {
@@ -639,14 +639,14 @@ pub enum PluginCommunicationChannel {
 }
 
 /// Straper type passed to params
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Ord, PartialOrd)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Ord, PartialOrd, Deserialize, Serialize)]
 pub enum ScraperParamType {
     Normal,
     Database,
 }
 
 /// Used to hold Scraper Parameters in db.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Ord, PartialOrd)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Ord, PartialOrd, Deserialize, Serialize)]
 pub struct ScraperParam {
     pub param_data: String,
     pub param_type: ScraperParamType,

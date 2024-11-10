@@ -9,6 +9,7 @@ use std::thread::JoinHandle;
 use std::{fs, thread};
 
 use crate::database::{self, Main};
+use crate::jobs::Jobs;
 use crate::logging;
 use crate::sharedtypes::{self, CallbackInfo};
 
@@ -29,7 +30,11 @@ pub struct PluginManager {
 /// Plugin Manager Handler
 ///
 impl PluginManager {
-    pub fn new(pluginsloc: String, main_db: Arc<Mutex<database::Main>>) -> Arc<Mutex<Self>> {
+    pub fn new(
+        pluginsloc: String,
+        main_db: Arc<Mutex<database::Main>>,
+        jobs: Arc<Mutex<Jobs>>,
+    ) -> Arc<Mutex<Self>> {
         let reftoself = Arc::new(Mutex::new(PluginManager {
             _plugin: HashMap::new(),
             _callback: HashMap::new(),
@@ -48,7 +53,7 @@ impl PluginManager {
 
         logging::log(&"Starting IPC Server.".to_string());
         let srv = std::thread::spawn(move || {
-            let mut ipc_coms = server::PluginIpcInteract::new(main_db.clone(), threa);
+            let mut ipc_coms = server::PluginIpcInteract::new(main_db.clone(), threa, jobs);
             //let _ = rcv.recv();
 
             //println!("v");

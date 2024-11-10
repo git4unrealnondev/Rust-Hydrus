@@ -2,8 +2,13 @@
 #![allow(unused_variables)]
 
 use crate::database;
+use crate::download;
+use crate::jobs::Jobs;
 use crate::logging;
 use crate::plugins::PluginManager;
+use crate::scraper::InternalScraper;
+use crate::sharedtypes;
+use crate::threading;
 use anyhow::Context;
 
 // use interprocess::local_socket::traits::tokio::Listener;
@@ -140,11 +145,13 @@ impl PluginIpcInteract {
     pub fn new(
         main_db: Arc<Mutex<database::Main>>,
         pluginmanager: Arc<Mutex<PluginManager>>,
+        jobs: Arc<Mutex<Jobs>>,
     ) -> Self {
         PluginIpcInteract {
             db_interface: DbInteract {
                 _database: main_db.clone(),
                 pluginmanager,
+                jobmanager: jobs.clone(),
             },
         }
     }
@@ -230,6 +237,7 @@ another process and try again.",
 struct DbInteract {
     _database: Arc<Mutex<database::Main>>,
     pluginmanager: Arc<Mutex<PluginManager>>,
+    jobmanager: Arc<Mutex<Jobs>>,
 }
 
 /// Storage object for database interactions with the plugin system
@@ -248,6 +256,31 @@ impl DbInteract {
     /// pretty mint.
     pub fn dbactions_to_function(&mut self, dbaction: types::SupportedDBRequests) -> Vec<u8> {
         match dbaction {
+            types::SupportedDBRequests::PutFile((file, ratelimit)) => {
+                let scraper = InternalScraper {
+                    _version: 0,
+                    _name: "InternalFileAdd".to_string(),
+                    _sites: Vec::new(),
+                    _ratelimit: ratelimit,
+                    _type: sharedtypes::ScraperType::Automatic,
+                };
+
+                let ratelimiter_obj = threading::create_ratelimiter(scraper._ratelimit);
+                let manageeplugin = self.pluginmanager.clone();
+                let client = &download::client_create();
+                let jobstorage = &mut self.jobmanager;
+                threading::main_file_loop(
+                    file,
+                    &mut self._database,
+                    ratelimiter_obj,
+                    manageeplugin,
+                    client,
+                    jobstorage,
+                    &scraper,
+                );
+
+                Self::data_size_to_b(&true)
+            }
             types::SupportedDBRequests::PutJob((
                 id,
                 time,
@@ -262,7 +295,7 @@ impl DbInteract {
                 dbjobsmanager,
             )) => {
                 let mut unwrappy = self._database.lock().unwrap();
-                &unwrappy.jobs_add(
+                let _ = &unwrappy.jobs_add(
                     id,
                     time,
                     reptime,

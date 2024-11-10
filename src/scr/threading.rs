@@ -121,6 +121,11 @@ impl Drop for Worker {
         }
     }
 }
+///
+/// Creates a relelimiter object
+pub fn create_ratelimiter(input: (u64, Duration)) -> Arc<Mutex<Ratelimiter>> {
+    Arc::new(Mutex::new(download::ratelimiter_create(input.0, input.1)))
+}
 
 impl Worker {
     fn new(
@@ -137,10 +142,7 @@ impl Worker {
         let mut db = dba.clone();
         let mut jobstorage = jobstorage.clone();
         let manageeplugin = pluginmanager.clone();
-        let ratelimiter_main = Arc::new(Mutex::new(download::ratelimiter_create(
-            scraper._ratelimit.0,
-            scraper._ratelimit.1,
-        )));
+        let ratelimiter_main = create_ratelimiter(scraper._ratelimit);
         let thread = thread::spawn(move || {
             let ratelimiter_obj = ratelimiter_main.clone();
 
@@ -244,11 +246,6 @@ impl Worker {
                             vec![(job.param.clone().unwrap(), scraper_data_holder)]
                         }
                     };
-                    let scraper_library;
-                    {
-                        let scrapermanager = arc_scrapermanager.lock().unwrap();
-                        scraper_library = scrapermanager.library_get().get(&scraper).unwrap();
-                    }
                     'urlloop: for (urll, scraperdata) in urlload {
                         'errloop: loop {
                             let resp = task::block_on(download::dltext_new(
@@ -646,7 +643,7 @@ fn parse_skipif(
 }
 
 /// Main file checking loop manages the downloads
-fn main_file_loop(
+pub fn main_file_loop(
     file: sharedtypes::FileObject,
     db: &mut Arc<Mutex<database::Main>>,
     ratelimiter_obj: Arc<Mutex<Ratelimiter>>,

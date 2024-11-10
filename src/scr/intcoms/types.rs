@@ -3,6 +3,7 @@
 
 use crate::sharedtypes;
 use anyhow::Context;
+use chrono::Duration;
 use interprocess::local_socket::prelude::LocalSocketStream;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -110,6 +111,7 @@ pub enum SupportedDBRequests {
         ),
     ),
     GetJob(usize),
+    PutFile((sharedtypes::FileObject, (u64, std::time::Duration))),
 }
 
 /// A descriptor for the parents and the type of data that we're sending

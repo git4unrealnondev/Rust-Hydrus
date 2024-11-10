@@ -128,10 +128,7 @@ fn main() {
         Some(pluginobj) => pluginobj.param.as_ref().unwrap().clone(),
     };
 
-    // Converts db into Arc for multithreading
     let mut arc = Arc::new(Mutex::new(data));
-    let mut pluginmanager = plugins::PluginManager::new(plugin_loc.to_string(), arc.clone());
-
     // Putting this down here after plugin manager because that's when the IPC server
     // starts and we can then inside of the scraper start calling IPC functions
     'upgradeloop: loop {
@@ -169,22 +166,27 @@ fn main() {
     arc.lock()
         .unwrap()
         .load_table(&sharedtypes::LoadDBTable::Jobs);
-    let mut jobmanager = jobs::Jobs::new(arc.clone());
+    let mut jobmanager = Arc::new(Mutex::new(jobs::Jobs::new(arc.clone())));
+
+    // Converts db into Arc for multithreading
+    let mut pluginmanager =
+        plugins::PluginManager::new(plugin_loc.to_string(), arc.clone(), jobmanager.clone());
+
     arc.lock().unwrap().transaction_flush();
-    jobmanager.jobs_load(&scraper_manager);
+    jobmanager.lock().unwrap().jobs_load(&scraper_manager);
 
     // Calls the on_start func for the plugins
     pluginmanager.lock().unwrap().plugin_on_start();
 
     // Creates a threadhandler that manages callable threads.
     let mut threadhandler = threading::Threads::new();
-    jobmanager.jobs_run_new(
+    jobmanager.lock().unwrap().jobs_run_new(
         &mut arc,
         &mut threadhandler,
         &mut pluginmanager,
         &scraper_manager,
     );
-    let arc_jobmanager = Arc::new(Mutex::new(jobmanager));
+    let arc_jobmanager = jobmanager;
     let arc_scrapermanager = Arc::new(Mutex::new(scraper_manager));
     for (scraper, _) in arc_jobmanager.lock().unwrap()._jobref.clone() {
         // let scraper_library = scraper_manager._library.get(&scraper).unwrap();

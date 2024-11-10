@@ -10,6 +10,7 @@ use interprocess::local_socket::ToNsName;
 use std::collections::BTreeMap;
 use std::collections::{HashMap, HashSet};
 use std::io::BufReader;
+use std::time::Duration;
 
 pub mod types;
 
@@ -22,6 +23,15 @@ pub fn search_db_files(
 ) -> Option<HashSet<usize>> {
     init_data_request(&types::SupportedRequests::Database(
         types::SupportedDBRequests::Search((search, limit, offset)),
+    ))
+}
+
+///
+/// Adds file into db downloads if needed. Blocks execution until done
+///
+pub fn add_file(file: sharedtypes::FileObject, ratelimit: (u64, Duration)) -> bool {
+    init_data_request(&types::SupportedRequests::Database(
+        types::SupportedDBRequests::PutFile((file, ratelimit)),
     ))
 }
 
