@@ -10,7 +10,7 @@ reqwest = { version = "0.12.4", features = ["cookies", "gzip", "brotli", "defaul
 #tokio = { version = "1", features = ["full"] }
 url = "2.3.1"
 http = "1.1.0"
-ratelimit = "0.9.1"
+ratelimit = "0.10.0"
 async-std = { version = "1", features = ["attributes", "tokio1"] }
 rusqlite = {version = "0.32.1", features=["modern_sqlite", "bundled", "column_decltype"] }
 fast_log = "1.5.25"
@@ -22,7 +22,7 @@ log = {version="0.4.2" }
 strum_macros = "0.26.2"
 strum = { default-features = false, version = "0.26.2" }
 csv = "1.2.2"
-file-format = { version = "0.25.0", features = ["reader"] }
+file-format = { version = "0.26.0", features = ["reader"] }
 serde = {version = "1.0.171", features = ["derive"], default-features = false }
 md5 = { default-features = false, version = "0.7.0" }
 sha1 = { default-features = false, features=["std"],version = "0.10.5" }
