@@ -111,6 +111,7 @@ pub enum SupportedDBRequests {
     ),
     GetJob(usize),
     PutFile((sharedtypes::FileObject, (u64, std::time::Duration))),
+    PutFileNoBlock((sharedtypes::FileObject, (u64, std::time::Duration))),
 }
 
 /// A descriptor for the parents and the type of data that we're sending

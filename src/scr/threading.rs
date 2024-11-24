@@ -193,6 +193,8 @@ impl Worker {
                             }
                         }
                     }
+
+                    // Makes recursion possible
                     if let Some(recursion) = &job.jobmanager.recreation {
                         match recursion {
                             sharedtypes::DbJobRecreation::AlwaysTime((timestamp, count)) => {
@@ -239,6 +241,7 @@ impl Worker {
                         sharedtypes::DbJobType::NoScrape => {
                             vec![(job.param.clone().unwrap(), scraper_data_holder)]
                         }
+                        sharedtypes::DbJobType::FileUrl => Vec::new(),
                         // sharedtypes::DbJobType::FileUrl => { let parpms: Vec<(String, ScraperData)> = (
                         // job.param .clone() .unwrap() .split_whitespace() .map(str::to_string)
                         // .collect(), scraper_data_holder, ); parpms }

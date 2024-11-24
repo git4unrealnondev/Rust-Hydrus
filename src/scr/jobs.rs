@@ -76,22 +76,27 @@ impl Jobs {
         if let Some(recreation) = &data.jobmanager.recreation {
             match recreation {
                 sharedtypes::DbJobRecreation::AlwaysTime((timestamp, count)) => {
-                    if *count <= 1 {
-                        self.jobs_remove_dbjob(scraper, &data, true);
-                    } else {
-                        let original_data = data.clone();
-                        let mut data = data.clone();
-                        data.jobmanager.recreation = Some(
-                            sharedtypes::DbJobRecreation::AlwaysTime((*timestamp, count - 1)),
-                        );
-                        data.time = Some(time_secs());
-                        data.reptime = Some(timestamp.clone());
-                        self.update_job(&scraper, &data, &original_data);
-                        self.jobs_add_jobsobj(scraper, data.clone(), true, false, Some(data.id));
-                        let mut db = self.db.lock().unwrap();
-                        db.jobs_update_db(data);
-                        db.transaction_flush();
+                    let mut data = data.clone();
+                    if let Some(count) = count {
+                        if *count <= 1 {
+                            self.jobs_remove_dbjob(scraper, &data, true);
+                            return;
+                        } else {
+                            data.jobmanager.recreation =
+                                Some(sharedtypes::DbJobRecreation::AlwaysTime((
+                                    *timestamp,
+                                    Some(count - 1),
+                                )));
+                        }
                     }
+                    let original_data = data.clone();
+                    data.time = Some(time_secs());
+                    data.reptime = Some(timestamp.clone());
+                    self.update_job(&scraper, &data, &original_data);
+                    self.jobs_add_jobsobj(scraper, data.clone(), true, false, Some(data.id));
+                    let mut db = self.db.lock().unwrap();
+                    db.jobs_update_db(data);
+                    db.transaction_flush();
                 }
                 _ => {}
             }
@@ -366,8 +371,7 @@ impl Jobs {
         let mut db = dba.lock().unwrap();
 
         // let mut name_ratelimited: HashMap<String, (u64, Duration)> = AHashMap::new();
-        let scraper_and_job: HashMap<InternalScraper, Vec<sharedtypes::DbJobsObj>> =
-            HashMap::new();
+        let scraper_and_job: HashMap<InternalScraper, Vec<sharedtypes::DbJobsObj>> = HashMap::new();
 
         // let mut job_plus_storeddata: HashMap<String, String> = AHashMap::new(); Checks
         // if their are no jobs to run.

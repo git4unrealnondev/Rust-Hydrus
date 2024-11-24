@@ -310,7 +310,7 @@ pub enum DbJobRecreation {
     OnTagId(usize, Option<usize>),
     OnTag(String, usize, Option<usize>),
     // Runs x seconds after processing
-    AlwaysTime((usize, usize)),
+    AlwaysTime((usize, Option<usize>)),
 }
 
 /// Type of job in db. Will be used to confirm what the scraping logic should work.
@@ -335,8 +335,8 @@ pub enum DbJobType {
     Params,
     /// Runs a plugin directly (don't use plz).
     Plugin,
-    /// Signifies that this is a FileUrl.
-    // FileUrl,
+    /// Signifies that this is a url to a file that does not need to be parsed by a scraper.
+    FileUrl,
     /// Something else sends to scraper.
     Scraper,
     /// Do Not Reachout to network to scrape this item

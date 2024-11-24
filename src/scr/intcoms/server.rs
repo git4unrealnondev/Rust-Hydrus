@@ -16,6 +16,7 @@ use interprocess::local_socket::{prelude::*, GenericNamespaced, ListenerOptions}
 use std::collections::HashSet;
 use std::sync::Arc;
 use std::sync::Mutex;
+use std::thread;
 
 // use std::sync::{Arc, Mutex};
 use std::{
@@ -152,6 +153,7 @@ impl PluginIpcInteract {
                 _database: main_db.clone(),
                 pluginmanager,
                 jobmanager: jobs.clone(),
+                threads: Vec::new(),
             },
         }
     }
@@ -238,6 +240,7 @@ struct DbInteract {
     _database: Arc<Mutex<database::Main>>,
     pluginmanager: Arc<Mutex<PluginManager>>,
     jobmanager: Arc<Mutex<Jobs>>,
+    threads: Vec<thread::JoinHandle<()>>,
 }
 
 /// Storage object for database interactions with the plugin system
@@ -256,6 +259,36 @@ impl DbInteract {
     /// pretty mint.
     pub fn dbactions_to_function(&mut self, dbaction: types::SupportedDBRequests) -> Vec<u8> {
         match dbaction {
+            types::SupportedDBRequests::PutFileNoBlock((file, ratelimit)) => {
+                let scraper = InternalScraper {
+                    _version: 0,
+                    _name: "InternalFileAdd".to_string(),
+                    _sites: Vec::new(),
+                    _ratelimit: ratelimit,
+                    _type: sharedtypes::ScraperType::Automatic,
+                };
+
+                let ratelimiter_obj = threading::create_ratelimiter(scraper._ratelimit);
+                let manageeplugin = self.pluginmanager.clone();
+                let client = download::client_create();
+                let mut jobstorage = self.jobmanager.clone();
+                let mut database = self._database.clone();
+                let thread = thread::spawn(move || {
+                    threading::main_file_loop(
+                        file,
+                        &mut database,
+                        ratelimiter_obj,
+                        manageeplugin,
+                        &client.clone(),
+                        &mut jobstorage,
+                        &scraper,
+                    );
+                });
+                self.threads.push(thread);
+
+                Self::data_size_to_b(&true)
+            }
+
             types::SupportedDBRequests::PutFile((file, ratelimit)) => {
                 let scraper = InternalScraper {
                     _version: 0,

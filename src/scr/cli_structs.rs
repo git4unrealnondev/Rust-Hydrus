@@ -198,8 +198,8 @@ pub struct Timestamp {
     #[arg(exclusive = false, required = true)]
     pub timestamp: usize,
     /// Number of times to run a job
-    #[arg(exclusive = false, required = true)]
-    pub count: usize,
+    #[arg(exclusive = false, required = false)]
+    pub count: Option<usize>,
 }
 
 #[derive(Debug, Hash, Eq, PartialEq, Clone, Parser)]
