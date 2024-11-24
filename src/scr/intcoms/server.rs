@@ -284,6 +284,13 @@ impl DbInteract {
                         &scraper,
                     );
                 });
+                let thread_max = 1000;
+                if self.threads.len() >= thread_max {
+                    let threads = self.threads.drain(0..thread_max / 100);
+                    for thread in threads {
+                        let _ = thread.join();
+                    }
+                }
                 self.threads.push(thread);
 
                 Self::data_size_to_b(&true)
