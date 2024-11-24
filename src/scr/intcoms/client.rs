@@ -35,6 +35,15 @@ pub fn add_file(file: sharedtypes::FileObject, ratelimit: (u64, Duration)) -> bo
     ))
 }
 
+///
+/// Adds file into db downloads if needed. Does not block execution until done
+///
+pub fn add_file_nonblocking(file: sharedtypes::FileObject, ratelimit: (u64, Duration)) -> bool {
+    init_data_request(&types::SupportedRequests::Database(
+        types::SupportedDBRequests::PutFileNoBlock((file, ratelimit)),
+    ))
+}
+
 /// See the database reference for this function. I'm a lazy turd just check it
 /// their
 pub fn load_table(table: sharedtypes::LoadDBTable) -> bool {

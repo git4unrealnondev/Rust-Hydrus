@@ -77,6 +77,10 @@ impl Jobs {
             match recreation {
                 sharedtypes::DbJobRecreation::AlwaysTime((timestamp, count)) => {
                     let mut data = data.clone();
+
+                    // If theirs a count thats not none then decrement the job count and remove if
+                    // zero.
+                    // Otherwisw just add the job again lol
                     if let Some(count) = count {
                         if *count <= 1 {
                             self.jobs_remove_dbjob(scraper, &data, true);
