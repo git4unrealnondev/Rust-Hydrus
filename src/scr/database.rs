@@ -1,6 +1,6 @@
 #![forbid(unsafe_code)]
-
 use crate::logging;
+use crate::logging::info_log;
 use crate::scraper::ScraperManager;
 use crate::sharedtypes;
 use log::{error, info};
@@ -227,7 +227,7 @@ impl Main {
         None
     }
 
-    /// Gets the location of a file in the file system.
+    /// Gets the location of a file in the file system
     pub fn get_file(&self, file_id: &usize) -> Option<String> {
         let file = self.file_get_id(file_id);
         if let Some(file_obj) = file {
@@ -715,230 +715,6 @@ impl Main {
         out
     }
 
-    /// Migrates from version 2 to version 3 SQLITE Only bb
-    fn db_update_two_to_three(&mut self) {
-        dbg!("db update");
-
-        // self.backup_db();
-        let jobs_cnt = self.db_table_collumn_getnames(&"Jobs".to_string()).len();
-        match jobs_cnt {
-            5 => {
-                logging::info_log(&format!("Starting work on Jobs."));
-                if !self.check_table_exists("Jobs_Old".to_string()) {
-                    self.alter_table(&"Jobs".to_string(), &"Jobs_Old".to_string());
-                }
-                let mut storage = std::collections::HashSet::new();
-                {
-                    let conn = self._conn.lock().unwrap();
-                    let mut stmt = conn.prepare("SELECT * FROM Jobs_Old").unwrap();
-                    let mut rows = stmt.query([]).unwrap();
-                    let mut cnt = 0;
-
-                    // Loads the V2 jobs into memory
-                    while let Some(row) = rows.next().unwrap() {
-                        let time: usize = row.get(0).unwrap();
-                        let reptime: usize = row.get(1).unwrap();
-                        let site: String = row.get(2).unwrap();
-                        let param: String = row.get(3).unwrap();
-                        let committype: String = row.get(4).unwrap();
-                        storage.insert((
-                            cnt.clone(),
-                            time,
-                            reptime,
-                            serde_json::to_string(&sharedtypes::DbJobsManager {
-                                jobtype: sharedtypes::DbJobType::Params,
-                                recreation: None,
-                                // additionaldata: None,
-                            })
-                            .unwrap(),
-                            site,
-                            param,
-                            committype,
-                        ));
-                        cnt += 1;
-                    }
-                }
-                let keys = &vec_of_strings!(
-                    "id",
-                    "time",
-                    "reptime",
-                    "Manager",
-                    "site",
-                    "param",
-                    "CommitType"
-                );
-                let vals = &vec_of_strings!(
-                    "INTEGER", "INTEGER", "INTEGER", "TEXT", "TEXT", "TEXT", "TEXT"
-                );
-                self.table_create(&"Jobs".to_string(), keys, vals);
-
-                // Putting blank parenthesis forces rust to drop conn which is locking our
-                // reference to self
-                {
-                    let conn = self._conn.lock().unwrap();
-                    let mut stmt =
-                        conn
-                            .prepare(
-                                "INSERT INTO Jobs (id,time,reptime,Manager,site,param,CommitType) VALUES (?1,?2,?3,?4,?5,?6,?7)",
-                            )
-                            .unwrap();
-                    for item in storage.into_iter() {
-                        stmt.execute(item).unwrap();
-                    }
-                }
-                self.db_drop_table(&"Jobs_Old".to_string());
-                self.transaction_flush();
-            }
-            7 => {
-                if self.check_table_exists("Jobs".to_string())
-                    && !self.check_table_exists("Jobs_Old".to_string())
-                {
-                    logging::info_log(&format!(
-                        "DB-Ugrade: Already processed Jobs table moving on."
-                    ));
-                } else {
-                    logging::panic_log(&format!(
-                        "DB IS IN WEIRD INCONSISTEINT STATE PLEASE ROLLBACK TO LATEST BACKUP."
-                    ))
-                }
-            }
-            _ => {
-                logging::error_log(&format!(
-                    "Weird table loading. Should be 5 or 7 for db upgrade. Pulled {}",
-                    &jobs_cnt
-                ));
-                logging::panic_log(&format!(
-                    "DB IS IN WEIRD INCONSISTEINT STATE PLEASE ROLLBACK TO LATEST BACKUP."
-                ));
-            }
-        }
-        let tags_cnt = self.db_table_collumn_getnames(&"Tags".to_string()).len();
-        match tags_cnt {
-            3 => {
-                if self.check_table_exists("Tags".to_string())
-                    && !self.check_table_exists("Tags_Old".to_string())
-                {
-                    logging::info_log(&format!(
-                        "DB-Ugrade: Already processed Tags table moving on."
-                    ));
-                } else {
-                    logging::panic_log(&format!(
-                        "DB IS IN WEIRD INCONSISTEINT STATE PLEASE ROLLBACK TO LATEST BACKUP."
-                    ))
-                }
-            }
-            4 => {
-                logging::info_log(&format!("Starting work on Tags."));
-                if !self.check_table_exists("Tags_Old".to_string()) {
-                    self.alter_table(&"Tags".to_string(), &"Tags_Old".to_string());
-                }
-                let mut storage = std::collections::HashSet::new();
-                {
-                    let conn = self._conn.lock().unwrap();
-                    let mut stmt = conn.prepare("SELECT * FROM Tags_Old").unwrap();
-                    let mut rows = stmt.query([]).unwrap();
-
-                    // Loads the V2 jobs into memory
-                    while let Some(row) = rows.next().unwrap() {
-                        let id: usize = row.get(0).unwrap();
-                        let name: String = row.get(1).unwrap();
-                        let namespace: usize = row.get(3).unwrap();
-                        storage.insert((id, name, namespace));
-                    }
-                }
-                let keys = &vec_of_strings!("id", "name", "namespace");
-                let vals = &vec_of_strings!("INTEGER", "TEXT", "INTEGER");
-                self.table_create(&"Tags".to_string(), keys, vals);
-
-                // Putting blank parenthesis forces rust to drop conn which is locking our
-                // reference to self
-                {
-                    let conn = self._conn.lock().unwrap();
-                    let mut stmt = conn
-                        .prepare("INSERT INTO Tags (id,name,namespace) VALUES (?1,?2,?3)")
-                        .unwrap();
-                    for item in storage.into_iter() {
-                        stmt.execute(item).unwrap();
-                    }
-                }
-                self.db_drop_table(&"Tags_Old".to_string());
-                self.transaction_flush();
-            }
-            _ => {
-                logging::error_log(&format!(
-                    "Weird tags table loading. Should be 3 or 4 for db upgrade. Was {}",
-                    tags_cnt
-                ));
-                logging::panic_log(&format!(
-                    "DB IS IN WEIRD INCONSISTEINT STATE PLEASE ROLLBACK TO LATEST BACKUP."
-                ));
-            }
-        }
-        let tags_cnt = self.db_table_collumn_getnames(&"Parents".to_string()).len();
-        match tags_cnt {
-            3 => {
-                if self.check_table_exists("Parents".to_string())
-                    && !self.check_table_exists("Parents_Old".to_string())
-                {
-                    logging::info_log(&format!(
-                        "DB-Ugrade: Already processed Parents table moving on."
-                    ));
-                } else {
-                    logging::panic_log(&format!(
-                        "DB IS IN WEIRD INCONSISTEINT STATE PLEASE ROLLBACK TO LATEST BACKUP."
-                    ))
-                }
-            }
-            4 => {
-                logging::info_log(&format!("Starting work on Parents."));
-                if !self.check_table_exists("Parents_Old".to_string()) {
-                    self.alter_table(&"Parents".to_string(), &"Parents_Old".to_string());
-                }
-                let mut storage = std::collections::HashSet::new();
-                {
-                    let conn = self._conn.lock().unwrap();
-                    let mut stmt = conn.prepare("SELECT * FROM Parents_Old").unwrap();
-                    let mut rows = stmt.query([]).unwrap();
-
-                    // Loads the V2 jobs into memory
-                    while let Some(row) = rows.next().unwrap() {
-                        let tag: usize = row.get(1).unwrap();
-                        let relate: usize = row.get(3).unwrap();
-                        storage.insert((tag, relate));
-                    }
-                }
-                let keys = &vec_of_strings!("tag_id", "relate_tag_id", "limit_to");
-                let vals = &vec_of_strings!("INTEGER", "INTEGER", "INTEGER");
-                self.table_create(&"Parents".to_string(), keys, vals);
-
-                // Putting blank parenthesis forces rust to drop conn which is locking our
-                // reference to self
-                {
-                    let conn = self._conn.lock().unwrap();
-                    let mut stmt = conn
-                        .prepare("INSERT INTO Parents (tag_id,relate_tag_id) VALUES (?1,?2)")
-                        .unwrap();
-                    for item in storage.into_iter() {
-                        stmt.execute(item).unwrap();
-                    }
-                }
-                self.db_drop_table(&"Parents_Old".to_string());
-                self.transaction_flush();
-            }
-            _ => {
-                logging::error_log(&format!(
-                    "Weird parents table loading. Should be 3 or 4 for db upgrade. Was {}",
-                    tags_cnt
-                ));
-                logging::panic_log(&format!(
-                    "DB IS IN WEIRD INCONSISTEINT STATE PLEASE ROLLBACK TO LATEST BACKUP."
-                ));
-            }
-        }
-        self.db_version_set(3);
-        self.transaction_flush();
-    }
-
     /// Sets DB Version
     fn db_version_set(&mut self, version: usize) {
         logging::log(&format!("Setting DB Version to: {}", &version));
@@ -957,83 +733,6 @@ impl Main {
         let binding = self._conn.lock().unwrap();
         let mut toexec = binding.prepare(&query_string).unwrap();
         toexec.execute(params![]).unwrap();
-    }
-
-    /// Manages the upgrading process from V3 to V4.
-    fn db_update_three_to_four(&mut self) {
-        let jobs_cnt = self.db_table_collumn_getnames(&"Jobs".to_string()).len();
-        dbg!(&jobs_cnt);
-        let mut storage = std::collections::HashSet::new();
-        match jobs_cnt {
-            7 => {
-                logging::info_log(&format!("Starting work on Jobs."));
-
-                // Renames table to Jobs_Old
-                if !self.check_table_exists("Jobs_Old".to_string()) {
-                    self.alter_table(&"Jobs".to_string(), &"Jobs_Old".to_string());
-                }
-                {
-                    let conn = self._conn.lock().unwrap();
-                    let mut stmt = conn.prepare("SELECT * FROM Jobs_Old").unwrap();
-                    let mut rows = stmt.query([]).unwrap();
-
-                    // Loads the V3 jobs into memory
-                    while let Some(row) = rows.next().unwrap() {
-                        let id: usize = row.get(0).unwrap();
-                        let time: usize = row.get(1).unwrap();
-                        let reptime: usize = row.get(2).unwrap();
-                        let manager: String = row.get(3).unwrap();
-                        let site: String = row.get(4).unwrap();
-                        let param: String = row.get(5).unwrap();
-                        let committype: String = row.get(6).unwrap();
-                        storage.insert((
-                            id,
-                            time,
-                            reptime,
-                            manager,
-                            site,
-                            param,
-                            committype,
-                            serde_json::to_string(&BTreeMap::<String, String>::new()).unwrap(),
-                            serde_json::to_string(&BTreeMap::<String, String>::new()).unwrap(),
-                        ));
-                    }
-                }
-                let keys = &vec_of_strings!(
-                    "id",
-                    "time",
-                    "reptime",
-                    "Manager",
-                    "site",
-                    "param",
-                    "CommitType",
-                    "SystemData",
-                    "UserData"
-                );
-                let vals = &vec_of_strings!(
-                    "INTEGER", "INTEGER", "INTEGER", "TEXT", "TEXT", "TEXT", "TEXT", "TEXT", "TEXT"
-                );
-                self.table_create(&"Jobs".to_string(), keys, vals);
-                {
-                    let conn = self._conn.lock().unwrap();
-                    let mut stmt =
-                        conn
-                            .prepare(
-                                "INSERT INTO Jobs (id,time,reptime,Manager,site,param,CommitType,SystemData,UserData) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)",
-                            )
-                            .unwrap();
-                    for item in storage.into_iter() {
-                        stmt.execute(item).unwrap();
-                    }
-                }
-                self.db_drop_table(&"Jobs_Old".to_string());
-                self.transaction_flush();
-            }
-            9 => {
-                logging::info_log(&format!("Already processed jobs. Skipping..."));
-            }
-            _ => {}
-        }
     }
 
     /// Checks if db version is consistent. If this function returns false signifies
@@ -1100,6 +799,8 @@ impl Main {
                 db_vers += 1;
             } else if db_vers + 1 == 4 {
                 self.db_update_three_to_four();
+            } else if db_vers + 1 == 5 {
+                self.db_update_four_to_five();
             }
             logging::info_log(&format!("Finished upgrade to V{}.", db_vers));
             self.transaction_flush();
@@ -2242,6 +1943,31 @@ impl Main {
     /// Retuns namespace id's
     pub fn namespace_keys(&self) -> Vec<usize> {
         self._inmemdb.namespace_keys()
+    }
+
+    ///
+    /// Condenses and corrects file locations
+    ///
+    pub fn condense_file_locations(&mut self) {
+        self.load_table(&sharedtypes::LoadDBTable::Files);
+
+        /*let mut location_list = HashSet::new();
+        let mut bad_fids = HashSet::new();
+
+        info_log(&format!("Starting to correct bad fids"));
+        for fid in self.file_get_list_id().iter() {
+            if let Some(_) = self.get_file(fid) {
+                let location = self.file_get_id(fid).unwrap().location;
+                location_list.insert(location);
+            } else {
+                bad_fids.insert(fid);
+            }
+        }
+
+        for fid in bad_fids {
+            let file = self.file_get_id(fid);
+        }
+        info_log(&format!("Finished correcting bad fids"));*/
     }
 
     /// Condesnes relationships between tags & files. Changes tag id's removes spaces

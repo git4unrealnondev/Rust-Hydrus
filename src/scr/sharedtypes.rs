@@ -8,6 +8,22 @@ use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
 use strum_macros::{Display, EnumString};
 
+///
+/// Manages the conditions that determines which enclave should trigger
+///
+#[derive(Debug, Deserialize, Serialize)]
+pub enum EnclaveCondition {
+    Any,
+    FileSizeGreater(usize),
+    FileSizeLessthan(usize),
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub enum EnclaveAction {
+    DownloadToLocation(String),
+    DownloadToDefault,
+}
+
 /// Database Tags Object
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize, Serialize, Clone)]
 pub struct DbTagNNS {
