@@ -129,9 +129,14 @@ fn main() {
     };
 
     let mut arc = Arc::new(Mutex::new(data));
+
+    let mut jobmanager = Arc::new(Mutex::new(jobs::Jobs::new(arc.clone())));
+    let mut pluginmanager =
+        plugins::PluginManager::new(plugin_loc.to_string(), arc.clone(), jobmanager.clone());
     // Putting this down here after plugin manager because that's when the IPC server
     // starts and we can then inside of the scraper start calling IPC functions
     'upgradeloop: loop {
+        dbg!("Starting updoot");
         let repeat;
         {
             repeat = arc
@@ -140,7 +145,7 @@ fn main() {
                 .check_version(&mut scraper_manager)
                 .clone();
         }
-        if repeat {
+        if !repeat {
             for (internal_scraper, scraper_library) in scraper_manager.library_get().iter() {
                 logging::info_log(&format!(
                     "Starting scraper upgrade: {}",
@@ -166,11 +171,6 @@ fn main() {
     arc.lock()
         .unwrap()
         .load_table(&sharedtypes::LoadDBTable::Jobs);
-    let mut jobmanager = Arc::new(Mutex::new(jobs::Jobs::new(arc.clone())));
-
-    // Converts db into Arc for multithreading
-    let mut pluginmanager =
-        plugins::PluginManager::new(plugin_loc.to_string(), arc.clone(), jobmanager.clone());
 
     arc.lock().unwrap().transaction_flush();
     jobmanager.lock().unwrap().jobs_load(&scraper_manager);

@@ -371,16 +371,20 @@ pub fn main(data: Arc<Mutex<database::Main>>, scraper: &mut scraper::ScraperMana
                         // gets sha 256 from the file.
                         let (sha2, _a) = download::hash_bytes(
                             &b,
-                            &sharedtypes::HashesSupported::Sha256("".to_string()),
+                            &sharedtypes::HashesSupported::Sha512("".to_string()),
                         );
                         let filesloc = data.location_get();
+                        data.storage_put(&filesloc);
+                        let storage_id = data.storage_get_id(&filesloc).unwrap();
+
+                        let ext_id = data.extension_put_string(&ext);
 
                         // Adds data into db
                         let file =
                             sharedtypes::DbFileStorage::NoIdExist(sharedtypes::DbFileObjNoId {
                                 hash: sha2,
-                                ext,
-                                location: filesloc,
+                                ext_id,
+                                storage_id,
                             });
                         let fid = data.file_add(file, true);
                         let nid =
@@ -483,7 +487,7 @@ pub fn main(data: Arc<Mutex<database::Main>>, scraper: &mut scraper::ScraperMana
                                                 let client = download::client_create();
                                                 let file = &sharedtypes::FileObject {
                                                     source_url: Some(dat.name.clone()),
-                                                    hash: sharedtypes::HashesSupported::Sha256(
+                                                    hash: sharedtypes::HashesSupported::Sha512(
                                                         file.hash.clone(),
                                                     ),
                                                     tag_list: Vec::new(),
@@ -505,7 +509,7 @@ pub fn main(data: Arc<Mutex<database::Main>>, scraper: &mut scraper::ScraperMana
                                 let fil = std::fs::read(lispa).unwrap();
                                 let hinfo = download::hash_bytes(
                                     &bytes::Bytes::from(fil),
-                                    &sharedtypes::HashesSupported::Sha256(file.hash.clone()),
+                                    &sharedtypes::HashesSupported::Sha512(file.hash.clone()),
                                 );
                                 if !hinfo.1 {
                                     logging::error_log(&format!(
@@ -524,7 +528,7 @@ pub fn main(data: Arc<Mutex<database::Main>>, scraper: &mut scraper::ScraperMana
                                                     let client = download::client_create();
                                                     let file = &sharedtypes::FileObject {
                                                         source_url: Some(dat.name.clone()),
-                                                        hash: sharedtypes::HashesSupported::Sha256(
+                                                        hash: sharedtypes::HashesSupported::Sha512(
                                                             file.hash.clone(),
                                                         ),
                                                         tag_list: Vec::new(),

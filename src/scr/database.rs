@@ -6,6 +6,7 @@ use crate::sharedtypes;
 use log::{error, info};
 use rayon::prelude::*;
 pub use rusqlite::types::ToSql;
+use rusqlite::OptionalExtension;
 pub use rusqlite::{params, types::Null, Connection, Result, Transaction};
 use std::borrow::BorrowMut;
 use std::collections::BTreeMap;
@@ -49,6 +50,7 @@ pub struct Main {
     _dbpath: String,
     pub _conn: Arc<Mutex<Connection>>,
     _vers: usize,
+    _active_vers: usize,
     // inmem db with ahash low lookup/insert time. Alernative to hashmap
     _inmemdb: NewinMemDB,
     _dbcommitnum: usize,
@@ -74,6 +76,7 @@ impl Main {
             _dbpath: path.to_owned(),
             _conn: Arc::new(Mutex::new(Connection::open_in_memory().unwrap())),
             _vers: vers,
+            _active_vers: vers,
             _inmemdb: memdb,
             _dbcommitnum: 0,
             _dbcommitnum_static: 3000,
@@ -85,6 +88,7 @@ impl Main {
             _dbpath: path,
             _conn: Arc::new(Mutex::new(Connection::open_in_memory().unwrap())),
             _vers: vers,
+            _active_vers: vers,
             _inmemdb: memdbmain._inmemdb,
             _dbcommitnum: 0,
             _dbcommitnum_static: 3000,
@@ -236,7 +240,10 @@ impl Main {
                 sharedtypes::DbFileStorage::Exist(file) => file,
                 _ => return None,
             };
-            let sup = [file.location.to_string(), self.location_get()];
+
+            let location = self.storage_get_string(&file.storage_id).unwrap();
+
+            let sup = [location, self.location_get()];
             for each in sup {
                 // Cleans the file path if it contains a '/' in it
                 let loc = if each.ends_with('/') | each.ends_with('\\') {
@@ -296,7 +303,6 @@ impl Main {
     pub fn db_sanity_check_file(&mut self) {
         use crate::download;
 
-        let loc_vec: Mutex<Vec<String>> = Vec::new().into();
         self.load_table(&sharedtypes::LoadDBTable::Files);
         let flist = self.file_get_list_id();
         flist.par_iter().for_each(|feach| {
@@ -308,16 +314,14 @@ impl Main {
                         panic!("Pulled item that shouldnt exist: {:?}", filestorage_obj);
                     }
                 };
-                if !loc_vec.lock().unwrap().contains(&fileinfo.location) {
-                    loc_vec.lock().unwrap().push(fileinfo.location.clone());
-                }
                 loop {
-                    let temppath = &format!("{}/{}", fileinfo.location, fileinfo.hash);
+                    let location = self.storage_get_string(&fileinfo.storage_id).unwrap();
+                    let temppath = &format!("{}/{}", location, fileinfo.hash);
                     if Path::new(temppath).exists() {
                         let fil = std::fs::read(temppath).unwrap();
                         let hinfo = download::hash_bytes(
                             &bytes::Bytes::from(fil),
-                            &sharedtypes::HashesSupported::Sha256(fileinfo.hash.clone()),
+                            &sharedtypes::HashesSupported::Sha512(fileinfo.hash.clone()),
                         );
                         if !hinfo.1 {
                             dbg!(format!(
@@ -528,16 +532,10 @@ impl Main {
             panic!("No database write perms or file not created");
         }
 
-        // Making File Table
-        let mut name = "File".to_string();
-        let mut keys = vec_of_strings!["id", "hash", "extension", "location"];
-        let mut vals = vec_of_strings!["INTEGER", "TEXT", "TEXT", "TEXT"];
-        self.table_create(&name, &keys, &vals);
-
         // Making Relationship Table
-        name = "Relationship".to_string();
-        keys = vec_of_strings!["fileid", "tagid"];
-        vals = vec_of_strings!["INTEGER", "INTEGER"];
+        let mut name = "Relationship".to_string();
+        let mut keys = vec_of_strings!["fileid", "tagid"];
+        let mut vals = vec_of_strings!["INTEGER", "INTEGER"];
         self.table_create(&name, &keys, &vals);
 
         // Making Tags Table
@@ -581,6 +579,9 @@ impl Main {
             "INTEGER", "INTEGER", "INTEGER", "TEXT", "TEXT", "TEXT", "TEXT", "TEXT", "TEXT"
         ];
         self.table_create(&name, &keys, &vals);
+
+        self.enclave_create_database_v5();
+
         self.transaction_flush();
     }
 
@@ -622,6 +623,9 @@ impl Main {
             Some("./Plugins/".to_string()),
             true,
         );
+
+        self.enclave_create_default_file_download(self.location_get());
+
         self.transaction_flush();
     }
 
@@ -785,13 +789,18 @@ impl Main {
         }
         let mut db_vers = g1[0] as usize;
         logging::info_log(&format!("check_version: Loaded version {}", db_vers));
-        if self._vers != db_vers {
-            info!("STARTING MIGRATION");
+        dbg!(&db_vers, self._vers);
+        if self._active_vers != db_vers {
             logging::info_log(&format!(
                 "Starting upgrade from V{} to V{}",
                 db_vers,
                 db_vers + 1
             ));
+
+            // Resets the DB internal Cache if their is any.
+            self.clear_cache();
+            self.load_table(&sharedtypes::LoadDBTable::Settings);
+
             if db_vers == 1 && self._vers == 2 {
                 panic!("How did you get here vers is 1 did you do something dumb??")
             } else if db_vers + 1 == 3 {
@@ -804,7 +813,7 @@ impl Main {
             }
             logging::info_log(&format!("Finished upgrade to V{}.", db_vers));
             self.transaction_flush();
-            if db_vers == self._vers {
+            if db_vers == self._active_vers {
                 logging::info_log(&format!(
                     "Successfully updated db to version {}",
                     self._vers
@@ -813,7 +822,7 @@ impl Main {
             }
         } else {
             info!("Database Version is: {}", g1[0]);
-            return false;
+            return true;
         }
         false
     }
@@ -869,9 +878,63 @@ impl Main {
         self._inmemdb.file_put(file)
     }
 
+    ///
+    /// Gets a file storage location id
+    ///
+    pub fn storage_get_id(&self, location: &String) -> Option<usize> {
+        let conn = self._conn.lock().unwrap();
+        if let Ok(out) = conn
+            .query_row(
+                "SELECT id from FileStorageLocations where location = ?",
+                params![location],
+                |row| row.get(0),
+            )
+            .optional()
+        {
+            out
+        } else {
+            None
+        }
+    }
+
+    ///
+    /// Gets a string from the ID of the storage location
+    ///
+    pub fn storage_get_string(&self, id: &usize) -> Option<String> {
+        let conn = self._conn.lock().unwrap();
+        if let Ok(out) = conn
+            .query_row(
+                "SELECT location from FileStorageLocations where id = ?",
+                params![id],
+                |row| row.get(0),
+            )
+            .optional()
+        {
+            out
+        } else {
+            None
+        }
+    }
+
+    ///
+    /// Inserts into storage the location
+    ///
+    pub fn storage_put(&mut self, location: &String) {
+        if self.storage_get_id(location).is_some() {
+            return;
+        }
+        let conn = self._conn.lock().unwrap();
+        let mut prep = conn
+            .prepare("INSERT OR REPLACE INTO FileStorageLocations (location) VALUES (?)")
+            .unwrap();
+        let _ = prep.insert(params![location]);
+    }
+
     /// NOTE USES PASSED CONNECTION FROM FUNCTION NOT THE DB CONNECTION GETS ARROUND
     /// MEMROY SAFETY ISSUES WITH CLASSES IN RUST
     fn load_files(&mut self) {
+        self.load_extensions();
+
         logging::info_log(&"Database is Loading: Files".to_string());
         let binding = self._conn.clone();
         let temp_test = binding.lock().unwrap();
@@ -881,14 +944,14 @@ impl Main {
                 .query_map([], |row| {
                     let id: Option<usize> = row.get(0).unwrap();
                     let hash: Option<String> = row.get(1).unwrap();
-                    let ext: Option<String> = row.get(2).unwrap();
-                    let location: Option<String> = row.get(3).unwrap();
+                    let ext: Option<usize> = row.get(2).unwrap();
+                    let location: Option<usize> = row.get(3).unwrap();
                     if id.is_some() && hash.is_some() && ext.is_some() && location.is_some() {
                         Ok(sharedtypes::DbFileStorage::Exist(sharedtypes::DbFileObj {
                             id: row.get(0).unwrap(),
                             hash: row.get(1).unwrap(),
-                            ext: row.get(2).unwrap(),
-                            location: row.get(3).unwrap(),
+                            ext_id: row.get(2).unwrap(),
+                            storage_id: row.get(3).unwrap(),
                         }))
                     } else if id.is_some() && hash.is_none() && ext.is_none() && location.is_none()
                     {
@@ -910,6 +973,63 @@ impl Main {
         // |row| { Ok(sharedtypes::DbFileObj { id: row.get(0).unwrap(), hash:
         // row.get(1).unwrap(), ext: row.get(2).unwrap(), location: row.get(3).unwrap(),
         // }) }) .unwrap();
+    }
+
+    ///
+    /// Gets an ID if a extension string exists
+    ///
+    pub fn extension_get_id(&self, ext: &String) -> Option<&usize> {
+        self._inmemdb.extension_get_id(ext)
+    }
+
+    ///
+    /// Gets an extension id and creates it if it does not exist
+    ///
+    pub fn extension_put_string(&mut self, ext: &String) -> usize {
+        match self.extension_get_id(ext) {
+            Some(id) => id.clone(),
+            None => {
+                let conn = self._conn.lock().unwrap();
+                conn.execute(
+                    "insert or ignore into FileExtensions(extension) VALUES (?)",
+                    params![ext],
+                );
+                let out: usize = conn
+                    .query_row(
+                        "select id from FileExtensions where extension = ?",
+                        params![ext],
+                        |row| row.get(0),
+                    )
+                    .unwrap();
+                out
+            }
+        }
+    }
+
+    /// Puts extension into mem cache
+    pub fn extension_load(&mut self, id: usize, extension: String) {
+        self._inmemdb.extension_load(id, extension);
+    }
+
+    /// Loads extensions into db
+    fn load_extensions(&mut self) {
+        logging::info_log(&"Database is Loading: File Extensions".to_string());
+        let binding = self._conn.clone();
+        let temp_test = binding.lock().unwrap();
+        let temp = temp_test.prepare("SELECT * FROM File");
+
+        if let Ok(mut con) = temp {
+            let quer = con.query([]);
+            if let Ok(mut rows) = quer {
+                while let Ok(Some(row)) = rows.next() {
+                    let id: Option<usize> = row.get(0).unwrap();
+                    let extension: Option<String> = row.get(1).unwrap();
+                    if id.is_some() && extension.is_some() {
+                        self.extension_load(id.unwrap(), extension.unwrap());
+                    }
+                }
+            }
+        }
     }
 
     /// Same as above
@@ -1181,8 +1301,8 @@ impl Main {
     fn file_add_sql(
         &mut self,
         hash: &Option<String>,
-        extension: &Option<String>,
-        location: &Option<String>,
+        extension: &Option<usize>,
+        storage_id: &Option<usize>,
         file_id: &usize,
     ) {
         // println!("FILE_SQL {} {} {} {}", hash, extension, location, file_id);
@@ -1192,7 +1312,7 @@ impl Main {
             .borrow_mut()
             .lock()
             .unwrap()
-            .execute(inp, params![file_id, hash, extension, location]);
+            .execute(inp, params![file_id, hash, extension, storage_id]);
         self.db_commit_man();
     }
 
@@ -1205,8 +1325,8 @@ impl Main {
                     if addtodb {
                         self.file_add_sql(
                             &Some(file_obj.hash.clone()),
-                            &Some(file_obj.ext.clone()),
-                            &Some(file_obj.location.clone()),
+                            &Some(file_obj.ext_id.clone()),
+                            &Some(file_obj.storage_id),
                             &file_obj.id,
                         );
                     }
@@ -1221,8 +1341,8 @@ impl Main {
                     if addtodb {
                         self.file_add_sql(
                             &Some(noid_obj.hash.clone()),
-                            &Some(noid_obj.ext.clone()),
-                            &Some(noid_obj.location.clone()),
+                            &Some(noid_obj.ext_id.clone()),
+                            &Some(noid_obj.storage_id),
                             &id,
                         );
                     }

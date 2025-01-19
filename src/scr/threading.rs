@@ -558,12 +558,18 @@ fn download_add_to_db(
             return None;
         }
         Some((hash, file_ext)) => {
+            let unwrappydb = &mut db.lock().unwrap();
+
+            let ext_id = unwrappydb.extension_put_string(&file_ext);
+
+            unwrappydb.storage_put(&location);
+            let storage_id = unwrappydb.storage_get_id(&location).unwrap();
+
             let file = sharedtypes::DbFileStorage::NoIdExist(sharedtypes::DbFileObjNoId {
                 hash,
-                ext: file_ext,
-                location,
+                ext_id: ext_id,
+                storage_id,
             });
-            let unwrappydb = &mut db.lock().unwrap();
             let fileid = unwrappydb.file_add(file, true);
             let tagid = unwrappydb.tag_add(source, source_url_id, true, None);
             unwrappydb.relationship_add(fileid, tagid, true);

@@ -46,6 +46,8 @@ pub struct NewinMemDB {
     _namespace_id_tag: HashMap<usize, HashSet<usize>>,
     _file_id_data: HashMap<usize, sharedtypes::DbFileStorage>,
     _file_location_usize: FnvHashMap<usize, String>,
+    _file_extension_usize: FnvHashMap<usize, String>,
+    _file_extension_string: FnvHashMap<String, usize>,
     _file_location_string: FnvHashMap<String, usize>,
     _file_name_id: HashMap<String, usize>,
     _relationship_file_tag: FnvHashMap<usize, FnvHashSet<usize>>,
@@ -69,6 +71,8 @@ impl NewinMemDB {
             _jobs_id_data: HashMap::default(),
             _file_id_data: HashMap::default(),
             _file_location_usize: HashMap::default(),
+            _file_extension_usize: HashMap::default(),
+            _file_extension_string: HashMap::default(),
             _file_location_string: HashMap::default(),
             // _jobs_name_id: HashMap::new(),
             _file_name_id: HashMap::new(),
@@ -383,6 +387,17 @@ impl NewinMemDB {
         self._tag_max = 0;
     }
 
+    /// Overwrites an extension into the db cache
+    pub fn extension_load(&mut self, id: usize, extension: String) {
+        self._file_extension_usize.insert(id, extension.clone());
+        self._file_extension_string.insert(extension, id);
+    }
+
+    /// Gets an ID if a extension string exists
+    pub fn extension_get_id(&self, ext: &String) -> Option<&usize> {
+        self._file_extension_string.get(ext)
+    }
+
     /// inserts file into db returns file id
     pub fn file_put(&mut self, file: sharedtypes::DbFileStorage) -> usize {
         match file {
@@ -400,8 +415,8 @@ impl NewinMemDB {
                 let file = sharedtypes::DbFileObj {
                     id: self._file_max,
                     hash: file_noid.hash,
-                    ext: file_noid.ext,
-                    location: file_noid.location,
+                    ext_id: file_noid.ext_id,
+                    storage_id: file_noid.storage_id,
                 };
                 self._file_max += 1;
                 self._file_name_id.insert(file.hash.clone(), file.id);

@@ -14,13 +14,23 @@ use strum_macros::{Display, EnumString};
 #[derive(Debug, Deserialize, Serialize)]
 pub enum EnclaveCondition {
     Any,
+    None,
     FileSizeGreater(usize),
     FileSizeLessthan(usize),
 }
 
+///
+/// Manages the conditions that determines which enclave stop processing at
+///
+#[derive(Debug, Deserialize, Serialize)]
+pub enum EnclaveStopCondition {
+    /// We've found a location to put our file
+    FileDownloadLocation,
+}
+
 #[derive(Debug, Deserialize, Serialize)]
 pub enum EnclaveAction {
-    DownloadToLocation(String),
+    DownloadToLocation(usize),
     DownloadToDefault,
 }
 
@@ -251,16 +261,16 @@ pub struct ScraperFileReturn {
 pub struct DbFileObj {
     pub id: usize,
     pub hash: String,
-    pub ext: String,
-    pub location: String,
+    pub ext_id: usize,
+    pub storage_id: usize,
 }
 
 /// File object with no id field if unknown
 #[derive(Debug, Deserialize, Serialize, Clone, Eq, Hash, PartialEq)]
 pub struct DbFileObjNoId {
     pub hash: String,
-    pub ext: String,
-    pub location: String,
+    pub ext_id: usize,
+    pub storage_id: usize,
 }
 
 /// Wrapper for DbFileStorage
@@ -545,6 +555,7 @@ pub enum HashesSupported {
     Md5(String),
     Sha1(String),
     Sha256(String),
+    Sha512(String),
     None,
 }
 

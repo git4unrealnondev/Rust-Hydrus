@@ -51,6 +51,7 @@ libc = "0.2.159"
 ahash = "0.8.11"
 libloading = "0.8.5"
 thread-control = "0.1.2"
+fallible-streaming-iterator = "0.1.9"
 
 [profile.release]
 opt-level = 3

@@ -10,6 +10,7 @@ use log::{error, info};
 use reqwest::blocking::Client;
 use reqwest::cookie;
 use sha2::Digest as sha2Digest;
+use sha2::Sha256;
 use sha2::Sha512;
 use std::io::BufReader;
 use std::io::Cursor;
@@ -145,6 +146,16 @@ pub fn hash_bytes(bytes: &Bytes, hash: &sharedtypes::HashesSupported) -> (String
             (hastring, dune)
         }
         sharedtypes::HashesSupported::Sha256(hash) => {
+            let mut hasher = Sha256::new();
+            hasher.update(bytes);
+            let hastring = format!("{:X}", hasher.finalize());
+            let dune = &hastring == hash;
+            if !dune {
+                info!("Parser returned: {} Got: {}", &hash, &hastring);
+            }
+            (hastring, dune)
+        }
+        sharedtypes::HashesSupported::Sha512(hash) => {
             let mut hasher = Sha512::new();
             hasher.update(bytes);
             let hastring = format!("{:X}", hasher.finalize());
@@ -256,10 +267,18 @@ pub fn dlfile_new(
 
     // Gives file extension
     let file_ext = FileFormat::from_bytes(&bytes).extension().to_string();
-    dbg!(&file_ext);
+
     // Gets final path of file.
     let orig_path = format!("{}/{}", &final_loc, &hash);
-    let mut file_path = std::fs::File::create(&orig_path).unwrap();
+    let file_path_res = std::fs::File::create(&orig_path);
+
+    while file_path_res.is_err() {
+        logging::info_log(&format!(
+            "Cannot create file at path: {} Err: {:?}",
+            &orig_path, file_path_res
+        ));
+        thread::sleep(Duration::from_secs(1));
+    }
 
     // If the plugin manager is None then don't do anything plugin wise. Useful for if
     // doing something that we CANNOT allow plugins to run.
@@ -270,9 +289,18 @@ pub fn dlfile_new(
     }
     let mut content = Cursor::new(bytes);
 
-    // Copies file from memory to disk
-    std::io::copy(&mut content, &mut file_path).unwrap();
-    logging::info_log(&format!("Downloaded hash: {}", &hash));
+    if let Ok(mut file_path) = file_path_res {
+        // Copies file from memory to disk
+        while let Err(err) = std::io::copy(&mut content, &mut file_path) {
+            logging::info_log(&format!(
+                "Cannot copy file at path: {} Err: {:?}",
+                &orig_path, err
+            ));
+
+            thread::sleep(Duration::from_secs(1));
+        }
+        logging::info_log(&format!("Downloaded hash: {}", &hash));
+    }
     Some((hash, file_ext))
 }
 

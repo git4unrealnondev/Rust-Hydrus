@@ -61,7 +61,7 @@ pub fn import_files(
         }
         let (hash, _b) = download::hash_file(
             &row.path,
-            &sharedtypes::HashesSupported::Sha256("".to_string()),
+            &sharedtypes::HashesSupported::Sha512("".to_string()),
         );
         let hash_exists = db.file_get_hash(&hash);
         if hash_exists.is_some() {
@@ -93,13 +93,18 @@ pub fn import_files(
             }
         }
         println!("Copied to path: {}", &final_path);
-        dbg!(&hash, &row);
+
+        db.storage_put(&location);
+        let storage_id = db.storage_get_id(&location).unwrap();
+
+        // Gets the extension id from a string
+        let ext_id = db.extension_put_string(&file_ext);
 
         // Adds into DB
         let file = sharedtypes::DbFileStorage::NoIdExist(sharedtypes::DbFileObjNoId {
             hash,
-            ext: file_ext,
-            location: location.clone(),
+            ext_id,
+            storage_id,
         });
         let file_id = db.file_add(file, true);
         let namespace_id = db.namespace_add(row.namespace, None, true);

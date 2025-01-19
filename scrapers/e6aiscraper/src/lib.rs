@@ -48,6 +48,7 @@ pub enum NsIdent {
     Copyright,
     Character,
     Species,
+    Franchise,
     General,
 }
 
@@ -91,6 +92,10 @@ fn subgen(
 
 fn nsobjplg(name: &NsIdent) -> sharedtypes::GenericNamespaceObj {
     match name {
+        NsIdent::Franchise => sharedtypes::GenericNamespaceObj {
+            name: "franchise".to_string(),
+            description: Some("What franchise is this from: e6ai".to_string()),
+        },
         NsIdent::PoolUpdatedAt => {
             return sharedtypes::GenericNamespaceObj {
                 //tag: tag,

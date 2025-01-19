@@ -378,27 +378,29 @@ fn parse_plugin_output(
                     if let Some(temp) = names.file {
                         for files in temp {
                             if files.id.is_none() && files.hash.is_some() && files.ext.is_some() {
-                                if files.location.is_none() {
-                                    //let string_dlpath = download::getfinpath(&loc, &files.hash.as_ref().unwrap());
-                                    let location = unwrappy.location_get();
-                                    let file = sharedtypes::DbFileStorage::NoIdExist(
-                                        sharedtypes::DbFileObjNoId {
-                                            hash: files.hash.unwrap(),
-                                            ext: files.ext.unwrap(),
-                                            location,
-                                        },
-                                    );
-                                    unwrappy.file_add(file, true);
-                                } else {
-                                    let file = sharedtypes::DbFileStorage::NoIdExist(
-                                        sharedtypes::DbFileObjNoId {
-                                            hash: files.hash.unwrap(),
-                                            ext: files.ext.unwrap(),
-                                            location: files.location.unwrap(),
-                                        },
-                                    );
-                                    unwrappy.file_add(file, true);
-                                }
+                                // Gets the extension id
+                                let ext_id = unwrappy.extension_put_string(&files.ext.unwrap());
+
+                                let storage_id = match files.location {
+                                    Some(exists) => {
+                                        unwrappy.storage_put(&exists);
+                                        unwrappy.storage_get_id(&exists).unwrap()
+                                    }
+                                    None => {
+                                        let exists = unwrappy.location_get();
+                                        unwrappy.storage_put(&exists);
+                                        unwrappy.storage_get_id(&exists).unwrap()
+                                    }
+                                };
+
+                                let file = sharedtypes::DbFileStorage::NoIdExist(
+                                    sharedtypes::DbFileObjNoId {
+                                        hash: files.hash.unwrap(),
+                                        ext_id,
+                                        storage_id,
+                                    },
+                                );
+                                unwrappy.file_add(file, true);
                             }
                         }
                     }

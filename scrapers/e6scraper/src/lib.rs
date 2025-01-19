@@ -45,6 +45,7 @@ pub enum NsIdent {
     Artist,
     Copyright,
     Character,
+    Contributor,
     Species,
     General,
 }
@@ -162,6 +163,13 @@ fn nsobjplg(name: &NsIdent) -> sharedtypes::GenericNamespaceObj {
                 description: Some("What character's are in an image.".to_string()),
             };
         }
+        NsIdent::Contributor => {
+            return sharedtypes::GenericNamespaceObj {
+                name: "Contributor".to_string(),
+                description: Some("For those who helped make a piece of art not directly the artist think of VA's and such.".to_string()),
+            };
+        }
+
         NsIdent::Copyright => {
             return sharedtypes::GenericNamespaceObj {
                 name: "Copyright".to_string(),
@@ -741,6 +749,14 @@ pub fn parser(
             None,
             sharedtypes::TagType::Normal,
         );
+        json_sub_tag(
+            &mut tags_list,
+            &js["posts"][inc]["tags"],
+            nsobjplg(&NsIdent::Contributor),
+            None,
+            sharedtypes::TagType::Normal,
+        );
+
         json_sub_tag(
             &mut tags_list,
             &js["posts"][inc]["tags"],

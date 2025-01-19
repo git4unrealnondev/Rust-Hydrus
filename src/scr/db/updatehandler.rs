@@ -2,6 +2,8 @@ use crate::database::Main;
 use crate::logging;
 use crate::sharedtypes;
 use crate::vec_of_strings;
+use eta::{Eta, TimeAcc};
+use fallible_streaming_iterator::FallibleStreamingIterator;
 use rusqlite::params;
 use std::collections::BTreeMap;
 impl Main {
@@ -297,13 +299,14 @@ impl Main {
                     }
                 }
                 self.db_drop_table(&"Jobs_Old".to_string());
-                self.transaction_flush();
             }
             9 => {
                 logging::info_log(&format!("Already processed jobs. Skipping..."));
             }
             _ => {}
         }
+        self.db_version_set(4);
+        self.transaction_flush();
     }
 
     ///
@@ -312,20 +315,6 @@ impl Main {
     pub fn db_update_four_to_five(&mut self) {
         logging::info_log(&"Backing up db this could be messy.".to_string());
         self.backup_db();
-
-        // Creates a location to store the location of files
-        if !self.check_table_exists("FileStorageLocations".to_string()) {
-            let keys = &vec_of_strings!("id", "location");
-            let vals = &vec_of_strings!("INTEGER PRIMARY KEY", "TEXT NOT NULL");
-            self.table_create(&"FileStorageLocations".to_string(), keys, vals);
-        }
-
-        // Creates a location to store the location of the extension of a file
-        if !self.check_table_exists("FileExtensions".to_string()) {
-            let keys = &vec_of_strings!("id", "extension");
-            let vals = &vec_of_strings!("INTEGER PRIMARY KEY", "TEXT NOT NULL");
-            self.table_create(&"FileExtensions".to_string(), keys, vals);
-        }
 
         // Puts Files table into proper state
         match (
@@ -342,111 +331,106 @@ impl Main {
                 //self.transaction_flush();
             }
         }
-        // Creates a file table that is for V5
-        let keys = &vec_of_strings!("id", "hash", "extension", "enclave_id");
-        let vals = &vec_of_strings!("INTEGER PRIMARY KEY", "TEXT NOT NULL", "INTEGER", "INTEGER");
-        self.table_create(&"File".to_string(), keys, vals);
 
-        if !self.check_table_exists("EnclaveAction".to_string()) {
-            let keys = &vec_of_strings!("id", "action_name", "action_text");
-            let vals = &vec_of_strings!(
-                "INTEGER PRIMARY KEY NOT NULL",
-                "TEXT NOT NULL",
-                "TEXT NOT NULL"
-            );
-            self.table_create(&"EnclaveAction".to_string(), keys, vals);
+        // Puts Tags table into proper state
+        match (
+            self.check_table_exists("Tags_Old".to_string()),
+            self.check_table_exists("Tags".to_string()),
+        ) {
+            (true, true) => {}
+            (false, false) => {
+                panic!("Cannot figure out where DB is at for file table four to five. Table does not exist.");
+            }
+            (true, false) => {}
+            (false, true) => {
+                self.alter_table(&"Tags".to_string(), &"Tags_Old".to_string());
+                //self.transaction_flush();
+            }
         }
 
-        if !self.check_table_exists("EnclaveCondition".to_string()) {
-            let keys = &vec_of_strings!("id", "action_name", "action_condition");
-            let vals = &vec_of_strings!(
-                "INTEGER NOT NULL PRIMARY KEY",
-                "TEXT NOT NULL",
-                "TEXT NOT NULL"
-            );
-            self.table_create(&"EnclaveCondition".to_string(), keys, vals);
-        }
-        if !self.check_table_exists("EnclaveConditionList".to_string()) {
-            let keys = &vec_of_strings!(
-                "id",
-                "enclave_action_id",
-                "failed_enclave_action_id",
-                "condition_id"
-            );
-            let vals = &vec_of_strings!(
-                "INTEGER NOT NULL PRIMARY KEY",
-                "INTEGER NOT NULL",
-                "INTEGER",
-                "INTEGER NOT NULL"
-            );
-            self.table_create(&"EnclaveConditionList".to_string(), keys, vals);
+        // Puts Jobs table into proper state
+        match (
+            self.check_table_exists("Jobs_Old".to_string()),
+            self.check_table_exists("Jobs".to_string()),
+        ) {
+            (true, true) => {}
+            (false, false) => {
+                panic!("Cannot figure out where DB is at for file table four to five. Table does not exist.");
+            }
+            (true, false) => {}
+            (false, true) => {
+                self.alter_table(&"Jobs".to_string(), &"Jobs_Old".to_string());
+                //self.transaction_flush();
+            }
         }
 
-        // Intermedidate table
-        if !self.check_table_exists("EnclaveActionOrderList".to_string()) {
-            let keys = &vec_of_strings!(
-                "id",
-                "enclave_id",
-                "enclave_conditional_list_id",
-                "enclave_action_position"
-            );
-            let vals = &vec_of_strings!(
-                "INTEGER PRIMARY KEY NOT NULL",
-                "INTEGER NOT NULL",
-                "INTEGER NOT NULL",
-                "INTEGER NOT NULL"
-            );
-            self.table_create(&"EnclaveActionOrderList".to_string(), keys, vals);
+        logging::info_log(&"Creating tables inside of DB for V5 upgrade".to_string());
+        self.enclave_create_database_v5();
+
+        // Creating storage location in db
+        let mut location_storage = std::collections::HashMap::new();
+        {
+            let mut location_cnt = 0;
+            let conn = self._conn.lock().unwrap();
+
+            let mut stmt = conn.prepare("SELECT location FROM File_Old").unwrap();
+            let mut rows = stmt.query([]).unwrap();
+            while let Some(row) = rows.next().unwrap() {
+                let location_string: String = row.get(0).unwrap();
+
+                if location_storage.get(&location_string).is_none() {
+                    dbg!("Adding {}", &location_string);
+                    location_storage.insert(location_string, None);
+                }
+            }
         }
 
-        if !self.check_table_exists("Enclave".to_string()) {
-            let keys = &vec_of_strings!("id", "enclave_name");
-            let vals = &vec_of_strings!("INTEGER PRIMARY KEY", "TEXT NOT NULL");
-            self.table_create(&"Enclave".to_string(), keys, vals);
+        // Adds storage locations into db
+        for (location, id) in location_storage.iter_mut() {
+            self.storage_put(&location);
+            *id = self.storage_get_id(&location);
         }
 
         // Sets up missing enclave location
         self.enclave_create_default_file_download(self.location_get());
 
+        // Super dirty way of getting around the borrow checker
+        let mut location_to_enclave = std::collections::HashMap::new();
         {
-            let mut storage = std::collections::HashSet::new();
-            dbg!("Needs to transition files");
+            for (location_string, storage_id) in location_storage.iter() {
+                self.enclave_create_default_file_download(location_string.clone());
+
+                let file_enclave = format!("File_Download_location_{}", location_string);
+                location_to_enclave
+                    .insert(storage_id.unwrap(), self.enclave_name_get_id(&file_enclave));
+            }
+        }
+
+        {
             let conn = self._conn.lock().unwrap();
-
-            let mut stmt = conn.prepare("SELECT * FROM File_Old").unwrap();
-            let mut rows = stmt.query([]).unwrap();
-
-            let file_sqlite_inp = "INSERT INTO File VALUES (?, ?, ?, ?)";
 
             // Loads the Files into memory
             // Creates storage id's for them
             // Creates extension id's aswell
-            let storage_sqlite_inp = "INSERT INTO FileStorageLocations VALUES (?, ?)";
+            //
+            logging::info_log(&format!("Starting to process files for DB V5 Upgrade"));
             let extension_sqlite_inp = "INSERT INTO FileExtensions VALUES (?, ?)";
+            let file_sqlite_inp = "INSERT INTO File VALUES (?, ?, ?, ?)";
+            let file_enclave_sqlite_inp = "INSERT INTO FileEnclaveMapping VALUES (?, ?)";
 
-            let mut location_cnt = 0;
             let mut extension_cnt = 0;
-            let mut location_storage = std::collections::HashMap::new();
             let mut extension_storage = std::collections::HashMap::new();
+            let mut stmt = conn.prepare("SELECT * FROM File_Old").unwrap();
+            let mut rows = stmt.query([]).unwrap();
             while let Some(row) = rows.next().unwrap() {
                 let id: usize = row.get(0).unwrap();
                 let hash: String = row.get(1).unwrap();
                 let extension: String = row.get(2).unwrap();
                 let location_string: String = row.get(3).unwrap();
 
-                let storageid = match location_storage.get(&location_string) {
-                    None => {
-                        let original = location_cnt;
-                        location_cnt += 1;
-                        let _ =
-                            conn.execute(storage_sqlite_inp, params![original, location_string]);
-                        location_storage.insert(location_string, original);
-                        original
-                    }
-                    Some(id) => id.clone(),
-                };
+                let storage_id = location_storage.get(&location_string).unwrap().unwrap();
 
-                let extensionid = match extension_storage.get(&extension) {
+                let extension_id = match extension_storage.get(&extension) {
                     None => {
                         let original = extension_cnt;
                         extension_cnt += 1;
@@ -456,13 +440,126 @@ impl Main {
                     }
                     Some(id) => id.clone(),
                 };
-
-                storage.insert((id, hash, extensionid, storageid));
+                logging::info_log(&format!("Adding File: {}", &hash));
+                let _ = conn.execute(
+                    file_enclave_sqlite_inp,
+                    params![id, location_to_enclave.get(&storage_id).unwrap()],
+                );
+                let _ = conn.execute(file_sqlite_inp, params![id, hash, extension_id, storage_id]);
             }
-            dbg!(&storage);
-            dbg!(&location_storage);
-            dbg!(&extension_storage);
         }
-        self.transaction_flush();
+        self.db_drop_table(&"File_Old".to_string());
+
+        if !self.check_table_exists("Tags".to_string()) {
+            let keys = &vec_of_strings!("id", "name", "namespace");
+            let vals = &vec_of_strings!("INTEGER PRIMARY KEY", "TEXT NOT NULL", "INTEGER NOT NULL");
+            self.table_create(&"Tags".to_string(), keys, vals);
+        }
+
+        {
+            let conn = self._conn.lock().unwrap();
+
+            // Worst that can happen is that we cant pull numbers of items and we default to 1
+            let mut row_count: usize = 1;
+            {
+                let sqlite_count = "select count(*) from Tags_Old";
+                let mut stmt = conn.prepare(sqlite_count).unwrap();
+                let mut rows = stmt.query([]).unwrap();
+                while let Some(row) = rows.next().unwrap() {
+                    row_count = row.get(0).unwrap();
+                }
+            }
+
+            let count_five_percent = row_count.div_ceil(100);
+
+            // Loads the Files into memory
+            // Creates storage id's for them
+            // Creates extension id's aswell
+            //
+            logging::info_log(&format!("Starting to process Tags for DB V5 Upgrade"));
+
+            let tag_sqlite_inp = "INSERT INTO Tags VALUES (?, ?, ?)";
+            let mut stmt = conn.prepare("SELECT * FROM Tags_Old").unwrap();
+            let mut rows = stmt.query([]).unwrap();
+
+            let mut eta = Eta::new(row_count, TimeAcc::MILLI);
+            let mut cnt = 0;
+            while let Some(row) = rows.next().unwrap() {
+                let id: usize = row.get(0).unwrap();
+                let name: String = row.get(1).unwrap();
+                let namespace: usize = row.get(2).unwrap();
+
+                let _ = conn.execute(tag_sqlite_inp, params![id, name, namespace]);
+                eta.step();
+                cnt += 1;
+                if (cnt % count_five_percent) == 0 {
+                    logging::info_log(&format!("{}", &eta));
+                }
+            }
+        }
+        self.db_drop_table(&"Tags_Old".to_string());
+        if !self.check_table_exists("Jobs".to_string()) {
+            let keys = &vec_of_strings!(
+                "id",
+                "time",
+                "reptime",
+                "Manager",
+                "site",
+                "param",
+                "CommitType",
+                "SystemData",
+                "UserData"
+            );
+            let vals = &vec_of_strings!(
+                "INTEGER PRIMARY KEY",
+                "INTEGER NOT NULL",
+                "INTEGER NOT NULL",
+                "TEXT NOT NULL",
+                "TEXT NOT NULL",
+                "TEXT NOT NULL",
+                "TEXT NOT NULL",
+                "TEXT NOT NULL",
+                "TEXT NOT NULL"
+            );
+
+            self.table_create(&"Jobs".to_string(), keys, vals);
+        }
+
+        {
+            let conn = self._conn.lock().unwrap();
+
+            // Loads the Files into memory
+            // Creates storage id's for them
+            // Creates extension id's aswell
+            //
+            logging::info_log(&format!("Starting to process Jobs for DB V5 Upgrade"));
+
+            let tag_sqlite_inp = "INSERT INTO Jobs VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+            let mut stmt = conn.prepare("SELECT * FROM Jobs_Old").unwrap();
+            let mut rows = stmt.query([]).unwrap();
+            while let Some(row) = rows.next().unwrap() {
+                let id: usize = row.get(0).unwrap();
+                let time: usize = row.get(1).unwrap();
+                let reptime: usize = row.get(2).unwrap();
+                let manager: String = row.get(3).unwrap();
+                let site: String = row.get(4).unwrap();
+                let param: String = row.get(5).unwrap();
+                let committype: String = row.get(6).unwrap();
+                let systemdata: String = row.get(7).unwrap();
+                let userdata: String = row.get(8).unwrap();
+
+                logging::info_log(&format!("Adding JobId: {}", &id));
+                let _ = conn.execute(
+                    tag_sqlite_inp,
+                    params![
+                        id, time, reptime, manager, site, param, committype, systemdata, userdata
+                    ],
+                );
+            }
+        }
+        self.db_drop_table(&"Jobs_Old".to_string());
+
+        self.db_version_set(5);
+        //self.vacuum();
     }
 }
