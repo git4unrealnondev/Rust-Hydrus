@@ -1,6 +1,7 @@
 // use crate::scr::sharedtypes::jobs_add; use
 // crate::scr::sharedtypes::AllFields::EJobsAdd; use crate::scr::tasks;
 use log::{error, warn};
+use plugins::get_loadable_paths;
 use scraper::db_upgrade_call;
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -136,7 +137,6 @@ fn main() {
     // Putting this down here after plugin manager because that's when the IPC server
     // starts and we can then inside of the scraper start calling IPC functions
     'upgradeloop: loop {
-        dbg!("Starting updoot");
         let repeat;
         {
             repeat = arc
@@ -168,6 +168,9 @@ fn main() {
 
     // TODO Put code here
     cli::main(arc.clone(), &mut scraper_manager);
+
+    // Checks if we need to load any jobs
+    logging::info_log(&format!("Checking if we have any Jobs to run."));
     arc.lock()
         .unwrap()
         .load_table(&sharedtypes::LoadDBTable::Jobs);

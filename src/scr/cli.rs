@@ -351,10 +351,20 @@ pub fn main(data: Arc<Mutex<database::Main>>, scraper: &mut scraper::ScraperMana
                         .filter(|z| z.file_type().is_file())
                     {
                         // println!("{}", each.path().display()); println!("On file: {}", cnt);
-                        let (fhist, b) = download::hash_file(
+                        let (fhist, b) = match download::hash_file(
                             &each.path().display().to_string(),
                             &file_regen.hash,
-                        );
+                        ) {
+                            Ok(out) => out,
+                            Err(err) => {
+                                logging::info_log(&format!(
+                                    "Cannot hash file {} err: {:?}",
+                                    &each.path().display().to_string(),
+                                    err
+                                ));
+                                continue;
+                            }
+                        };
                         println!("File Hash: {}", &fhist);
 
                         // Tries to infer the type from the ext.

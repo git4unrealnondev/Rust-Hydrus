@@ -113,6 +113,8 @@ impl Main {
             "DownloadToDisk"
         };
 
+        let default_or_alternative_priority = if is_default_location { 0 } else { 5 };
+
         // By default we should download a file to the default file location
         // However if we have an old file location then we shouldn't download to it.
         let alt_condition = if is_default_location {
@@ -133,7 +135,10 @@ impl Main {
         };
 
         let default_file_enclave = format!("File_Download_location_{}", location);
-        self.enclave_name_put(default_file_enclave.clone(), &0);
+        self.enclave_name_put(
+            default_file_enclave.clone(),
+            &default_or_alternative_priority,
+        );
         self.enclave_condition_put("DownloadToDiskAny", alt_condition);
         self.enclave_action_put(&default_or_alternative_location.to_string(), alt_action);
 

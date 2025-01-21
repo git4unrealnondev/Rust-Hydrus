@@ -2,6 +2,7 @@ use libloading::{self, Library};
 use log::{error, info, warn};
 use std::collections::HashMap;
 use std::path::Path;
+use std::path::PathBuf;
 use std::sync::Arc;
 //use std::sync::{mpsc, Arc, Mutex};
 use std::sync::Mutex;
@@ -14,6 +15,57 @@ use crate::logging;
 use crate::sharedtypes::{self, CallbackInfo};
 
 use crate::server;
+
+///
+/// Determines what we should return from our get_loadable_paths function
+///
+pub enum LoadableType {
+    Release,
+    Debug,
+}
+
+///
+/// Gets valid paths for plugins
+///
+pub fn get_loadable_paths(pluginsloc: &String, loadable: &LoadableType) -> Vec<PathBuf> {
+    let mut out = Vec::new();
+
+    let ext = ["rlib", "so", "dylib", "dll"];
+    let plugin_path = Path::new(pluginsloc);
+
+    // Errors out if I cant create a folder
+    if !plugin_path.exists() {
+        let path_check = fs::create_dir_all(plugin_path);
+        match path_check {
+            Ok(_) => (),
+            Err(_) => panic!(
+                "{}",
+                format!("CANNOT CREATE FOLDER: {} DUE TO PERMISSIONS.", &pluginsloc)
+            ),
+        }
+    }
+
+    for entry in walkdir::WalkDir::new(plugin_path).max_depth(4) {
+        // Filters each entry if we're looking for release or debug libs
+        if let Ok(entry) = entry {
+            let loadable_string = match loadable {
+                LoadableType::Release => "release",
+                LoadableType::Debug => "debug",
+            };
+            if !entry.path().to_string_lossy().contains(loadable_string) {
+                continue;
+            }
+
+            unsafe {
+                if libloading::Library::new(entry.path()).is_ok() {
+                    out.push(entry.path().to_path_buf());
+                }
+            }
+        }
+    }
+
+    out
+}
 
 pub struct PluginManager {
     _plugin: HashMap<String, libloading::Library>,
@@ -141,58 +193,9 @@ impl PluginManager {
     fn load_plugins(&mut self, pluginsloc: &String) {
         logging::log(&format!("Starting to load plugins at: {}", pluginsloc));
 
-        let ext = ["rlib", "so", "dylib", "dll"];
-
-        let plugin_path = Path::new(pluginsloc);
-
-        // Errors out if I cant create a folder
-        if !plugin_path.exists() {
-            let path_check = fs::create_dir_all(plugin_path);
-            match path_check {
-                Ok(_) => (),
-                Err(_) => panic!(
-                    "{}",
-                    format!("CANNOT CREATE FOLDER: {} DUE TO PERMISSIONS.", &pluginsloc)
-                ),
-            }
-        }
-
-        let dirs = fs::read_dir(plugin_path).unwrap();
-
-        for entry in dirs {
-            let root: String = entry.as_ref().unwrap().path().display().to_string();
-            let name = root.split('/');
-            let vec: Vec<&str> = name.collect();
-
-            let formatted_name = vec[vec.len() - 1].replace('-', "_");
-
-            let plugin_loading_path = format!(
-                "{}{}/target/release/lib{}",
-                &pluginsloc,
-                vec[vec.len() - 1],
-                formatted_name
-            );
-
-            let mut finalpath: Option<String> = None;
-            'extloop: for exts in ext {
-                let testpath = format!("{}.{}", plugin_loading_path, exts);
-
-                // Loading Logic goes here.
-                if Path::new(&testpath).exists() {
-                    info!("Loading scraper at: {}", &testpath);
-                    finalpath = Some(testpath);
-                    break 'extloop;
-                } else {
-                    warn!(
-                        "Loading scraper at: {} FAILED due to path not existing",
-                        &testpath
-                    );
-                    finalpath = None;
-                }
-            }
-            if let Some(pathe) = &finalpath {
-                self.load_plugin_from_path(Path::new(pathe));
-            }
+        for plugin_path in get_loadable_paths(pluginsloc, &LoadableType::Release).iter() {
+            logging::log(&format!("Loading plugin at: {}", plugin_path.display()));
+            self.load_plugin_from_path(plugin_path);
         }
     }
 
@@ -217,7 +220,7 @@ impl PluginManager {
 
         let pluginname = plugininfo.name.clone();
 
-        logging::info_log(&format!(
+        logging::log(&format!(
             "Loaded: {} With Description: {} Plugin Version: {} ABI: {} Comms: {:?}",
             &pluginname,
             &plugininfo.description,

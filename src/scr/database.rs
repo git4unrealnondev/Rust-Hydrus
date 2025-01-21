@@ -789,7 +789,6 @@ impl Main {
         }
         let mut db_vers = g1[0] as usize;
         logging::info_log(&format!("check_version: Loaded version {}", db_vers));
-        dbg!(&db_vers, self._vers);
         if self._active_vers != db_vers {
             logging::info_log(&format!(
                 "Starting upgrade from V{} to V{}",
@@ -1270,8 +1269,10 @@ impl Main {
 
         // let result_general = self.settings_get_name(&"DBCOMMITNUM".to_string());
         if self._dbcommitnum >= self._dbcommitnum_static {
-            info!("Flushing {} Records into DB.", self._dbcommitnum_static);
-            println!("Flushing {} Records into DB.", self._dbcommitnum_static);
+            logging::info_log(&format!(
+                "Flushinbg {} Records into DB.",
+                self._dbcommitnum_static
+            ));
 
             // dbg!(self._dbcommitnum, general);
             self.transaction_flush();
@@ -2210,12 +2211,7 @@ impl Main {
 
     /// Returns all file objects in db.
     pub fn file_get_list_all(&self) -> &HashMap<usize, sharedtypes::DbFileStorage> {
-        use std::time::Instant;
-
-        let now = Instant::now();
         let out = self._inmemdb.file_get_list_all();
-        let elapsed = now.elapsed();
-        println!("DB Elapsed: {:.2?}", elapsed);
         out
     }
 

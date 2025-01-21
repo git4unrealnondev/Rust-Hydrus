@@ -1,4 +1,4 @@
-use crate::{logging, sharedtypes};
+use crate::{logging, plugins, sharedtypes};
 use log::{error, info, warn};
 use std::collections::HashMap;
 use std::fs;
@@ -78,6 +78,13 @@ impl ScraperManager {
             _scraper: Vec::new(),
         }
     }
+    pub fn debug(&self) {
+        dbg!(&self._string);
+        dbg!(&self._sites);
+        dbg!(&self._loaded);
+        dbg!(&self._library);
+        dbg!(&self._scraper);
+    }
 
     pub fn sites_get(&self) -> &Vec<Vec<String>> {
         &self._sites
@@ -92,11 +99,35 @@ impl ScraperManager {
     }
 
     pub fn load(&mut self, scraperfolder: String, libpath: String, libext: String) {
-        let path = Path::new(&scraperfolder);
+        for scraper_path in
+            plugins::get_loadable_paths(&scraperfolder, &plugins::LoadableType::Release).iter()
+        {
+            self._string
+                .push(scraper_path.to_string_lossy().to_string());
+            let lib;
+            let pulled_successfully;
+            unsafe {
+                lib = libloading::Library::new(&scraper_path).unwrap();
+                let plugindatafunc: libloading::Symbol<unsafe extern "C" fn() -> InternalScraper> =
+                    lib.get(b"new").unwrap();
+                pulled_successfully = plugindatafunc();
+            }
 
-        if !path.exists() {
-            fs::create_dir_all(&scraperfolder).unwrap();
+            let version = pulled_successfully.version_get();
+            if version < SUPPORTED_VERS {
+                let msg = format!(
+                    "PLUGIN LOAD: Loaded Version:{} Currently Supports:{}",
+                    version, SUPPORTED_VERS
+                );
+                error!("{}", msg);
+                //unsafe {mem::forget(funtwo.unwrap()());}
+                panic!("{}", msg);
+            }
+            self._scraper.push(pulled_successfully.clone());
+            self._library.insert(pulled_successfully, lib);
         }
+
+        return;
 
         let dirs = fs::read_dir(&scraperfolder).unwrap();
 
@@ -120,18 +151,6 @@ impl ScraperManager {
                     pulled_successfully = plugindatafunc();
                 }
 
-                /*let lib = unsafe { libloading::Library::new(&path).unwrap() };
-
-                let funtwo: Result<
-                    libloading::Symbol<unsafe extern "C" fn() -> InternalScraper>,
-                    libloading::Error,
-                > = unsafe { lib.get(b"new") };
-
-                let pulled_successfully = unsafe { funtwo.unwrap()() };
-                lib.close();*/
-
-                // Loads version in memsafe way from scraper
-                //let scraper = unsafe { funtwo.as_ref().unwrap()() };
                 self._library.insert(pulled_successfully, lib);
             } else {
                 let err = format!(

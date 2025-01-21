@@ -209,7 +209,7 @@ another process and try again.",
         };
 
         // Stand-in for the syncronization used, if any, between the client and the server.
-        println!("Server running at {}", types::SOCKET_NAME);
+        logging::info_log(&format!("IPC Server running at {}", types::SOCKET_NAME));
 
         // let _ = notify.send(()); Main Plugin interaction loop
         for conn in listener.incoming().filter_map(handle_error) {
@@ -534,12 +534,7 @@ impl DbInteract {
                 Self::data_size_to_b(&tmep)
             }
             types::SupportedDBRequests::GetFileListAll() => {
-                use std::time::Instant;
-
-                let now = Instant::now();
                 let unwrappy = self._database.lock().unwrap();
-                let elapsed = now.elapsed();
-                println!("Lock Elapsed: {:.2?}", elapsed);
                 let tmep = unwrappy.file_get_list_all();
                 bincode::serialize(&tmep).unwrap()
             }

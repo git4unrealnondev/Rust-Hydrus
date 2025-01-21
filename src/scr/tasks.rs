@@ -5,6 +5,7 @@ use super::database;
 use super::download;
 use super::sharedtypes;
 use crate::helpers;
+use crate::logging;
 use ahash::AHashMap;
 use file_format::FileFormat;
 use log::{error, info};
@@ -59,10 +60,19 @@ pub fn import_files(
             println!("Path: {} Doesn't exist. Exiting. Check logs", &row.path);
             continue;
         }
-        let (hash, _b) = download::hash_file(
+
+        // If we can hash the file then go on if we can't hash the file for some weird reason then
+        // ignore the file and continue downloading
+        let (hash, _b) = match download::hash_file(
             &row.path,
             &sharedtypes::HashesSupported::Sha512("".to_string()),
-        );
+        ) {
+            Err(err) => {
+                logging::info_log(&format!("Cannot hash file {} err: {:?}", &row.path, err));
+                continue;
+            }
+            Ok(out) => out,
+        };
         let hash_exists = db.file_get_hash(&hash);
         if hash_exists.is_some() {
             // delfiles.insert(row.path.to_string(), "".to_owned()); Removes file that's

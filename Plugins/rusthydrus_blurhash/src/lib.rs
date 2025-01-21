@@ -220,7 +220,10 @@ pub fn on_download(
             output.push(sharedtypes::DBPluginOutputEnum::Add(vec![plugin_output]));
         }
         Err(err) => {
-            dbg!("Plugin: blurhash -- Failed to load: {}, {:?}", hash_in, err);
+            client::log_no_print(format!(
+                "Plugin: blurhash -- Failed to load: {}, {:?}",
+                hash_in, err
+            ));
         }
     }
     output

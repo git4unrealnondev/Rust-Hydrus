@@ -305,12 +305,15 @@ pub fn dlfile_new(
 }
 
 /// Hashes file from location string with specified hash into the hash of the file.
-pub fn hash_file(filename: &String, hash: &sharedtypes::HashesSupported) -> (String, Bytes) {
-    let f = File::open(filename).unwrap();
+pub fn hash_file(
+    filename: &String,
+    hash: &sharedtypes::HashesSupported,
+) -> Result<(String, Bytes), Box<dyn std::error::Error>> {
+    let f = File::open(filename)?;
     let mut reader = BufReader::new(f);
     let mut buf = Vec::new();
-    reader.read_to_end(&mut buf).unwrap();
+    reader.read_to_end(&mut buf)?;
     let b = Bytes::from(buf);
     let hash_self = hash_bytes(&b, hash);
-    (hash_self.0, b)
+    Ok((hash_self.0, b))
 }
