@@ -567,7 +567,7 @@ fn download_add_to_db(
 
             let file = sharedtypes::DbFileStorage::NoIdExist(sharedtypes::DbFileObjNoId {
                 hash,
-                ext_id: ext_id,
+                ext_id,
                 storage_id,
             });
             let fileid = unwrappydb.file_add(file, true);

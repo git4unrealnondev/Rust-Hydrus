@@ -3,11 +3,14 @@ use crate::logging;
 use crate::sharedtypes;
 use crate::sharedtypes::EnclaveCondition;
 use crate::vec_of_strings;
+use bytes::Bytes;
 use core::panic;
 use rusqlite::params;
 use rusqlite::OptionalExtension;
 use std::collections::BTreeMap;
 impl Main {
+    pub fn enclave_determine_processing(&mut self, file: sharedtypes::FileObject, bytes: Bytes) {}
+
     ///
     /// Creates tje database tables for a V5 upgrade
     ///
@@ -113,7 +116,7 @@ impl Main {
             "DownloadToDisk"
         };
 
-        let default_or_alternative_priority = if is_default_location { 0 } else { 5 };
+        let default_or_alternative_priority = if is_default_location { 5 } else { 0 };
 
         // By default we should download a file to the default file location
         // However if we have an old file location then we shouldn't download to it.
@@ -121,6 +124,12 @@ impl Main {
             sharedtypes::EnclaveCondition::Any
         } else {
             sharedtypes::EnclaveCondition::None
+        };
+
+        let default_or_alternative_name = if is_default_location {
+            "DownloadToDiskDefaultLocation"
+        } else {
+            "DownloadToNoneLegacy"
         };
 
         let alt_action = if is_default_location {
@@ -139,11 +148,13 @@ impl Main {
             default_file_enclave.clone(),
             &default_or_alternative_priority,
         );
-        self.enclave_condition_put("DownloadToDiskAny", alt_condition);
+        self.enclave_condition_put(default_or_alternative_name, alt_condition);
         self.enclave_action_put(&default_or_alternative_location.to_string(), alt_action);
 
         let enclave_id = self.enclave_name_get_id(&default_file_enclave).unwrap();
-        let condition_id = self.enclave_condition_get_id("DownloadToDiskAny").unwrap();
+        let condition_id = self
+            .enclave_condition_get_id(default_or_alternative_name)
+            .unwrap();
         let action_id = self
             .enclave_action_get_id(&default_or_alternative_location.to_string())
             .unwrap();
@@ -191,6 +202,14 @@ impl Main {
         }
     }
 
+    pub fn enclave_process_enclave_by_priority(&self) {
+        for priority_id in self.enclave_priority_get().iter() {
+            for enclave_ids in self.enclave_get_id_from_priority(priority_id) {
+                dbg!(enclave_ids, priority_id);
+            }
+        }
+    }
+
     ///
     /// Gets the enclave id from the enclave name
     ///
@@ -211,6 +230,68 @@ impl Main {
     }
 
     ///
+    /// Gets prioritys from Enclaves
+    ///
+    pub fn enclave_get_id_from_priority(&self, priority_id: &usize) -> Vec<usize> {
+        let mut out: Vec<usize> = Vec::new();
+        let conn = self._conn.lock().unwrap();
+        let mut stmt = conn
+            .prepare("SELECT id from Enclave WHERE priority = ?")
+            .unwrap();
+        let row = stmt
+            .query_map(params![priority_id], |row| {
+                let id: Option<usize> = row.get(0).unwrap();
+                if let Some(id) = id {
+                    Ok(id)
+                } else {
+                    Err(rusqlite::Error::InvalidQuery)
+                }
+            })
+            .unwrap();
+        for ids in row {
+            if let Ok(ids) = ids {
+                if !out.contains(&ids) {
+                    out.push(ids);
+                }
+            }
+        }
+
+        out.sort();
+
+        out
+    }
+
+    ///
+    /// Gets prioritys from Enclaves
+    ///
+    pub fn enclave_priority_get(&self) -> Vec<usize> {
+        let mut out: Vec<usize> = Vec::new();
+        let conn = self._conn.lock().unwrap();
+        let mut stmt = conn.prepare("SELECT priority from Enclave").unwrap();
+        let row = stmt
+            .query_map([], |row| {
+                let id: Option<usize> = row.get(0).unwrap();
+                if let Some(id) = id {
+                    Ok(id)
+                } else {
+                    Err(rusqlite::Error::InvalidQuery)
+                }
+            })
+            .unwrap();
+        for ids in row {
+            if let Ok(ids) = ids {
+                if !out.contains(&ids) {
+                    out.push(ids);
+                }
+            }
+        }
+
+        out.sort();
+
+        out
+    }
+
+    ///
     /// Adds a condition to the database
     ///
     pub fn enclave_condition_put(&mut self, name: &str, condition: sharedtypes::EnclaveCondition) {
@@ -224,7 +305,6 @@ impl Main {
             .unwrap();
         let _ = prep.insert(params![name, serde_json::to_string(&condition).unwrap()]);
     }
-    pub fn enclave_condition_edit() {}
     pub fn enclave_condition_get_id(&self, name: &str) -> Option<usize> {
         let conn = self._conn.lock().unwrap();
         if let Ok(out) = conn

@@ -233,6 +233,9 @@ fn main() {
             );
         }
     }
+
+    arc.lock().unwrap().enclave_process_enclave_by_priority();
+
     arc.lock().unwrap().transaction_flush();
 
     // pluginmanager.lock().unwrap().thread_finish_closed(); while
