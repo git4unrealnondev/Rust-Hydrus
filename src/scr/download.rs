@@ -35,13 +35,23 @@ pub fn ratelimiter_create(number: u64, duration: Duration) -> Ratelimiter {
         "Making ratelimiter with: {} Request Per: {:?}",
         &number, &duration
     );
+    loop {
+        // The wrapper that implements ratelimiting
 
-    // The wrapper that implements ratelimiting
-    Ratelimiter::builder(number, duration)
-        .max_tokens(number)
-        .initial_available(number)
-        .build()
-        .unwrap()
+        match Ratelimiter::builder(number, duration)
+            .max_tokens(number)
+            .initial_available(number)
+            .build()
+        {
+            Ok(ratelimiter) => {
+                return ratelimiter;
+            }
+            Err(err) => {
+                logging::error_log(&format!("Failed to make ratelimiter with err: {:?}", err));
+                std::thread::sleep(Duration::from_millis(100));
+            }
+        }
+    }
 }
 
 pub fn ratelimiter_wait(ratelimit_object: &Arc<Mutex<Ratelimiter>>) {

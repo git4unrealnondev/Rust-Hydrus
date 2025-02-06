@@ -16,6 +16,7 @@ use std::panic;
 use std::path::Path;
 use std::sync::Arc;
 use std::sync::Mutex;
+use std::time::Duration;
 
 mod db;
 
@@ -1758,9 +1759,24 @@ impl Main {
         self.execute("BEGIN".to_string());
     }
 
+    ///
+    /// Determines if the DB has pending actions.
+    /// Was having a weird edge case where I was flushing over 6k tags at once and the db vomited
+    /// on itself. Hopefully this fixes it
+    ///
+    fn determine_if_busy(&self) -> bool {
+        let conn = self._conn.lock().unwrap();
+        conn.is_busy()
+    }
+
     /// Flushes to disk.
     pub fn transaction_flush(&mut self) {
         self._dbcommitnum = 0;
+
+        // If were busy doing a transaction then do nothing
+        while self.determine_if_busy() {
+            std::thread::sleep(Duration::from_millis(100));
+        }
         self.execute("COMMIT".to_string());
         self.execute("BEGIN".to_string());
     }
