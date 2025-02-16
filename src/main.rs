@@ -97,7 +97,7 @@ fn db_file_sanity(dbloc: &str) {
 
 /// Main function.
 fn main() {
-    let dbloc = "./main.db";
+    let dbloc = "main.db";
     let logloc = "log.txt";
 
     // Makes Logging work
@@ -149,7 +149,7 @@ fn main() {
             for (internal_scraper, scraper_library) in scraper_manager.library_get().iter() {
                 logging::info_log(&format!(
                     "Starting scraper upgrade: {}",
-                    internal_scraper._name
+                    internal_scraper.name
                 ));
                 let db_vers = {
                     let lck = arc.lock().unwrap();
@@ -233,8 +233,6 @@ fn main() {
             );
         }
     }
-
-    arc.lock().unwrap().enclave_process_enclave_by_priority();
 
     arc.lock().unwrap().transaction_flush();
 

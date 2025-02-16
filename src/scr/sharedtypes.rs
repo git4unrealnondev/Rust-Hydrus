@@ -73,6 +73,41 @@ pub enum TasksRemove {
     None,
 }
 
+#[derive(Debug, Clone, Eq, Hash, PartialEq)]
+pub enum LoginType {
+    Cookie(Option<String>),
+    Login(Option<(String, String)>),
+    Other(Option<String>),
+}
+
+#[derive(Debug, Clone, Eq, Hash, PartialEq)]
+pub struct StoredInfo {
+    filler: String,
+}
+
+///
+/// An individual site according to the scraper
+///
+#[derive(Debug, Clone, Eq, Hash, PartialEq)]
+pub struct SiteStruct {
+    /// Name of the site (human readable plz)
+    pub name: String,
+    /// List of Strings to match to determine if we should use this scraper.
+    pub sites: Vec<String>,
+    /// Verison of the scraper
+    pub version: usize,
+    /// Ratelimit for this site
+    pub ratelimit: (u64, std::time::Duration),
+    /// Weather this scraper should handle the file download
+    pub should_handle_file_download: bool,
+    /// Weather this scraper needs to handle text scraping
+    pub should_handle_text_scraping: bool,
+    /// Any data thats needed to access restricted content
+    pub login_type: Option<LoginType>,
+    /// Random storage. Leaving this for future use
+    pub stored_info: Option<StoredInfo>,
+}
+
 /// Determines how to run a function
 #[derive(Debug, EnumIter, Display)]
 pub enum PluginThreadType {

@@ -1,15 +1,196 @@
 use crate::database::Main;
+use crate::download;
 use crate::logging;
 use crate::sharedtypes;
-use crate::sharedtypes::EnclaveCondition;
 use crate::vec_of_strings;
 use bytes::Bytes;
+use chrono::DateTime;
+use chrono::{NaiveDate, Utc};
 use core::panic;
+use file_format::FileFormat;
 use rusqlite::params;
+use rusqlite::types::FromSql;
 use rusqlite::OptionalExtension;
-use std::collections::BTreeMap;
 impl Main {
-    pub fn enclave_determine_processing(&mut self, file: sharedtypes::FileObject, bytes: Bytes) {}
+    pub fn enclave_determine_processing(
+        &mut self,
+        file: &sharedtypes::FileObject,
+        bytes: Bytes,
+        sha512hash: &String,
+        source_url: &String,
+    ) {
+        logging::info_log(&format!("Starting to process: {}", file.hash));
+
+        for priority_id in self.enclave_priority_get().iter() {
+            for enclave_id in self.enclave_get_id_from_priority(priority_id).iter() {
+                for condition_list_id in self
+                    .enclave_action_order_enclave_get_list_id(enclave_id)
+                    .iter()
+                {
+                    logging::info_log(&format!(
+                        "Pulled condition list id for {}, enclave_id: {}",
+                        condition_list_id, enclave_id
+                    ));
+
+                    for (enclave_action_id, failed_enclave_action_id, condition_id) in
+                        self.enclave_condition_list_get(condition_list_id).iter()
+                    {
+                        dbg!(enclave_action_id, failed_enclave_action_id, condition_id);
+
+                        let (action_bool, action_name) =
+                            self.enclave_condition_evaluate(condition_id, file, &bytes);
+
+                        let run_option_action_id = if action_bool {
+                            Some(enclave_action_id)
+                        } else {
+                            failed_enclave_action_id.as_ref()
+                        };
+
+                        if let Some(run_action_id) = run_option_action_id {
+                            logging::info_log(&format!("Running action id: {}", run_action_id));
+                            if let Some(action_name) = action_name {
+                                logging::info_log(&format!(
+                                    "Running action name: {:?}",
+                                    action_name
+                                ));
+                                let source_url_ns_id = self.create_default_source_url_ns_id();
+                                self.enclave_run_action(
+                                    &action_name,
+                                    &file,
+                                    &bytes,
+                                    sha512hash,
+                                    source_url,
+                                    source_url_ns_id,
+                                    run_action_id,
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    ///
+    /// Runs an action as it's valid
+    ///
+    pub fn enclave_run_action(
+        &mut self,
+        action: &sharedtypes::EnclaveAction,
+        file: &sharedtypes::FileObject,
+        bytes: &Bytes,
+        sha512hash: &String,
+        source_url: &String,
+        source_url_ns_id: usize,
+        enclave_id: &usize,
+    ) -> Option<usize> {
+        match action {
+            sharedtypes::EnclaveAction::DownloadToDefault => {
+                let loc = self.location_get();
+
+                self.storage_put(&loc);
+
+                // Gives file extension
+                let file_ext = FileFormat::from_bytes(&bytes).extension().to_string();
+
+                let ext_id = self.extension_put_string(&file_ext);
+
+                let download_loc = std::path::Path::new(&loc).canonicalize().unwrap();
+                dbg!(&download_loc, &download_loc.file_name());
+
+                download::write_to_disk(download_loc, file, bytes, sha512hash);
+
+                let storage_id = self.storage_get_id(&loc).unwrap();
+
+                let file = sharedtypes::DbFileStorage::NoIdExist(sharedtypes::DbFileObjNoId {
+                    hash: sha512hash.to_string(),
+                    ext_id,
+                    storage_id,
+                });
+                let fileid = self.file_add(file, true);
+                let tagid = self.tag_add(source_url, source_url_ns_id, true, None);
+                self.relationship_add(fileid, tagid, true);
+                self.enclave_file_mapping_add(&fileid, enclave_id);
+                Some(fileid.clone())
+            }
+            sharedtypes::EnclaveAction::DownloadToLocation(location_id) => None,
+        }
+    }
+
+    ///
+    /// Checks if a condition is true
+    ///
+    pub fn enclave_condition_evaluate(
+        &self,
+        condition_id: &usize,
+        file: &sharedtypes::FileObject,
+        bytes: &Bytes,
+    ) -> (bool, Option<sharedtypes::EnclaveAction>) {
+        if let Some((action, condition)) = self.enclave_condition_get_data(condition_id) {
+            return (
+                match condition {
+                    sharedtypes::EnclaveCondition::Any => true,
+                    sharedtypes::EnclaveCondition::None => false,
+                    sharedtypes::EnclaveCondition::FileSizeGreater(byte_len) => {
+                        byte_len < bytes.len()
+                    }
+                    sharedtypes::EnclaveCondition::FileSizeLessthan(byte_len) => {
+                        byte_len > bytes.len()
+                    }
+                },
+                Some(action),
+            );
+        } else {
+            (false, None)
+        }
+    }
+
+    ///
+    /// Adds a filemapping if it doesn't exist
+    ///
+    pub fn enclave_file_mapping_add(&mut self, file_id: &usize, enclave_id: &usize) {
+        let utc = Utc::now();
+        let timestamp = utc.timestamp_millis();
+
+        if self.enclave_file_mapping_get(file_id, enclave_id).is_some() {
+            let conn = self._conn.lock().unwrap();
+            let mut prep = conn
+            .prepare(
+                "UPDATE FileEnclaveMapping SET timestamp = ? WHERE fileid = ? AND enclave_id = ?)",
+            )
+            .unwrap();
+
+            let _ = prep.insert(params![timestamp, file_id, enclave_id]);
+            return;
+        }
+
+        let conn = self._conn.lock().unwrap();
+        let mut prep = conn
+            .prepare(
+                "INSERT INTO FileEnclaveMapping (file_id, enclave_id, timestamp) VALUES (?, ?, ?)",
+            )
+            .unwrap();
+        let _ = prep.insert(params![file_id, enclave_id, timestamp]);
+    }
+
+    ///
+    /// Checks if a file mapping pair exists
+    ///
+    pub fn enclave_file_mapping_get(&self, file_id: &usize, enclave_id: &usize) -> Option<usize> {
+        let conn = self._conn.lock().unwrap();
+        if let Ok(out) = conn
+            .query_row(
+                "SELECT file_id from FileEnclaveMapping where file_id = ? AND enclave_id = ?",
+                params![file_id, enclave_id],
+                |row| row.get(0),
+            )
+            .optional()
+        {
+            out
+        } else {
+            None
+        }
+    }
 
     ///
     /// Creates tje database tables for a V5 upgrade
@@ -46,8 +227,8 @@ impl Main {
 
         // Maps enclave id's to file ids
         if !self.check_table_exists("FileEnclaveMapping".to_string()) {
-            let keys = &vec_of_strings!("file_id", "enclave_id");
-            let vals = &vec_of_strings!("INTEGER NOT NULL", "INTEGER NOT NULL");
+            let keys = &vec_of_strings!("file_id", "enclave_id", "timestamp");
+            let vals = &vec_of_strings!("INTEGER NOT NULL", "INTEGER NOT NULL", "INTEGER NOT NULL");
             self.table_create(&"FileEnclaveMapping".to_string(), keys, vals);
         }
 
@@ -127,9 +308,9 @@ impl Main {
         };
 
         let default_or_alternative_name = if is_default_location {
-            "DownloadToDiskDefaultLocation"
+            sharedtypes::EnclaveAction::DownloadToDefault
         } else {
-            "DownloadToNoneLegacy"
+            sharedtypes::EnclaveAction::DownloadToLocation(default_or_alternative_priority)
         };
 
         let alt_action = if is_default_location {
@@ -148,12 +329,12 @@ impl Main {
             default_file_enclave.clone(),
             &default_or_alternative_priority,
         );
-        self.enclave_condition_put(default_or_alternative_name, alt_condition);
+        self.enclave_condition_put(&default_or_alternative_name, &alt_condition);
         self.enclave_action_put(&default_or_alternative_location.to_string(), alt_action);
 
         let enclave_id = self.enclave_name_get_id(&default_file_enclave).unwrap();
         let condition_id = self
-            .enclave_condition_get_id(default_or_alternative_name)
+            .enclave_condition_get_id(&default_or_alternative_name)
             .unwrap();
         let action_id = self
             .enclave_action_get_id(&default_or_alternative_location.to_string())
@@ -199,14 +380,6 @@ impl Main {
             out
         } else {
             None
-        }
-    }
-
-    pub fn enclave_process_enclave_by_priority(&self) {
-        for priority_id in self.enclave_priority_get().iter() {
-            for enclave_ids in self.enclave_get_id_from_priority(priority_id) {
-                dbg!(enclave_ids, priority_id);
-            }
         }
     }
 
@@ -294,8 +467,12 @@ impl Main {
     ///
     /// Adds a condition to the database
     ///
-    pub fn enclave_condition_put(&mut self, name: &str, condition: sharedtypes::EnclaveCondition) {
-        if self.enclave_condition_get_id(name).is_some() {
+    pub fn enclave_condition_put(
+        &mut self,
+        action: &sharedtypes::EnclaveAction,
+        condition: &sharedtypes::EnclaveCondition,
+    ) {
+        if self.enclave_condition_get_id(action).is_some() {
             return;
         }
 
@@ -303,19 +480,51 @@ impl Main {
         let mut prep = conn
             .prepare("INSERT OR REPLACE INTO EnclaveCondition (action_name, action_condition) VALUES (?, ?)")
             .unwrap();
-        let _ = prep.insert(params![name, serde_json::to_string(&condition).unwrap()]);
+        let _ = prep.insert(params![
+            serde_json::to_string(action).unwrap(),
+            serde_json::to_string(condition).unwrap()
+        ]);
     }
-    pub fn enclave_condition_get_id(&self, name: &str) -> Option<usize> {
+    pub fn enclave_condition_get_id(&self, name: &sharedtypes::EnclaveAction) -> Option<usize> {
         let conn = self._conn.lock().unwrap();
         if let Ok(out) = conn
             .query_row(
                 "SELECT id from EnclaveCondition where action_name = ?",
-                params![name],
+                params![serde_json::to_string(name).unwrap()],
                 |row| row.get(0),
             )
             .optional()
         {
             out
+        } else {
+            None
+        }
+    }
+
+    ///
+    /// Gets conditional action and condition from id
+    ///
+    pub fn enclave_condition_get_data(
+        &self,
+        condition_id: &usize,
+    ) -> Option<(sharedtypes::EnclaveAction, sharedtypes::EnclaveCondition)> {
+        let conn = self._conn.lock().unwrap();
+        if let Ok(out) = conn
+            .query_row(
+                "SELECT action_name, action_condition from EnclaveCondition where id = ?",
+                params![condition_id],
+                |row| {
+                    let action: String = row.get(0).unwrap();
+                    let condition: String = row.get(1).unwrap();
+                    Ok(Some((
+                        serde_json::from_str(&action).unwrap(),
+                        serde_json::from_str(&condition).unwrap(),
+                    )))
+                },
+            )
+            .optional()
+        {
+            out?
         } else {
             None
         }
@@ -370,6 +579,42 @@ impl Main {
     }
 
     ///
+    /// Gets enclave conditional jump by enclave_id
+    ///
+    pub fn enclave_action_order_enclave_get_list_id(&self, enclave_id: &usize) -> Vec<usize> {
+        let mut out: Vec<usize> = Vec::new();
+        let conn = self._conn.lock().unwrap();
+        let mut stmt = conn
+            .prepare("SELECT enclave_conditional_list_id from EnclaveActionOrderList where enclave_id = ? ORDER BY enclave_action_position DESC")
+            .unwrap();
+        let row = stmt
+            .query_map([enclave_id], |row| {
+                let id: Option<usize> = row.get(0).unwrap();
+                if let Some(id) = id {
+                    Ok(id)
+                } else {
+                    Err(rusqlite::Error::InvalidQuery)
+                }
+            })
+            .unwrap();
+        for ids in row {
+            if let Ok(ids) = ids {
+                if !out.contains(&ids) {
+                    out.push(ids);
+                }
+            }
+        }
+
+        out.sort();
+
+        out
+    }
+
+    ///
+    /// Gets enclave action order IDs based on file enclave id
+    ///
+
+    ///
     /// Adds the conditional link between for a condition and it's priority in the enclave list
     ///
     pub fn enclave_condition_link_put(
@@ -411,6 +656,33 @@ impl Main {
             None
         }
     }
+
+    ///
+    /// Gets conditional jumps for conditonlist id
+    ///
+    pub fn enclave_condition_list_get(
+        &mut self,
+        condition_list_id: &usize,
+    ) -> Option<(usize, Option<usize>, usize)> {
+        let conn = self._conn.lock().unwrap();
+
+        if let Ok(out) = conn
+            .query_row(
+                "SELECT enclave_action_id, failed_enclave_action_id, condition_id from EnclaveConditionList where id = ?",
+                params![condition_list_id],
+                |row| Ok(Some((row.get(0).unwrap(), row.get(1).unwrap(), row.get(2).unwrap()))),
+            )
+            .optional()
+        {
+            out?
+        } else {
+            None
+        }
+    }
+
+    ///
+    /// Gets condition ID
+    ///
 
     ///
     /// Inserts the name and action into the database

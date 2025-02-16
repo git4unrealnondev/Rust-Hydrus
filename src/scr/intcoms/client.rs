@@ -59,6 +59,12 @@ pub fn get_file(fileid: usize) -> Option<String> {
     ))
 }
 
+pub fn get_file_ext(fileext: usize) -> Option<String> {
+    init_data_request(&types::SupportedRequests::Database(
+        types::SupportedDBRequests::GetFileExt(fileext),
+    ))
+}
+
 pub fn get_file_bytes(fileid: usize) -> Option<Vec<u8>> {
     init_data_request(&types::SupportedRequests::Database(
         types::SupportedDBRequests::GetFileByte(fileid),

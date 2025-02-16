@@ -69,6 +69,7 @@ pub enum SupportedDBRequests {
     RelationshipGetTagid(usize),
     RelationshipGetFileid(usize),
     GetFile(usize),
+    GetFileExt(usize),
     GetFileHash(String),
     GetNamespace(String),
     CreateNamespace(String, Option<String>, bool),

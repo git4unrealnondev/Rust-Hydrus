@@ -1,3 +1,4 @@
+use crate::sharedtypes::SiteStruct;
 use crate::{logging, plugins, sharedtypes};
 use log::{error, info, warn};
 use std::collections::HashMap;
@@ -7,65 +8,13 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 static SUPPORTED_VERS: usize = 0;
-#[derive(Debug, Clone, PartialEq, Hash, Eq)]
-pub struct InternalScraper {
-    pub _version: usize,                 //Version of the scraper
-    pub _name: String,                   // Name of the scraper
-    pub _sites: Vec<String>,             // Sites supported by scraper
-    pub _ratelimit: (u64, Duration),     // Ratelimiter object that has yet to be created.
-    pub _type: sharedtypes::ScraperType, // What type of scraper to use in matching.
-}
-
-///
-/// Internal Scraping Reference for scrapers.
-/// Copy pasta this code is and you should have a pretty good idea on what to do.
-///
-#[allow(dead_code)]
-impl InternalScraper {
-    pub fn new() -> Self {
-        InternalScraper {
-            _version: 0,
-            _name: "test.to_string".to_string(),
-            _sites: crate::vec_of_strings!("example", "example1"),
-            _ratelimit: (2, Duration::from_secs(2)),
-            _type: sharedtypes::ScraperType::Automatic,
-        }
-    }
-    pub fn version_get(&self) -> usize {
-        self._version
-    }
-    pub fn version_set(&mut self, inp: usize) {
-        self._version = inp;
-    }
-    pub fn name_get(&self) -> &String {
-        &self._name
-    }
-    pub fn name_put(&mut self, inp: String) {
-        self._name = inp;
-    }
-    pub fn sites_get(&self) -> Vec<String> {
-        let mut vecs: Vec<String> = Vec::new();
-        for each in &self._sites {
-            vecs.push(each.to_string());
-        }
-        vecs
-    }
-
-    pub fn url_get(&self, _params: Vec<String>) -> String {
-        "a".to_string()
-    }
-
-    pub fn ratelimit_get(&self) -> (u64, Duration) {
-        self._ratelimit
-    }
-}
 
 pub struct ScraperManager {
     _string: Vec<String>,
     _sites: Vec<Vec<String>>,
     _loaded: Vec<bool>,
-    pub _library: HashMap<InternalScraper, libloading::Library>,
-    _scraper: Vec<InternalScraper>,
+    pub _library: HashMap<SiteStruct, libloading::Library>,
+    _scraper: Vec<SiteStruct>,
 }
 
 impl ScraperManager {
@@ -90,11 +39,11 @@ impl ScraperManager {
         &self._sites
     }
 
-    pub fn scraper_get(&self) -> &Vec<InternalScraper> {
+    pub fn scraper_get(&self) -> &Vec<SiteStruct> {
         &self._scraper
     }
 
-    pub fn library_get(&self) -> &HashMap<InternalScraper, libloading::Library> {
+    pub fn library_get(&self) -> &HashMap<SiteStruct, libloading::Library> {
         &self._library
     }
 
@@ -108,89 +57,42 @@ impl ScraperManager {
             let pulled_successfully;
             unsafe {
                 lib = libloading::Library::new(&scraper_path).unwrap();
-                let plugindatafunc: libloading::Symbol<unsafe extern "C" fn() -> InternalScraper> =
-                    lib.get(b"new").unwrap();
+                let plugindatafunc: libloading::Symbol<
+                    unsafe extern "C" fn() -> Vec<sharedtypes::SiteStruct>,
+                > = lib.get(b"new").unwrap();
                 pulled_successfully = plugindatafunc();
             }
 
-            let version = pulled_successfully.version_get();
-            if version < SUPPORTED_VERS {
-                let msg = format!(
-                    "PLUGIN LOAD: Loaded Version:{} Currently Supports:{}",
-                    version, SUPPORTED_VERS
-                );
-                error!("{}", msg);
-                //unsafe {mem::forget(funtwo.unwrap()());}
-                panic!("{}", msg);
+            for site in pulled_successfully {
+                let lib_storage;
+                unsafe {
+                    lib_storage = libloading::Library::new(&scraper_path).unwrap();
+                }
+
+                let version = site.version;
+                if version < SUPPORTED_VERS {
+                    let msg = format!(
+                        "PLUGIN LOAD: Loaded Version:{} Currently Supports:{}",
+                        version, SUPPORTED_VERS
+                    );
+                    error!("{}", msg);
+                    panic!("{}", msg);
+                }
+                self._scraper.push(site.clone());
+                self._library.insert(site, lib_storage);
             }
-            self._scraper.push(pulled_successfully.clone());
-            self._library.insert(pulled_successfully, lib);
         }
 
         return;
-
-        let dirs = fs::read_dir(&scraperfolder).unwrap();
-
-        for entry in dirs {
-            let root: String = entry.as_ref().unwrap().path().display().to_string();
-            let name = root.split('/');
-            let vec: Vec<&str> = name.collect();
-            let path = format!("{}{}lib{}.{}", &root, &libpath, vec[vec.len() - 1], &libext);
-
-            info!("Loading scraper at: {}", path);
-
-            if Path::new(&path).exists() {
-                self._string.push(path.to_string());
-                let lib;
-                let pulled_successfully;
-                unsafe {
-                    lib = libloading::Library::new(&path).unwrap();
-                    let plugindatafunc: libloading::Symbol<
-                        unsafe extern "C" fn() -> InternalScraper,
-                    > = lib.get(b"new").unwrap();
-                    pulled_successfully = plugindatafunc();
-                }
-
-                self._library.insert(pulled_successfully, lib);
-            } else {
-                let err = format!(
-                    "Loading scraper couInternalScraper::neld not find {}",
-                    &path
-                );
-                warn!("{}", err);
-            }
-        }
-
-        for each in &mut self._library {
-            //let mut internal: Vec<libloading::Symbol<unsafe extern  fn() -> InternalScraper>> = Vec::new();
-            //let mut internal = Vec::new();
-
-            let version = each.0.version_get();
-
-            if version < SUPPORTED_VERS {
-                let msg = format!(
-                    "PLUGIN LOAD: Loaded Version:{} Currently Supports:{}",
-                    version, SUPPORTED_VERS
-                );
-                error!("{}", msg);
-                //unsafe {mem::forget(funtwo.unwrap()());}
-                panic!("{}", msg);
-            }
-
-            //let sites: Vec<String> = scraper.sites_get();
-
-            //    self._sites.push(sites);
-            self._scraper.push(each.0.clone());
-        }
     }
 
-    pub fn returnlibloading(&self, scraper: &InternalScraper) -> &libloading::Library {
+    pub fn returnlibloading(&self, scraper: &SiteStruct) -> &libloading::Library {
         &self._library[scraper]
     }
 
     pub fn return_libloading_string(&self, input: &String) -> Option<&libloading::Library> {
         for each in self._library.keys() {
-            if each._sites.contains(input) {
+            if each.sites.contains(input) {
                 return Some(self._library.get(each).unwrap());
             }
         }
@@ -257,7 +159,7 @@ pub fn url_dump(
     params: &Vec<sharedtypes::ScraperParam>,
     scraperdata: &sharedtypes::ScraperData,
     arc_scrapermanager: Arc<Mutex<ScraperManager>>,
-    scraper: &InternalScraper,
+    scraper: &SiteStruct,
 ) -> Vec<(String, sharedtypes::ScraperData)> {
     let scrapermanager = arc_scrapermanager.lock().unwrap();
     let scraper_library = scrapermanager.library_get().get(&scraper).unwrap();
@@ -276,7 +178,7 @@ pub fn parser_call(
     url_output: &String,
     actual_params: &sharedtypes::ScraperData,
     arc_scrapermanager: Arc<Mutex<ScraperManager>>,
-    scraper: &InternalScraper,
+    scraper: &SiteStruct,
 ) -> Result<(sharedtypes::ScraperObject, sharedtypes::ScraperData), sharedtypes::ScraperReturn> {
     let scrapermanager = arc_scrapermanager.lock().unwrap();
     let scraper_library = scrapermanager.library_get().get(&scraper).unwrap();

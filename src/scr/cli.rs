@@ -510,6 +510,7 @@ pub fn main(data: Arc<Mutex<database::Main>>, scraper: &mut scraper::ScraperMana
                                                     &data.location_get(),
                                                     None,
                                                     &ratelimiter_obj,
+                                                    &dat.name.clone(),
                                                 );
                                             }
                                         }
@@ -551,6 +552,7 @@ pub fn main(data: Arc<Mutex<database::Main>>, scraper: &mut scraper::ScraperMana
                                                         &data.location_get(),
                                                         None,
                                                         &ratelimiter_obj,
+                                                        &dat.name.clone(),
                                                     );
                                                 }
                                             }

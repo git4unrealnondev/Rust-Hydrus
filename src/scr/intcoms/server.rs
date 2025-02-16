@@ -6,7 +6,6 @@ use crate::download;
 use crate::jobs::Jobs;
 use crate::logging;
 use crate::plugins::PluginManager;
-use crate::scraper::InternalScraper;
 use crate::sharedtypes;
 use crate::threading;
 use anyhow::Context;
@@ -18,6 +17,7 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use std::thread;
 
+use std::time::Duration;
 // use std::sync::{Arc, Mutex};
 use std::{
     io::{self, prelude::*, BufReader},
@@ -260,15 +260,17 @@ impl DbInteract {
     pub fn dbactions_to_function(&mut self, dbaction: types::SupportedDBRequests) -> Vec<u8> {
         match dbaction {
             types::SupportedDBRequests::PutFileNoBlock((file, ratelimit)) => {
-                let scraper = InternalScraper {
-                    _version: 0,
-                    _name: "InternalFileAdd".to_string(),
-                    _sites: Vec::new(),
-                    _ratelimit: ratelimit,
-                    _type: sharedtypes::ScraperType::Automatic,
+                let scraper = sharedtypes::SiteStruct {
+                    name: "InternalFileAdd".to_string(),
+                    sites: Vec::new(),
+                    version: 0,
+                    ratelimit: ratelimit.clone(),
+                    should_handle_file_download: false,
+                    should_handle_text_scraping: false,
+                    login_type: None,
+                    stored_info: None,
                 };
-
-                let ratelimiter_obj = threading::create_ratelimiter(scraper._ratelimit);
+                let ratelimiter_obj = threading::create_ratelimiter(ratelimit);
                 let manageeplugin = self.pluginmanager.clone();
                 let client = download::client_create();
                 let mut jobstorage = self.jobmanager.clone();
@@ -297,15 +299,18 @@ impl DbInteract {
             }
 
             types::SupportedDBRequests::PutFile((file, ratelimit)) => {
-                let scraper = InternalScraper {
-                    _version: 0,
-                    _name: "InternalFileAdd".to_string(),
-                    _sites: Vec::new(),
-                    _ratelimit: ratelimit,
-                    _type: sharedtypes::ScraperType::Automatic,
+                let scraper = sharedtypes::SiteStruct {
+                    name: "InternalFileAdd".to_string(),
+                    sites: Vec::new(),
+                    version: 0,
+                    ratelimit: ratelimit.clone(),
+                    should_handle_file_download: false,
+                    should_handle_text_scraping: false,
+                    login_type: None,
+                    stored_info: None,
                 };
 
-                let ratelimiter_obj = threading::create_ratelimiter(scraper._ratelimit);
+                let ratelimiter_obj = threading::create_ratelimiter(ratelimit);
                 let manageeplugin = self.pluginmanager.clone();
                 let client = &download::client_create();
                 let jobstorage = &mut self.jobmanager;
@@ -349,6 +354,10 @@ impl DbInteract {
                     dbjobsmanager,
                 );
                 Self::data_size_to_b(&true)
+            }
+            types::SupportedDBRequests::GetFileExt(ext_id) => {
+                let unwrappy = self._database.lock().unwrap();
+                Self::option_to_bytes(unwrappy.extension_get_string(&ext_id).as_ref())
             }
             types::SupportedDBRequests::GetJob(id) => {
                 let unwrappy = self._database.lock().unwrap();

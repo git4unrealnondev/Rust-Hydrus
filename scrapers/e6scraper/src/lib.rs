@@ -351,8 +351,18 @@ fn build_url(params: &Vec<sharedtypes::ScraperParam>, pagenum: u64) -> String {
 /// Only really useful to store variables. not useful for calling functions. :C
 ///
 #[no_mangle]
-pub fn new() -> InternalScraper {
-    InternalScraper::new()
+pub fn new() -> Vec<sharedtypes::SiteStruct> {
+    let mut out: Vec<sharedtypes::SiteStruct> = vec![sharedtypes::SiteStruct {
+        name: "E621.net".to_string(),
+        sites: vec_of_strings!("e6", "e621", "e621.net"),
+        version: 0,
+        ratelimit: (1, Duration::from_secs(1)),
+        should_handle_file_download: false,
+        should_handle_text_scraping: false,
+        login_type: Some(sharedtypes::LoginType::Cookie(None)),
+        stored_info: None,
+    }];
+    out
 }
 #[no_mangle]
 pub fn test() -> u8 {

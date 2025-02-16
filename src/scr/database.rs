@@ -607,7 +607,7 @@ impl Main {
             "FilesLoc".to_string(),
             None,
             None,
-            Some("./Files/".to_string()),
+            Some("Files".to_string()),
             true,
         );
         self.setting_add(
@@ -628,6 +628,22 @@ impl Main {
         self.enclave_create_default_file_download(self.location_get());
 
         self.transaction_flush();
+    }
+
+    ///
+    /// Gets a default namespace id if it doesn't exist
+    ///
+    pub fn create_default_source_url_ns_id(&mut self) -> usize {
+        match self.namespace_get(&"source_url".to_string()).cloned() {
+            None => self
+                .namespace_add(
+                    "source_url".to_string(),
+                    Some("Source URL for a file.".to_string()),
+                    true,
+                )
+                .clone(),
+            Some(id) => id,
+        }
     }
 
     /// Creates a table name: The table name key: List of Collumn lables. dtype: List
@@ -980,6 +996,12 @@ impl Main {
     ///
     pub fn extension_get_id(&self, ext: &String) -> Option<&usize> {
         self._inmemdb.extension_get_id(ext)
+    }
+    ///
+    /// Gets an ID if a extension string exists
+    ///
+    pub fn extension_get_string(&self, ext_id: &usize) -> Option<&String> {
+        self._inmemdb.extension_get_string(ext_id)
     }
 
     ///

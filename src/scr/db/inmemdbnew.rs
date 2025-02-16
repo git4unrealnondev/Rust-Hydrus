@@ -397,6 +397,10 @@ impl NewinMemDB {
     pub fn extension_get_id(&self, ext: &String) -> Option<&usize> {
         self._file_extension_string.get(ext)
     }
+    /// Gets an ext strubg if a extension id exists
+    pub fn extension_get_string(&self, ext_id: &usize) -> Option<&String> {
+        self._file_extension_usize.get(ext_id)
+    }
 
     /// inserts file into db returns file id
     pub fn file_put(&mut self, file: sharedtypes::DbFileStorage) -> usize {

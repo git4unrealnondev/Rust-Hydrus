@@ -1,7 +1,6 @@
 use crate::database;
 use crate::download;
 use crate::logging;
-use crate::scraper::InternalScraper;
 use crate::scraper::ScraperManager;
 
 // use crate::jobs::JobsRef;
@@ -30,7 +29,7 @@ pub struct Threads {
     _workers: usize,
     worker: HashMap<usize, Worker>,
     worker_control: HashMap<usize, Flag>,
-    scraper_storage: HashMap<scraper::InternalScraper, usize>,
+    scraper_storage: HashMap<sharedtypes::SiteStruct, usize>,
 }
 
 /// Holder for workers. Workers manage their own threads.
@@ -50,7 +49,7 @@ impl Threads {
         &mut self,
         jobstorage: &mut Arc<Mutex<crate::jobs::Jobs>>,
         db: &mut Arc<Mutex<database::Main>>,
-        scrapermanager: scraper::InternalScraper,
+        scrapermanager: sharedtypes::SiteStruct,
         pluginmanager: &mut Arc<Mutex<PluginManager>>,
         arc_scrapermanager: Arc<Mutex<ScraperManager>>,
     ) {
@@ -132,7 +131,7 @@ impl Worker {
         id: usize,
         jobstorage: &mut Arc<Mutex<crate::jobs::Jobs>>,
         dba: &mut Arc<Mutex<database::Main>>,
-        scraper: scraper::InternalScraper,
+        scraper: sharedtypes::SiteStruct,
         pluginmanager: &mut Arc<Mutex<PluginManager>>,
         threadflagcontrol: Control,
         arc_scrapermanager: Arc<Mutex<ScraperManager>>,
@@ -142,7 +141,7 @@ impl Worker {
         let mut db = dba.clone();
         let mut jobstorage = jobstorage.clone();
         let manageeplugin = pluginmanager.clone();
-        let ratelimiter_main = create_ratelimiter(scraper._ratelimit);
+        let ratelimiter_main = create_ratelimiter(scraper.ratelimit);
         let thread = thread::spawn(move || {
             let ratelimiter_obj = ratelimiter_main.clone();
 
@@ -175,7 +174,7 @@ impl Worker {
                         }
                         let unwrappydb = &mut db.lock().unwrap();
                         let datafromdb = unwrappydb
-                            .settings_get_name(&format!("{}_{}", scraper._type, &scraper._name));
+                            .settings_get_name(&format!("{}_{}", "FILLER", &scraper.name));
                         match datafromdb {
                             None => {}
                             Some(setting) => {
@@ -539,7 +538,6 @@ fn download_add_to_db(
     client: &Client,
     db: Arc<Mutex<database::Main>>,
     file: &sharedtypes::FileObject,
-    source_url_id: usize,
 ) -> Option<usize> {
     // Download file doesn't exist. URL doesn't exist in DB Will download
     let blopt;
@@ -551,6 +549,7 @@ fn download_add_to_db(
             &location,
             Some(manageeplugin),
             &ratelimiter_obj,
+            source,
         );
     }
     match blopt {
@@ -571,7 +570,8 @@ fn download_add_to_db(
                 storage_id,
             });
             let fileid = unwrappydb.file_add(file, true);
-            let tagid = unwrappydb.tag_add(source, source_url_id, true, None);
+            let source_url_ns_id = unwrappydb.create_default_source_url_ns_id();
+            let tagid = unwrappydb.tag_add(source, source_url_ns_id, true, None);
             unwrappydb.relationship_add(fileid, tagid, true);
             Some(fileid.clone())
         }
@@ -584,7 +584,7 @@ fn parse_jobs(
     fileid: Option<usize>,
     jobstorage: &mut Arc<Mutex<crate::jobs::Jobs>>,
     db: &mut Arc<Mutex<database::Main>>,
-    scraper: &InternalScraper,
+    scraper: &sharedtypes::SiteStruct,
 ) {
     let urls_to_scrape = parse_tags(&db, tag, fileid);
     {
@@ -659,7 +659,7 @@ pub fn main_file_loop(
     manageeplugin: Arc<Mutex<PluginManager>>,
     client: &Client,
     jobstorage: &mut Arc<Mutex<crate::jobs::Jobs>>,
-    scraper: &InternalScraper,
+    scraper: &sharedtypes::SiteStruct,
 ) {
     if let Some(ref source) = file.source_url {
         // If url exists in db then don't download thread::sleep(Duration::from_secs(10));
@@ -672,16 +672,7 @@ pub fn main_file_loop(
         // Gets the source url namespace id
         let source_url_id = {
             let unwrappydb = &mut db.lock().unwrap();
-            match unwrappydb.namespace_get(&"source_url".to_string()).cloned() {
-                None => unwrappydb
-                    .namespace_add(
-                        "source_url".to_string(),
-                        Some("Source URL for a file.".to_string()),
-                        true,
-                    )
-                    .clone(),
-                Some(id) => id,
-            }
+            unwrappydb.create_default_source_url_ns_id()
         };
 
         let location = {
@@ -708,7 +699,6 @@ pub fn main_file_loop(
                     &client,
                     db.clone(),
                     &file,
-                    source_url_id,
                 ) {
                     None => return,
                     Some(id) => id,
@@ -743,7 +733,6 @@ pub fn main_file_loop(
                             &client,
                             db.clone(),
                             &file,
-                            source_url_id,
                         ) {
                             None => return,
                             Some(id) => id,

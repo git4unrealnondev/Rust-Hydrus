@@ -2,9 +2,9 @@ use crate::database;
 use crate::logging;
 use crate::plugins::PluginManager;
 use crate::scraper;
-use crate::scraper::InternalScraper;
 use crate::sharedtypes;
 use crate::sharedtypes::ScraperType;
+use crate::sharedtypes::SiteStruct;
 use crate::threading;
 use crate::time_func;
 use crate::time_func::time_secs;
@@ -16,7 +16,7 @@ use std::sync::Mutex;
 
 pub struct Jobs {
     // References jobid in _inmemdb hashmap :D
-    pub _jobref: HashMap<scraper::InternalScraper, HashSet<sharedtypes::DbJobsObj>>,
+    pub _jobref: HashMap<sharedtypes::SiteStruct, HashSet<sharedtypes::DbJobsObj>>,
     pub previously_seen: HashSet<(String, String, usize, usize)>,
     pub db: Arc<Mutex<database::Main>>,
 }
@@ -38,7 +38,7 @@ impl Jobs {
     }
 
     /// Returns a list of all jobs associated with a scraper
-    pub fn jobs_get(&self, scraper: &scraper::InternalScraper) -> HashSet<sharedtypes::DbJobsObj> {
+    pub fn jobs_get(&self, scraper: &sharedtypes::SiteStruct) -> HashSet<sharedtypes::DbJobsObj> {
         match self._jobref.get(scraper) {
             Some(jobs) => jobs.clone(),
             None => HashSet::new(),
@@ -47,7 +47,7 @@ impl Jobs {
 
     pub fn jobs_remove_dbjob(
         &mut self,
-        scraper: &scraper::InternalScraper,
+        scraper: &sharedtypes::SiteStruct,
         data: &sharedtypes::DbJobsObj,
         del_from_db: bool,
     ) {
@@ -71,7 +71,7 @@ impl Jobs {
     pub fn jobs_decrement_count(
         &mut self,
         data: &sharedtypes::DbJobsObj,
-        scraper: &scraper::InternalScraper,
+        scraper: &sharedtypes::SiteStruct,
     ) {
         if let Some(recreation) = &data.jobmanager.recreation {
             match recreation {
@@ -110,7 +110,7 @@ impl Jobs {
     /// jobs_remove removes job from DB & from
     pub fn jobs_remove(
         &mut self,
-        scraper: &scraper::InternalScraper,
+        scraper: &sharedtypes::SiteStruct,
         data: sharedtypes::ScraperData,
     ) {
         for job in self.jobs_get(scraper) {
@@ -126,7 +126,7 @@ impl Jobs {
     /// Adds jobs to db and to previosuly seen hashset
     pub fn jobs_add(
         &mut self,
-        scraper: &scraper::InternalScraper,
+        scraper: &sharedtypes::SiteStruct,
         data: sharedtypes::ScraperData,
         addtodb: bool,
         deduplicate: bool,
@@ -193,7 +193,7 @@ impl Jobs {
 
     pub fn jobs_add_jobsobj(
         &mut self,
-        scraper: &scraper::InternalScraper,
+        scraper: &sharedtypes::SiteStruct,
         data: sharedtypes::DbJobsObj,
         addtodb: bool,
         deduplicate: bool,
@@ -265,7 +265,7 @@ impl Jobs {
 
     fn update_job(
         &mut self,
-        scraper: &scraper::InternalScraper,
+        scraper: &sharedtypes::SiteStruct,
         data: &sharedtypes::DbJobsObj,
         orig_data: &sharedtypes::DbJobsObj,
     ) {
@@ -296,7 +296,7 @@ impl Jobs {
         }
         let beans = scrapermanager.scraper_get();
         for scraper in beans.into_iter() {
-            for site in scraper._sites.clone() {
+            for site in scraper.sites.clone() {
                 scraper_site_map.insert(site, scraper.clone());
             }
         }
@@ -375,7 +375,7 @@ impl Jobs {
         let mut db = dba.lock().unwrap();
 
         // let mut name_ratelimited: HashMap<String, (u64, Duration)> = AHashMap::new();
-        let scraper_and_job: HashMap<InternalScraper, Vec<sharedtypes::DbJobsObj>> = HashMap::new();
+        let scraper_and_job: HashMap<SiteStruct, Vec<sharedtypes::DbJobsObj>> = HashMap::new();
 
         // let mut job_plus_storeddata: HashMap<String, String> = AHashMap::new(); Checks
         // if their are no jobs to run.
@@ -402,11 +402,11 @@ impl Jobs {
         //
         // // Checks job type. If manual then scraper handles ALL calls from here on. //
         // If Automatic then jobs will handle it. match job.1._type { ScraperType::Manual
-        // => {} ScraperType::Automatic => { // Checks if InternalScraper types are the
+        // => {} ScraperType::Automatic => { // Checks if SiteStruct types are the
         // same data. if &job.1 == scrape { match scraper_and_job.entry(job.1.clone()) {
         // Entry::Vacant(e) => { e.insert(vec![job.0.clone()]); } Entry::Occupied(mut e)
         // => { e.get_mut().push(job.0.clone()); } } } } } } } // Loops through each
-        // InternalScraper and creates a thread for it. for each in scraper_and_job { let
+        // SiteStruct and creates a thread for it. for each in scraper_and_job { let
         // scraper = each.0;
         //
         // // Captures the libloading library from the _library. // Removes item from
@@ -419,7 +419,7 @@ impl Jobs {
     /// pub fn cookie_needed(&mut self, id: usize, params: String) -> (bool, String)
     pub fn library_cookie_needed(
         &self,
-        memid: &InternalScraper,
+        memid: &SiteStruct,
         scrapermanager: scraper::ScraperManager,
     ) -> (ScraperType, String) {
         let libloading = scrapermanager.returnlibloading(memid);

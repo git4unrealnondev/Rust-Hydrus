@@ -15,6 +15,7 @@ use sha2::Sha512;
 use std::io::BufReader;
 use std::io::Cursor;
 use std::io::Read;
+use std::path::PathBuf;
 use std::time::Duration;
 use url::Url;
 
@@ -187,6 +188,7 @@ pub fn dlfile_new(
     location: &String,
     pluginmanager: Option<Arc<Mutex<PluginManager>>>,
     ratelimiter_obj: &Arc<Mutex<Ratelimiter>>,
+    source_url: &String,
 ) -> Option<(String, String)> {
     let mut boolloop = true;
     let mut hash = String::new();
@@ -273,44 +275,29 @@ pub fn dlfile_new(
             }
         };
     }
-    let final_loc = helpers::getfinpath(location, &hash);
 
-    // Gives file extension
     let file_ext = FileFormat::from_bytes(&bytes).extension().to_string();
-
-    // Gets final path of file.
-    let orig_path = format!("{}/{}", &final_loc, &hash);
-    let file_path_res = std::fs::File::create(&orig_path);
-
-    while file_path_res.is_err() {
-        logging::info_log(&format!(
-            "Cannot create file at path: {} Err: {:?}",
-            &orig_path, file_path_res
-        ));
-        thread::sleep(Duration::from_secs(1));
-    }
 
     // If the plugin manager is None then don't do anything plugin wise. Useful for if
     // doing something that we CANNOT allow plugins to run.
     {
         if let Some(pluginmanager) = pluginmanager {
-            crate::plugins::plugin_on_download(pluginmanager, db, bytes.as_ref(), &hash, &file_ext);
+            crate::plugins::plugin_on_download(
+                pluginmanager,
+                db.clone(),
+                bytes.as_ref(),
+                &hash,
+                &file_ext,
+            );
         }
     }
-    let mut content = Cursor::new(bytes);
-
-    if let Ok(mut file_path) = file_path_res {
-        // Copies file from memory to disk
-        while let Err(err) = std::io::copy(&mut content, &mut file_path) {
-            logging::info_log(&format!(
-                "Cannot copy file at path: {} Err: {:?}",
-                &orig_path, err
-            ));
-
-            thread::sleep(Duration::from_secs(1));
-        }
-        logging::info_log(&format!("Downloaded hash: {}", &hash));
+    {
+        let mut unwrappydb = db.lock().unwrap();
+        let source_url_ns_id = unwrappydb.create_default_source_url_ns_id();
+        unwrappydb.enclave_determine_processing(file, bytes, &hash, source_url);
+        return None;
     }
+
     Some((hash, file_ext))
 }
 
@@ -326,4 +313,63 @@ pub fn hash_file(
     let b = Bytes::from(buf);
     let hash_self = hash_bytes(&b, hash);
     Ok((hash_self.0, b))
+}
+
+pub fn write_to_disk(
+    location: std::path::PathBuf,
+    file: &sharedtypes::FileObject,
+    bytes: &Bytes,
+    sha512hash: &String,
+) {
+    let mut local_location = location.clone();
+
+    // Adds directory name back into the full path
+    if local_location.is_dir() && sha512hash.len() > 6 {
+        let sha512hash_str = sha512hash.as_str();
+        local_location = local_location.join(sha512hash_str[0..2].to_string());
+        local_location = local_location.join(sha512hash_str[2..4].to_string());
+        local_location = local_location.join(sha512hash_str[4..6].to_string());
+        match std::fs::create_dir_all(&local_location) {
+            Ok(_) => {}
+            Err(err) => {
+                logging::error_log(&format!("{} {}", sha512hash_str, err));
+            }
+        }
+
+        local_location = local_location.join("FILENAMEFILLER".to_string());
+    }
+
+    // Gives file extension
+    let file_ext = FileFormat::from_bytes(&bytes).extension().to_string();
+
+    local_location.set_file_name(sha512hash);
+    local_location.set_extension(file_ext);
+
+    let file_path_res = std::fs::File::create(&local_location);
+
+    while file_path_res.is_err() {
+        logging::info_log(&format!(
+            "Cannot create file at path: {} Err: {:?}",
+            &location.to_string_lossy(),
+            file_path_res
+        ));
+        thread::sleep(Duration::from_secs(1));
+    }
+
+    if let Ok(mut file_path) = file_path_res {
+        // Creates a content wrapper for bytes object
+        let mut content = Cursor::new(bytes);
+
+        // Copies file from memory to disk
+        while let Err(err) = std::io::copy(&mut content, &mut file_path) {
+            logging::info_log(&format!(
+                "Cannot copy file at path: {} Err: {:?}",
+                &location.to_string_lossy(),
+                err
+            ));
+
+            thread::sleep(Duration::from_secs(1));
+        }
+        logging::info_log(&format!("Downloaded hash: {}", &sha512hash));
+    }
 }
