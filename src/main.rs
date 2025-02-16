@@ -136,6 +136,11 @@ fn main() {
         plugins::PluginManager::new(plugin_loc.to_string(), arc.clone(), jobmanager.clone());
     // Putting this down here after plugin manager because that's when the IPC server
     // starts and we can then inside of the scraper start calling IPC functions
+
+    let mut upgradeversvec = Vec::new();
+
+    // Upgrades the DB by geting version differences.
+    // Waits for the entire DB to be upgraded before running scraper upgrades.
     'upgradeloop: loop {
         let repeat;
         {
@@ -146,19 +151,21 @@ fn main() {
                 .clone();
         }
         if !repeat {
-            for (internal_scraper, scraper_library) in scraper_manager.library_get().iter() {
-                logging::info_log(&format!(
-                    "Starting scraper upgrade: {}",
-                    internal_scraper.name
-                ));
-                let db_vers = {
-                    let lck = arc.lock().unwrap();
-                    lck.db_vers_get()
-                };
-                db_upgrade_call(scraper_library, &db_vers);
-            }
+            let lck = arc.lock().unwrap();
+            upgradeversvec.push(lck.db_vers_get());
         } else {
             break 'upgradeloop;
+        }
+    }
+
+    // Actually upgrades the DB from scraper calls
+    for db_version in upgradeversvec {
+        for (internal_scraper, scraper_library) in scraper_manager.library_get().iter() {
+            logging::info_log(&format!(
+                "Starting scraper upgrade: {}",
+                internal_scraper.name
+            ));
+            db_upgrade_call(scraper_library, &db_version);
         }
     }
 

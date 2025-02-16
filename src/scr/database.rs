@@ -77,7 +77,7 @@ impl Main {
             _dbpath: path.to_owned(),
             _conn: Arc::new(Mutex::new(Connection::open_in_memory().unwrap())),
             _vers: vers,
-            _active_vers: vers,
+            _active_vers: 0,
             _inmemdb: memdb,
             _dbcommitnum: 0,
             _dbcommitnum_static: 3000,
@@ -89,7 +89,7 @@ impl Main {
             _dbpath: path,
             _conn: Arc::new(Mutex::new(Connection::open_in_memory().unwrap())),
             _vers: vers,
-            _active_vers: vers,
+            _active_vers: 0,
             _inmemdb: memdbmain._inmemdb,
             _dbcommitnum: 0,
             _dbcommitnum_static: 3000,
@@ -118,7 +118,7 @@ impl Main {
 
     /// Returns the db version number
     pub fn db_vers_get(&self) -> usize {
-        self._vers
+        self._active_vers
     }
 
     /// Clears in memdb structures
@@ -739,7 +739,7 @@ impl Main {
     /// Sets DB Version
     fn db_version_set(&mut self, version: usize) {
         logging::log(&format!("Setting DB Version to: {}", &version));
-        self._vers = version;
+        self._active_vers = version;
         self.setting_add(
             "VERSION".to_string(),
             Some("Version that the database is currently on.".to_string()),
@@ -805,8 +805,9 @@ impl Main {
             ));
         }
         let mut db_vers = g1[0] as usize;
+        self._active_vers = db_vers;
         logging::info_log(&format!("check_version: Loaded version {}", db_vers));
-        if self._active_vers != db_vers {
+        if self._active_vers != self._vers {
             logging::info_log(&format!(
                 "Starting upgrade from V{} to V{}",
                 db_vers,
@@ -820,6 +821,7 @@ impl Main {
             if db_vers == 1 && self._vers == 2 {
                 panic!("How did you get here vers is 1 did you do something dumb??")
             } else if db_vers + 1 == 3 {
+                dbg!(self._vers, self._active_vers);
                 self.db_update_two_to_three();
                 db_vers += 1;
             } else if db_vers + 1 == 4 {
@@ -829,7 +831,7 @@ impl Main {
             }
             logging::info_log(&format!("Finished upgrade to V{}.", db_vers));
             self.transaction_flush();
-            if db_vers == self._active_vers {
+            if db_vers == self._vers {
                 logging::info_log(&format!(
                     "Successfully updated db to version {}",
                     self._vers

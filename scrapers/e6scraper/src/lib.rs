@@ -608,7 +608,6 @@ fn parse_pools(
         });
         let mut cnt = 0;
         for postids in multpool["post_ids"].members() {
-            dbg!(&scraperdata.system_data);
             if let Some(recursion) = scraperdata.system_data.get("recursion") {
                 if recursion == "false" {
                     tag.insert(sharedtypes::TagObject {
