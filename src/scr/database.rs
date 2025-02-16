@@ -2010,9 +2010,9 @@ impl Main {
     }
 
     /// Removes tag & relationship from db.
-    pub fn delete_tag_relationship(&mut self, tagid: &usize) {
+    pub fn delete_tag_relationship(&mut self, tag_id: &usize) {
         // self.transaction_flush();
-        let relationships = self._inmemdb.relationship_get_fileid(tagid);
+        let relationships = self.relationship_get_fileid(tag_id);
 
         // Gets list of fileids from internal db.
         match relationships {
@@ -2021,25 +2021,19 @@ impl Main {
                 logging::log(&format!(
                     "Found {} relationships's effected for tagid: {}.",
                     fileids.len(),
-                    tagid
+                    tag_id
                 ));
 
                 // let mut sql = String::new();
-                for file in fileids.clone() {
+                for file_id in fileids.clone() {
                     logging::log(&format!(
                         "Removing file: {} tagid: {} from db.",
-                        file, tagid
+                        file_id, tag_id
                     ));
-                    logging::log(&"waiting on: relationship_remove".to_string());
-                    self._inmemdb.relationship_remove(&file, tagid);
 
-                    // sql += &format!("DELETE FROM Relationship WHERE fileid = {} AND tagid = {}; ",
-                    // file, tagid);
                     logging::log(&"Removing relationship sql".to_string());
 
-                    // println!("DELETE FROM Relationship WHERE fileid = {} AND tagid = {};", &file,
-                    // &tagid);
-                    self.delete_relationship_sql(&file, tagid);
+                    self.relationship_remove(&file_id, tag_id);
                 }
 
                 // self._conn.lock().unwrap().execute_batch(&sql).unwrap();
@@ -2047,6 +2041,14 @@ impl Main {
                 // self.transaction_flush();
             }
         }
+    }
+
+    ///
+    /// Removes a relationship based on fileid and tagid
+    ///
+    pub fn relationship_remove(&mut self, file_id: &usize, tag_id: &usize) {
+        self._inmemdb.relationship_remove(file_id, tag_id);
+        self.delete_relationship_sql(file_id, tag_id);
     }
 
     /// Removes tag from inmemdb and sql database.
@@ -2133,54 +2135,44 @@ impl Main {
 
     /// Condesnes relationships between tags & files. Changes tag id's removes spaces
     /// inbetween tag id's and their relationships.
+    /// TODO FIX THIS FUNCTION TEMPORARILY DEPRECATING
     pub fn condese_relationships_tags(&mut self) {
         self.load_table(&sharedtypes::LoadDBTable::Relationship);
         self.load_table(&sharedtypes::LoadDBTable::Parents);
         self.load_table(&sharedtypes::LoadDBTable::Tags);
-        logging::info_log(&"Starting compression of tags & relationships.".to_string());
-        logging::info_log(&"Backing up db this could be messy.".to_string());
+        //logging::info_log(&"Starting compression of tags & relationships.".to_string());
+        //logging::info_log(&"Backing up db this could be messy.".to_string());
         self.backup_db();
         let tag_max = self._inmemdb.tags_max_return();
         dbg!(&tag_max);
-        self._inmemdb.tags_max_reset();
+        /*self._inmemdb.tags_max_reset();
         let mut lastvalid: usize = 0;
-        for tid in 0..tag_max + 1 {
-            let exst = self._inmemdb.tags_get_data(&tid).cloned();
+        for tag_id in 0..tag_max + 1 {
+            let exst = self._inmemdb.tags_get_data(&tag_id).cloned();
             match exst {
                 None => {}
                 Some(nns) => {
                     self.transaction_flush();
                     let mut relat_str = String::new();
-                    let file_listop = self._inmemdb.relationship_get_fileid(&tid);
+                    let file_listop = self.relationship_get_fileid(&tag_id);
                     let mut file_to_add: HashSet<usize> = HashSet::new();
                     match file_listop {
                         None => {
-                            self.tag_remove(&tid);
+                            self.tag_remove(&tag_id);
                             self.tag_add(&nns.name, nns.namespace, true, Some(lastvalid));
                             lastvalid += 1;
                             continue;
                         }
                         Some(file_list) => {
-                            for file in file_list.clone() {
-                                self._inmemdb.relationship_remove(&file, &tid);
-                                relat_str += &format!(
-                                    "DELETE FROM Relationship WHERE fileid = {} AND tagid = {};",
-                                    &file, &tid
-                                );
+                            for file_id in file_list.clone() {
+                                self.relationship_remove(&file_id, &tag_id);
 
-                                // println!("DELETE FROM Relationship WHERE fileid = {} AND tagid = {};", &file,
-                                // &tid); self.delete_relationship_sql(&file, &tid);
-                                file_to_add.insert(file);
+                                file_to_add.insert(file_id);
                             }
-                            self._conn
-                                .lock()
-                                .unwrap()
-                                .execute_batch(&relat_str)
-                                .unwrap();
                             self.transaction_flush();
                         }
                     }
-                    self.tag_remove(&tid);
+                    self.tag_remove(&tag_id);
                     self.tag_add(&nns.name, nns.namespace, true, Some(lastvalid));
                     for fid in file_to_add {
                         self.relationship_add(fid, lastvalid, true);
@@ -2190,7 +2182,7 @@ impl Main {
                 }
             }
         }
-        self.vacuum();
+        self.vacuum();*/
     }
 
     /// Gets all tag's assocated a singular namespace
