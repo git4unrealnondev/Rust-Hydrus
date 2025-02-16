@@ -2,8 +2,8 @@ use crate::database::Main;
 use crate::logging;
 use crate::sharedtypes;
 use crate::vec_of_strings;
+use chrono::Utc;
 use eta::{Eta, TimeAcc};
-use fallible_streaming_iterator::FallibleStreamingIterator;
 use rusqlite::params;
 use std::collections::BTreeMap;
 impl Main {
@@ -416,7 +416,7 @@ impl Main {
             logging::info_log(&format!("Starting to process files for DB V5 Upgrade"));
             let extension_sqlite_inp = "INSERT INTO FileExtensions VALUES (?, ?)";
             let file_sqlite_inp = "INSERT INTO File VALUES (?, ?, ?, ?)";
-            let file_enclave_sqlite_inp = "INSERT INTO FileEnclaveMapping VALUES (?, ?)";
+            let file_enclave_sqlite_inp = "INSERT INTO FileEnclaveMapping VALUES (?, ?, ?)";
 
             let mut extension_cnt = 0;
             let mut extension_storage = std::collections::HashMap::new();
@@ -441,9 +441,11 @@ impl Main {
                     Some(id) => id.clone(),
                 };
                 logging::info_log(&format!("Adding File: {}", &hash));
+                let utc = Utc::now();
+                let timestamp = utc.timestamp_millis();
                 let _ = conn.execute(
                     file_enclave_sqlite_inp,
-                    params![id, location_to_enclave.get(&storage_id).unwrap()],
+                    params![id, location_to_enclave.get(&storage_id).unwrap(), timestamp],
                 );
                 let _ = conn.execute(file_sqlite_inp, params![id, hash, extension_id, storage_id]);
             }
