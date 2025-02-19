@@ -184,7 +184,7 @@ pub fn hash_bytes(bytes: &Bytes, hash: &sharedtypes::HashesSupported) -> (String
 pub fn dlfile_new(
     client: &Client,
     db: Arc<Mutex<Main>>,
-    file: &sharedtypes::FileObject,
+    file: &mut sharedtypes::FileObject,
     location: &String,
     pluginmanager: Option<Arc<Mutex<PluginManager>>>,
     ratelimiter_obj: &Arc<Mutex<Ratelimiter>>,

@@ -495,7 +495,7 @@ pub fn main(data: Arc<Mutex<database::Main>>, scraper: &mut scraper::ScraperMana
                                             ));
                                             if dat.namespace == nsid.unwrap() {
                                                 let client = download::client_create();
-                                                let file = &sharedtypes::FileObject {
+                                                let mut file = sharedtypes::FileObject {
                                                     source_url: Some(dat.name.clone()),
                                                     hash: sharedtypes::HashesSupported::Sha512(
                                                         file.hash.clone(),
@@ -506,7 +506,7 @@ pub fn main(data: Arc<Mutex<database::Main>>, scraper: &mut scraper::ScraperMana
                                                 download::dlfile_new(
                                                     &client,
                                                     dbstore.clone(),
-                                                    file,
+                                                    &mut file,
                                                     &data.location_get(),
                                                     None,
                                                     &ratelimiter_obj,
@@ -537,7 +537,7 @@ pub fn main(data: Arc<Mutex<database::Main>>, scraper: &mut scraper::ScraperMana
                                                 ));
                                                 if dat.namespace == nsid.unwrap() {
                                                     let client = download::client_create();
-                                                    let file = &sharedtypes::FileObject {
+                                                    let mut file = sharedtypes::FileObject {
                                                         source_url: Some(dat.name.clone()),
                                                         hash: sharedtypes::HashesSupported::Sha512(
                                                             file.hash.clone(),
@@ -548,7 +548,7 @@ pub fn main(data: Arc<Mutex<database::Main>>, scraper: &mut scraper::ScraperMana
                                                     download::dlfile_new(
                                                         &client,
                                                         dbstore.clone(),
-                                                        file,
+                                                        &mut file,
                                                         &data.location_get(),
                                                         None,
                                                         &ratelimiter_obj,

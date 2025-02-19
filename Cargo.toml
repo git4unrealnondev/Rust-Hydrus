@@ -13,7 +13,7 @@ http = "1.1.0"
 ratelimit = "0.10.0"
 async-std = { version = "1", features = ["attributes", "tokio1"] }
 rusqlite = {version = "0.32.1", features=["modern_sqlite", "bundled", "column_decltype"] }
-fast_log = "1.5.25"
+fast_log = "1.7.6"
 bytes = { default-features = false, version = "1.4.0" }
 sha2 = { default-features = false, version = "0.10.6" }
 futures = { features = ["executor"], default-features = false, version = "0.3.24" }
@@ -52,6 +52,7 @@ ahash = "0.8.11"
 libloading = "0.8.5"
 thread-control = "0.1.2"
 fallible-streaming-iterator = "0.1.9"
+regex = "1.11.1"
 
 [profile.release]
 opt-level = 3
@@ -68,3 +69,4 @@ walkdir = "2.4.0"
 [profile.release-with-debug]
 inherits = "release"
 debug = true
+strip = false

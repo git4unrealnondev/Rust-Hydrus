@@ -17,6 +17,7 @@ pub enum EnclaveCondition {
     None,
     FileSizeGreater(usize),
     FileSizeLessthan(usize),
+    TagNameAndNamespace((String, String)),
 }
 
 ///
@@ -31,6 +32,7 @@ pub enum EnclaveStopCondition {
 #[derive(Debug, Deserialize, Serialize)]
 pub enum EnclaveAction {
     DownloadToLocation(usize),
+    AddTagAndNamespace((String, GenericNamespaceObj, TagType, Option<SubTag>)),
     DownloadToDefault,
 }
 
@@ -519,6 +521,17 @@ pub struct FileObject {
     pub skip_if: Vec<SkipIf>,
 }
 
+///
+/// Search types for searching
+/// String just checks that a string exists in the tag and it runs the callback
+/// Regex searches the tag via regex searching
+///
+#[derive(Clone, Debug, Hash, Eq, PartialEq)]
+pub enum SearchType {
+    String(String),
+    Regex(String),
+}
+
 /// Holder of Tag info. Keeps relationalship info into account.
 #[derive(Debug, Eq, PartialEq, Hash, Clone, Deserialize, Serialize)]
 pub struct TagObject {
@@ -629,6 +642,10 @@ pub enum PluginCallback {
     OnStart,
     // Custom callback to be used for cross communication
     OnCallback(CallbackInfo),
+    // Runs when a tag has exists.
+    // First when the tag exists OR when the namespace exists
+    // Use None when searching all or Some when searching restrictivly
+    OnTag(Vec<(Option<SearchType>, Option<usize>)>),
 }
 
 /// Callback info for live plugins Gets sent to plugins

@@ -288,7 +288,7 @@ impl Worker {
                             };
 
                             // Parses tags from the tags field
-                            for tag in out_st.tag {
+                            for tag in out_st.tag.iter() {
                                 parse_jobs(tag, None, &mut jobstorage, &mut db, &scraper);
                             }
 
@@ -296,7 +296,7 @@ impl Worker {
                             let pool = ThreadPool::default();
 
                             // Parses files from urls
-                            for file in out_st.file {
+                            for mut file in out_st.file {
                                 let ratelimiter_obj = ratelimiter_main.clone();
                                 let manageeplugin = manageeplugin.clone();
                                 let mut db = db.clone();
@@ -305,7 +305,7 @@ impl Worker {
                                 let scraper = scraper.clone();
                                 pool.execute(move || {
                                     main_file_loop(
-                                        file,
+                                        &mut file,
                                         &mut db,
                                         ratelimiter_obj,
                                         manageeplugin,
@@ -370,21 +370,24 @@ impl Worker {
 /// Parses tags and adds the tags into the db.
 fn parse_tags(
     db: &Arc<Mutex<database::Main>>,
-    tag: sharedtypes::TagObject,
+    tag: &sharedtypes::TagObject,
     file_id: Option<usize>,
 ) -> BTreeSet<sharedtypes::ScraperData> {
     let mut url_return: BTreeSet<sharedtypes::ScraperData> = BTreeSet::new();
     let unwrappy = &mut db.lock().unwrap();
 
     // dbg!(&tag);
-    match tag.tag_type {
+    match &tag.tag_type {
         sharedtypes::TagType::Normal => {
             // println!("Adding tag: {} {:?}", tag.tag, &file_id); We've recieved a normal
             // tag. Will parse.
-            let namespace_id =
-                unwrappy.namespace_add(tag.namespace.name, tag.namespace.description, true);
+            let namespace_id = unwrappy.namespace_add(
+                tag.namespace.name.clone(),
+                tag.namespace.description.clone(),
+                true,
+            );
             let tag_id = unwrappy.tag_add(&tag.tag, namespace_id, true, None);
-            match tag.relates_to {
+            match &tag.relates_to {
                 None => {
                     // let relate_ns_id = unwrappy.namespace_add( relate.namespace.name.clone(),
                     // relate.namespace.description, true, );
@@ -392,15 +395,15 @@ fn parse_tags(
                 Some(relate) => {
                     let relate_ns_id = unwrappy.namespace_add(
                         relate.namespace.name.clone(),
-                        relate.namespace.description,
+                        relate.namespace.description.clone(),
                         true,
                     );
-                    let limit_to = match relate.limit_to {
+                    let limit_to = match &relate.limit_to {
                         None => None,
                         Some(tag) => {
                             let namespace_id = unwrappy.namespace_add(
-                                tag.namespace.name,
-                                tag.namespace.description,
+                                tag.namespace.name.clone(),
+                                tag.namespace.description.clone(),
                                 true,
                             );
                             let tid = unwrappy.tag_add(&tag.tag, namespace_id, true, None);
@@ -422,7 +425,7 @@ fn parse_tags(
         sharedtypes::TagType::ParseUrl((jobscraped, skippy)) => {
             match skippy {
                 None => {
-                    url_return.insert(jobscraped);
+                    url_return.insert(jobscraped.clone());
                 }
                 Some(skip_if) => {
                     match skip_if {
@@ -458,7 +461,7 @@ fn parse_tags(
                                     }
                                 }
                             }
-                            if cnt >= filter_number {
+                            if cnt >= *filter_number {
                                 dbg!(&cnt, &filter_number);
                                 info_log(
                                     &format!(
@@ -472,7 +475,7 @@ fn parse_tags(
                                         "Downloading due to unique namespace not existing or number less then limit number."
                                     ),
                                 );
-                                url_return.insert(jobscraped);
+                                url_return.insert(jobscraped.clone());
                             }
                         }
                         sharedtypes::SkipIf::FileTagRelationship(taginfo) => 'tag: {
@@ -480,7 +483,7 @@ fn parse_tags(
                             let id = match nid {
                                 None => {
                                     println!("Namespace does not exist: {:?}", taginfo.namespace);
-                                    url_return.insert(jobscraped);
+                                    url_return.insert(jobscraped.clone());
                                     break 'tag;
                                 }
                                 Some(id) => id,
@@ -488,7 +491,7 @@ fn parse_tags(
                             match unwrappy.tag_get_name(taginfo.tag.clone(), *id) {
                                 None => {
                                     println!("WillDownload: {}", taginfo.tag);
-                                    url_return.insert(jobscraped);
+                                    url_return.insert(jobscraped.clone());
                                 }
                                 Some(tag_id) => {
                                     let rel_hashset = unwrappy.relationship_get_fileid(tag_id);
@@ -499,7 +502,7 @@ fn parse_tags(
                                                 taginfo.tag
                                             );
                                             println!("Will download from: {}", taginfo.tag);
-                                            url_return.insert(jobscraped);
+                                            url_return.insert(jobscraped.clone());
                                         }
                                         Some(_) => {
                                             info_log(
@@ -537,7 +540,7 @@ fn download_add_to_db(
     manageeplugin: Arc<Mutex<PluginManager>>,
     client: &Client,
     db: Arc<Mutex<database::Main>>,
-    file: &sharedtypes::FileObject,
+    file: &mut sharedtypes::FileObject,
 ) -> Option<usize> {
     // Download file doesn't exist. URL doesn't exist in DB Will download
     let blopt;
@@ -545,7 +548,7 @@ fn download_add_to_db(
         blopt = download::dlfile_new(
             &client,
             db.clone(),
-            &file,
+            file,
             &location,
             Some(manageeplugin),
             &ratelimiter_obj,
@@ -580,7 +583,7 @@ fn download_add_to_db(
 
 /// Simple code to add jobs from a tag object
 fn parse_jobs(
-    tag: sharedtypes::TagObject,
+    tag: &sharedtypes::TagObject,
     fileid: Option<usize>,
     jobstorage: &mut Arc<Mutex<crate::jobs::Jobs>>,
     db: &mut Arc<Mutex<database::Main>>,
@@ -653,7 +656,7 @@ fn parse_skipif(
 
 /// Main file checking loop manages the downloads
 pub fn main_file_loop(
-    file: sharedtypes::FileObject,
+    file: &mut sharedtypes::FileObject,
     db: &mut Arc<Mutex<database::Main>>,
     ratelimiter_obj: Arc<Mutex<Ratelimiter>>,
     manageeplugin: Arc<Mutex<PluginManager>>,
@@ -661,7 +664,7 @@ pub fn main_file_loop(
     jobstorage: &mut Arc<Mutex<crate::jobs::Jobs>>,
     scraper: &sharedtypes::SiteStruct,
 ) {
-    if let Some(ref source) = file.source_url {
+    if let Some(source) = &file.source_url.clone() {
         // If url exists in db then don't download thread::sleep(Duration::from_secs(10));
         for file_tag in file.skip_if.iter() {
             if parse_skipif(file_tag, source, db) {
@@ -698,7 +701,7 @@ pub fn main_file_loop(
                     manageeplugin,
                     &client,
                     db.clone(),
-                    &file,
+                    file,
                 ) {
                     None => return,
                     Some(id) => id,
@@ -732,7 +735,7 @@ pub fn main_file_loop(
                             manageeplugin,
                             &client,
                             db.clone(),
-                            &file,
+                            file,
                         ) {
                             None => return,
                             Some(id) => id,
@@ -743,7 +746,7 @@ pub fn main_file_loop(
         };
 
         // We've got valid fileid for reference.
-        for tag in file.tag_list {
+        for tag in file.tag_list.iter() {
             parse_jobs(tag, Some(fileid), jobstorage, db, &scraper);
         }
     }

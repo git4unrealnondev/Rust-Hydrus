@@ -1,6 +1,8 @@
 #![forbid(unsafe_code)]
 use crate::logging;
 use crate::logging::info_log;
+use crate::plugins;
+use crate::plugins::PluginManager;
 use crate::scraper::ScraperManager;
 use crate::sharedtypes;
 use log::{error, info};
@@ -59,6 +61,7 @@ pub struct Main {
     _tables_loaded: Vec<sharedtypes::LoadDBTable>,
     _tables_loading: Vec<sharedtypes::LoadDBTable>,
     _cache: CacheType,
+    _pluginmanager: Option<Arc<Mutex<PluginManager>>>,
 }
 
 /// Contains DB functions.
@@ -84,6 +87,7 @@ impl Main {
             _tables_loaded: vec![],
             _tables_loading: vec![],
             _cache: CacheType::Bare(path.clone()),
+            _pluginmanager: None,
         };
         let mut main = Main {
             _dbpath: path,
@@ -96,6 +100,7 @@ impl Main {
             _tables_loaded: vec![],
             _tables_loading: vec![],
             _cache: CacheType::InMemdb,
+            _pluginmanager: None,
         };
         main._conn = Arc::new(Mutex::new(connection));
 
@@ -689,12 +694,14 @@ impl Main {
             ke.to_string(),
             " ".to_string(),
             dt.to_string(),
-            ")".to_string(),
+            ");".to_string(),
         ]
         .concat();
         info!("Creating table as: {}", endresult);
-        stocat = endresult;
-        self.execute(stocat);
+        let conn = self._conn.lock().unwrap();
+        let _ = conn.execute_batch(&endresult);
+        //stocat = endresult;
+        //self.execute(stocat);
     }
 
     /// Alters a tables name
@@ -1530,6 +1537,10 @@ impl Main {
         self._inmemdb.dumpe_data();
     }
 
+    pub fn setup_pluginmanager(&mut self, pluginmanager: Arc<Mutex<PluginManager>>) {
+        self._pluginmanager = Some(pluginmanager);
+    }
+
     /// Adds tag into DB if it doesn't exist in the memdb.
     pub fn tag_add(
         &mut self,
@@ -1538,6 +1549,10 @@ impl Main {
         addtodb: bool,
         id: Option<usize>,
     ) -> usize {
+        dbg!(tags);
+        if let Some(pluginmanager) = &self._pluginmanager {
+            plugins::plugin_on_tag(pluginmanager.clone(), self, &tags, &namespace);
+        }
         match id {
             None => {
                 // Do we have an ID coming in to add manually?

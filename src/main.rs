@@ -121,7 +121,6 @@ fn main() {
     let mut data = makedb(dbloc);
 
     // NOTE ONLY USER FOR LOADING DB DYNAMICALLY
-    let alt_connection = database::dbinit(&dbloc.to_string());
     data.load_table(&sharedtypes::LoadDBTable::Settings);
     let plugin_option = data.settings_get_name(&"pluginloadloc".to_string());
     let plugin_loc = match plugin_option {
@@ -131,9 +130,16 @@ fn main() {
 
     let mut arc = Arc::new(Mutex::new(data));
 
-    let mut jobmanager = Arc::new(Mutex::new(jobs::Jobs::new(arc.clone())));
+    let jobmanager = Arc::new(Mutex::new(jobs::Jobs::new(arc.clone())));
     let mut pluginmanager =
         plugins::PluginManager::new(plugin_loc.to_string(), arc.clone(), jobmanager.clone());
+
+    // Adds pluginmanager capability from inside the db
+    // Things like callbacks and the like
+    arc.lock()
+        .unwrap()
+        .setup_pluginmanager(pluginmanager.clone());
+
     // Putting this down here after plugin manager because that's when the IPC server
     // starts and we can then inside of the scraper start calling IPC functions
 

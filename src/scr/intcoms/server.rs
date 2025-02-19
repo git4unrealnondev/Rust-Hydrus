@@ -259,7 +259,7 @@ impl DbInteract {
     /// pretty mint.
     pub fn dbactions_to_function(&mut self, dbaction: types::SupportedDBRequests) -> Vec<u8> {
         match dbaction {
-            types::SupportedDBRequests::PutFileNoBlock((file, ratelimit)) => {
+            types::SupportedDBRequests::PutFileNoBlock((mut file, ratelimit)) => {
                 let scraper = sharedtypes::SiteStruct {
                     name: "InternalFileAdd".to_string(),
                     sites: Vec::new(),
@@ -277,7 +277,7 @@ impl DbInteract {
                 let mut database = self._database.clone();
                 let thread = thread::spawn(move || {
                     threading::main_file_loop(
-                        file,
+                        &mut file,
                         &mut database,
                         ratelimiter_obj,
                         manageeplugin,
@@ -298,7 +298,7 @@ impl DbInteract {
                 Self::data_size_to_b(&true)
             }
 
-            types::SupportedDBRequests::PutFile((file, ratelimit)) => {
+            types::SupportedDBRequests::PutFile((mut file, ratelimit)) => {
                 let scraper = sharedtypes::SiteStruct {
                     name: "InternalFileAdd".to_string(),
                     sites: Vec::new(),
@@ -315,7 +315,7 @@ impl DbInteract {
                 let client = &download::client_create();
                 let jobstorage = &mut self.jobmanager;
                 threading::main_file_loop(
-                    file,
+                    &mut file,
                     &mut self._database,
                     ratelimiter_obj,
                     manageeplugin,

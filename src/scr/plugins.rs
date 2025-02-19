@@ -16,6 +16,8 @@ use crate::sharedtypes::{self, CallbackInfo};
 
 use crate::server;
 
+use regex::Regex;
+
 ///
 /// Determines what we should return from our get_loadable_paths function
 ///
@@ -76,6 +78,7 @@ pub struct PluginManager {
     _thread_path: HashMap<String, String>,    // Will be used for storing path of plugin name.
     _thread_data_share: HashMap<String, (os_pipe::PipeReader, os_pipe::PipeWriter)>,
     callbackstorage: HashMap<String, Vec<CallbackInfo>>,
+    tagstorageregex: Vec<(Regex, Option<usize>)>,
 }
 
 ///
@@ -96,6 +99,7 @@ impl PluginManager {
             _thread_path: HashMap::new(),
             _thread_data_share: HashMap::new(),
             callbackstorage: HashMap::new(),
+            tagstorageregex: Vec::new(),
         }));
 
         reftoself.lock().unwrap().load_plugins(&pluginsloc);
@@ -237,6 +241,30 @@ impl PluginManager {
             .insert(pluginname.clone(), path.to_string_lossy().to_string());
 
         for each in plugininfo.callbacks {
+            if std::mem::discriminant(&each)
+                == std::mem::discriminant(&sharedtypes::PluginCallback::OnTag(Vec::new()))
+            {
+                match &each {
+                    sharedtypes::PluginCallback::OnTag(ontaginfo) => {
+                        for (search_type, namespace) in ontaginfo {
+                            if let Some(search) = search_type {
+                                match search {
+                                    sharedtypes::SearchType::Regex(regexstring) => {
+                                        let regexresult = Regex::new(&regexstring);
+                                        if let Ok(regex) = regexresult {
+                                            self.tagstorageregex.push((regex, *namespace));
+                                        }
+                                    }
+                                    _ => {}
+                                }
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+
+            dbg!(&each);
             match self._callback.get_mut(&each) {
                 Some(vec_plugin) => {
                     vec_plugin.push(pluginname.clone());
@@ -456,6 +484,26 @@ fn parse_plugin_output(
             sharedtypes::DBPluginOutputEnum::Del(name) => for _names in name {},
             sharedtypes::DBPluginOutputEnum::None => {}
         }
+    }
+}
+
+///
+/// Threadsafe way to call callback on adding a tag into the db
+///
+pub fn plugin_on_tag(
+    manager_arc: Arc<Mutex<PluginManager>>,
+    db: &mut Main,
+    tag: &String,
+    namespace: &usize,
+) {
+    let tagstorageregex;
+    {
+        let temp = manager_arc.lock().unwrap();
+        tagstorageregex = temp.tagstorageregex.clone();
+    }
+
+    for (regex, namespace) in tagstorageregex {
+        dbg!(regex);
     }
 }
 

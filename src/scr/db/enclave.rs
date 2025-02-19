@@ -12,12 +12,12 @@ use rusqlite::OptionalExtension;
 impl Main {
     pub fn enclave_determine_processing(
         &mut self,
-        file: &sharedtypes::FileObject,
+        file: &mut sharedtypes::FileObject,
         bytes: Bytes,
         sha512hash: &String,
         source_url: &String,
     ) {
-        logging::info_log(&format!("Starting to process: {}", file.hash));
+        logging::info_log(&format!("Starting to process: {}", &sha512hash));
 
         for priority_id in self.enclave_priority_get().iter() {
             for enclave_id in self.enclave_get_id_from_priority(priority_id).iter() {
@@ -54,7 +54,7 @@ impl Main {
                                 let source_url_ns_id = self.create_default_source_url_ns_id();
                                 self.enclave_run_action(
                                     &action_name,
-                                    &file,
+                                    file,
                                     &bytes,
                                     sha512hash,
                                     source_url,
@@ -75,7 +75,7 @@ impl Main {
     pub fn enclave_run_action(
         &mut self,
         action: &sharedtypes::EnclaveAction,
-        file: &sharedtypes::FileObject,
+        file: &mut sharedtypes::FileObject,
         bytes: &Bytes,
         sha512hash: &String,
         source_url: &String,
@@ -83,6 +83,20 @@ impl Main {
         enclave_id: &usize,
     ) -> Option<usize> {
         match action {
+            sharedtypes::EnclaveAction::AddTagAndNamespace((
+                tag,
+                namespace,
+                tag_type,
+                relates_to,
+            )) => {
+                file.tag_list.push(sharedtypes::TagObject {
+                    namespace: namespace.clone(),
+                    tag: tag.clone(),
+                    tag_type: tag_type.clone(),
+                    relates_to: relates_to.clone(),
+                });
+                None
+            }
             sharedtypes::EnclaveAction::DownloadToDefault => {
                 let loc = self.location_get();
 
@@ -109,6 +123,7 @@ impl Main {
                 let tagid = self.tag_add(source_url, source_url_ns_id, true, None);
                 self.relationship_add(fileid, tagid, true);
                 self.enclave_file_mapping_add(&fileid, enclave_id);
+                self.transaction_flush();
                 Some(fileid.clone())
             }
             sharedtypes::EnclaveAction::DownloadToLocation(location_id) => None,
@@ -134,6 +149,18 @@ impl Main {
                     }
                     sharedtypes::EnclaveCondition::FileSizeLessthan(byte_len) => {
                         byte_len > bytes.len()
+                    }
+                    sharedtypes::EnclaveCondition::TagNameAndNamespace((tag_name, namespace)) => {
+                        let mut out = false;
+                        for tag in file.tag_list.iter() {
+                            if tag.tag.contains(&tag_name)
+                                && tag.namespace.name.contains(&namespace)
+                            {
+                                out = true;
+                                break;
+                            }
+                        }
+                        out
                     }
                 },
                 Some(action),
