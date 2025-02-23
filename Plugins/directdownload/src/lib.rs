@@ -26,8 +26,14 @@ static PLUGIN_DESCRIPTION: &str =
 #[no_mangle]
 pub fn return_info() -> sharedtypes::PluginInfo {
     let mut tag_vec = Vec::new();
-
-    tag_vec.push((Some(sharedtypes::SearchType::Regex(r"[(http(s)?):(www\.)?a-zA-Z0-9@:%._\+~#=]{2,256}\.[a-z]{2,6}\b([-a-zA-Z0-9@:%_\+.~#?&//=]*)".to_string())), None));
+    tag_vec.push((
+        Some(sharedtypes::SearchType::Regex(
+            r"(http(s)?://www.|((www.|http(s)?://)))[a-zA-Z0-9-].[a-zA-Z0-9-_.]*/[a-zA-Z0-9/_%]+\.[a-zA-Z0-9/_%\.?=&-]+"
+            .to_string(),
+        )),
+        None,
+        Some("source_url".to_string()),
+    ));
 
     let callbackvec = vec![sharedtypes::PluginCallback::OnTag(tag_vec)];
     sharedtypes::PluginInfo {
@@ -43,4 +49,54 @@ pub fn return_info() -> sharedtypes::PluginInfo {
             )),
         }),
     }
+}
+
+#[no_mangle]
+pub fn on_regex_match(
+    tag: &String,
+    tag_ns: &String,
+    regex_match: &String,
+    callback: sharedtypes::PluginCallback,
+) {
+    if regex_match.contains("bsky.app") {
+        return;
+    }
+
+    let subtag = sharedtypes::SubTag {
+        namespace: sharedtypes::GenericNamespaceObj {
+            name: tag_ns.to_string(),
+            description: None,
+        },
+        tag: tag.to_string(),
+        tag_type: sharedtypes::TagType::Normal,
+        limit_to: None,
+    };
+
+    let taginfo = sharedtypes::TagObject {
+        namespace: sharedtypes::GenericNamespaceObj {
+            name: "source_url".to_string(),
+            description: None,
+        },
+        tag: regex_match.to_string(),
+        tag_type: sharedtypes::TagType::Normal,
+        relates_to: Some(subtag),
+    };
+
+    let earlyexistag = sharedtypes::Tag {
+        tag: regex_match.to_string(),
+        namespace: sharedtypes::GenericNamespaceObj {
+            name: "source_url".to_string(),
+            description: None,
+        },
+    };
+
+    let file = sharedtypes::FileObject {
+        source_url: Some(regex_match.to_string()),
+        hash: sharedtypes::HashesSupported::None,
+        tag_list: vec![taginfo],
+        skip_if: vec![sharedtypes::SkipIf::FileTagRelationship(earlyexistag)],
+    };
+    let ratelimit = (1, Duration::from_secs(1));
+
+    client::add_file_nonblocking(file, ratelimit);
 }

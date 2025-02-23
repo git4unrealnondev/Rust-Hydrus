@@ -645,7 +645,7 @@ pub enum PluginCallback {
     // Runs when a tag has exists.
     // First when the tag exists OR when the namespace exists
     // Use None when searching all or Some when searching restrictivly
-    OnTag(Vec<(Option<SearchType>, Option<usize>)>),
+    OnTag(Vec<(Option<SearchType>, Option<String>, Option<String>)>),
 }
 
 /// Callback info for live plugins Gets sent to plugins

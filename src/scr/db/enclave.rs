@@ -179,9 +179,10 @@ impl Main {
 
         if self.enclave_file_mapping_get(file_id, enclave_id).is_some() {
             let conn = self._conn.lock().unwrap();
+            dbg!(file_id, enclave_id);
             let mut prep = conn
             .prepare(
-                "UPDATE FileEnclaveMapping SET timestamp = ? WHERE fileid = ? AND enclave_id = ?)",
+                "UPDATE FileEnclaveMapping SET timestamp = ? WHERE file_id = ? AND enclave_id = ?",
             )
             .unwrap();
 

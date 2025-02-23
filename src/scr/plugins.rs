@@ -78,7 +78,13 @@ pub struct PluginManager {
     _thread_path: HashMap<String, String>,    // Will be used for storing path of plugin name.
     _thread_data_share: HashMap<String, (os_pipe::PipeReader, os_pipe::PipeWriter)>,
     callbackstorage: HashMap<String, Vec<CallbackInfo>>,
-    tagstorageregex: Vec<(Regex, Option<usize>)>,
+    tagstorageregex: Vec<(
+        Regex,
+        String,
+        Option<String>,
+        Option<String>,
+        sharedtypes::PluginCallback,
+    )>,
 }
 
 ///
@@ -246,13 +252,19 @@ impl PluginManager {
             {
                 match &each {
                     sharedtypes::PluginCallback::OnTag(ontaginfo) => {
-                        for (search_type, namespace) in ontaginfo {
+                        for (search_type, namespace, not_namespace) in ontaginfo {
                             if let Some(search) = search_type {
                                 match search {
                                     sharedtypes::SearchType::Regex(regexstring) => {
                                         let regexresult = Regex::new(&regexstring);
                                         if let Ok(regex) = regexresult {
-                                            self.tagstorageregex.push((regex, *namespace));
+                                            self.tagstorageregex.push((
+                                                regex,
+                                                pluginname.clone(),
+                                                namespace.clone(),
+                                                not_namespace.clone(),
+                                                each.clone(),
+                                            ));
                                         }
                                     }
                                     _ => {}
@@ -264,7 +276,6 @@ impl PluginManager {
                 }
             }
 
-            dbg!(&each);
             match self._callback.get_mut(&each) {
                 Some(vec_plugin) => {
                     vec_plugin.push(pluginname.clone());
@@ -494,7 +505,7 @@ pub fn plugin_on_tag(
     manager_arc: Arc<Mutex<PluginManager>>,
     db: &mut Main,
     tag: &String,
-    namespace: &usize,
+    tag_nsid: &usize,
 ) {
     let tagstorageregex;
     {
@@ -502,8 +513,31 @@ pub fn plugin_on_tag(
         tagstorageregex = temp.tagstorageregex.clone();
     }
 
-    for (regex, namespace) in tagstorageregex {
-        dbg!(regex);
+    for (regex, plugin_name, namespace, not_namespace, plugin_callback) in tagstorageregex.iter() {
+        if let Some(not_namespace) = not_namespace {
+            if let Some(nsid) = db.namespace_get(not_namespace) {
+                if tag_nsid == nsid {
+                    return;
+                }
+            }
+        }
+
+        let regex_iter: Vec<&str> = regex.find_iter(tag).map(|m| m.as_str()).collect();
+        for regex_match in regex_iter {
+            //dbg!(regex_match, plugin_name, namespace, not_namespace);
+            let tag_ns = match db.namespace_get_string(tag_nsid) {
+                None => continue,
+                Some(namespace_name) => &namespace_name.name,
+            };
+            c_regex_match(
+                manager_arc.clone(),
+                plugin_name,
+                tag,
+                &tag_ns,
+                &regex_match.to_string(),
+                plugin_callback.clone(),
+            );
+        }
     }
 }
 
@@ -587,5 +621,43 @@ fn c_run_onstart(path: &String) {
         liba.get::<libloading::Symbol<unsafe extern "C" fn()>>(b"on_start")
             .unwrap();
         plugindatafunc();
+    };
+}
+
+fn c_regex_match(
+    manager_arc: Arc<Mutex<PluginManager>>,
+    lib_name: &String,
+    tag: &String,
+    tag_ns: &String,
+    regex_match: &String,
+    plugin_callback: sharedtypes::PluginCallback,
+) {
+    let pluginmanager = manager_arc.lock().unwrap();
+    let liba;
+    {
+        match pluginmanager._plugin.get(lib_name) {
+            None => {
+                return;
+            }
+            Some(lib) => {
+                liba = lib;
+            }
+        }
+    }
+
+    unsafe {
+        let plugindatafunc: libloading::Symbol<
+            unsafe extern "C" fn(&String, &String, &String, sharedtypes::PluginCallback),
+        > = match liba.get(b"on_regex_match") {
+            Ok(good) => good,
+            Err(_) => {
+                return;
+            }
+        };
+        liba.get::<libloading::Symbol<
+            unsafe extern "C" fn(&String, &String, &String, sharedtypes::PluginCallback),
+        >>(b"on_regex_match")
+            .unwrap();
+        plugindatafunc(tag, tag_ns, regex_match, plugin_callback);
     };
 }

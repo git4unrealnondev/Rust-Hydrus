@@ -277,7 +277,6 @@ pub fn dlfile_new(
     }
 
     let file_ext = FileFormat::from_bytes(&bytes).extension().to_string();
-
     // If the plugin manager is None then don't do anything plugin wise. Useful for if
     // doing something that we CANNOT allow plugins to run.
     {
