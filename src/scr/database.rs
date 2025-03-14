@@ -38,6 +38,7 @@ pub fn dbinit(dbpath: &String) -> Connection {
     Connection::open(dbpath).unwrap()
 }
 
+<<<<<<< HEAD
 #[derive(Clone)]
 pub enum CacheType {
     // Default option. Will use in memory DB to make store cached data.
@@ -46,6 +47,145 @@ pub enum CacheType {
     InMemory,
     // Will be use to query the DB directly. No caching.
     Bare(String),
+=======
+///
+/// Pulls db into memdb.
+/// main: &mut Main, conn: &Connection
+///
+pub fn load_mem(tempmem: &mut Main, conn: &Connection) {
+    //let mut brr =  tempmem._conn.borrow();1
+
+    //drop(brr);
+    //let conn = dbinit(&self._dbpath);
+    //let mutborrow = &*self._conn.borrow_mut();
+    // Loads data from db into memory. CAN BE SLOW SHOULD OPTIMIZE WITH HASHMAP MAYBE??
+    let mut fiex = conn.prepare("SELECT * FROM File").unwrap();
+    let mut files = fiex.query(params![]).unwrap();
+
+    //let mut files = self._conn.prepare("SELECT * FROM File").unwrap().query(params![]).unwrap();
+    let mut jobex = conn.prepare("SELECT * FROM Jobs").unwrap();
+    let mut jobs = jobex.query(params![]).unwrap();
+    let mut naex = conn.prepare("SELECT * FROM Namespace").unwrap();
+    let mut names = naex.query(params![]).unwrap();
+    let mut paex = conn.prepare("SELECT * FROM Parents").unwrap();
+    let mut paes = paex.query(params![]).unwrap();
+    let mut relx = conn.prepare("SELECT * FROM Relationship").unwrap();
+    let mut rels = relx.query(params![]).unwrap();
+    let mut taex = conn.prepare("SELECT * FROM Tags").unwrap();
+    let mut tags = taex.query(params![]).unwrap();
+    let mut setex = conn.prepare("SELECT * FROM Settings").unwrap();
+    let mut sets = setex.query(params![]).unwrap();
+
+    //drop(fiex);
+    //Preserves mutability of database while we have an active connection to database.
+    let mut file_vec: Vec<(usize, String, String, String)> = Vec::new();
+    let mut job_vec: Vec<(usize, usize, String, String, CommitType)> = Vec::new();
+    let mut parents_vec: Vec<(usize, String, String, usize)> = Vec::new();
+    let mut namespace_vec: Vec<(usize, String, String)> = Vec::new();
+    let mut relationship_vec: Vec<(usize, usize)> = Vec::new();
+    let mut tag_vec: Vec<(usize, String, String, usize)> = Vec::new();
+    let mut setting_vec: Vec<(String, String, isize, String)> = Vec::new();
+
+    dbg!("Loading DB.");
+    //drop(fiex);
+    while let Some(file) = files.next().unwrap() {
+        let a: String = file.get(0).unwrap();
+        let a1: usize = a.parse::<usize>().unwrap();
+        tempmem.file_add(
+            file.get(1).unwrap(),
+            file.get(2).unwrap(),
+            file.get(3).unwrap(),
+            false,
+        );
+    }
+    while let Some(job) = jobs.next().unwrap() {
+        let a1: String = job.get(0).unwrap();
+        let b1: String = job.get(1).unwrap();
+        let d1: String = job.get(2).unwrap();
+        let e1: String = job.get(3).unwrap();
+        let c1: String = job.get(4).unwrap();
+        let c: CommitType = sharedtypes::stringto_commit_type(&c1);
+        let a: usize = a1.parse::<usize>().unwrap();
+        let b: usize = b1.parse::<usize>().unwrap();
+        tempmem.jobs_add_new_todb(&d1, &e1, b, a, &c);
+    }
+
+    while let Some(name) = names.next().unwrap() {
+        let a1: String = name.get(0).unwrap();
+        let b1: String = name.get(2).unwrap();
+        let a: usize = a1.parse::<usize>().unwrap();
+        let b: String = b1.parse::<String>().unwrap();
+        //namespace_vec.push((a, name.get(1).unwrap(), b.to_string()));
+        tempmem.namespace_add(&name.get(1).unwrap(), &b.to_string(), false);
+    }
+
+    while let Some(tag) = rels.next().unwrap() {
+        let a1: String = tag.get(0).unwrap();
+        let b1: String = tag.get(1).unwrap();
+        let a: usize = a1.parse::<usize>().unwrap();
+        let b = b1.parse::<usize>();
+        if let Err(ref error) = b.clone() {
+            println!("WARNING: CANNOT LOAD NUMBER: {} {} {} {}", error, a1, b1, a);
+            panic!();
+        }
+        //relationship_vec.push((a, b));
+        tempmem.relationship_add(a, b.unwrap(), false);
+    }
+
+    while let Some(tag) = tags.next().unwrap() {
+        let a1: String = tag.get(2).unwrap();
+        let b1: String = tag.get(3).unwrap();
+        let c1: String = tag.get(0).unwrap();
+        let a: String = a1.parse::<String>().unwrap();
+        let b: usize = b1.parse::<usize>().unwrap();
+        let c: usize = c1.parse::<usize>().unwrap();
+        //tag_vec.push((c, tag.get(1).unwrap(), a, b));
+        tempmem.tag_add(tag.get(1).unwrap(), a, b, false);
+        //self.tag_add(each.1, each.2, each.3, false);
+    }
+
+    while let Some(tag) = paes.next().unwrap() {
+        let a1: String = tag.get(0).unwrap();
+        let a2: String = tag.get(1).unwrap();
+        let a3: String = tag.get(2).unwrap();
+        let a4: String = tag.get(3).unwrap();
+
+        let b1 = a1.parse::<usize>().unwrap();
+        let b2 = a2.parse::<usize>().unwrap();
+        let b3 = a3.parse::<usize>().unwrap();
+        let b4 = a4.parse::<usize>().unwrap();
+        tempmem.parents_add(b1, b2, b3, b4, false);
+    }
+
+    while let Some(name) = paes.next().unwrap() {
+        let a1: String = name.get(0).unwrap();
+        let b1: String = name.get(3).unwrap();
+        let a: usize = a1.parse::<usize>().unwrap();
+        let b: usize = b1.parse::<usize>().unwrap();
+        parents_vec.push((a, name.get(1).unwrap(), name.get(2).unwrap(), b));
+    }
+
+    while let Some(set) = sets.next().unwrap() {
+        let b1: String = set.get(2).unwrap(); // FIXME
+        let b: usize = b1.parse::<usize>().unwrap();
+        let re1: String = match set.get(1) {
+            Ok(re1) => re1,
+            Err(error) => "".to_string(),
+        };
+        let re3: String = match set.get(3) {
+            Ok(re3) => re3,
+            Err(error) => "".to_string(),
+        };
+
+        setting_vec.push((set.get(0).unwrap(), re1, b.try_into().unwrap(), re3));
+    }
+
+    for each in setting_vec {
+        tempmem.setting_add(each.0, each.1, each.2, each.3, false);
+    }
+
+    //self._conn = conn;
+>>>>>>> a909ef6 (Update for old)
 }
 
 /// Holder of database self variables

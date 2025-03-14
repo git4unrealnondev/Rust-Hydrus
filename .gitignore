@@ -36,6 +36,7 @@ Files
 **.db
 **.sync-conflict*
 **.data
+<<<<<<< HEAD
 **.db-journal
 profile.svg
 flamegraph.svg
@@ -47,3 +48,9 @@ notes.txt
 dategent
 **.sql
 dbbackup
+=======
+**.folded
+out.txt
+**.csv
+dategent
+>>>>>>> a909ef6 (Update for old)
