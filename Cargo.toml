@@ -58,7 +58,7 @@ regex = "1.11.1"
 opt-level = 3
 lto=true
 codegenunits=1
-strip = true
+#strip = true
 panic = "abort"
 debug = false
 
