@@ -3,6 +3,8 @@
 
 use crate::sharedtypes;
 use anyhow::Context;
+use bincode;
+use bincode::impl_borrow_decode;
 use interprocess::local_socket::prelude::LocalSocketStream;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -13,7 +15,7 @@ use std::io::Write;
 
 pub const SOCKET_NAME: &str = "RustHydrus.sock";
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, bincode::Encode, bincode::Decode)]
 pub enum EComType {
     SendOnly,
     RecieveOnly,
@@ -21,7 +23,7 @@ pub enum EComType {
     None,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, bincode::Encode, bincode::Decode)]
 pub enum EControlSigs {
     // Sending data to and fro
     Send,
@@ -32,7 +34,7 @@ pub enum EControlSigs {
 }
 
 /// Main communication block structure.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, bincode::Encode, bincode::Decode)]
 pub struct Coms {
     pub com_type: EComType,
     pub control: EControlSigs,
@@ -59,7 +61,7 @@ pub struct Coms {
 // con_supportedrequests(input: &mut [u8; 56]) -> SupportedRequests { //    unsafe
 // { std::mem::transmute(*input) } //}
 /// Supported Database operations.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, bincode::Encode, bincode::Decode)]
 pub enum SupportedDBRequests {
     GetTagId(usize),
     PutTag(String, usize, bool, Option<usize>),
@@ -116,7 +118,7 @@ pub enum SupportedDBRequests {
 }
 
 /// A descriptor for the parents and the type of data that we're sending
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, bincode::Encode, bincode::Decode)]
 pub enum ParentsType {
     Tag,
     Rel,
@@ -157,21 +159,25 @@ pub enum EfficientDataReturn {
 }
 
 /// Supported cross talks between plugins.
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, bincode::Encode, bincode::Decode)]
 pub enum SupportedPluginRequests {}
 
 /// Supported enum requests for the transaction. Will get sent over to sever /
 /// client to determine what data will be sent back and forth.
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, bincode::Encode, bincode::Decode)]
 pub enum SupportedRequests {
     Database(SupportedDBRequests),
     PluginCross(SupportedPluginRequests),
 }
 
 /// Writes all data into buffer.
-pub fn send<T: Sized + Serialize>(inp: T, conn: &mut BufReader<LocalSocketStream>) {
-    let byte_buf = bincode::serialize(&inp).unwrap();
+pub fn send<T: Sized + Serialize + bincode::Encode>(
+    inp: T,
+    conn: &mut BufReader<LocalSocketStream>,
+) {
+    let byte_buf = bincode::serde::encode_to_vec(&inp, bincode::config::standard()).unwrap();
     let size = &byte_buf.len();
+
     conn.get_mut()
         .write_all(&size.to_ne_bytes())
         .context("Socket send failed")
@@ -209,6 +215,7 @@ pub fn recieve<T: serde::de::DeserializeOwned>(
         .get_mut()
         .read_exact(&mut data_b[..])
         .context("Socket send failed");
-    let out = bincode::deserialize(&data_b)?;
-    Ok(out)
+
+    let out = bincode::serde::decode_from_slice(&data_b, bincode::config::standard())?;
+    Ok(out.0)
 }

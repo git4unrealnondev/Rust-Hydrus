@@ -266,6 +266,20 @@ impl Main {
                     logging::error_log(&"UNSUPPORTED OS FOR GETFILE CALLING.".to_string());
                     return None;
                 }
+
+                // New revision of the downloader adds the extension to the file downloaded.
+                // This will rename the file if it uses the old file ext
+                if let Some(ext_str) = self.extension_get_string(&file.ext_id) {
+                    if Path::new(&out).with_extension(ext_str).exists() {
+                        return Some(
+                            Path::new(&out)
+                                .with_extension(ext_str)
+                                .to_string_lossy()
+                                .to_string(),
+                        );
+                    }
+                }
+
                 if Path::new(&out).exists() {
                     let out = std::fs::canonicalize(out)
                         .unwrap()
@@ -1046,7 +1060,7 @@ impl Main {
         logging::info_log(&"Database is Loading: File Extensions".to_string());
         let binding = self._conn.clone();
         let temp_test = binding.lock().unwrap();
-        let temp = temp_test.prepare("SELECT * FROM File");
+        let temp = temp_test.prepare("SELECT * FROM FileExtensions");
 
         if let Ok(mut con) = temp {
             let quer = con.query([]);

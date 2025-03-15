@@ -88,7 +88,7 @@ another process and try again.",
             com_type: types::EComType::BiDirectional,
             control: types::EControlSigs::Send,
         };
-        let b_struct = bincode::serialize(&coms_struct).unwrap();
+        let b_struct = bincode::encode_to_vec(&coms_struct, bincode::config::standard()).unwrap();
 
         // Wrap the connection into a buffered reader right away so that we could read a
         // single line out of it.
@@ -106,7 +106,10 @@ another process and try again.",
         // write, do it. (`.get_mut()` is to get the writer, `BufReader` doesn't implement
         // a pass-through `Write`.) conn.get_mut().write_all(b"Hello from server!\n")?;
         // Print out the result, getting the newline for free!
-        let instruct: types::Coms = bincode::deserialize(&buffer[..]).unwrap();
+        let instruct: types::Coms =
+            bincode::decode_from_slice(&buffer[..], bincode::config::standard())
+                .unwrap()
+                .0;
 
         // std::mem::forget(buffer.clone());
         match instruct.control {
@@ -250,7 +253,8 @@ impl DbInteract {
         let tmp = data_object;
 
         // let bytd = types::x_to_bytes(tmp).to_vec();
-        let byt: Vec<u8> = bincode::serialize(&tmp).unwrap();
+        let byt: Vec<u8> =
+            bincode::serde::encode_to_vec(&tmp, bincode::config::standard()).unwrap();
         byt
     }
 
@@ -545,7 +549,8 @@ impl DbInteract {
             types::SupportedDBRequests::GetFileListAll() => {
                 let unwrappy = self._database.lock().unwrap();
                 let tmep = unwrappy.file_get_list_all();
-                bincode::serialize(&tmep).unwrap()
+                Self::data_size_to_b(tmep)
+                //bincode::serialize(&tmep).unwrap()
             }
         }
     }

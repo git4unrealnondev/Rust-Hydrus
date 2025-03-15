@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 #![allow(unused_variables)]
 
+use bincode;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashSet};
 use std::fmt;
@@ -11,7 +12,7 @@ use strum_macros::{Display, EnumString};
 ///
 /// Manages the conditions that determines which enclave should trigger
 ///
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, bincode::Encode, bincode::Decode)]
 pub enum EnclaveCondition {
     Any,
     None,
@@ -23,13 +24,13 @@ pub enum EnclaveCondition {
 ///
 /// Manages the conditions that determines which enclave stop processing at
 ///
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, bincode::Encode, bincode::Decode)]
 pub enum EnclaveStopCondition {
     /// We've found a location to put our file
     FileDownloadLocation,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, bincode::Encode, bincode::Decode)]
 pub enum EnclaveAction {
     DownloadToLocation(usize),
     AddTagAndNamespace((String, GenericNamespaceObj, TagType, Option<SubTag>)),
@@ -37,14 +38,26 @@ pub enum EnclaveAction {
 }
 
 /// Database Tags Object
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize, Serialize, Clone)]
+#[derive(
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    Deserialize,
+    Serialize,
+    bincode::Encode,
+    bincode::Decode,
+    Clone,
+)]
 pub struct DbTagNNS {
     pub name: String,
     pub namespace: usize,
 }
 
 /// Database Tags Object
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, bincode::Encode, bincode::Decode)]
 pub struct DbTagObjCompatability {
     pub id: usize,
     pub name: String,
@@ -134,7 +147,18 @@ pub enum CsvCopyMvHard {
 }
 
 /// Tells DB which table to load.
-#[derive(EnumIter, PartialEq, Debug, Serialize, Deserialize, Clone, Copy, ValueEnum)]
+#[derive(
+    EnumIter,
+    PartialEq,
+    Debug,
+    Serialize,
+    bincode::Encode,
+    bincode::Decode,
+    Deserialize,
+    Clone,
+    Copy,
+    ValueEnum,
+)]
 pub enum LoadDBTable {
     // Files table
     Files,
@@ -170,7 +194,7 @@ pub fn stringto_commit_type(into: &String) -> CommitType {
 
 /// Dummy Holder Dummy thick
 #[allow(dead_code)]
-#[derive(Debug, EnumIter, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, EnumIter, PartialEq, Serialize, bincode::Encode, bincode::Decode, Deserialize)]
 pub enum SearchHolder {
     AND((usize, usize)),
     OR((usize, usize)),
@@ -182,7 +206,7 @@ pub enum SearchHolder {
 /// & 1 are an AND search then the 4 search items are AND searched in db in
 /// addition to the 4 terms in the searches
 #[allow(dead_code)]
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Serialize, bincode::Encode, bincode::Decode, Deserialize)]
 pub struct SearchObj {
     pub search_relate: Option<Vec<SearchHolder>>,
     pub searches: Vec<SearchHolder>,
@@ -219,7 +243,19 @@ pub fn stringto_jobtype(into: &String) -> DbJobType {
 use clap::ValueEnum;
 
 #[derive(
-    Debug, EnumIter, Clone, Eq, Hash, PartialEq, Copy, EnumString, Serialize, Deserialize, ValueEnum,
+    Debug,
+    EnumIter,
+    Clone,
+    Eq,
+    Hash,
+    PartialEq,
+    Copy,
+    EnumString,
+    Serialize,
+    bincode::Encode,
+    bincode::Decode,
+    Deserialize,
+    ValueEnum,
 )]
 #[serde(rename_all = "PascalCase")]
 #[clap(rename_all = "kebab_case")]
@@ -267,7 +303,19 @@ pub struct ScraperObject {
 }
 
 /// Shared data to be passed for jobs
-#[derive(Debug, Clone, Eq, PartialEq, Hash, Ord, PartialOrd, Deserialize, Serialize)]
+#[derive(
+    Debug,
+    Clone,
+    Eq,
+    PartialEq,
+    Hash,
+    Ord,
+    PartialOrd,
+    Deserialize,
+    Serialize,
+    bincode::Encode,
+    bincode::Decode,
+)]
 pub struct ScraperData {
     pub job: JobScraper,
     pub system_data: BTreeMap<String, String>,
@@ -294,7 +342,9 @@ pub struct ScraperFileReturn {
 }
 
 /// File object should of done this sooner lol
-#[derive(Debug, Deserialize, Serialize, Clone, Eq, Hash, PartialEq)]
+#[derive(
+    Debug, Deserialize, Serialize, bincode::Encode, bincode::Decode, Clone, Eq, Hash, PartialEq,
+)]
 pub struct DbFileObj {
     pub id: usize,
     pub hash: String,
@@ -303,7 +353,9 @@ pub struct DbFileObj {
 }
 
 /// File object with no id field if unknown
-#[derive(Debug, Deserialize, Serialize, Clone, Eq, Hash, PartialEq)]
+#[derive(
+    Debug, Deserialize, Serialize, bincode::Encode, bincode::Decode, Clone, Eq, Hash, PartialEq,
+)]
 pub struct DbFileObjNoId {
     pub hash: String,
     pub ext_id: usize,
@@ -311,7 +363,9 @@ pub struct DbFileObjNoId {
 }
 
 /// Wrapper for DbFileStorage
-#[derive(Debug, Deserialize, Serialize, Clone, Eq, Hash, PartialEq)]
+#[derive(
+    Debug, Deserialize, Serialize, bincode::Encode, bincode::Decode, Clone, Eq, Hash, PartialEq,
+)]
 pub enum DbFileStorage {
     // Complete file object
     Exist(DbFileObj),
@@ -324,7 +378,7 @@ pub enum DbFileStorage {
 }
 
 /// File object Should only be used for parsing data from plugins
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, bincode::Encode, bincode::Decode)]
 pub struct PluginFileObj {
     pub id: Option<usize>,
     pub hash: Option<String>,
@@ -333,7 +387,7 @@ pub struct PluginFileObj {
 }
 
 /// Namespace object should of done this sooner lol
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, bincode::Encode, bincode::Decode, Deserialize)]
 pub struct DbNamespaceObj {
     pub id: usize,
     pub name: String,
@@ -345,7 +399,9 @@ pub struct DbNamespaceObj {
 // pub tag: Option`<String>`, pub name: Option`<String>`, pub description:
 // Option`<String>`, }
 /// Database Jobs object
-#[derive(Debug, Hash, Eq, PartialEq, Clone, Serialize, Deserialize)]
+#[derive(
+    Debug, Hash, Eq, PartialEq, Clone, Serialize, bincode::Encode, bincode::Decode, Deserialize,
+)]
 pub struct DbJobsObj {
     pub id: usize,
     pub time: Option<usize>,
@@ -360,7 +416,19 @@ pub struct DbJobsObj {
 }
 
 /// Manager on job type and logic
-#[derive(Debug, Hash, Eq, PartialEq, Clone, Serialize, Deserialize, Ord, PartialOrd)]
+#[derive(
+    Debug,
+    Hash,
+    Eq,
+    PartialEq,
+    Clone,
+    Serialize,
+    bincode::Encode,
+    bincode::Decode,
+    Deserialize,
+    Ord,
+    PartialOrd,
+)]
 pub struct DbJobsManager {
     pub jobtype: DbJobType,
     pub recreation: Option<DbJobRecreation>,
@@ -368,7 +436,19 @@ pub struct DbJobsManager {
 }
 
 /// Recreate current job on x event
-#[derive(Debug, Hash, Eq, PartialEq, Clone, Serialize, Deserialize, Ord, PartialOrd)]
+#[derive(
+    Debug,
+    Hash,
+    Eq,
+    PartialEq,
+    Clone,
+    Serialize,
+    bincode::Encode,
+    bincode::Decode,
+    Deserialize,
+    Ord,
+    PartialOrd,
+)]
 pub enum DbJobRecreation {
     OnTagId(usize, Option<usize>),
     OnTag(String, usize, Option<usize>),
@@ -387,6 +467,8 @@ pub enum DbJobRecreation {
     EnumIter,
     Display,
     Serialize,
+    bincode::Encode,
+    bincode::Decode,
     Deserialize,
     ValueEnum,
     Ord,
@@ -407,7 +489,20 @@ pub enum DbJobType {
 }
 
 /// Database Parents Object.
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy, Serialize, Deserialize)]
+#[derive(
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    Clone,
+    Copy,
+    Serialize,
+    bincode::Encode,
+    bincode::Decode,
+    Deserialize,
+)]
 pub struct DbParentsObj {
     pub tag_id: usize,
     pub relate_tag_id: usize,
@@ -423,7 +518,7 @@ pub struct DbRelationshipObj {
 }
 
 /// Database Settings Object
-#[derive(Debug, Deserialize, Clone, Serialize)]
+#[derive(Debug, Deserialize, Clone, Serialize, bincode::Encode, bincode::Decode)]
 pub struct DbSettingObj {
     pub name: String,
     pub pretty: Option<String>,
@@ -511,7 +606,7 @@ pub struct DBPluginOutput {
 }
 
 /// Represents one file
-#[derive(Debug, Eq, Hash, PartialEq, Deserialize, Serialize)]
+#[derive(Debug, Eq, Hash, PartialEq, Deserialize, Serialize, bincode::Encode, bincode::Decode)]
 pub struct FileObject {
     pub source_url: Option<String>,
     // Hash of file
@@ -533,7 +628,9 @@ pub enum SearchType {
 }
 
 /// Holder of Tag info. Keeps relationalship info into account.
-#[derive(Debug, Eq, PartialEq, Hash, Clone, Deserialize, Serialize)]
+#[derive(
+    Debug, Eq, PartialEq, Hash, Clone, Deserialize, Serialize, bincode::Encode, bincode::Decode,
+)]
 pub struct TagObject {
     pub namespace: GenericNamespaceObj,
     pub tag: String,
@@ -541,7 +638,9 @@ pub struct TagObject {
     pub relates_to: Option<SubTag>,
 }
 
-#[derive(Debug, Eq, PartialEq, Hash, Clone, Deserialize, Serialize)]
+#[derive(
+    Debug, Eq, PartialEq, Hash, Clone, Deserialize, Serialize, bincode::Encode, bincode::Decode,
+)]
 pub struct SubTag {
     pub namespace: GenericNamespaceObj,
     pub tag: String,
@@ -549,7 +648,9 @@ pub struct SubTag {
     pub tag_type: TagType,
 }
 
-#[derive(Debug, Eq, PartialEq, Hash, Clone, Deserialize, Serialize)]
+#[derive(
+    Debug, Eq, PartialEq, Hash, Clone, Deserialize, Serialize, bincode::Encode, bincode::Decode,
+)]
 pub struct GenericNamespaceObj {
     pub name: String,
     pub description: Option<String>,
@@ -558,7 +659,7 @@ pub struct GenericNamespaceObj {
 /// Tag Type object. Represents metadata for parser.
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
-#[derive(Eq, Hash, PartialEq, Deserialize, Serialize)]
+#[derive(Eq, Hash, PartialEq, Deserialize, Serialize, bincode::Encode, bincode::Decode)]
 pub enum TagType {
     // Normal tag.
     Normal,
@@ -569,7 +670,9 @@ pub enum TagType {
     Special,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Deserialize, Serialize)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, Hash, Deserialize, Serialize, bincode::Encode, bincode::Decode,
+)]
 pub struct Tag {
     pub tag: String,
     pub namespace: GenericNamespaceObj,
@@ -578,7 +681,9 @@ pub struct Tag {
 }
 
 /// Used for skipping a ParseUrl in TagType if a tag exists.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Deserialize, Serialize)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, Hash, Deserialize, Serialize, bincode::Encode, bincode::Decode,
+)]
 pub enum SkipIf {
     // If a relationship between any file and tag exists.
     FileTagRelationship(Tag),
@@ -587,7 +692,19 @@ pub enum SkipIf {
     FileNamespaceNumber((Tag, GenericNamespaceObj, usize)),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Ord, PartialOrd, Deserialize, Serialize)]
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    Hash,
+    Ord,
+    PartialOrd,
+    Deserialize,
+    Serialize,
+    bincode::Encode,
+    bincode::Decode,
+)]
 pub struct JobScraper {
     pub site: String,
     pub param: Vec<ScraperParam>,
@@ -596,7 +713,7 @@ pub struct JobScraper {
 }
 
 /// Supported types of hashes in Rust Hydrus
-#[derive(Debug, Clone, Display, Deserialize, Serialize)]
+#[derive(Debug, Clone, Display, Deserialize, Serialize, bincode::Encode, bincode::Decode)]
 #[allow(dead_code)]
 #[derive(Eq, Hash, PartialEq)]
 pub enum HashesSupported {
@@ -649,7 +766,7 @@ pub enum PluginCallback {
 }
 
 /// Callback info for live plugins Gets sent to plugins
-#[derive(Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Hash, Serialize, bincode::Encode, bincode::Decode, Deserialize)]
 pub struct CallbackInfoInput {
     // Name of variable
     pub data_name: Vec<String>,
@@ -673,7 +790,9 @@ pub struct CallbackInfo {
 }
 
 /// Data that's to be recieved to a plugin
-#[derive(Debug, PartialEq, Eq, Hash, Clone, Serialize, Deserialize)]
+#[derive(
+    Debug, PartialEq, Eq, Hash, Clone, Serialize, bincode::Encode, bincode::Decode, Deserialize,
+)]
 pub enum CallbackCustomData {
     String,
     U8,
@@ -684,7 +803,9 @@ pub enum CallbackCustomData {
 }
 
 /// Data that gets sent to a plugin
-#[derive(Debug, PartialEq, Eq, Hash, Serialize, Deserialize, Clone)]
+#[derive(
+    Debug, PartialEq, Eq, Hash, Serialize, bincode::Encode, bincode::Decode, Deserialize, Clone,
+)]
 pub enum CallbackCustomDataReturning {
     String(String),
     U8(Vec<u8>),
@@ -718,14 +839,38 @@ pub enum PluginCommunicationChannel {
 }
 
 /// Straper type passed to params
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Ord, PartialOrd, Deserialize, Serialize)]
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    Hash,
+    Ord,
+    PartialOrd,
+    Deserialize,
+    Serialize,
+    bincode::Encode,
+    bincode::Decode,
+)]
 pub enum ScraperParamType {
     Normal,
     Database,
 }
 
 /// Used to hold Scraper Parameters in db.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Ord, PartialOrd, Deserialize, Serialize)]
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    Hash,
+    Ord,
+    PartialOrd,
+    Deserialize,
+    Serialize,
+    bincode::Encode,
+    bincode::Decode,
+)]
 pub struct ScraperParam {
     pub param_data: String,
     pub param_type: ScraperParamType,

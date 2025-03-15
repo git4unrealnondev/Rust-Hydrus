@@ -12,7 +12,7 @@ strum_macros = "0.25.1"
 pipe = { version = "0.4.0", features = ["bidirectional"] }
 serde = { version = "1.0.192", features = ["serde_derive"] }
 thumbnailer = {path= "./thumbnailer"} 
-bincode = "1.3.3"
+bincode = { version = "2.0.1", features = ["serde","alloc"] }
 serde_bytes = "0.11.14"
 interprocess = "2.1.0"
 anyhow = "1.0.83"
