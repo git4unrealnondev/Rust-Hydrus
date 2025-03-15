@@ -12,6 +12,7 @@ use reqwest::cookie;
 use sha2::Digest as sha2Digest;
 use sha2::Sha256;
 use sha2::Sha512;
+use std::error::Error;
 use std::io::BufReader;
 use std::io::Cursor;
 use std::io::Read;
@@ -96,13 +97,22 @@ pub async fn dltext_new(
     url_string: String,
     client: &Client,
     ratelimiter_obj: &Arc<Mutex<Ratelimiter>>,
-) -> Result<String, reqwest::Error> {
+) -> Result<String, Box<dyn Error>> {
     // let mut ret: Vec<AHashMap<String, AHashMap<String, Vec`<String>`>>> =
     // Vec::new(); let ex = Executor::new(); let url =
     // Url::parse("http://www.google.com").unwrap();
     let mut cnt = 0;
     loop {
-        let url = Url::parse(&url_string).unwrap();
+        let url = match Url::parse(&url_string) {
+            Ok(out) => out,
+            Err(err) => {
+                logging::error_log(&format!(
+                    "Failed to parse URL: {} with error {:?}",
+                    url_string, err
+                ));
+                return Err(Box::new(err));
+            }
+        };
 
         // let requestit = Request::new(Method::GET, url); fut.push();
         logging::info_log(&format!("Spawned web reach to: {}", &url_string));
@@ -115,7 +125,7 @@ pub async fn dltext_new(
         // let test = reqwest::get(url).await.unwrap().text(); let futurez =
         // futures::executor::block_on(futureresult); dbg!(&futureresult);
         if cnt == 3 {
-            return Err(futureresult.err().unwrap());
+            return Err(Box::new(futureresult.err().unwrap()));
         }
         cnt += 1;
         match futureresult {
@@ -128,7 +138,7 @@ pub async fn dltext_new(
                 }
             },
             Err(_) => {
-                return Err(futureresult.err().unwrap());
+                return Err(Box::new(futureresult.err().unwrap()));
             }
         }
     }

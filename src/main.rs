@@ -3,6 +3,7 @@
 use log::{error, warn};
 use plugins::get_loadable_paths;
 use scraper::db_upgrade_call;
+use scraper::on_start;
 use std::sync::Arc;
 use std::sync::Mutex;
 
@@ -48,6 +49,8 @@ mod os;
 #[path = "./scr/intcoms/server.rs"]
 mod server;
 
+pub const VERS: usize = 5;
+
 // mod scr { pub mod cli; pub mod database; pub mod download; pub mod file; pub
 // mod jobs; pub mod logging; pub mod plugins; pub mod scraper; pub mod
 // sharedtypes; pub mod tasks; pub mod threading; pub mod time; }
@@ -66,11 +69,10 @@ fn pause() {
 fn makedb(dbloc: &str) -> database::Main {
     // Setting up DB VARS
     let path = dbloc.to_string();
-    let vers: usize = 5;
 
     // let dbexist = Path::new(&path).exists(); dbcon is database connector let mut
     // dbcon = scr::database::dbinit(&path);
-    database::Main::new(path, vers)
+    database::Main::new(Some(path), VERS)
     // let dbcon = data.load_mem(&mut data._conn);
 }
 
@@ -171,7 +173,7 @@ fn main() {
                 "Starting scraper upgrade: {}",
                 internal_scraper.name
             ));
-            db_upgrade_call(scraper_library, &db_version);
+            db_upgrade_call(scraper_library, &db_version, &internal_scraper);
         }
     }
 
@@ -203,6 +205,16 @@ fn main() {
         &scraper_manager,
     );
     let arc_jobmanager = jobmanager;
+
+    //
+    // Loads the scrapers for their on_start function
+    for (scraper, libloading) in scraper_manager.library_get() {
+        {
+            dbg!("A");
+            on_start(libloading, &scraper);
+        }
+    }
+
     let arc_scrapermanager = Arc::new(Mutex::new(scraper_manager));
     for (scraper, _) in arc_jobmanager.lock().unwrap()._jobref.clone() {
         // let scraper_library = scraper_manager._library.get(&scraper).unwrap();
@@ -246,7 +258,7 @@ fn main() {
             );
         }
     }
-
+    arc.lock().unwrap().condense_db_all();
     arc.lock().unwrap().transaction_flush();
 
     // pluginmanager.lock().unwrap().thread_finish_closed(); while

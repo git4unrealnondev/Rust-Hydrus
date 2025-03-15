@@ -1,46 +1,76 @@
 use crate::database::CacheType;
+use crate::database::Main;
 use log::error;
+use rusqlite::params;
 pub use rusqlite::Connection;
 use std::sync::Arc;
 use std::sync::Mutex;
 
-pub trait SqliteConnection {}
+impl Main {
+    pub fn parents_delete_sql(&mut self, id: &usize) {
+        self.parents_delete_tag_id_sql(id);
+        self.parents_delete_relate_tag_id_sql(id);
+        self.parents_delete_limit_to_sql(id);
+    }
 
-pub struct SqliteSearchStructs {
-    conn: Arc<Mutex<Connection>>,
-    conn_type: CacheType,
-}
+    ///
+    /// Removes ALL of a tag_id from the parents collumn
+    ///
+    fn parents_delete_tag_id_sql(&mut self, tag_id: &usize) {
+        let conn = self._conn.lock().unwrap();
+        let _ = conn.execute("DELETE FROM Parents WHERE tag_id = ?", params![tag_id]);
+    }
 
-impl SqliteSearchStructs {
-    pub fn new(db_type: CacheType) -> Self {
-        SqliteSearchStructs {
-            conn: make_connection(db_type.clone()),
-            conn_type: db_type,
-        }
+    ///
+    /// Removes ALL of a relate_tag_id from the parents collumn
+    ///
+    fn parents_delete_relate_tag_id_sql(&mut self, relate_tag_id: &usize) {
+        let conn = self._conn.lock().unwrap();
+        let _ = conn.execute(
+            "DELETE FROM Parents WHERE relate_tag_id = ?",
+            params![relate_tag_id],
+        );
+    }
+
+    ///
+    /// Removes ALL of a relate_tag_id from the parents collumn
+    ///
+    fn parents_delete_limit_to_sql(&mut self, limit_to: &usize) {
+        let conn = self._conn.lock().unwrap();
+        let _ = conn.execute("DELETE FROM Parents WHERE limit_to = ?", params![limit_to]);
     }
 }
 
-fn make_connection(conntype: CacheType) -> Arc<Mutex<Connection>> {
-    match conntype {
-        CacheType::InMemory => Arc::new(Mutex::new(Connection::open_in_memory().unwrap())),
-        CacheType::Bare(db_path) => Arc::new(Mutex::new(Connection::open(db_path).unwrap())),
-        CacheType::InMemdb => {
-            error!("Should not use Inmemdb with SQLITE cache. paniking");
-            panic!();
-        }
-    }
-}
+#[cfg(test)]
+mod tests {
+    use crate::VERS;
+    use std::collections::HashSet;
 
-// impl DBTraits for SqliteSearchStructs {
-impl SqliteSearchStructs {
-    fn parents_put(
-        &mut self,
-        _tag_namespace_id: usize,
-        _tag_id: usize,
-        _relate_tag_id: usize,
-        _relate_namespace_id: usize,
-    ) -> usize {
-        let _conn = self.conn.lock().unwrap();
-        0
+    use super::*;
+
+    fn setup_default_db() -> Main {
+        let mut db = Main::new(None, VERS);
+        db.parents_add(1, 2, Some(3), true);
+        db
     }
+
+    #[test]
+    fn sql_parents_add() {
+        let db = setup_default_db();
+        let mut hs: HashSet<usize> = HashSet::new();
+        hs.insert(2);
+        let mut ts: HashSet<usize> = HashSet::new();
+        ts.insert(1);
+
+        let mut hs: HashSet<usize> = HashSet::new();
+        hs.insert(2);
+        assert_eq!(db.parents_rel_get(&1), Some(hs));
+        assert_eq!(db.parents_tag_get(&2), Some(ts));
+    }
+    #[test]
+    fn sql_parents_del_tag_id() {}
+    #[test]
+    fn sql_parents_del_relate_tag_id() {}
+    #[test]
+    fn sql_parents_del_limit_to() {}
 }

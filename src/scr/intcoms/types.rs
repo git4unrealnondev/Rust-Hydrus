@@ -4,7 +4,6 @@
 use crate::sharedtypes;
 use anyhow::Context;
 use bincode;
-use bincode::impl_borrow_decode;
 use interprocess::local_socket::prelude::LocalSocketStream;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;

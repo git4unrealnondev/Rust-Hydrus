@@ -1197,8 +1197,8 @@ mod inmemdb {
         let file = sharedtypes::DbFileObj {
             id: 1,
             hash: "None".to_owned(),
-            ext: "None".to_owned(),
-            location: "None".to_owned(),
+            ext_id: 0,
+            storage_id: 0,
         };
         let init = db.file_put(sharedtypes::DbFileStorage::Exist(file));
         dbg!(&db._file_id_data, &db._file_name_id, &db._file_max);
@@ -1208,8 +1208,8 @@ mod inmemdb {
         let file = sharedtypes::DbFileObj {
             id: 10,
             hash: "None".to_owned(),
-            ext: "None".to_owned(),
-            location: "None".to_owned(),
+            ext_id: 0,
+            storage_id: 0,
         };
         dbg!(&db._file_id_data, &db._file_name_id, &db._file_max);
         let init = db.file_put(sharedtypes::DbFileStorage::Exist(file));
@@ -1219,8 +1219,8 @@ mod inmemdb {
         assert_eq!(init, 11);
         let file = sharedtypes::DbFileObjNoId {
             hash: "None".to_owned(),
-            ext: "None".to_owned(),
-            location: "None".to_owned(),
+            ext_id: 0,
+            storage_id: 0,
         };
         dbg!(&db._file_id_data, &db._file_name_id, &db._file_max);
         let init = db.file_put(sharedtypes::DbFileStorage::NoIdExist(file));
@@ -1230,8 +1230,8 @@ mod inmemdb {
         assert_eq!(init, 13);
         let file = sharedtypes::DbFileObjNoId {
             hash: "None".to_owned(),
-            ext: "None".to_owned(),
-            location: "None".to_owned(),
+            ext_id: 0,
+            storage_id: 0,
         };
         dbg!(&db._file_id_data, &db._file_name_id, &db._file_max);
         let init = db.file_put(sharedtypes::DbFileStorage::NoIdExist(file));
@@ -1240,16 +1240,16 @@ mod inmemdb {
         let file = sharedtypes::DbFileObj {
             id: 13,
             hash: "None".to_owned(),
-            ext: "None".to_owned(),
-            location: "None".to_owned(),
+            ext_id: 0,
+            storage_id: 0,
         };
         dbg!(&db._file_id_data, &db._file_name_id, &db._file_max);
         let init = db.file_put(sharedtypes::DbFileStorage::Exist(file));
         assert_eq!(init, 13);
         let file = sharedtypes::DbFileObjNoId {
             hash: "None".to_owned(),
-            ext: "None".to_owned(),
-            location: "None".to_owned(),
+            ext_id: 0,
+            storage_id: 0,
         };
         dbg!(&db._file_id_data, &db._file_name_id, &db._file_max);
         let init = db.file_put(sharedtypes::DbFileStorage::NoIdExist(file));

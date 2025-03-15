@@ -200,8 +200,12 @@ pub fn url_load_test(libloading: &libloading::Library, params: Vec<String>) -> V
     unsafe { temp(&params) }
 }
 
-pub fn db_upgrade_call(libloading: &libloading::Library, db_version: &usize) {
-    let temp: libloading::Symbol<unsafe extern "C" fn(&usize)> =
+pub fn db_upgrade_call(
+    libloading: &libloading::Library,
+    db_version: &usize,
+    site_struct: &sharedtypes::SiteStruct,
+) {
+    let temp: libloading::Symbol<unsafe extern "C" fn(&usize, &sharedtypes::SiteStruct)> =
         match unsafe { libloading.get(b"db_upgrade_call\0") } {
             Err(err) => {
                 logging::error_log(&format!(
@@ -213,5 +217,20 @@ pub fn db_upgrade_call(libloading: &libloading::Library, db_version: &usize) {
             Ok(lib) => lib,
         };
 
-    unsafe { temp(db_version) }
+    unsafe { temp(db_version, site_struct) }
+}
+
+///
+/// Gets called onstartup of the software
+///
+pub fn on_start(libloading: &libloading::Library, site_struct: &sharedtypes::SiteStruct) {
+    let temp: libloading::Symbol<unsafe extern "C" fn(&sharedtypes::SiteStruct)> =
+        match unsafe { libloading.get(b"on_start\0") } {
+            Err(err) => {
+                return;
+            }
+            Ok(lib) => lib,
+        };
+
+    unsafe { temp(site_struct) }
 }

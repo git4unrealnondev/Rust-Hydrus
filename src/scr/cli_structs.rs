@@ -163,6 +163,7 @@ pub struct JobBulkAddStruct {
         exclusive = false,
         required = true,
         num_args = 2,
+        value_delimiter = ',',
         value_terminator = ";"
     )]
     pub system_data: Option<Vec<String>>,
@@ -233,7 +234,8 @@ pub struct JobAddStruct {
     #[arg(
         exclusive = false,
         required = false,
-        // value_terminator = ";",
+        value_delimiter = ',',
+        value_terminator = ";",
         long = "system"
     )]
     pub system_data: Vec<String>,

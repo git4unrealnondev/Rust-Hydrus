@@ -49,7 +49,7 @@ pub enum CacheType {
 }
 /// Holder of database self variables
 pub struct Main {
-    _dbpath: String,
+    _dbpath: Option<String>,
     pub _conn: Arc<Mutex<Connection>>,
     _vers: usize,
     _active_vers: usize,
@@ -66,46 +66,83 @@ pub struct Main {
 /// Contains DB functions.
 impl Main {
     /// Sets up new db instance.
-    pub fn new(path: String, vers: usize) -> Self {
+    pub fn new(path: Option<String>, vers: usize) -> Self {
         // Initiates two connections to the DB. Cheap workaround to avoid loading errors.
-        let dbexist = Path::new(&path).exists();
-        let connection = dbinit(&path);
 
-        // let conn = connection;
-        let memdb = NewinMemDB::new();
+        let mut first_time_load_flag = false;
+
+        let mut main = match path {
+            Some(ref file_path) => {
+                first_time_load_flag = Path::new(&file_path).exists();
+                let connection = dbinit(&file_path);
+                let memdb = NewinMemDB::new();
+                let memdbmain = Main {
+                    _dbpath: path.clone(),
+                    _conn: Arc::new(Mutex::new(Connection::open_in_memory().unwrap())),
+                    _vers: vers,
+                    _active_vers: 0,
+                    _inmemdb: memdb,
+                    _dbcommitnum: 0,
+                    _dbcommitnum_static: 3000,
+                    _tables_loaded: vec![],
+                    _tables_loading: vec![],
+                    _cache: CacheType::Bare(file_path.to_string()),
+                    _pluginmanager: None,
+                };
+                let mut main = Main {
+                    _dbpath: path,
+                    _conn: Arc::new(Mutex::new(Connection::open_in_memory().unwrap())),
+                    _vers: vers,
+                    _active_vers: 0,
+                    _inmemdb: memdbmain._inmemdb,
+                    _dbcommitnum: 0,
+                    _dbcommitnum_static: 3000,
+                    _tables_loaded: vec![],
+                    _tables_loading: vec![],
+                    _cache: CacheType::InMemdb,
+                    _pluginmanager: None,
+                };
+                main._conn = Arc::new(Mutex::new(connection));
+                main
+            }
+            None => {
+                let memdb = NewinMemDB::new();
+                let memdbmain = Main {
+                    _dbpath: None,
+                    _conn: Arc::new(Mutex::new(Connection::open_in_memory().unwrap())),
+                    _vers: vers,
+                    _active_vers: 0,
+                    _inmemdb: memdb,
+                    _dbcommitnum: 0,
+                    _dbcommitnum_static: 3000,
+                    _tables_loaded: vec![],
+                    _tables_loading: vec![],
+                    _cache: CacheType::InMemory,
+                    _pluginmanager: None,
+                };
+                let mut main = Main {
+                    _dbpath: None,
+                    _conn: Arc::new(Mutex::new(Connection::open_in_memory().unwrap())),
+                    _vers: vers,
+                    _active_vers: 0,
+                    _inmemdb: memdbmain._inmemdb,
+                    _dbcommitnum: 0,
+                    _dbcommitnum_static: 3000,
+                    _tables_loaded: vec![],
+                    _tables_loading: vec![],
+                    _cache: CacheType::InMemdb,
+                    _pluginmanager: None,
+                };
+                main._conn = Arc::new(Mutex::new(Connection::open_in_memory().unwrap()));
+                main
+            }
+        };
 
         // let path = String::from("./main.db");
-        let memdbmain = Main {
-            _dbpath: path.to_owned(),
-            _conn: Arc::new(Mutex::new(Connection::open_in_memory().unwrap())),
-            _vers: vers,
-            _active_vers: 0,
-            _inmemdb: memdb,
-            _dbcommitnum: 0,
-            _dbcommitnum_static: 3000,
-            _tables_loaded: vec![],
-            _tables_loading: vec![],
-            _cache: CacheType::Bare(path.clone()),
-            _pluginmanager: None,
-        };
-        let mut main = Main {
-            _dbpath: path,
-            _conn: Arc::new(Mutex::new(Connection::open_in_memory().unwrap())),
-            _vers: vers,
-            _active_vers: 0,
-            _inmemdb: memdbmain._inmemdb,
-            _dbcommitnum: 0,
-            _dbcommitnum_static: 3000,
-            _tables_loaded: vec![],
-            _tables_loading: vec![],
-            _cache: CacheType::InMemdb,
-            _pluginmanager: None,
-        };
-        main._conn = Arc::new(Mutex::new(connection));
 
         // Sets default settings for db settings.
         main.db_open();
-        if !dbexist {
+        if !first_time_load_flag {
             // Database Doesn't exist
             main.transaction_start();
             main.first_db();
@@ -114,8 +151,14 @@ impl Main {
         } else {
             // Database does exist.
             main.transaction_start();
-            println!("Database Exists: {} : Skipping creation.", dbexist);
-            info!("Database Exists: {} : Skipping creation.", dbexist);
+            println!(
+                "Database Exists: {} : Skipping creation.",
+                first_time_load_flag
+            );
+            info!(
+                "Database Exists: {} : Skipping creation.",
+                first_time_load_flag
+            );
         }
         main
     }
@@ -134,6 +177,14 @@ impl Main {
     pub fn backup_db(&mut self) {
         use chrono::prelude::*;
 
+        // If we don't have a location set then eazy out
+        let dbloc = match self.get_db_loc() {
+            None => {
+                return;
+            }
+            Some(location) => location,
+        };
+
         let current_date = Utc::now();
         let year = current_date.year();
         let month = current_date.month();
@@ -144,7 +195,6 @@ impl Main {
         let defaultloc = String::from("dbbackup");
 
         // Gets the DB file location for copying.
-        let dbloc = self.get_db_loc();
         let mut add_backup_location = None;
 
         // Gets the db backup folder from DB or uses the "defaultloc" variable
@@ -459,6 +509,17 @@ impl Main {
         self._inmemdb.tags_get_data(uid)
     }
 
+    pub fn tags_max_id(&self) -> usize {
+        self._inmemdb.tags_max_return()
+    }
+
+    ///
+    /// Returns a list of loaded tag ids
+    ///
+    pub fn tags_get_list_id(&self) -> HashSet<usize> {
+        self._inmemdb.tags_get_list_id()
+    }
+
     /// returns file id's based on relationships with a tag
     pub fn relationship_get_fileid(&self, tag: &usize) -> Option<HashSet<usize>> {
         self._inmemdb.relationship_get_fileid(tag)
@@ -545,12 +606,6 @@ impl Main {
 
     /// Sets up first database interaction. Makes tables and does first time setup.
     pub fn first_db(&mut self) {
-        // Checking if file exists. If doesn't then no write perms.
-        let dbexists = Path::new(&self.get_db_loc()).exists();
-        if !dbexists {
-            panic!("No database write perms or file not created");
-        }
-
         // Making Relationship Table
         let mut name = "Relationship".to_string();
         let mut keys = vec_of_strings!["fileid", "tagid"];
@@ -1842,8 +1897,8 @@ impl Main {
     }
 
     /// Returns db location as String refernce.
-    pub fn get_db_loc(&self) -> String {
-        self._dbpath.to_string()
+    pub fn get_db_loc(&self) -> Option<String> {
+        self._dbpath.clone()
     }
 
     /// database searching advanced.
@@ -2127,9 +2182,6 @@ impl Main {
             // self.transaction_flush();
             self._inmemdb.namespace_delete(id);
             self.delete_namespace_sql(id);
-
-            // self.vacuum(); Condenses the database. (removes gaps in id's)
-            self.condese_relationships_tags();
         }
     }
 
@@ -2161,20 +2213,91 @@ impl Main {
             let file = self.file_get_id(fid);
         }
         info_log(&format!("Finished correcting bad fids"));*/
+
+        let mut file_id_list: Vec<usize> = self.file_get_list_all().clone().into_keys().collect();
+
+        file_id_list.par_sort_unstable();
+
+        let mut cnt = 0;
+        for key in file_id_list {
+            if cnt == key {
+                dbg!(&key);
+            } else {
+                dbg!("mismatch", &key, &cnt);
+            }
+            cnt += 1;
+        }
+    }
+
+    ///
+    /// Condenses tag ids into a solid column
+    ///
+    pub fn condense_tags(&mut self) {
+        self.load_table(&sharedtypes::LoadDBTable::Tags);
+
+        let tag_max = self.tags_max_id();
+
+        let mut cnt: usize = 0;
+        let mut flag = false;
+
+        logging::info_log(&format!("Starting preliminary tags scanning"));
+        for id in 0..tag_max {
+            if self.tag_id_get(&id).is_none() {
+                logging::info_log(&format!("Disjointed tags detected. initting fixing"));
+                flag = true;
+                break;
+            }
+        }
+
+        if flag {
+            logging::info_log(&format!(
+                "Started loading files, relationship and parents table"
+            ));
+            self.load_table(&sharedtypes::LoadDBTable::Files);
+            self.load_table(&sharedtypes::LoadDBTable::Relationship);
+            self.load_table(&sharedtypes::LoadDBTable::Parents);
+            flag = false;
+        }
+
+        for id in 0..tag_max {
+            let tagnns = self.tag_id_get(&id);
+            match tagnns {
+                None => {
+                    flag = true;
+                }
+                Some(tag) => {
+                    if flag {
+                        self.tag_add(&tag.name.clone(), tag.namespace, true, Some(cnt));
+                        if let Some(fileids) = self.relationship_get_fileid(&id) {
+                            for file_id in fileids {
+                                self.relationship_add(file_id, cnt, true);
+                                self.relationship_remove(&file_id, &id);
+                            }
+                        }
+
+                        if let Some(parents_id) = self.parents_tag_get(&id) {
+                            for id in parents_id {
+                                self.parents_delete_sql(&id);
+                            }
+                        }
+
+                        self.tag_remove(&id);
+                    }
+                }
+            }
+            cnt += 1;
+        }
     }
 
     /// Condesnes relationships between tags & files. Changes tag id's removes spaces
     /// inbetween tag id's and their relationships.
     /// TODO FIX THIS FUNCTION TEMPORARILY DEPRECATING
-    pub fn condese_relationships_tags(&mut self) {
-        self.load_table(&sharedtypes::LoadDBTable::Relationship);
-        self.load_table(&sharedtypes::LoadDBTable::Parents);
-        self.load_table(&sharedtypes::LoadDBTable::Tags);
+    pub fn condense_db_all(&mut self) {
+        self.load_table(&sharedtypes::LoadDBTable::Files);
         //logging::info_log(&"Starting compression of tags & relationships.".to_string());
         //logging::info_log(&"Backing up db this could be messy.".to_string());
-        self.backup_db();
-        let tag_max = self._inmemdb.tags_max_return();
-        dbg!(&tag_max);
+        //self.backup_db();
+
         /*self._inmemdb.tags_max_reset();
         let mut lastvalid: usize = 0;
         for tag_id in 0..tag_max + 1 {

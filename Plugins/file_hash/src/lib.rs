@@ -1,4 +1,5 @@
 use std::collections::{HashMap, HashSet};
+use std::sync::{Arc, Mutex};
 use strum::{EnumIter, IntoEnumIterator};
 
 #[path = "../../../src/scr/sharedtypes.rs"]
@@ -231,6 +232,8 @@ fn check_existing_db() {
         }
         client::log(format!("Ended table loop for table: {:?}", &table));
     }
+    let failed_id: Arc<Mutex<HashMap<Supset, usize>>> = Arc::new(Mutex::new(HashMap::new()));
+    let hashed_id: Arc<Mutex<HashMap<Supset, usize>>> = Arc::new(Mutex::new(HashMap::new()));
     for table in Supset::iter() {
         // Early exist for if the table neeeds to be skipped
         if table_skip.contains(&table) {
@@ -263,7 +266,9 @@ fn check_existing_db() {
                 total,
                 get_set(table).name
             ));
+            failed_id.lock().unwrap().insert(table, 0);
         }
+        hashed_id.lock().unwrap().insert(table, 0);
     }
 
     // Main loop paralel iterated for each file.
@@ -279,6 +284,16 @@ fn check_existing_db() {
                     let tid =
                         client::tag_add(hash, *utable_storage.get(&hashtype).unwrap(), true, None);
                     client::relationship_add(modern.0.id, tid, true);
+                    let mut hashed_lock = hashed_id.lock().unwrap();
+
+                    if let Some(hashed_number) = hashed_lock.get_mut(hashtype) {
+                        *hashed_number += 1;
+                    }
+                } else {
+                    let mut failed_lock = failed_id.lock().unwrap();
+                    if let Some(failed_number) = failed_lock.get_mut(hashtype) {
+                        *failed_number += 1;
+                    }
                 }
             }
         } else {
@@ -288,6 +303,41 @@ fn check_existing_db() {
             ));
         }
     });
+
+    // Error Checking if we've completed all tables
+    let failed_lock = failed_id.lock().unwrap();
+    let hashed_lock = hashed_id.lock().unwrap();
+
+    for table in Supset::iter() {
+        let failed_total = failed_lock.get(&table).unwrap_or(&0);
+        let hashed_total = hashed_lock.get(&table).unwrap_or(&0);
+        let utable_total = utable_count.get(&table).unwrap_or(&0);
+        if failed_total + hashed_total == *utable_total {
+            match client::settings_get_name(get_set(table).name) {
+                None => {
+                    client::setting_add(
+                        get_set(table).name,
+                        get_set(table).description,
+                        None,
+                        Some("True".to_string()),
+                        true,
+                    );
+                }
+                Some(name) => {
+                    if name.param == Some("True".to_string()) {
+                        client::setting_add(
+                            get_set(table).name,
+                            get_set(table).description,
+                            None,
+                            Some("False".to_string()),
+                            true,
+                        );
+                    }
+                }
+            };
+        }
+    }
+
     client::transaction_flush();
 }
 
@@ -341,7 +391,7 @@ fn hash_file(hashtype: Supset, byte: &[u8]) -> Option<String> {
         }
         Supset::IMAGEHASH => {
             use image_hasher::BitOrder;
-            use image_hasher::{HasherConfig, ImageHash};
+            use image_hasher::HasherConfig;
             use std::io::Cursor;
 
             let hasher = HasherConfig::new()

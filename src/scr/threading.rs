@@ -217,11 +217,26 @@ impl Worker {
                     };
 
                     // Legacy data holder obj for plguins
-                    let scraper_data_holder = sharedtypes::ScraperData {
+                    let mut scraper_data_holder = sharedtypes::ScraperData {
                         job: job_holder_legacy.clone(),
                         system_data: job.system_data,
                         user_data: job.user_data,
                     };
+
+                    // Loads anything passed from the scraper at compile time into the user_data
+                    // field
+                    if let Some(ref stored_info) = scraper.stored_info {
+                        match stored_info {
+                            sharedtypes::StoredInfo::Storage(storage) => {
+                                for (key, val) in storage.iter() {
+                                    scraper_data_holder
+                                        .user_data
+                                        .insert(key.to_string(), val.to_string());
+                                }
+                            }
+                        }
+                    }
+
                     let urlload = match job.jobmanager.jobtype {
                         sharedtypes::DbJobType::Params => {
                             let temp = scraper::url_dump(
@@ -262,7 +277,9 @@ impl Worker {
                                     arc_scrapermanager.clone(),
                                     &scraper,
                                 ),
-                                Err(_) => continue,
+                                Err(_) => {
+                                    break 'errloop;
+                                }
                             };
                             let (out_st, scraper_data_parser) = match st {
                                 Ok(objectscraper) => objectscraper,

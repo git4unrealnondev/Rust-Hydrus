@@ -1,0 +1,31 @@
+[package]
+name = "e6"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[profile.release]
+opt-level = "z"
+lto=true
+codegenunits=1
+strip = true
+debug=false
+
+[lib]
+doc=true
+name = "e6"
+path = "src/lib.rs"
+crate-type = ["dylib"]
+
+[dependencies]
+anyhow = "1.0.86"
+bincode = { version = "2.0.1", features = ["serde","alloc"] }
+chrono = "0.4.31"
+clap = { version = "4.5.17", features = ["derive"] }
+interprocess = "2.2.1"
+json = "0.12.4"
+serde = { version = "1.0.192", features = ["derive"] }
+serde_bytes = "0.11.15"
+strum = "0.25.0"
+strum_macros = "0.25.1"

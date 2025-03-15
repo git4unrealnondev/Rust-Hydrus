@@ -3,7 +3,7 @@
 
 use bincode;
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt;
 use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
@@ -96,8 +96,8 @@ pub enum LoginType {
 }
 
 #[derive(Debug, Clone, Eq, Hash, PartialEq)]
-pub struct StoredInfo {
-    filler: String,
+pub enum StoredInfo {
+    Storage(Vec<(String, String)>),
 }
 
 ///
@@ -119,7 +119,7 @@ pub struct SiteStruct {
     pub should_handle_text_scraping: bool,
     /// Any data thats needed to access restricted content
     pub login_type: Option<LoginType>,
-    /// Random storage. Leaving this for future use
+    /// Storage for the site scraper, Will be loaded into the user_data slot
     pub stored_info: Option<StoredInfo>,
 }
 

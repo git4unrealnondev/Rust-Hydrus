@@ -573,7 +573,7 @@ pub fn main(data: Arc<Mutex<database::Main>>, scraper: &mut scraper::ScraperMana
                     }
                     cli_structs::Database::CompressDatabase => {
                         let mut data = data.lock().unwrap();
-                        data.condese_relationships_tags();
+                        data.condense_db_all();
                     }
                     cli_structs::Database::RemoveWhereNot(db_n_rmv) => {
                         let mut data = data.lock().unwrap();
