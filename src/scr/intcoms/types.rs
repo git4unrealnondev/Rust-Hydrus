@@ -168,12 +168,6 @@ pub enum SupportedRequests {
     PluginCross(SupportedPluginRequests),
 }
 
-#[derive(Debug, Deserialize, Serialize)]
-struct Effdata {
-    #[serde(with = "serde_bytes")]
-    byte_buf: Vec<u8>,
-}
-
 /// Writes all data into buffer.
 pub fn send<T: Sized + Serialize>(inp: T, conn: &mut BufReader<LocalSocketStream>) {
     let byte_buf = bincode::serialize(&inp).unwrap();
