@@ -104,9 +104,17 @@ impl NewinMemDB {
     pub fn dumpe_data(&self) {
         use crate::pause;
 
-        dbg!(&self._tag_nns_id_data, &self._tag_nns_data_id);
-        pause();
+        dbg!(
+            &self._parents_max,
+            &self._parents_dual,
+            &self._parents_rel_tag,
+            &self._parents_tag_rel,
+            &self._parents_cantor_limitto,
+            &self._parents_limitto_cantor
+        );
 
+        dbg!(&self._tag_nns_id_data, &self._tag_nns_data_id);
+        dbg!();
         // &self. , &self. , &self. , &self. , &self. , &self.
         dbg!(&self._file_name_id, &self._file_id_data);
         pause();
@@ -523,62 +531,72 @@ impl NewinMemDB {
     }
 
     /// Adds a tag into db
+    /// If we get an ID as some then we overwrite whatever was inside the slot
     pub fn tags_put(&mut self, tag_info: &sharedtypes::DbTagNNS, id: Option<usize>) -> usize {
-        let temp = self._tag_nns_data_id.get(tag_info);
-        match temp {
-            None => {
-                let working_id = match id {
-                    None => self._tag_max,
-                    Some(tid) => tid,
-                };
-
-                // let working_id = self._tag_max; Inserts the tagid into namespace.
-                let namespace_opt = self._namespace_id_tag.get_mut(&tag_info.namespace);
-                match namespace_opt {
-                    None => {
-                        logging::info_log(&format!(
-                            "Making namespace with id : {}",
-                            &tag_info.namespace
-                        ));
-
-                        // Gets called when the namespace id wasn't found as a key
-                        let mut idset = HashSet::new();
-                        idset.insert(working_id);
-                        self._namespace_id_tag.insert(tag_info.namespace, idset);
-                    }
-                    Some(namespace) => {
-                        namespace.insert(working_id);
-                    }
-                };
-                self.insert_tag_nns(sharedtypes::DbTagObjCompatability {
-                    id: working_id,
-                    name: tag_info.name.clone(),
-                    namespace: tag_info.namespace,
-                });
-                self._tag_max += 1;
-                match id {
-                    None => {}
-                    Some(id) => {
-                        if self._tag_max < id {
-                            self._tag_max = id;
-                        }
+        let selected_id = match id {
+            None => match self._tag_nns_data_id.get(tag_info) {
+                None => {
+                    let out = self._tag_max;
+                    self._tag_max += 1;
+                    out
+                }
+                Some(out) => *out,
+            },
+            Some(out) => {
+                if let Some(matchid) = self._tag_nns_id_data.get(&out) {
+                    if matchid != tag_info {
+                        let id = self._tag_nns_data_id.remove(matchid).unwrap();
+                        self._tag_nns_id_data.remove(&id);
                     }
                 }
-                working_id
+
+                if self._tag_max < out {
+                    self._tag_max = out;
+                }
+
+                out
             }
-            Some(id) => *id,
-        }
+        };
+
+        let namespace_opt = self._namespace_id_tag.get_mut(&tag_info.namespace);
+        match namespace_opt {
+            None => {
+                logging::info_log(&format!(
+                    "Making namespace with id : {}",
+                    &tag_info.namespace
+                ));
+
+                // Gets called when the namespace id wasn't found as a key
+                let mut idset = HashSet::new();
+                idset.insert(selected_id);
+                self._namespace_id_tag.insert(tag_info.namespace, idset);
+            }
+            Some(namespace) => {
+                namespace.insert(selected_id);
+            }
+        };
+
+        self.insert_tag_nns(sharedtypes::DbTagObjCompatability {
+            id: selected_id,
+            name: tag_info.name.clone(),
+            namespace: tag_info.namespace,
+        });
+
+        selected_id
     }
 
     fn insert_tag_nns(&mut self, tag_info: sharedtypes::DbTagObjCompatability) {
-        if self._tag_nns_id_data.contains_key(&tag_info.id) {
-            logging::log(&format!(
-                "INMEMDB: Already has key {} replacing {:?} with {}.",
-                tag_info.id,
-                self._tag_nns_id_data.get(&tag_info.id).unwrap(),
-                tag_info.name
-            ));
+        // Removes duplicate items in db
+        if let Some(match_id) = self._tag_nns_data_id.get(&sharedtypes::DbTagNNS {
+            name: tag_info.name.to_owned(),
+            namespace: tag_info.namespace,
+        }) {
+            if *match_id != tag_info.id {
+                let tagnns = self._tag_nns_id_data.remove(match_id).unwrap();
+                self._tag_nns_data_id.remove(&tagnns).unwrap();
+            }
         }
+
         self._tag_nns_id_data.insert(
             tag_info.id,
             sharedtypes::DbTagNNS {
@@ -619,7 +637,7 @@ impl NewinMemDB {
         relate_tag_id: &usize,
         limit_to: Option<usize>,
     ) -> Option<HashSet<usize>> {
-        let out = self._parents_tag_rel.get(relate_tag_id);
+        let out = self._parents_rel_tag.get(relate_tag_id);
         if let Some(out) = out {
             let temp = out.clone();
             match limit_to {
@@ -641,13 +659,15 @@ impl NewinMemDB {
         None
     }
 
-    /// Returns the list of tags assicated with relationship
+    ///
+    /// Returns a list of cantor pairs associated with the tag_id
+    ///
     pub fn parents_tag_get(
         &self,
         tag_id: &usize,
         limit_to: Option<usize>,
     ) -> Option<HashSet<usize>> {
-        let out = self._parents_rel_tag.get(tag_id);
+        let out = self._parents_tag_rel.get(tag_id);
         if let Some(out) = out {
             let temp = out.clone();
             match limit_to {
@@ -656,7 +676,6 @@ impl NewinMemDB {
                 }
                 Some(limitto) => {
                     for each in temp.iter() {
-                        let cantor = self.cantor_pair(each, tag_id);
                         if let Some(cantorlist) = self._parents_limitto_cantor.get(&limitto) {
                             let re = temp.intersection(cantorlist);
                             let te = re.cloned().collect();
@@ -693,18 +712,24 @@ impl NewinMemDB {
 
     /// Removes a list of parents based on relational tag id Returns a list of tag id's
     /// that were removed DANGEROUS AVOID TO USE IF POSSIBLE
-    pub fn parents_reltagid_remove(&mut self, relate_tag_id: &usize) -> HashSet<usize> {
+    pub fn parents_reltagid_remove(
+        &mut self,
+        relate_tag_id: &usize,
+    ) -> HashSet<sharedtypes::DbParentsObj> {
         let mut out = HashSet::new();
         match self.parents_rel_get(relate_tag_id, None) {
             None => {}
             Some(tag_id_set) => {
                 for tag_id in tag_id_set.clone() {
-                    out.insert(tag_id);
-                    self.parents_selective_remove(&sharedtypes::DbParentsObj {
-                        tag_id,
-                        relate_tag_id: *relate_tag_id,
-                        limit_to: None,
-                    });
+                    if let Some(parent) =
+                        self.parents_selective_remove(&sharedtypes::DbParentsObj {
+                            tag_id,
+                            relate_tag_id: *relate_tag_id,
+                            limit_to: None,
+                        })
+                    {
+                        out.insert(parent);
+                    };
                 }
             }
         }
@@ -713,55 +738,165 @@ impl NewinMemDB {
 
     /// Removes a list of parents based on tag id Returns a list of relational tag id's
     /// that were removed DANGEROUS AVOID TO USE IF POSSIBLE
-    pub fn parents_tagid_remove(&mut self, tag_id: &usize) -> HashSet<usize> {
+    pub fn parents_tagid_remove(&mut self, tag_id: &usize) -> HashSet<sharedtypes::DbParentsObj> {
         let mut out = HashSet::new();
         match self.parents_tag_get(tag_id, None) {
             None => {}
             Some(relate_tag_id_set) => {
                 for relate_tag_id in relate_tag_id_set.clone() {
-                    out.insert(relate_tag_id);
-                    self.parents_selective_remove(&sharedtypes::DbParentsObj {
-                        tag_id: *tag_id,
-                        relate_tag_id,
-                        limit_to: None,
-                    });
+                    if let Some(parent) =
+                        self.parents_selective_remove(&sharedtypes::DbParentsObj {
+                            tag_id: *tag_id,
+                            relate_tag_id,
+                            limit_to: None,
+                        })
+                    {
+                        out.insert(parent);
+                    }
                 }
             }
         }
         out
     }
 
+    ///
+    /// Returns a list of parents obj based on limit_to
+    ///
+    pub fn parents_limitto_remove(
+        &mut self,
+        limit_to: &usize,
+    ) -> HashSet<sharedtypes::DbParentsObj> {
+        let mut out = HashSet::new();
+        let cantor_list = self._parents_limitto_cantor.get(limit_to).clone();
+        let mut temp = Vec::new();
+        if let Some(cantor_list) = cantor_list {
+            for cantor in cantor_list {
+                let (tag_id, relate_tag_id) = self.cantor_unpair(cantor);
+                temp.push(sharedtypes::DbParentsObj {
+                    tag_id,
+                    relate_tag_id,
+                    limit_to: Some(*limit_to),
+                });
+            }
+        }
+
+        for each in temp {
+            if let Some(parent) = self.parents_selective_remove(&each) {
+                out.insert(parent);
+            }
+        }
+
+        out
+    }
+
     /// Removes a parent selectivly from the Db USE THIS IF POSSIBLE
-    pub fn parents_selective_remove(&mut self, parentobj: &sharedtypes::DbParentsObj) {
+    /// Returns a list of parents items removed.
+    pub fn parents_selective_remove(
+        &mut self,
+        parentobj: &sharedtypes::DbParentsObj,
+    ) -> Option<sharedtypes::DbParentsObj> {
+        let mut limitto = None;
+        let mut should_wipe_rel_tag = true;
         let cantor = self.cantor_pair(&parentobj.tag_id, &parentobj.relate_tag_id);
-        match self._parents_dual.remove(&cantor) {
-            false => return,
-            true => {
-                match self._parents_cantor_limitto.get_mut(&cantor) {
-                    None => {}
-                    Some(set) => {
-                        for each in set.iter() {
-                            self._parents_limitto_cantor
-                                .get_mut(each)
-                                .unwrap()
-                                .remove(&cantor);
+        let par_cantor_id = self.parents_get(parentobj).copied();
+        if let Some(parent_cantor_id) = par_cantor_id {
+            if let Some(limitto_set) = self._parents_cantor_limitto.get(&parent_cantor_id) {
+                if limitto_set.len() > 1 {
+                    should_wipe_rel_tag = false;
+                    match parentobj.limit_to {
+                        None => {
+                            limitto = Some(*limitto_set.iter().next().unwrap());
+                        }
+                        Some(id) => {
+                            limitto = Some(id);
                         }
                     }
+                } else {
+                    limitto = Some(*limitto_set.iter().next().unwrap());
                 }
-                match self._parents_rel_tag.get_mut(&parentobj.relate_tag_id) {
-                    None => {}
-                    Some(relset) => {
-                        relset.remove(&parentobj.tag_id);
-                    }
+            }
+            if let Some(parlimit) = limitto {
+                if let Some(a) = self._parents_cantor_limitto.get_mut(&parent_cantor_id) {
+                    a.remove(&parlimit);
+                } else {
+                    //self._parents_cantor_limitto.remove(&cantor);
                 }
-                match self._parents_tag_rel.get_mut(&parentobj.tag_id) {
-                    None => {}
-                    Some(tagset) => {
-                        tagset.remove(&parentobj.relate_tag_id);
-                    }
+
+                if let Some(a) = self._parents_limitto_cantor.get_mut(&parlimit) {
+                    a.remove(&parent_cantor_id);
+                } else {
+                    //self._parents_limitto_cantor.remove(&parlimit);
                 }
             }
         }
+
+        if should_wipe_rel_tag {
+            match self._parents_rel_tag.get_mut(&parentobj.relate_tag_id) {
+                None => {}
+                Some(relset) => {
+                    relset.remove(&parentobj.tag_id);
+                }
+            }
+            match self._parents_tag_rel.get_mut(&parentobj.tag_id) {
+                None => {}
+                Some(tagset) => {
+                    tagset.remove(&parentobj.relate_tag_id);
+                }
+            }
+            self._parents_dual.remove(&cantor);
+        }
+        return Some(sharedtypes::DbParentsObj {
+            tag_id: parentobj.tag_id,
+            relate_tag_id: parentobj.relate_tag_id,
+            limit_to: limitto,
+        });
+
+        /* match self._parents_dual.get(&cantor).is_some() {
+            false => return None,
+            true => {
+                let limitto = match self._parents_cantor_limitto.get(&cantor) {
+                    None => parentobj.limit_to,
+                    Some(set) => {
+                        if set.len() >= 1 && parentobj.limit_to.is_none() {
+                            should_wipe_rel_tag = false;
+                            Some(*set.iter().next().unwrap())
+                        }
+                        /*if let Some(parlimit) = parentobj.limit_to {
+                            if set.len() > 1 && set.contains(&parlimit) {
+                                should_wipe_rel_tag = false;
+                                /*self._parents_cantor_limitto
+                                    .get_mut(&cantor)
+                                    .unwrap()
+                                    .remove(&parlimit);
+
+                                self._parents_limitto_cantor
+                                    .get_mut(&parlimit)
+                                    .unwrap()
+                                    .remove(&cantor);*/
+                                Some(parlimit)
+                            } else {
+                                parentobj.limit_to
+                            }
+                        }*/
+                        else {
+                            None
+                        }
+                    }
+                };
+
+                /*if let Some(par) = self._parents_cantor_limitto.get(&cantor) {
+                    if par.len() > 1 {
+                        should_wipe_rel_tag = false;
+                    }
+                }*/
+
+                return Some(sharedtypes::DbParentsObj {
+                    tag_id: parentobj.tag_id,
+                    relate_tag_id: parentobj.relate_tag_id,
+                    limit_to: limitto,
+                });
+            }
+        }*/
     }
 
     /// Puts a parent into db NOTE: If limit_to is set and their was a previous parent
@@ -954,6 +1089,59 @@ mod inmemdb {
         let _ = setup_db();
     }
 
+    #[test]
+    fn tags_test() {
+        let mut db = setup_db();
+        db.tags_put(
+            &sharedtypes::DbTagNNS {
+                name: "yeet".to_string(),
+                namespace: 0,
+            },
+            None,
+        );
+        assert_eq!(
+            db.tags_get_data(&0),
+            Some(&sharedtypes::DbTagNNS {
+                name: "yeet".to_string(),
+                namespace: 0
+            })
+        );
+        assert_eq!(db._tag_max, 1);
+        db.tags_put(
+            &sharedtypes::DbTagNNS {
+                name: "yee".to_string(),
+                namespace: 0,
+            },
+            Some(0),
+        );
+        assert_eq!(
+            db.tags_get_data(&0),
+            Some(&sharedtypes::DbTagNNS {
+                name: "yee".to_string(),
+                namespace: 0
+            })
+        );
+        assert_eq!(db._tag_max, 1);
+        db.tags_put(
+            &sharedtypes::DbTagNNS {
+                name: "yeet".to_string(),
+                namespace: 0,
+            },
+            None,
+        );
+
+        dbg!(&db._tag_nns_data_id, &db._tag_nns_id_data);
+
+        assert_eq!(
+            db.tags_get_data(&1),
+            Some(&sharedtypes::DbTagNNS {
+                name: "yeet".to_string(),
+                namespace: 0
+            })
+        );
+        assert_eq!(db._tag_max, 2);
+    }
+
     /// Tests if the integration with putting parents are deduplicated properly
     #[test]
     fn parents_add() {
@@ -1037,7 +1225,7 @@ mod inmemdb {
     }
 
     #[test]
-    fn parents_rel_get() {
+    fn parents_tag_get() {
         let mut db = setup_db();
         db.parents_put(sharedtypes::DbParentsObj {
             tag_id: 0,
@@ -1054,11 +1242,12 @@ mod inmemdb {
             relate_tag_id: 0,
             limit_to: Some(2),
         });
-        let ll = db.parents_rel_get(&0, None).unwrap();
+        let ll = db.parents_tag_get(&0, None).unwrap();
+
         assert_eq!(ll.len(), 2);
-        let ll = db.parents_rel_get(&0, Some(1)).unwrap();
+        let ll = db.parents_tag_get(&0, Some(1)).unwrap();
         assert_eq!(ll.len(), 1);
-        assert_eq!(db.parents_rel_get(&0, Some(4)), None);
+        assert_eq!(db.parents_tag_get(&0, Some(4)), None);
         dbg!(
             &db._parents_dual,
             &db._parents_limitto_cantor,
@@ -1067,6 +1256,190 @@ mod inmemdb {
             &db._parents_cantor_limitto,
             &db._parents_max
         );
+    }
+
+    #[test]
+    fn parents_limitto_remove() {
+        let mut db = setup_db();
+        let mut temp = HashSet::new();
+        temp.insert(sharedtypes::DbParentsObj {
+            tag_id: 4,
+            relate_tag_id: 5,
+            limit_to: Some(2),
+        });
+        temp.insert(sharedtypes::DbParentsObj {
+            tag_id: 4,
+            relate_tag_id: 4,
+            limit_to: Some(2),
+        });
+        temp.insert(sharedtypes::DbParentsObj {
+            tag_id: 1,
+            relate_tag_id: 0,
+            limit_to: Some(2),
+        });
+        temp.insert(sharedtypes::DbParentsObj {
+            tag_id: 0,
+            relate_tag_id: 2,
+            limit_to: Some(2),
+        });
+        db.parents_put(sharedtypes::DbParentsObj {
+            tag_id: 0,
+            relate_tag_id: 1,
+            limit_to: Some(1),
+        });
+        db.parents_put(sharedtypes::DbParentsObj {
+            tag_id: 0,
+            relate_tag_id: 2,
+            limit_to: Some(2),
+        });
+        db.parents_put(sharedtypes::DbParentsObj {
+            tag_id: 1,
+            relate_tag_id: 0,
+            limit_to: Some(2),
+        });
+        db.parents_put(sharedtypes::DbParentsObj {
+            tag_id: 4,
+            relate_tag_id: 4,
+            limit_to: Some(2),
+        });
+        db.parents_put(sharedtypes::DbParentsObj {
+            tag_id: 4,
+            relate_tag_id: 5,
+            limit_to: Some(2),
+        });
+        db.parents_put(sharedtypes::DbParentsObj {
+            tag_id: 4,
+            relate_tag_id: 5,
+            limit_to: Some(3),
+        });
+        let deleted = db.parents_limitto_remove(&2);
+        dbg!(
+            &db._parents_dual,
+            &db._parents_limitto_cantor,
+            &db._parents_rel_tag,
+            &db._parents_tag_rel,
+            &db._parents_cantor_limitto,
+            &db._parents_max
+        );
+
+        assert_eq!(deleted, temp);
+
+        let valid3 = db.parents_get(&sharedtypes::DbParentsObj {
+            tag_id: 4,
+            relate_tag_id: 5,
+            limit_to: Some(3),
+        });
+
+        assert_eq!(valid3, Some(&db.cantor_pair(&4, &5)));
+
+        let deleted = db.parents_limitto_remove(&3);
+        let mut a = HashSet::new();
+        a.insert(sharedtypes::DbParentsObj {
+            tag_id: 4,
+            relate_tag_id: 5,
+            limit_to: Some(3),
+        });
+        assert_eq!(deleted, a);
+        assert_eq!(*db._parents_limitto_cantor.get(&3).unwrap(), HashSet::new());
+        assert_eq!(
+            db.parents_get(&sharedtypes::DbParentsObj {
+                tag_id: 4,
+                relate_tag_id: 5,
+                limit_to: None
+            }),
+            None
+        );
+        assert_eq!(
+            db.parents_get(&sharedtypes::DbParentsObj {
+                tag_id: 4,
+                relate_tag_id: 4,
+                limit_to: None
+            }),
+            None
+        );
+        db.parents_put(sharedtypes::DbParentsObj {
+            tag_id: 4,
+            relate_tag_id: 5,
+            limit_to: Some(3),
+        });
+        a.clear();
+        a.insert(sharedtypes::DbParentsObj {
+            tag_id: 4,
+            relate_tag_id: 5,
+            limit_to: Some(3),
+        });
+        assert_eq!(
+            db.parents_get(&sharedtypes::DbParentsObj {
+                tag_id: 4,
+                relate_tag_id: 5,
+                limit_to: Some(3),
+            }),
+            Some(&db.cantor_pair(&4, &5))
+        )
+    }
+
+    #[test]
+    fn parents_tag_del() {
+        let mut db = setup_db();
+        db.parents_put(sharedtypes::DbParentsObj {
+            tag_id: 0,
+            relate_tag_id: 1,
+            limit_to: Some(1),
+        });
+        db.parents_put(sharedtypes::DbParentsObj {
+            tag_id: 0,
+            relate_tag_id: 2,
+            limit_to: Some(2),
+        });
+        db.parents_put(sharedtypes::DbParentsObj {
+            tag_id: 1,
+            relate_tag_id: 0,
+            limit_to: Some(2),
+        });
+        db.parents_put(sharedtypes::DbParentsObj {
+            tag_id: 4,
+            relate_tag_id: 4,
+            limit_to: Some(2),
+        });
+        db.parents_put(sharedtypes::DbParentsObj {
+            tag_id: 4,
+            relate_tag_id: 5,
+            limit_to: Some(2),
+        });
+
+        let ll = db.parents_tag_get(&0, None).unwrap();
+
+        assert_eq!(ll.len(), 2);
+
+        db.parents_reltagid_remove(&2);
+        dbg!(
+            &db._parents_dual,
+            &db._parents_limitto_cantor,
+            &db._parents_rel_tag,
+            &db._parents_tag_rel,
+            &db._parents_cantor_limitto,
+            &db._parents_max
+        );
+
+        assert_eq!(db.parents_rel_get(&2, None), Some(HashSet::new()));
+
+        db.parents_limitto_remove(&2);
+
+        dbg!(
+            &db._parents_dual,
+            &db._parents_limitto_cantor,
+            &db._parents_rel_tag,
+            &db._parents_tag_rel,
+            &db._parents_cantor_limitto,
+            &db._parents_max
+        );
+
+        assert_eq!(db.parents_rel_get(&4, None), Some(HashSet::new()));
+        db.parents_put(sharedtypes::DbParentsObj {
+            tag_id: 4,
+            relate_tag_id: 5,
+            limit_to: Some(2),
+        });
     }
 
     #[test]

@@ -1,6 +1,5 @@
 #![forbid(unsafe_code)]
 use crate::logging;
-use crate::logging::info_log;
 use crate::plugins;
 use crate::plugins::PluginManager;
 use crate::scraper::ScraperManager;
@@ -1522,6 +1521,7 @@ impl Main {
 
     /// Wrapper that handles inserting parents info into DB.
     fn parents_add_sql(&mut self, parent: &sharedtypes::DbParentsObj) {
+        dbg!(&parent);
         let inp = "INSERT INTO Parents VALUES(?, ?, ?)";
         let limit_to = match parent.limit_to {
             None => &Null as &dyn ToSql,
@@ -1557,6 +1557,7 @@ impl Main {
             limit_to,
         };
         let parent = self._inmemdb.parents_get(&par);
+        dbg!(&parent, &par);
         if addtodb & &parent.is_none() {
             self.parents_add_sql(&par);
         }
@@ -1575,19 +1576,32 @@ impl Main {
 
     /// Adds tag into inmemdb
     fn tag_add_db(&mut self, tag: &String, namespace: &usize, id: Option<usize>) -> usize {
-        match self._inmemdb.tags_get_id(&sharedtypes::DbTagNNS {
-            name: tag.to_string(),
-            namespace: namespace.to_owned(),
-        }) {
+        let selected_id = match id {
             None => {
+                match self._inmemdb.tags_get_id(&sharedtypes::DbTagNNS {
+                    name: tag.to_string(),
+                    namespace: namespace.to_owned(),
+                }) {
+                    None => {
+                        let tag_info = sharedtypes::DbTagNNS {
+                            name: tag.to_string(),
+                            namespace: *namespace,
+                        };
+                        self._inmemdb.tags_put(&tag_info, id)
+                    }
+                    Some(tag_id_max) => *tag_id_max,
+                }
+            }
+            Some(out) => {
                 let tag_info = sharedtypes::DbTagNNS {
                     name: tag.to_string(),
                     namespace: *namespace,
                 };
                 self._inmemdb.tags_put(&tag_info, id)
             }
-            Some(tag_id_max) => *tag_id_max,
-        }
+        };
+
+        selected_id
     }
 
     /// Adds tags into sql database
@@ -2147,9 +2161,35 @@ impl Main {
         }
     }
 
-    /// Removes a parent item from system.
-    pub fn parents_remove_id(&mut self, parent_id: &usize) {
-        self._inmemdb.parents_remove_id(parent_id)
+    ///
+    /// Removes parent from db
+    ///
+    pub fn parents_tagid_remove(&mut self, tag_id: &usize) -> HashSet<sharedtypes::DbParentsObj> {
+        self.parents_delete_tag_id_sql(tag_id);
+        self._inmemdb.parents_tagid_remove(tag_id)
+    }
+
+    ///
+    /// Wrapper for inmemdb
+    ///
+    pub fn parents_reltagid_remove(
+        &mut self,
+        reltag: &usize,
+    ) -> HashSet<sharedtypes::DbParentsObj> {
+        self.parents_delete_relate_tag_id_sql(reltag);
+        self._inmemdb.parents_reltagid_remove(reltag)
+    }
+
+    pub fn parents_limitto_remove(
+        &mut self,
+        limit_to: Option<usize>,
+    ) -> HashSet<sharedtypes::DbParentsObj> {
+        if let Some(limit_to) = limit_to {
+            self.parents_delete_limit_to_sql(&limit_to);
+            self._inmemdb.parents_limitto_remove(&limit_to)
+        } else {
+            HashSet::new()
+        }
     }
 
     /// Removes a parent selectivly
@@ -2171,7 +2211,6 @@ impl Main {
         let tagida = self.namespace_get_tagids(id);
         if let Some(tagids) = tagida {
             for each in tagids.clone().iter() {
-                logging::log(&format!("Removing tagid: {}.", each));
                 self.tag_remove(each);
 
                 // tag_sql += &format!("DELETE FROM Tags WHERE id = {}; ", each);
@@ -2220,9 +2259,7 @@ impl Main {
 
         let mut cnt = 0;
         for key in file_id_list {
-            if cnt == key {
-                dbg!(&key);
-            } else {
+            if cnt != key {
                 dbg!("mismatch", &key, &cnt);
             }
             cnt += 1;
@@ -2237,13 +2274,15 @@ impl Main {
 
         let tag_max = self.tags_max_id();
 
-        let mut cnt: usize = 0;
         let mut flag = false;
 
         logging::info_log(&format!("Starting preliminary tags scanning"));
-        for id in 0..tag_max {
+        for id in 0..tag_max - 1 {
             if self.tag_id_get(&id).is_none() {
-                logging::info_log(&format!("Disjointed tags detected. initting fixing"));
+                logging::info_log(&format!(
+                    "Disjointed tags detected. initting fixing badid: {}",
+                    &id
+                ));
                 flag = true;
                 break;
             }
@@ -2259,7 +2298,12 @@ impl Main {
             flag = false;
         }
 
-        for id in 0..tag_max {
+        let mut cnt: usize = 0;
+        for id in 0..tag_max + 1 {
+            /*if id == 719 {
+                self.transaction_flush();
+                break;
+            }*/
             let tagnns = self.tag_id_get(&id);
             match tagnns {
                 None => {
@@ -2267,6 +2311,7 @@ impl Main {
                 }
                 Some(tag) => {
                     if flag {
+                        logging::info_log(&format!("Moving tagid: {} to {}", &id, &cnt));
                         self.tag_add(&tag.name.clone(), tag.namespace, true, Some(cnt));
                         if let Some(fileids) = self.relationship_get_fileid(&id) {
                             for file_id in fileids {
@@ -2274,26 +2319,69 @@ impl Main {
                                 self.relationship_remove(&file_id, &id);
                             }
                         }
+                        // Removes parent by ID and readds it with the new id
+                        for parent in self.parents_tagid_remove(&id) {
+                            logging::log(&format!(
+                                "T Deleting parent: {} {} {:?}  replacing with {} {} {:?}",
+                                parent.tag_id,
+                                parent.relate_tag_id,
+                                parent.limit_to,
+                                cnt,
+                                parent.relate_tag_id,
+                                parent.limit_to
+                            ));
+                            dbg!(&parent);
+                            self.parents_add(cnt, parent.relate_tag_id, parent.limit_to, true);
+                        }
 
-                        if let Some(parents_id) = self.parents_tag_get(&id) {
-                            for id in parents_id {
-                                self.parents_delete_sql(&id);
-                            }
+                        // Removes parent by ID and readds it with the new id
+                        for parent in self.parents_reltagid_remove(&id) {
+                            logging::log(&format!(
+                                "R Deleting parent: {} {} {:?}  replacing with {} {} {:?}",
+                                parent.tag_id,
+                                parent.relate_tag_id,
+                                parent.limit_to,
+                                parent.tag_id,
+                                cnt,
+                                parent.limit_to
+                            ));
+                            dbg!(&parent);
+                            self.parents_add(parent.tag_id, cnt, parent.limit_to, true);
+                        }
+                        // Kinda hacky but nothing bad will happen if we have nothing in the limit
+                        // slot
+                        for parent in self.parents_limitto_remove(Some(id)) {
+                            logging::log(&format!(
+                                "L Deleting parent: {} {} {:?}  replacing with {} {} {:?}",
+                                parent.tag_id,
+                                parent.relate_tag_id,
+                                parent.limit_to,
+                                parent.tag_id,
+                                parent.relate_tag_id,
+                                cnt
+                            ));
+                            //logging::info_log(&format!("Moving tagid: {} to {}", &id, &cnt));
+                            dbg!(&parent);
+                            self.parents_add(parent.tag_id, parent.relate_tag_id, Some(cnt), true);
                         }
 
                         self.tag_remove(&id);
                     }
+                    cnt += 1;
                 }
             }
-            cnt += 1;
         }
+        dbg!(&tag_max);
+
+        self.transaction_flush();
     }
 
     /// Condesnes relationships between tags & files. Changes tag id's removes spaces
     /// inbetween tag id's and their relationships.
     /// TODO FIX THIS FUNCTION TEMPORARILY DEPRECATING
     pub fn condense_db_all(&mut self) {
-        self.load_table(&sharedtypes::LoadDBTable::Files);
+        self.condense_tags();
+        self.condense_file_locations();
         //logging::info_log(&"Starting compression of tags & relationships.".to_string());
         //logging::info_log(&"Backing up db this could be messy.".to_string());
         //self.backup_db();
