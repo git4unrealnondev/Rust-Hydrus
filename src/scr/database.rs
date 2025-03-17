@@ -4,6 +4,7 @@ use crate::plugins;
 use crate::plugins::PluginManager;
 use crate::scraper::ScraperManager;
 use crate::sharedtypes;
+use eta::{Eta, TimeAcc};
 use log::{error, info};
 use rayon::prelude::*;
 pub use rusqlite::types::ToSql;
@@ -1369,7 +1370,7 @@ impl Main {
         // let result_general = self.settings_get_name(&"DBCOMMITNUM".to_string());
         if self._dbcommitnum >= self._dbcommitnum_static {
             logging::info_log(&format!(
-                "Flushinbg {} Records into DB.",
+                "Flushing {} Records into DB.",
                 self._dbcommitnum_static
             ));
 
@@ -1521,7 +1522,6 @@ impl Main {
 
     /// Wrapper that handles inserting parents info into DB.
     fn parents_add_sql(&mut self, parent: &sharedtypes::DbParentsObj) {
-        dbg!(&parent);
         let inp = "INSERT INTO Parents VALUES(?, ?, ?)";
         let limit_to = match parent.limit_to {
             None => &Null as &dyn ToSql,
@@ -1557,7 +1557,6 @@ impl Main {
             limit_to,
         };
         let parent = self._inmemdb.parents_get(&par);
-        dbg!(&parent, &par);
         if addtodb & &parent.is_none() {
             self.parents_add_sql(&par);
         }
@@ -2299,6 +2298,8 @@ impl Main {
         }
 
         let mut cnt: usize = 0;
+        let mut eta = Eta::new(tag_max, TimeAcc::MILLI);
+        let count_percent = tag_max.div_ceil(100 / 2);
         for id in 0..tag_max + 1 {
             /*if id == 719 {
                 self.transaction_flush();
@@ -2311,7 +2312,7 @@ impl Main {
                 }
                 Some(tag) => {
                     if flag {
-                        logging::info_log(&format!("Moving tagid: {} to {}", &id, &cnt));
+                        logging::log(&format!("Moving tagid: {} to {}", &id, &cnt));
                         self.tag_add(&tag.name.clone(), tag.namespace, true, Some(cnt));
                         if let Some(fileids) = self.relationship_get_fileid(&id) {
                             for file_id in fileids {
@@ -2330,7 +2331,6 @@ impl Main {
                                 parent.relate_tag_id,
                                 parent.limit_to
                             ));
-                            dbg!(&parent);
                             self.parents_add(cnt, parent.relate_tag_id, parent.limit_to, true);
                         }
 
@@ -2345,7 +2345,6 @@ impl Main {
                                 cnt,
                                 parent.limit_to
                             ));
-                            dbg!(&parent);
                             self.parents_add(parent.tag_id, cnt, parent.limit_to, true);
                         }
                         // Kinda hacky but nothing bad will happen if we have nothing in the limit
@@ -2360,8 +2359,6 @@ impl Main {
                                 parent.relate_tag_id,
                                 cnt
                             ));
-                            //logging::info_log(&format!("Moving tagid: {} to {}", &id, &cnt));
-                            dbg!(&parent);
                             self.parents_add(parent.tag_id, parent.relate_tag_id, Some(cnt), true);
                         }
 
@@ -2370,8 +2367,11 @@ impl Main {
                     cnt += 1;
                 }
             }
+            eta.step();
+            if (cnt % count_percent) == 0 || cnt == 10 || cnt == tag_max {
+                logging::info_log(&format!("{}", &eta));
+            }
         }
-        dbg!(&tag_max);
 
         self.transaction_flush();
     }
@@ -2382,48 +2382,7 @@ impl Main {
     pub fn condense_db_all(&mut self) {
         self.condense_tags();
         self.condense_file_locations();
-        //logging::info_log(&"Starting compression of tags & relationships.".to_string());
-        //logging::info_log(&"Backing up db this could be messy.".to_string());
-        //self.backup_db();
-
-        /*self._inmemdb.tags_max_reset();
-        let mut lastvalid: usize = 0;
-        for tag_id in 0..tag_max + 1 {
-            let exst = self._inmemdb.tags_get_data(&tag_id).cloned();
-            match exst {
-                None => {}
-                Some(nns) => {
-                    self.transaction_flush();
-                    let mut relat_str = String::new();
-                    let file_listop = self.relationship_get_fileid(&tag_id);
-                    let mut file_to_add: HashSet<usize> = HashSet::new();
-                    match file_listop {
-                        None => {
-                            self.tag_remove(&tag_id);
-                            self.tag_add(&nns.name, nns.namespace, true, Some(lastvalid));
-                            lastvalid += 1;
-                            continue;
-                        }
-                        Some(file_list) => {
-                            for file_id in file_list.clone() {
-                                self.relationship_remove(&file_id, &tag_id);
-
-                                file_to_add.insert(file_id);
-                            }
-                            self.transaction_flush();
-                        }
-                    }
-                    self.tag_remove(&tag_id);
-                    self.tag_add(&nns.name, nns.namespace, true, Some(lastvalid));
-                    for fid in file_to_add {
-                        self.relationship_add(fid, lastvalid, true);
-                        // self._inmemdb.relationship_add(fid, tid);
-                    }
-                    lastvalid += 1;
-                }
-            }
-        }
-        self.vacuum();*/
+        self.vacuum();
     }
 
     /// Gets all tag's assocated a singular namespace

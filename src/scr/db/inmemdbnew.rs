@@ -798,6 +798,11 @@ impl NewinMemDB {
         let mut limitto = None;
         let mut should_wipe_rel_tag = true;
         let cantor = self.cantor_pair(&parentobj.tag_id, &parentobj.relate_tag_id);
+
+        // This block of code is just to determine if we have a limitto object if we didn't pass
+        // anything into the parentobj if their is more then one limitto obj then we don't want to
+        // remove the SINGLE link between the tagid and rel_tag but if its alone then remove it
+        // because the link is dead anyways
         let par_cantor_id = self.parents_get(parentobj).copied();
         if let Some(parent_cantor_id) = par_cantor_id {
             if let Some(limitto_set) = self._parents_cantor_limitto.get(&parent_cantor_id) {
