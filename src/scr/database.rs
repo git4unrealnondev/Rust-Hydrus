@@ -56,7 +56,7 @@ pub struct Main {
     // inmem db with ahash low lookup/insert time. Alernative to hashmap
     _inmemdb: NewinMemDB,
     _dbcommitnum: usize,
-    _dbcommitnum_static: usize,
+    _dbcommitnum_static: Option<usize>,
     _tables_loaded: Vec<sharedtypes::LoadDBTable>,
     _tables_loading: Vec<sharedtypes::LoadDBTable>,
     _cache: CacheType,
@@ -83,7 +83,7 @@ impl Main {
                     _active_vers: 0,
                     _inmemdb: memdb,
                     _dbcommitnum: 0,
-                    _dbcommitnum_static: 3000,
+                    _dbcommitnum_static: Some(3000),
                     _tables_loaded: vec![],
                     _tables_loading: vec![],
                     _cache: CacheType::Bare(file_path.to_string()),
@@ -96,7 +96,7 @@ impl Main {
                     _active_vers: 0,
                     _inmemdb: memdbmain._inmemdb,
                     _dbcommitnum: 0,
-                    _dbcommitnum_static: 3000,
+                    _dbcommitnum_static: Some(3000),
                     _tables_loaded: vec![],
                     _tables_loading: vec![],
                     _cache: CacheType::InMemdb,
@@ -114,7 +114,7 @@ impl Main {
                     _active_vers: 0,
                     _inmemdb: memdb,
                     _dbcommitnum: 0,
-                    _dbcommitnum_static: 3000,
+                    _dbcommitnum_static: Some(3000),
                     _tables_loaded: vec![],
                     _tables_loading: vec![],
                     _cache: CacheType::InMemory,
@@ -127,7 +127,7 @@ impl Main {
                     _active_vers: 0,
                     _inmemdb: memdbmain._inmemdb,
                     _dbcommitnum: 0,
-                    _dbcommitnum_static: 3000,
+                    _dbcommitnum_static: Some(3000),
                     _tables_loaded: vec![],
                     _tables_loading: vec![],
                     _cache: CacheType::InMemdb,
@@ -1364,19 +1364,16 @@ impl Main {
     }
 
     /// Loads _dbcommitnum from DB Used for determining when to flush to DB.
+    /// If we can't load a value for db_commitnum then we don't  flush intermittently
     fn db_commit_man(&mut self) {
         self._dbcommitnum += 1;
 
-        // let result_general = self.settings_get_name(&"DBCOMMITNUM".to_string());
-        if self._dbcommitnum >= self._dbcommitnum_static {
-            logging::info_log(&format!(
-                "Flushing {} Records into DB.",
-                self._dbcommitnum_static
-            ));
+        if let Some(static_commit) = self._dbcommitnum_static {
+            if self._dbcommitnum >= static_commit {
+                logging::info_log(&format!("Flushing {} Records into DB.", static_commit));
 
-            // dbg!(self._dbcommitnum, general);
-            self.transaction_flush();
-            // dbg!(self._dbcommitnum, general);
+                self.transaction_flush();
+            }
         }
     }
 
@@ -1397,8 +1394,7 @@ impl Main {
         self._dbcommitnum_static = self
             .settings_get_name(&"DBCOMMITNUM".to_string())
             .unwrap()
-            .num
-            .unwrap();
+            .num;
     }
 
     /// Adds file via SQL
@@ -2271,6 +2267,10 @@ impl Main {
     pub fn condense_tags(&mut self) {
         self.load_table(&sharedtypes::LoadDBTable::Tags);
 
+        // Stopping automagically updating the db
+        let commit_storage = self._dbcommitnum_static;
+        self._dbcommitnum_static = None;
+
         let tag_max = self.tags_max_id();
 
         let mut flag = false;
@@ -2374,14 +2374,33 @@ impl Main {
         }
 
         self.transaction_flush();
+        self._dbcommitnum_static = commit_storage;
+    }
+
+    pub fn condense_namespace(&mut self) {
+        self.load_table(&sharedtypes::LoadDBTable::Namespace);
+        self.load_table(&sharedtypes::LoadDBTable::Tags);
+
+        dbg!(self._inmemdb.tags_max_return());
+
+        for namespace_id in self.namespace_keys() {
+            if self.namespace_get_tagids(&namespace_id).is_none() {
+                dbg!(&namespace_id);
+            } else if let Some(ns_set) = self.namespace_get_tagids(&namespace_id) {
+                if ns_set.is_empty() {
+                    dbg!(&namespace_id);
+                }
+            }
+        }
     }
 
     /// Condesnes relationships between tags & files. Changes tag id's removes spaces
     /// inbetween tag id's and their relationships.
     /// TODO FIX THIS FUNCTION TEMPORARILY DEPRECATING
     pub fn condense_db_all(&mut self) {
-        self.condense_tags();
-        self.condense_file_locations();
+        self.condense_namespace();
+        //self.condense_tags();
+        //self.condense_file_locations();
         self.vacuum();
     }
 

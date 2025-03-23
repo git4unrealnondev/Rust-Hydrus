@@ -752,89 +752,30 @@ pub fn parser(
     }
 
     for inc in 0..js["posts"].len() {
+        let search_list = [
+            ("general", &NsIdent::General),
+            ("contributor", &NsIdent::Contributor),
+            ("franchise", &NsIdent::Franchise),
+            ("director", &NsIdent::Director),
+            ("species", &NsIdent::Species),
+            ("character", &NsIdent::Character),
+            ("copyright", &NsIdent::Copyright),
+            ("artist", &NsIdent::Artist),
+            ("lore", &NsIdent::Lore),
+            ("meta", &NsIdent::Meta),
+        ];
+
         let mut tags_list: Vec<sharedtypes::TagObject> = Vec::new();
-        json_sub_tag(
-            &mut tags_list,
-            &js["posts"][inc]["tags"],
-            nsobjplg(&NsIdent::General, &site),
-            &"general",
-            None,
-            sharedtypes::TagType::Normal,
-        );
-        json_sub_tag(
-            &mut tags_list,
-            &js["posts"][inc]["tags"],
-            nsobjplg(&NsIdent::Contributor, &site),
-            &"contributor",
-            None,
-            sharedtypes::TagType::Normal,
-        );
-
-        json_sub_tag(
-            &mut tags_list,
-            &js["posts"][inc]["tags"],
-            nsobjplg(&NsIdent::Franchise, &site),
-            &"franchise",
-            None,
-            sharedtypes::TagType::Normal,
-        );
-        json_sub_tag(
-            &mut tags_list,
-            &js["posts"][inc]["tags"],
-            nsobjplg(&NsIdent::Director, &site),
-            &"director",
-            None,
-            sharedtypes::TagType::Normal,
-        );
-
-        json_sub_tag(
-            &mut tags_list,
-            &js["posts"][inc]["tags"],
-            nsobjplg(&NsIdent::Species, &site),
-            &"species",
-            None,
-            sharedtypes::TagType::Normal,
-        );
-        json_sub_tag(
-            &mut tags_list,
-            &js["posts"][inc]["tags"],
-            nsobjplg(&NsIdent::Character, &site),
-            &"character",
-            None,
-            sharedtypes::TagType::Normal,
-        );
-        json_sub_tag(
-            &mut tags_list,
-            &js["posts"][inc]["tags"],
-            nsobjplg(&NsIdent::Copyright, &site),
-            &"copyright",
-            None,
-            sharedtypes::TagType::Normal,
-        );
-        json_sub_tag(
-            &mut tags_list,
-            &js["posts"][inc]["tags"],
-            nsobjplg(&NsIdent::Artist, &site),
-            &"artist",
-            None,
-            sharedtypes::TagType::Normal,
-        );
-        json_sub_tag(
-            &mut tags_list,
-            &js["posts"][inc]["tags"],
-            nsobjplg(&NsIdent::Lore, &site),
-            &"lore",
-            None,
-            sharedtypes::TagType::Normal,
-        );
-        json_sub_tag(
-            &mut tags_list,
-            &js["posts"][inc]["tags"],
-            nsobjplg(&NsIdent::Meta, &site),
-            &"meta",
-            None,
-            sharedtypes::TagType::Normal,
-        );
+        for (search, nsident) in search_list {
+            json_sub_tag(
+                &mut tags_list,
+                &js["posts"][inc]["tags"],
+                nsobjplg(nsident, &site),
+                search,
+                None,
+                sharedtypes::TagType::Normal,
+            );
+        }
         json_sub_tag(
             &mut tags_list,
             &js["posts"][inc],
