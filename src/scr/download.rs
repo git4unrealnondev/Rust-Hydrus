@@ -352,7 +352,7 @@ pub fn write_to_disk(
     let file_ext = FileFormat::from_bytes(&bytes).extension().to_string();
 
     local_location.set_file_name(sha512hash);
-    local_location.set_extension(file_ext);
+    //local_location.set_extension(file_ext);
 
     let file_path_res = std::fs::File::create(&local_location);
 
