@@ -1,4 +1,5 @@
 use crate::sharedtypes::SiteStruct;
+
 use crate::{logging, plugins, sharedtypes};
 use log::{error, info, warn};
 use std::collections::HashMap;
@@ -123,7 +124,7 @@ pub fn scraper_file_return(
 /// Checks job storage type. If manual then do nothing if Automatic then it will store info before
 /// the scraper even starts. Useful for storing API keys or anything similar to that.
 ///
-pub fn cookie_need(libloading: &libloading::Library) -> (sharedtypes::ScraperType, String) {
+pub fn cookie_need_LEGACY(libloading: &libloading::Library) -> (sharedtypes::ScraperType, String) {
     let temp: libloading::Symbol<unsafe extern "C" fn() -> (sharedtypes::ScraperType, String)> =
         unsafe { libloading.get(b"cookie_needed\0").unwrap() };
     unsafe { temp() }

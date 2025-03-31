@@ -271,7 +271,7 @@ impl DbInteract {
                     ratelimit: ratelimit.clone(),
                     should_handle_file_download: false,
                     should_handle_text_scraping: false,
-                    login_type: None,
+                    login_type: vec![],
                     stored_info: None,
                 };
                 let ratelimiter_obj = threading::create_ratelimiter(ratelimit);
@@ -310,7 +310,7 @@ impl DbInteract {
                     ratelimit: ratelimit.clone(),
                     should_handle_file_download: false,
                     should_handle_text_scraping: false,
-                    login_type: None,
+                    login_type: vec![],
                     stored_info: None,
                 };
 

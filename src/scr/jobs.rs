@@ -415,15 +415,4 @@ impl Jobs {
         //
         // thread.startwork(scraper, jobs, adb, scrap, pluginmanager); }
     }
-
-    /// pub fn cookie_needed(&mut self, id: usize, params: String) -> (bool, String)
-    pub fn library_cookie_needed(
-        &self,
-        memid: &SiteStruct,
-        scrapermanager: scraper::ScraperManager,
-    ) -> (ScraperType, String) {
-        let libloading = scrapermanager.returnlibloading(memid);
-        scraper::cookie_need(libloading)
-        // self.scrapermanager.cookie_needed(memid)
-    }
 }

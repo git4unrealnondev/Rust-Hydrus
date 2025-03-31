@@ -369,7 +369,7 @@ pub fn new() -> Vec<sharedtypes::SiteStruct> {
             ratelimit: (1, Duration::from_secs(1)),
             should_handle_file_download: false,
             should_handle_text_scraping: false,
-            login_type: Some(sharedtypes::LoginType::Cookie(None)),
+            login_type: vec![sharedtypes::LoginType::Api(None)],
             stored_info: Some(sharedtypes::StoredInfo::Storage(vec![(
                 "loaded_site".to_string(),
                 "E621".to_string(),
@@ -382,7 +382,7 @@ pub fn new() -> Vec<sharedtypes::SiteStruct> {
             ratelimit: (1, Duration::from_secs(1)),
             should_handle_file_download: false,
             should_handle_text_scraping: false,
-            login_type: Some(sharedtypes::LoginType::Cookie(None)),
+            login_type: vec![sharedtypes::LoginType::Api(None)],
             stored_info: Some(sharedtypes::StoredInfo::Storage(vec![(
                 "loaded_site".to_string(),
                 "E6AI".to_string(),

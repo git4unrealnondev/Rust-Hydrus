@@ -88,9 +88,22 @@ pub enum TasksRemove {
     None,
 }
 
-#[derive(Debug, Clone, Eq, Hash, PartialEq)]
+#[derive(
+    Debug,
+    Clone,
+    Eq,
+    Hash,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    Deserialize,
+    Serialize,
+    bincode::Encode,
+    bincode::Decode,
+)]
 pub enum LoginType {
     Cookie(Option<String>),
+    Api(Option<String>),
     Login(Option<(String, String)>),
     Other(Option<String>),
 }
@@ -118,7 +131,7 @@ pub struct SiteStruct {
     /// Weather this scraper needs to handle text scraping
     pub should_handle_text_scraping: bool,
     /// Any data thats needed to access restricted content
-    pub login_type: Option<LoginType>,
+    pub login_type: Vec<LoginType>,
     /// Storage for the site scraper, Will be loaded into the user_data slot
     pub stored_info: Option<StoredInfo>,
 }
@@ -852,26 +865,8 @@ pub enum PluginCommunicationChannel {
     bincode::Encode,
     bincode::Decode,
 )]
-pub enum ScraperParamType {
-    Normal,
-    Database,
-}
-
-/// Used to hold Scraper Parameters in db.
-#[derive(
-    Debug,
-    Clone,
-    PartialEq,
-    Eq,
-    Hash,
-    Ord,
-    PartialOrd,
-    Deserialize,
-    Serialize,
-    bincode::Encode,
-    bincode::Decode,
-)]
-pub struct ScraperParam {
-    pub param_data: String,
-    pub param_type: ScraperParamType,
+pub enum ScraperParam {
+    Normal(String),
+    Login(LoginType),
+    Database(String),
 }
