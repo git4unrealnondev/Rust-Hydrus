@@ -10,13 +10,13 @@ reqwest = { version = "0.12.4", features = ["cookies", "gzip", "brotli", "defaul
 url = "2.3.1"
 ratelimit = "0.10.0"
 async-std = { version = "1", features = ["attributes", "tokio1"] }
-rusqlite = {version = "0.32.1", features=["modern_sqlite", "bundled", "column_decltype"] }
+rusqlite = {version = "0.34.0", features=["modern_sqlite", "bundled", "column_decltype"] }
 fast_log = "1.7.6"
 bytes = { default-features = false, version = "1.4.0" }
 sha2 = { default-features = false, version = "0.10.6" }
-futures = { features = ["executor"], default-features = false, version = "0.3.24" }
+futures = { features = ["executor"], default-features = false, version = "0.3.31" }
 log = {version="0.4.2" }
-strum_macros = "0.26.2"
+strum_macros = "0.27.1"
 strum = { default-features = false, version = "0.26.2" }
 csv = "1.2.2"
 file-format = { version = "0.26.0", features = ["reader"] }
