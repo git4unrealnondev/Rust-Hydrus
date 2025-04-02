@@ -151,10 +151,7 @@ fn main() {
     'upgradeloop: loop {
         let repeat;
         {
-            repeat = arc
-                .lock()
-                .unwrap()
-                .check_version(&mut scraper_manager);
+            repeat = arc.lock().unwrap().check_version(&mut scraper_manager);
         }
         if !repeat {
             let lck = arc.lock().unwrap();
@@ -208,7 +205,6 @@ fn main() {
     // Loads the scrapers for their on_start function
     for (scraper, libloading) in scraper_manager.library_get() {
         {
-            dbg!("A");
             on_start(libloading, scraper);
         }
     }
@@ -256,7 +252,7 @@ fn main() {
             );
         }
     }
-    //arc.lock().unwrap().condense_db_all();
+    arc.lock().unwrap().condense_db_all();
     arc.lock().unwrap().transaction_flush();
 
     // pluginmanager.lock().unwrap().thread_finish_closed(); while

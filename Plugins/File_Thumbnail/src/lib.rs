@@ -301,7 +301,7 @@ pub fn on_start() {
             let _ = std::panic::catch_unwind(|| {
                 match generate_thumbnail(*fid.0) {
                     Ok(thumb_file) => {
-                        client::log(format!("Starting work on fid: {}", fid.0));
+                        client::log_no_print(format!("Starting work on fid: {}", fid.0));
                         let (thumb_path, thumb_hash) = make_thumbnail_path(&location, &thumb_file);
                         let thpath = thumb_path.join(thumb_hash.clone());
                         let pa = thpath.to_string_lossy().to_string();

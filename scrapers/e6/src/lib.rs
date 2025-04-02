@@ -1263,8 +1263,10 @@ pub fn on_start(site_struct: &sharedtypes::SiteStruct) {
             "Director",
         ];
 
+        let mut nsids = Vec::new();
         for ns in legacy_ns {
             if let Some(nsid) = client::namespace_get(ns.to_string()) {
+                nsids.push(nsid);
                 dbg!(ns, nsid);
             }
         }

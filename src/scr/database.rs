@@ -708,12 +708,11 @@ impl Main {
     ///
     pub fn create_default_source_url_ns_id(&mut self) -> usize {
         match self.namespace_get(&"source_url".to_string()).cloned() {
-            None => self
-                .namespace_add(
-                    "source_url".to_string(),
-                    Some("Source URL for a file.".to_string()),
-                    true,
-                ),
+            None => self.namespace_add(
+                "source_url".to_string(),
+                Some("Source URL for a file.".to_string()),
+                true,
+            ),
             Some(id) => id,
         }
     }
@@ -874,7 +873,9 @@ impl Main {
                 let izce = ver.parse().unwrap();
                 g1.push(izce)
             }
-            logging::panic_log(&"check_version: Could not load DB properly PANICING!!!".to_string());
+            logging::panic_log(
+                &"check_version: Could not load DB properly PANICING!!!".to_string(),
+            );
         }
         let mut db_vers = g1[0] as usize;
         self._active_vers = db_vers;
@@ -973,13 +974,13 @@ impl Main {
     ///
     pub fn storage_get_id(&self, location: &String) -> Option<usize> {
         let conn = self._conn.lock().unwrap();
-        conn
-            .query_row(
-                "SELECT id from FileStorageLocations where location = ?",
-                params![location],
-                |row| row.get(0),
-            )
-            .optional().unwrap_or_default()
+        conn.query_row(
+            "SELECT id from FileStorageLocations where location = ?",
+            params![location],
+            |row| row.get(0),
+        )
+        .optional()
+        .unwrap_or_default()
     }
 
     ///
@@ -987,13 +988,13 @@ impl Main {
     ///
     pub fn storage_get_string(&self, id: &usize) -> Option<String> {
         let conn = self._conn.lock().unwrap();
-        conn
-            .query_row(
-                "SELECT location from FileStorageLocations where id = ?",
-                params![id],
-                |row| row.get(0),
-            )
-            .optional().unwrap_or_default()
+        conn.query_row(
+            "SELECT location from FileStorageLocations where id = ?",
+            params![id],
+            |row| row.get(0),
+        )
+        .optional()
+        .unwrap_or_default()
     }
 
     ///
@@ -2366,7 +2367,7 @@ impl Main {
         self.load_table(&sharedtypes::LoadDBTable::Namespace);
         self.load_table(&sharedtypes::LoadDBTable::Tags);
 
-        dbg!(self._inmemdb.tags_max_return());
+        //self.namespace_delete_id(&2);
 
         for namespace_id in self.namespace_keys() {
             if self.namespace_get_tagids(&namespace_id).is_none() {

@@ -138,7 +138,7 @@ pub fn on_start() {
     }
 
     // Logs info to screen
-    client::log_no_print(format!(
+    client::log(format!(
         "BlurHash - We've got {} files to parse.",
         file_ids.len()
     ));
