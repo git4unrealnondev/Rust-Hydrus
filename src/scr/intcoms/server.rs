@@ -17,7 +17,6 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use std::thread;
 
-use std::time::Duration;
 // use std::sync::{Arc, Mutex};
 use std::{
     io::{self, prelude::*, BufReader},
@@ -254,7 +253,7 @@ impl DbInteract {
 
         // let bytd = types::x_to_bytes(tmp).to_vec();
         let byt: Vec<u8> =
-            bincode::serde::encode_to_vec(&tmp, bincode::config::standard()).unwrap();
+            bincode::serde::encode_to_vec(tmp, bincode::config::standard()).unwrap();
         byt
     }
 
@@ -268,7 +267,7 @@ impl DbInteract {
                     name: "InternalFileAdd".to_string(),
                     sites: Vec::new(),
                     version: 0,
-                    ratelimit: ratelimit.clone(),
+                    ratelimit,
                     should_handle_file_download: false,
                     should_handle_text_scraping: false,
                     login_type: vec![],
@@ -307,7 +306,7 @@ impl DbInteract {
                     name: "InternalFileAdd".to_string(),
                     sites: Vec::new(),
                     version: 0,
-                    ratelimit: ratelimit.clone(),
+                    ratelimit,
                     should_handle_file_download: false,
                     should_handle_text_scraping: false,
                     login_type: vec![],
@@ -380,10 +379,10 @@ impl DbInteract {
                 let unwrappy = self._database.lock().unwrap();
                 match parentswitch {
                     types::ParentsType::Tag => {
-                        return Self::option_to_bytes(unwrappy.parents_rel_get(&id).as_ref());
+                        Self::option_to_bytes(unwrappy.parents_rel_get(&id).as_ref())
                     }
                     types::ParentsType::Rel => {
-                        return Self::option_to_bytes(unwrappy.parents_tag_get(&id).as_ref());
+                        Self::option_to_bytes(unwrappy.parents_tag_get(&id).as_ref())
                     }
                 }
             }

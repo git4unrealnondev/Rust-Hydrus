@@ -271,12 +271,7 @@ impl NewinMemDB {
 
     /// Returns a list of tag id's based on a file id
     pub fn relationship_get_tagid(&self, file: &usize) -> Option<HashSet<usize>> {
-        match self._relationship_file_tag.get(file) {
-            None => None,
-            Some(relref) => {
-                return Some(HashSet::from_iter(relref.clone()));
-            }
-        }
+        self._relationship_file_tag.get(file).map(|relref| HashSet::from_iter(relref.clone()))
     }
 
     /// relationship gets only one fileid
@@ -767,7 +762,7 @@ impl NewinMemDB {
         limit_to: &usize,
     ) -> HashSet<sharedtypes::DbParentsObj> {
         let mut out = HashSet::new();
-        let cantor_list = self._parents_limitto_cantor.get(limit_to).clone();
+        let cantor_list = self._parents_limitto_cantor.get(limit_to);
         let mut temp = Vec::new();
         if let Some(cantor_list) = cantor_list {
             for cantor in cantor_list {
@@ -850,11 +845,11 @@ impl NewinMemDB {
             }
             self._parents_dual.remove(&cantor);
         }
-        return Some(sharedtypes::DbParentsObj {
+        Some(sharedtypes::DbParentsObj {
             tag_id: parentobj.tag_id,
             relate_tag_id: parentobj.relate_tag_id,
             limit_to: limitto,
-        });
+        })
 
         /* match self._parents_dual.get(&cantor).is_some() {
             false => return None,
@@ -1012,7 +1007,7 @@ impl NewinMemDB {
         let t = (w64two * w64two + w64two) / 2;
         let m = z - t;
         let n = w64two - m;
-        return (n, m);
+        (n, m)
     }
 
     /// Checks if relationship exists

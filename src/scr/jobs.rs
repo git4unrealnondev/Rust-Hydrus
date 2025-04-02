@@ -3,7 +3,6 @@ use crate::logging;
 use crate::plugins::PluginManager;
 use crate::scraper;
 use crate::sharedtypes;
-use crate::sharedtypes::ScraperType;
 use crate::sharedtypes::SiteStruct;
 use crate::threading;
 use crate::time_func;
@@ -74,35 +73,32 @@ impl Jobs {
         scraper: &sharedtypes::SiteStruct,
     ) {
         if let Some(recreation) = &data.jobmanager.recreation {
-            match recreation {
-                sharedtypes::DbJobRecreation::AlwaysTime((timestamp, count)) => {
-                    let mut data = data.clone();
+            if let sharedtypes::DbJobRecreation::AlwaysTime((timestamp, count)) = recreation {
+                let mut data = data.clone();
 
-                    // If theirs a count thats not none then decrement the job count and remove if
-                    // zero.
-                    // Otherwisw just add the job again lol
-                    if let Some(count) = count {
-                        if *count <= 1 {
-                            self.jobs_remove_dbjob(scraper, &data, true);
-                            return;
-                        } else {
-                            data.jobmanager.recreation =
-                                Some(sharedtypes::DbJobRecreation::AlwaysTime((
-                                    *timestamp,
-                                    Some(count - 1),
-                                )));
-                        }
+                // If theirs a count thats not none then decrement the job count and remove if
+                // zero.
+                // Otherwisw just add the job again lol
+                if let Some(count) = count {
+                    if *count <= 1 {
+                        self.jobs_remove_dbjob(scraper, &data, true);
+                        return;
+                    } else {
+                        data.jobmanager.recreation =
+                            Some(sharedtypes::DbJobRecreation::AlwaysTime((
+                                *timestamp,
+                                Some(count - 1),
+                            )));
                     }
-                    let original_data = data.clone();
-                    data.time = Some(time_secs());
-                    data.reptime = Some(timestamp.clone());
-                    self.update_job(&scraper, &data, &original_data);
-                    self.jobs_add_jobsobj(scraper, data.clone(), true, false, Some(data.id));
-                    let mut db = self.db.lock().unwrap();
-                    db.jobs_update_db(data);
-                    db.transaction_flush();
                 }
-                _ => {}
+                let original_data = data.clone();
+                data.time = Some(time_secs());
+                data.reptime = Some(*timestamp);
+                self.update_job(scraper, &data, &original_data);
+                self.jobs_add_jobsobj(scraper, data.clone(), true, false, Some(data.id));
+                let mut db = self.db.lock().unwrap();
+                db.jobs_update_db(data);
+                db.transaction_flush();
             }
         }
     }
@@ -131,7 +127,7 @@ impl Jobs {
         addtodb: bool,
         deduplicate: bool,
     ) {
-        if let None = self._jobref.get(scraper) {
+        if self._jobref.get(scraper).is_none() {
             return;
         }
         if self.previously_seen.contains(&(
@@ -257,7 +253,7 @@ impl Jobs {
             ));
             return JobAddOutput::LoadedJob;
         }
-        if let None = self._jobref.get(scraper) {
+        if self._jobref.get(scraper).is_none() {
             return JobAddOutput::RemoveJob;
         }
         JobAddOutput::NoOperation
@@ -295,7 +291,7 @@ impl Jobs {
             hashjobs = db.jobs_get_all().clone();
         }
         let beans = scrapermanager.scraper_get();
-        for scraper in beans.into_iter() {
+        for scraper in beans.iter() {
             for site in scraper.sites.clone() {
                 scraper_site_map.insert(site, scraper.clone());
             }
@@ -309,7 +305,7 @@ impl Jobs {
             if let Some(scraper) = scraper_site_map.get(&jobsobj.site) {
                 if !self.jobs_get(scraper).contains(&jobsobj) {
                     match self.jobs_add_jobsobj(
-                        &scraper,
+                        scraper,
                         jobsobj.clone(),
                         true,
                         true,
@@ -356,7 +352,7 @@ impl Jobs {
     pub fn jobs_empty(&self) -> bool {
         let mut out = true;
         for (scraper, each) in self._jobref.iter() {
-            if each.len() > 0 {
+            if !each.is_empty() {
                 out = false;
             }
         }
@@ -381,7 +377,6 @@ impl Jobs {
         // if their are no jobs to run.
         if scrapermanager.scraper_get().is_empty() || self._jobref.is_empty() {
             println!("No jobs to run...");
-            return;
         } else {
             // Loads DB into memory. Everything that hasn't been loaded already
             db.load_table(&sharedtypes::LoadDBTable::All);

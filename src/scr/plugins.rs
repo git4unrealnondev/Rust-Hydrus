@@ -1,5 +1,5 @@
 use libloading::{self, Library};
-use log::{error, info, warn};
+use log::{error, info};
 use std::collections::HashMap;
 use std::path::Path;
 use std::path::PathBuf;
@@ -150,10 +150,7 @@ impl PluginManager {
         if let Some(valid_func) = self.callbackstorage.get_mut(func_name) {
             for each in valid_func.iter() {
                 if *vers == each.vers {
-                    let plugin_lib = match self._plugin.get_mut(&each.name) {
-                        Some(lib) => lib,
-                        None => return None,
-                    };
+                    let plugin_lib = self._plugin.get_mut(&each.name)?;
                     let plugininfo;
                     unsafe {
                         let plugindatafunc: libloading::Symbol<
@@ -250,29 +247,23 @@ impl PluginManager {
             if std::mem::discriminant(&each)
                 == std::mem::discriminant(&sharedtypes::PluginCallback::Tag(Vec::new()))
             {
-                match &each {
-                    sharedtypes::PluginCallback::Tag(ontaginfo) => {
-                        for (search_type, namespace, not_namespace) in ontaginfo {
-                            if let Some(search) = search_type {
-                                match search {
-                                    sharedtypes::SearchType::Regex(regexstring) => {
-                                        let regexresult = Regex::new(&regexstring);
-                                        if let Ok(regex) = regexresult {
-                                            self.tagstorageregex.push((
-                                                regex,
-                                                pluginname.clone(),
-                                                namespace.clone(),
-                                                not_namespace.clone(),
-                                                each.clone(),
-                                            ));
-                                        }
-                                    }
-                                    _ => {}
+                if let sharedtypes::PluginCallback::Tag(ontaginfo) = &each {
+                    for (search_type, namespace, not_namespace) in ontaginfo {
+                        if let Some(search) = search_type {
+                            if let sharedtypes::SearchType::Regex(regexstring) = search {
+                                let regexresult = Regex::new(regexstring);
+                                if let Ok(regex) = regexresult {
+                                    self.tagstorageregex.push((
+                                        regex,
+                                        pluginname.clone(),
+                                        namespace.clone(),
+                                        not_namespace.clone(),
+                                        each.clone(),
+                                    ));
                                 }
                             }
                         }
                     }
-                    _ => {}
                 }
             }
 

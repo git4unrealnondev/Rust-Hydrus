@@ -15,7 +15,7 @@ impl Main {
         let jobs_cnt = self.db_table_collumn_getnames(&"Jobs".to_string()).len();
         match jobs_cnt {
             5 => {
-                logging::info_log(&format!("Starting work on Jobs."));
+                logging::info_log(&"Starting work on Jobs.".to_string());
                 if !self.check_table_exists("Jobs_Old".to_string()) {
                     self.alter_table(&"Jobs".to_string(), &"Jobs_Old".to_string());
                 }
@@ -34,7 +34,7 @@ impl Main {
                         let param: String = row.get(3).unwrap();
                         let committype: String = row.get(4).unwrap();
                         storage.insert((
-                            cnt.clone(),
+                            cnt,
                             time,
                             reptime,
                             serde_json::to_string(&sharedtypes::DbJobsManager {
@@ -85,13 +85,9 @@ impl Main {
                 if self.check_table_exists("Jobs".to_string())
                     && !self.check_table_exists("Jobs_Old".to_string())
                 {
-                    logging::info_log(&format!(
-                        "DB-Ugrade: Already processed Jobs table moving on."
-                    ));
+                    logging::info_log(&"DB-Ugrade: Already processed Jobs table moving on.".to_string());
                 } else {
-                    logging::panic_log(&format!(
-                        "DB IS IN WEIRD INCONSISTEINT STATE PLEASE ROLLBACK TO LATEST BACKUP."
-                    ))
+                    logging::panic_log(&"DB IS IN WEIRD INCONSISTEINT STATE PLEASE ROLLBACK TO LATEST BACKUP.".to_string())
                 }
             }
             _ => {
@@ -99,9 +95,7 @@ impl Main {
                     "Weird table loading. Should be 5 or 7 for db upgrade. Pulled {}",
                     &jobs_cnt
                 ));
-                logging::panic_log(&format!(
-                    "DB IS IN WEIRD INCONSISTEINT STATE PLEASE ROLLBACK TO LATEST BACKUP."
-                ));
+                logging::panic_log(&"DB IS IN WEIRD INCONSISTEINT STATE PLEASE ROLLBACK TO LATEST BACKUP.".to_string());
             }
         }
         let tags_cnt = self.db_table_collumn_getnames(&"Tags".to_string()).len();
@@ -110,17 +104,13 @@ impl Main {
                 if self.check_table_exists("Tags".to_string())
                     && !self.check_table_exists("Tags_Old".to_string())
                 {
-                    logging::info_log(&format!(
-                        "DB-Ugrade: Already processed Tags table moving on."
-                    ));
+                    logging::info_log(&"DB-Ugrade: Already processed Tags table moving on.".to_string());
                 } else {
-                    logging::panic_log(&format!(
-                        "DB IS IN WEIRD INCONSISTEINT STATE PLEASE ROLLBACK TO LATEST BACKUP."
-                    ))
+                    logging::panic_log(&"DB IS IN WEIRD INCONSISTEINT STATE PLEASE ROLLBACK TO LATEST BACKUP.".to_string())
                 }
             }
             4 => {
-                logging::info_log(&format!("Starting work on Tags."));
+                logging::info_log(&"Starting work on Tags.".to_string());
                 if !self.check_table_exists("Tags_Old".to_string()) {
                     self.alter_table(&"Tags".to_string(), &"Tags_Old".to_string());
                 }
@@ -161,9 +151,7 @@ impl Main {
                     "Weird tags table loading. Should be 3 or 4 for db upgrade. Was {}",
                     tags_cnt
                 ));
-                logging::panic_log(&format!(
-                    "DB IS IN WEIRD INCONSISTEINT STATE PLEASE ROLLBACK TO LATEST BACKUP."
-                ));
+                logging::panic_log(&"DB IS IN WEIRD INCONSISTEINT STATE PLEASE ROLLBACK TO LATEST BACKUP.".to_string());
             }
         }
         let tags_cnt = self.db_table_collumn_getnames(&"Parents".to_string()).len();
@@ -172,17 +160,13 @@ impl Main {
                 if self.check_table_exists("Parents".to_string())
                     && !self.check_table_exists("Parents_Old".to_string())
                 {
-                    logging::info_log(&format!(
-                        "DB-Ugrade: Already processed Parents table moving on."
-                    ));
+                    logging::info_log(&"DB-Ugrade: Already processed Parents table moving on.".to_string());
                 } else {
-                    logging::panic_log(&format!(
-                        "DB IS IN WEIRD INCONSISTEINT STATE PLEASE ROLLBACK TO LATEST BACKUP."
-                    ))
+                    logging::panic_log(&"DB IS IN WEIRD INCONSISTEINT STATE PLEASE ROLLBACK TO LATEST BACKUP.".to_string())
                 }
             }
             4 => {
-                logging::info_log(&format!("Starting work on Parents."));
+                logging::info_log(&"Starting work on Parents.".to_string());
                 if !self.check_table_exists("Parents_Old".to_string()) {
                     self.alter_table(&"Parents".to_string(), &"Parents_Old".to_string());
                 }
@@ -222,9 +206,7 @@ impl Main {
                     "Weird parents table loading. Should be 3 or 4 for db upgrade. Was {}",
                     tags_cnt
                 ));
-                logging::panic_log(&format!(
-                    "DB IS IN WEIRD INCONSISTEINT STATE PLEASE ROLLBACK TO LATEST BACKUP."
-                ));
+                logging::panic_log(&"DB IS IN WEIRD INCONSISTEINT STATE PLEASE ROLLBACK TO LATEST BACKUP.".to_string());
             }
         }
         self.db_version_set(3);
@@ -238,7 +220,7 @@ impl Main {
         let mut storage = std::collections::HashSet::new();
         match jobs_cnt {
             7 => {
-                logging::info_log(&format!("Starting work on Jobs."));
+                logging::info_log(&"Starting work on Jobs.".to_string());
 
                 // Renames table to Jobs_Old
                 if !self.check_table_exists("Jobs_Old".to_string()) {
@@ -301,7 +283,7 @@ impl Main {
                 self.db_drop_table(&"Jobs_Old".to_string());
             }
             9 => {
-                logging::info_log(&format!("Already processed jobs. Skipping..."));
+                logging::info_log(&"Already processed jobs. Skipping...".to_string());
             }
             _ => {}
         }
@@ -370,7 +352,7 @@ impl Main {
         // Creating storage location in db
         let mut location_storage = std::collections::HashMap::new();
         {
-            let mut location_cnt = 0;
+            let location_cnt = 0;
             let conn = self._conn.lock().unwrap();
 
             let mut stmt = conn.prepare("SELECT location FROM File_Old").unwrap();
@@ -387,8 +369,8 @@ impl Main {
 
         // Adds storage locations into db
         for (location, id) in location_storage.iter_mut() {
-            self.storage_put(&location);
-            *id = self.storage_get_id(&location);
+            self.storage_put(location);
+            *id = self.storage_get_id(location);
         }
 
         // Sets up missing enclave location
@@ -413,7 +395,7 @@ impl Main {
             // Creates storage id's for them
             // Creates extension id's aswell
             //
-            logging::info_log(&format!("Starting to process files for DB V5 Upgrade"));
+            logging::info_log(&"Starting to process files for DB V5 Upgrade".to_string());
             let extension_sqlite_inp = "INSERT INTO FileExtensions VALUES (?, ?)";
             let file_sqlite_inp = "INSERT INTO File VALUES (?, ?, ?, ?)";
             let file_enclave_sqlite_inp = "INSERT INTO FileEnclaveMapping VALUES (?, ?, ?)";
@@ -438,7 +420,7 @@ impl Main {
                         extension_storage.insert(extension, original);
                         original
                     }
-                    Some(id) => id.clone(),
+                    Some(id) => *id,
                 };
                 logging::info_log(&format!("Adding File: {}", &hash));
                 let utc = Utc::now();
@@ -478,7 +460,7 @@ impl Main {
             // Creates storage id's for them
             // Creates extension id's aswell
             //
-            logging::info_log(&format!("Starting to process Tags for DB V5 Upgrade"));
+            logging::info_log(&"Starting to process Tags for DB V5 Upgrade".to_string());
 
             let tag_sqlite_inp = "INSERT INTO Tags VALUES (?, ?, ?)";
             let mut stmt = conn.prepare("SELECT * FROM Tags_Old").unwrap();
@@ -534,7 +516,7 @@ impl Main {
             // Creates storage id's for them
             // Creates extension id's aswell
             //
-            logging::info_log(&format!("Starting to process Jobs for DB V5 Upgrade"));
+            logging::info_log(&"Starting to process Jobs for DB V5 Upgrade".to_string());
 
             let tag_sqlite_inp = "INSERT INTO Jobs VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
             let mut stmt = conn.prepare("SELECT * FROM Jobs_Old").unwrap();

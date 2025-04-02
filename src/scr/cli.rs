@@ -28,16 +28,16 @@ fn return_jobtypemanager(
     };
     let jobsmanager = match recursion {
         None => sharedtypes::DbJobsManager {
-            jobtype: jobtype,
+            jobtype,
             recreation: None,
         },
         Some(recursion) => match recursion {
             cli_structs::DbJobRecreationClap::OnTagId(id) => sharedtypes::DbJobsManager {
-                jobtype: jobtype,
+                jobtype,
                 recreation: Some(sharedtypes::DbJobRecreation::OnTagId(id.id, id.timestamp)),
             },
             cli_structs::DbJobRecreationClap::OnTagExist(tagclap) => sharedtypes::DbJobsManager {
-                jobtype: jobtype,
+                jobtype,
                 recreation: Some(sharedtypes::DbJobRecreation::OnTag(
                     tagclap.name.clone(),
                     tagclap.namespace,
@@ -45,7 +45,7 @@ fn return_jobtypemanager(
                 )),
             },
             cli_structs::DbJobRecreationClap::AlwaysTime(timestamp) => sharedtypes::DbJobsManager {
-                jobtype: jobtype,
+                jobtype,
                 recreation: Some(sharedtypes::DbJobRecreation::AlwaysTime((
                     timestamp.timestamp,
                     timestamp.count,
@@ -66,11 +66,11 @@ fn return_jobtypemanager_old(
     };
     let jobsmanager = match recursion {
         cli_structs::DbJobRecreationClap::OnTagId(id) => sharedtypes::DbJobsManager {
-            jobtype: jobtype,
+            jobtype,
             recreation: Some(sharedtypes::DbJobRecreation::OnTagId(id.id, id.timestamp)),
         },
         cli_structs::DbJobRecreationClap::OnTagExist(tagclap) => sharedtypes::DbJobsManager {
-            jobtype: jobtype,
+            jobtype,
             recreation: Some(sharedtypes::DbJobRecreation::OnTag(
                 tagclap.name.clone(),
                 tagclap.namespace,
@@ -78,7 +78,7 @@ fn return_jobtypemanager_old(
             )),
         },
         cli_structs::DbJobRecreationClap::AlwaysTime(timestamp) => sharedtypes::DbJobsManager {
-            jobtype: jobtype,
+            jobtype,
             recreation: Some(sharedtypes::DbJobRecreation::AlwaysTime((
                 timestamp.timestamp,
                 timestamp.count,

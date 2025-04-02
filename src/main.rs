@@ -1,7 +1,6 @@
 // use crate::scr::sharedtypes::jobs_add; use
 // crate::scr::sharedtypes::AllFields::EJobsAdd; use crate::scr::tasks;
 use log::{error, warn};
-use plugins::get_loadable_paths;
 use scraper::db_upgrade_call;
 use scraper::on_start;
 use std::sync::Arc;
@@ -155,8 +154,7 @@ fn main() {
             repeat = arc
                 .lock()
                 .unwrap()
-                .check_version(&mut scraper_manager)
-                .clone();
+                .check_version(&mut scraper_manager);
         }
         if !repeat {
             let lck = arc.lock().unwrap();
@@ -173,7 +171,7 @@ fn main() {
                 "Starting scraper upgrade: {}",
                 internal_scraper.name
             ));
-            db_upgrade_call(scraper_library, &db_version, &internal_scraper);
+            db_upgrade_call(scraper_library, &db_version, internal_scraper);
         }
     }
 
@@ -185,7 +183,7 @@ fn main() {
     cli::main(arc.clone(), &mut scraper_manager);
 
     // Checks if we need to load any jobs
-    logging::info_log(&format!("Checking if we have any Jobs to run."));
+    logging::info_log(&"Checking if we have any Jobs to run.".to_string());
     arc.lock()
         .unwrap()
         .load_table(&sharedtypes::LoadDBTable::Jobs);
@@ -211,7 +209,7 @@ fn main() {
     for (scraper, libloading) in scraper_manager.library_get() {
         {
             dbg!("A");
-            on_start(libloading, &scraper);
+            on_start(libloading, scraper);
         }
     }
 

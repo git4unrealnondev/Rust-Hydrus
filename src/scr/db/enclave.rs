@@ -103,7 +103,7 @@ impl Main {
                 self.storage_put(&loc);
 
                 // Gives file extension
-                let file_ext = FileFormat::from_bytes(&bytes).extension().to_string();
+                let file_ext = FileFormat::from_bytes(bytes).extension().to_string();
 
                 let ext_id = self.extension_put_string(&file_ext);
 
@@ -124,7 +124,7 @@ impl Main {
                 self.relationship_add(fileid, tagid, true);
                 self.enclave_file_mapping_add(&fileid, enclave_id);
                 self.transaction_flush();
-                Some(fileid.clone())
+                Some(fileid)
             }
             sharedtypes::EnclaveAction::DownloadToLocation(location_id) => None,
         }
@@ -140,7 +140,7 @@ impl Main {
         bytes: &Bytes,
     ) -> (bool, Option<sharedtypes::EnclaveAction>) {
         if let Some((action, condition)) = self.enclave_condition_get_data(condition_id) {
-            return (
+            (
                 match condition {
                     sharedtypes::EnclaveCondition::Any => true,
                     sharedtypes::EnclaveCondition::None => false,
@@ -164,7 +164,7 @@ impl Main {
                     }
                 },
                 Some(action),
-            );
+            )
         } else {
             (false, None)
         }
@@ -204,18 +204,13 @@ impl Main {
     ///
     pub fn enclave_file_mapping_get(&self, file_id: &usize, enclave_id: &usize) -> Option<usize> {
         let conn = self._conn.lock().unwrap();
-        if let Ok(out) = conn
+        conn
             .query_row(
                 "SELECT file_id from FileEnclaveMapping where file_id = ? AND enclave_id = ?",
                 params![file_id, enclave_id],
                 |row| row.get(0),
             )
-            .optional()
-        {
-            out
-        } else {
-            None
-        }
+            .optional().unwrap_or_default()
     }
 
     ///
@@ -395,18 +390,13 @@ impl Main {
     ///
     pub fn enclave_name_get_name(&self, id: &usize) -> Option<String> {
         let conn = self._conn.lock().unwrap();
-        if let Ok(out) = conn
+        conn
             .query_row(
                 "SELECT enclave_name from Enclave where id = ?",
                 params![id],
                 |row| row.get(0),
             )
-            .optional()
-        {
-            out
-        } else {
-            None
-        }
+            .optional().unwrap_or_default()
     }
 
     ///
@@ -414,18 +404,13 @@ impl Main {
     ///
     pub fn enclave_name_get_id(&self, name: &str) -> Option<usize> {
         let conn = self._conn.lock().unwrap();
-        if let Ok(out) = conn
+        conn
             .query_row(
                 "SELECT id from Enclave where enclave_name = ?",
                 params![name],
                 |row| row.get(0),
             )
-            .optional()
-        {
-            out
-        } else {
-            None
-        }
+            .optional().unwrap_or_default()
     }
 
     ///
@@ -513,18 +498,13 @@ impl Main {
     }
     pub fn enclave_condition_get_id(&self, name: &sharedtypes::EnclaveAction) -> Option<usize> {
         let conn = self._conn.lock().unwrap();
-        if let Ok(out) = conn
+        conn
             .query_row(
                 "SELECT id from EnclaveCondition where action_name = ?",
                 params![serde_json::to_string(name).unwrap()],
                 |row| row.get(0),
             )
-            .optional()
-        {
-            out
-        } else {
-            None
-        }
+            .optional().unwrap_or_default()
     }
 
     ///
@@ -565,8 +545,7 @@ impl Main {
         enclave_conditional_list_id: &usize,
         enclave_action_position: &usize,
     ) {
-        if let Some(_) =
-            self.enclave_action_order_link_get_id(enclave_id, enclave_conditional_list_id)
+        if self.enclave_action_order_link_get_id(enclave_id, enclave_conditional_list_id).is_some()
         {
             return;
         }
@@ -590,18 +569,13 @@ impl Main {
         enclave_conditional_list_id: &usize,
     ) -> Option<usize> {
         let conn = self._conn.lock().unwrap();
-        if let Ok(out) = conn
+        conn
             .query_row(
                 "SELECT id from EnclaveActionOrderList where enclave_id = ? AND enclave_conditional_list_id = ?",
                 params![enclave_id, enclave_conditional_list_id],
                 |row| row.get(0),
             )
-            .optional()
-        {
-            out
-        } else {
-            None
-        }
+            .optional().unwrap_or_default()
     }
 
     ///
@@ -649,7 +623,7 @@ impl Main {
         action_id: &usize,
         failed_enclave_id: Option<&usize>,
     ) {
-        if let Some(_) = self.enclave_condition_link_get_id(condition_id, action_id) {
+        if self.enclave_condition_link_get_id(condition_id, action_id).is_some() {
             return;
         }
 
@@ -669,18 +643,13 @@ impl Main {
         action_id: &usize,
     ) -> Option<usize> {
         let conn = self._conn.lock().unwrap();
-        if let Ok(out) = conn
+        conn
             .query_row(
                 "SELECT id from EnclaveConditionList where enclave_action_id = ? AND condition_id = ?",
                 params![action_id, condition_id],
                 |row| row.get(0),
             )
-            .optional()
-        {
-            out
-        } else {
-            None
-        }
+            .optional().unwrap_or_default()
     }
 
     ///
@@ -715,7 +684,7 @@ impl Main {
     ///
     pub fn enclave_action_put(&mut self, name: &String, action: sharedtypes::EnclaveAction) {
         // Quick out if we already have this inserted
-        if let Some(_) = self.enclave_action_get_id(name) {
+        if self.enclave_action_get_id(name).is_some() {
             return;
         }
 
@@ -733,17 +702,12 @@ impl Main {
     ///
     pub fn enclave_action_get_id(&self, name: &String) -> Option<usize> {
         let conn = self._conn.lock().unwrap();
-        if let Ok(out) = conn
+        conn
             .query_row(
                 "SELECT id from EnclaveAction where action_name = ?",
                 params![name],
                 |row| row.get(0),
             )
-            .optional()
-        {
-            out
-        } else {
-            None
-        }
+            .optional().unwrap_or_default()
     }
 }

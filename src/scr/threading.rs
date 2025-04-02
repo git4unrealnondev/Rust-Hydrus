@@ -81,7 +81,7 @@ impl Threads {
         for (id, threadflag) in &self.worker_control {
             if !threadflag.alive() {
                 logging::info_log(&format!("Removing Worker Thread {}", id));
-                temp.push(id.clone())
+                temp.push(*id)
             }
         }
 
@@ -257,16 +257,13 @@ impl Worker {
 
                     // Makes recursion possible
                     if let Some(recursion) = &job.jobmanager.recreation {
-                        match recursion {
-                            sharedtypes::DbJobRecreation::AlwaysTime((timestamp, count)) => {
-                                let mut temp = jobstorage.lock().unwrap();
-                                let mut data = job.clone();
-                                data.time = Some(crate::time_func::time_secs());
-                                data.reptime = Some(*timestamp);
-                                temp.jobs_decrement_count(&data, &scraper);
-                                should_remove_original_job = false;
-                            }
-                            _ => {}
+                        if let sharedtypes::DbJobRecreation::AlwaysTime((timestamp, count)) = recursion {
+                            let mut temp = jobstorage.lock().unwrap();
+                            let mut data = job.clone();
+                            data.time = Some(crate::time_func::time_secs());
+                            data.reptime = Some(*timestamp);
+                            temp.jobs_decrement_count(&data, &scraper);
+                            should_remove_original_job = false;
                         }
                     }
 
@@ -301,15 +298,15 @@ impl Worker {
 
                     let urlload = match job.jobmanager.jobtype {
                         sharedtypes::DbJobType::Params => {
-                            let temp = scraper::url_dump(
+                            
+
+                            // job = temp.1;
+                            scraper::url_dump(
                                 &par_vec,
                                 &scraper_data_holder,
                                 arc_scrapermanager.clone(),
                                 &scraper,
-                            );
-
-                            // job = temp.1;
-                            temp
+                            )
                         }
                         sharedtypes::DbJobType::Plugin => {
                             continue;
@@ -550,9 +547,7 @@ fn parse_tags(
                                 );
                             } else {
                                 info_log(
-                                    &format!(
-                                        "Downloading due to unique namespace not existing or number less then limit number."
-                                    ),
+                                    &"Downloading due to unique namespace not existing or number less then limit number.".to_string(),
                                 );
                                 url_return.insert(jobscraped.clone());
                             }
@@ -625,7 +620,7 @@ fn download_add_to_db(
     let blopt;
     {
         blopt = download::dlfile_new(
-            &client,
+            client,
             db.clone(),
             file,
             &location,
@@ -636,7 +631,7 @@ fn download_add_to_db(
     }
     match blopt {
         None => {
-            return None;
+            None
         }
         Some((hash, file_ext)) => {
             let unwrappydb = &mut db.lock().unwrap();
@@ -655,7 +650,7 @@ fn download_add_to_db(
             let source_url_ns_id = unwrappydb.create_default_source_url_ns_id();
             let tagid = unwrappydb.tag_add(source, source_url_ns_id, true, None);
             unwrappydb.relationship_add(fileid, tagid, true);
-            Some(fileid.clone())
+            Some(fileid)
         }
     }
 }
@@ -668,7 +663,7 @@ fn parse_jobs(
     db: &mut Arc<Mutex<database::Main>>,
     scraper: &sharedtypes::SiteStruct,
 ) {
-    let urls_to_scrape = parse_tags(&db, tag, fileid);
+    let urls_to_scrape = parse_tags(db, tag, fileid);
     {
         let mut joblock = jobstorage.lock().unwrap();
         for url in urls_to_scrape {
@@ -713,14 +708,14 @@ fn parse_skipif(
                 return true;
             } else {
                 info_log(
-                    &format!("Downloading due to unique namespace not existing or number less then limit number."),
+                    &"Downloading due to unique namespace not existing or number less then limit number.".to_string(),
                 );
             }
         }
         sharedtypes::SkipIf::FileTagRelationship(tag) => {
             let unwrappydb = db.lock().unwrap();
             if let Some(nsid) = unwrappydb.namespace_get(&tag.namespace.name) {
-                if let Some(_) = unwrappydb.tag_get_name(tag.tag.to_string(), *nsid) {
+                if unwrappydb.tag_get_name(tag.tag.to_string(), *nsid).is_some() {
                     info_log(&format!(
                         "Skipping file: {} Due to skip tag {} already existing in Tags Table.",
                         file_url_source, tag.tag
@@ -778,7 +773,7 @@ pub fn main_file_loop(
                     source,
                     location,
                     manageeplugin,
-                    &client,
+                    client,
                     db.clone(),
                     file,
                 ) {
@@ -812,7 +807,7 @@ pub fn main_file_loop(
                             source,
                             location,
                             manageeplugin,
-                            &client,
+                            client,
                             db.clone(),
                             file,
                         ) {
@@ -826,7 +821,7 @@ pub fn main_file_loop(
 
         // We've got valid fileid for reference.
         for tag in file.tag_list.iter() {
-            parse_jobs(tag, Some(fileid), jobstorage, db, &scraper);
+            parse_jobs(tag, Some(fileid), jobstorage, db, scraper);
         }
     }
 }

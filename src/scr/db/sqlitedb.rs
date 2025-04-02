@@ -1,10 +1,5 @@
-use crate::database::CacheType;
 use crate::database::Main;
-use log::error;
 use rusqlite::params;
-pub use rusqlite::Connection;
-use std::sync::Arc;
-use std::sync::Mutex;
 
 impl Main {
     pub fn parents_delete_sql(&mut self, id: &usize) {
@@ -44,7 +39,7 @@ impl Main {
 #[cfg(test)]
 mod tests {
     use crate::VERS;
-    use std::collections::HashSet;
+    
 
     use super::*;
 

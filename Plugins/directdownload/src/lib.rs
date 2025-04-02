@@ -35,7 +35,7 @@ pub fn return_info() -> sharedtypes::PluginInfo {
         Some("source_url".to_string()),
     ));
 
-    let callbackvec = vec![sharedtypes::PluginCallback::OnTag(tag_vec)];
+    let callbackvec = vec![sharedtypes::PluginCallback::Tag(tag_vec)];
     sharedtypes::PluginInfo {
         name: PLUGIN_NAME.to_string(),
         description: PLUGIN_DESCRIPTION.to_string(),

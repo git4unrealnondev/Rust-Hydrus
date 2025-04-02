@@ -13,8 +13,8 @@ static PLUGIN_DESCRIPTION: &str = "Gets hash information from a file.";
 #[no_mangle]
 pub fn return_info() -> sharedtypes::PluginInfo {
     let callbackvec = vec![
-        sharedtypes::PluginCallback::OnStart,
-        sharedtypes::PluginCallback::OnDownload,
+        sharedtypes::PluginCallback::Start,
+        sharedtypes::PluginCallback::Download,
     ];
     sharedtypes::PluginInfo {
         name: PLUGIN_NAME.to_string(),

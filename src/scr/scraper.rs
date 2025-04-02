@@ -1,12 +1,9 @@
 use crate::sharedtypes::SiteStruct;
 
 use crate::{logging, plugins, sharedtypes};
-use log::{error, info, warn};
+use log::error;
 use std::collections::HashMap;
-use std::fs;
-use std::path::Path;
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
 
 static SUPPORTED_VERS: usize = 0;
 
@@ -57,7 +54,7 @@ impl ScraperManager {
             let lib;
             let pulled_successfully;
             unsafe {
-                lib = libloading::Library::new(&scraper_path).unwrap();
+                lib = libloading::Library::new(scraper_path).unwrap();
                 let plugindatafunc: libloading::Symbol<
                     unsafe extern "C" fn() -> Vec<sharedtypes::SiteStruct>,
                 > = lib.get(b"new").unwrap();
@@ -67,7 +64,7 @@ impl ScraperManager {
             for site in pulled_successfully {
                 let lib_storage;
                 unsafe {
-                    lib_storage = libloading::Library::new(&scraper_path).unwrap();
+                    lib_storage = libloading::Library::new(scraper_path).unwrap();
                 }
 
                 let version = site.version;
@@ -83,8 +80,6 @@ impl ScraperManager {
                 self._library.insert(site, lib_storage);
             }
         }
-
-        return;
     }
 
     pub fn returnlibloading(&self, scraper: &SiteStruct) -> &libloading::Library {
@@ -163,7 +158,7 @@ pub fn url_dump(
     scraper: &SiteStruct,
 ) -> Vec<(String, sharedtypes::ScraperData)> {
     let scrapermanager = arc_scrapermanager.lock().unwrap();
-    let scraper_library = scrapermanager.library_get().get(&scraper).unwrap();
+    let scraper_library = scrapermanager.library_get().get(scraper).unwrap();
     let temp: libloading::Symbol<
         unsafe extern "C" fn(
             &Vec<sharedtypes::ScraperParam>,
@@ -182,7 +177,7 @@ pub fn parser_call(
     scraper: &SiteStruct,
 ) -> Result<(sharedtypes::ScraperObject, sharedtypes::ScraperData), sharedtypes::ScraperReturn> {
     let scrapermanager = arc_scrapermanager.lock().unwrap();
-    let scraper_library = scrapermanager.library_get().get(&scraper).unwrap();
+    let scraper_library = scrapermanager.library_get().get(scraper).unwrap();
     let temp: libloading::Symbol<
         unsafe extern "C" fn(
             &String,

@@ -16,13 +16,11 @@ use std::error::Error;
 use std::io::BufReader;
 use std::io::Cursor;
 use std::io::Read;
-use std::path::PathBuf;
 use std::time::Duration;
 use url::Url;
 
 extern crate reqwest;
 
-use crate::helpers;
 use ratelimit::Ratelimiter;
 use std::fs::File;
 
@@ -217,7 +215,7 @@ pub fn dlfile_new(
                 Some(fileurl) => fileurl,
             };
             let url = Url::parse(fileurlmatch).unwrap();
-            ratelimiter_wait(&ratelimiter_obj);
+            ratelimiter_wait(ratelimiter_obj);
             logging::info_log(&format!("Downloading: {} to: {}", &fileurlmatch, &location));
             let mut futureresult = client.get(url.as_ref()).send();
             loop {
@@ -335,9 +333,9 @@ pub fn write_to_disk(
     // Adds directory name back into the full path
     if local_location.is_dir() && sha512hash.len() > 6 {
         let sha512hash_str = sha512hash.as_str();
-        local_location = local_location.join(sha512hash_str[0..2].to_string());
-        local_location = local_location.join(sha512hash_str[2..4].to_string());
-        local_location = local_location.join(sha512hash_str[4..6].to_string());
+        local_location = local_location.join(&sha512hash_str[0..2]);
+        local_location = local_location.join(&sha512hash_str[2..4]);
+        local_location = local_location.join(&sha512hash_str[4..6]);
         match std::fs::create_dir_all(&local_location) {
             Ok(_) => {}
             Err(err) => {
@@ -345,11 +343,11 @@ pub fn write_to_disk(
             }
         }
 
-        local_location = local_location.join("FILENAMEFILLER".to_string());
+        local_location = local_location.join("FILENAMEFILLER");
     }
 
     // Gives file extension
-    let file_ext = FileFormat::from_bytes(&bytes).extension().to_string();
+    let file_ext = FileFormat::from_bytes(bytes).extension().to_string();
 
     local_location.set_file_name(sha512hash);
     //local_location.set_extension(file_ext);

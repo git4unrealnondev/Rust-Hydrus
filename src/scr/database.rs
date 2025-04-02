@@ -74,7 +74,7 @@ impl Main {
         let mut main = match path {
             Some(ref file_path) => {
                 first_time_load_flag = Path::new(&file_path).exists();
-                let connection = dbinit(&file_path);
+                let connection = dbinit(file_path);
                 let memdb = NewinMemDB::new();
                 let memdbmain = Main {
                     _dbpath: path.clone(),
@@ -713,8 +713,7 @@ impl Main {
                     "source_url".to_string(),
                     Some("Source URL for a file.".to_string()),
                     true,
-                )
-                .clone(),
+                ),
             Some(id) => id,
         }
     }
@@ -875,9 +874,7 @@ impl Main {
                 let izce = ver.parse().unwrap();
                 g1.push(izce)
             }
-            logging::panic_log(&format!(
-                "check_version: Could not load DB properly PANICING!!!"
-            ));
+            logging::panic_log(&"check_version: Could not load DB properly PANICING!!!".to_string());
         }
         let mut db_vers = g1[0] as usize;
         self._active_vers = db_vers;
@@ -976,18 +973,13 @@ impl Main {
     ///
     pub fn storage_get_id(&self, location: &String) -> Option<usize> {
         let conn = self._conn.lock().unwrap();
-        if let Ok(out) = conn
+        conn
             .query_row(
                 "SELECT id from FileStorageLocations where location = ?",
                 params![location],
                 |row| row.get(0),
             )
-            .optional()
-        {
-            out
-        } else {
-            None
-        }
+            .optional().unwrap_or_default()
     }
 
     ///
@@ -995,18 +987,13 @@ impl Main {
     ///
     pub fn storage_get_string(&self, id: &usize) -> Option<String> {
         let conn = self._conn.lock().unwrap();
-        if let Ok(out) = conn
+        conn
             .query_row(
                 "SELECT location from FileStorageLocations where id = ?",
                 params![id],
                 |row| row.get(0),
             )
-            .optional()
-        {
-            out
-        } else {
-            None
-        }
+            .optional().unwrap_or_default()
     }
 
     ///
@@ -1086,7 +1073,7 @@ impl Main {
     ///
     pub fn extension_put_string(&mut self, ext: &String) -> usize {
         match self.extension_get_id(ext) {
-            Some(id) => id.clone(),
+            Some(id) => *id,
             None => {
                 let conn = self._conn.lock().unwrap();
                 conn.execute(
@@ -1344,7 +1331,7 @@ impl Main {
             .borrow_mut()
             .lock()
             .unwrap()
-            .execute(&"PRAGMA secure_delete = 0;", params![]);
+            .execute("PRAGMA secure_delete = 0;", params![]);
         // self.execute("PRAGMA journal_mode = MEMORY".to_string()); self.execute("PRAGMA
         // synchronous = OFF".to_string()); info!("Setting synchronous = OFF");
     }
@@ -1424,7 +1411,7 @@ impl Main {
                     if addtodb {
                         self.file_add_sql(
                             &Some(file_obj.hash.clone()),
-                            &Some(file_obj.ext_id.clone()),
+                            &Some(file_obj.ext_id),
                             &Some(file_obj.storage_id),
                             &file_obj.id,
                         );
@@ -1440,14 +1427,14 @@ impl Main {
                     if addtodb {
                         self.file_add_sql(
                             &Some(noid_obj.hash.clone()),
-                            &Some(noid_obj.ext_id.clone()),
+                            &Some(noid_obj.ext_id),
                             &Some(noid_obj.storage_id),
                             &id,
                         );
                     }
                     id
                 } else {
-                    self.file_get_hash(&noid_obj.hash).unwrap().clone()
+                    *self.file_get_hash(&noid_obj.hash).unwrap()
                 }
             }
             sharedtypes::DbFileStorage::NoExist(_) => {
@@ -1631,7 +1618,7 @@ impl Main {
         match id {
             None => {
                 if let Some(pluginmanager) = &self._pluginmanager {
-                    plugins::plugin_on_tag(pluginmanager.clone(), self, &tags, &namespace);
+                    plugins::plugin_on_tag(pluginmanager.clone(), self, tags, &namespace);
                 }
 
                 // Do we have an ID coming in to add manually?
@@ -1763,7 +1750,7 @@ impl Main {
         jobsmanager: sharedtypes::DbJobsManager,
     ) -> usize {
         let id = match id {
-            None => self._inmemdb.jobs_get_max().clone(),
+            None => *self._inmemdb.jobs_get_max(),
             Some(id) => id,
         };
         let params = if param.is_empty() {
@@ -2275,7 +2262,7 @@ impl Main {
 
         let mut flag = false;
 
-        logging::info_log(&format!("Starting preliminary tags scanning"));
+        logging::info_log(&"Starting preliminary tags scanning".to_string());
         for id in 0..tag_max - 1 {
             if self.tag_id_get(&id).is_none() {
                 logging::info_log(&format!(
@@ -2288,9 +2275,7 @@ impl Main {
         }
 
         if flag {
-            logging::info_log(&format!(
-                "Started loading files, relationship and parents table"
-            ));
+            logging::info_log(&"Started loading files, relationship and parents table".to_string());
             self.load_table(&sharedtypes::LoadDBTable::Files);
             self.load_table(&sharedtypes::LoadDBTable::Relationship);
             self.load_table(&sharedtypes::LoadDBTable::Parents);
