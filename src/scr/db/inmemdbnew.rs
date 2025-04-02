@@ -271,7 +271,9 @@ impl NewinMemDB {
 
     /// Returns a list of tag id's based on a file id
     pub fn relationship_get_tagid(&self, file: &usize) -> Option<HashSet<usize>> {
-        self._relationship_file_tag.get(file).map(|relref| HashSet::from_iter(relref.clone()))
+        self._relationship_file_tag
+            .get(file)
+            .map(|relref| HashSet::from_iter(relref.clone()))
     }
 
     /// relationship gets only one fileid
@@ -818,12 +820,18 @@ impl NewinMemDB {
             if let Some(parlimit) = limitto {
                 if let Some(a) = self._parents_cantor_limitto.get_mut(&parent_cantor_id) {
                     a.remove(&parlimit);
+                    if a.is_empty() {
+                        self._parents_cantor_limitto.remove(&parent_cantor_id);
+                    }
                 } else {
                     //self._parents_cantor_limitto.remove(&cantor);
                 }
 
                 if let Some(a) = self._parents_limitto_cantor.get_mut(&parlimit) {
                     a.remove(&parent_cantor_id);
+                    if a.is_empty() {
+                        self._parents_limitto_cantor.remove(&parlimit);
+                    }
                 } else {
                     //self._parents_limitto_cantor.remove(&parlimit);
                 }
@@ -835,12 +843,18 @@ impl NewinMemDB {
                 None => {}
                 Some(relset) => {
                     relset.remove(&parentobj.tag_id);
+                    if relset.is_empty() {
+                        self._parents_rel_tag.remove(&parentobj.relate_tag_id);
+                    }
                 }
             }
             match self._parents_tag_rel.get_mut(&parentobj.tag_id) {
                 None => {}
                 Some(tagset) => {
                     tagset.remove(&parentobj.relate_tag_id);
+                    if tagset.is_empty() {
+                        self._parents_tag_rel.remove(&parentobj.tag_id);
+                    }
                 }
             }
             self._parents_dual.remove(&cantor);
@@ -1340,7 +1354,7 @@ mod inmemdb {
             limit_to: Some(3),
         });
         assert_eq!(deleted, a);
-        assert_eq!(*db._parents_limitto_cantor.get(&3).unwrap(), HashSet::new());
+        assert_eq!(db._parents_limitto_cantor.get(&3).is_none(), true);
         assert_eq!(
             db.parents_get(&sharedtypes::DbParentsObj {
                 tag_id: 4,
@@ -1421,7 +1435,7 @@ mod inmemdb {
             &db._parents_max
         );
 
-        assert_eq!(db.parents_rel_get(&2, None), Some(HashSet::new()));
+        assert_eq!(db.parents_rel_get(&2, None), None);
 
         db.parents_limitto_remove(&2);
 
@@ -1434,7 +1448,7 @@ mod inmemdb {
             &db._parents_max
         );
 
-        assert_eq!(db.parents_rel_get(&4, None), Some(HashSet::new()));
+        assert_eq!(db.parents_rel_get(&4, None), None);
         db.parents_put(sharedtypes::DbParentsObj {
             tag_id: 4,
             relate_tag_id: 5,

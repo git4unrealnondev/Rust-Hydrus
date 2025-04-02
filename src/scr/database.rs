@@ -2462,3 +2462,25 @@ impl Main {
             .to_owned()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::VERS;
+
+    fn setup_default_db() -> Main {
+        let mut db = Main::new(None, VERS);
+        db.parents_add(1, 2, Some(3), true);
+        db.parents_add(2, 3, Some(4), true);
+        db.parents_add(3, 4, Some(5), true);
+        db
+    }
+
+    #[test]
+    fn db_parents_tagid_remove() {
+        let mut main = setup_default_db();
+        main.parents_tagid_remove(&1);
+        assert_eq!(main.parents_rel_get(&1), None);
+        assert_eq!(main.parents_tag_get(&1), None);
+    }
+}
