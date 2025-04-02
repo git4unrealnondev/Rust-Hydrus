@@ -1616,11 +1616,16 @@ impl Main {
         addtodb: bool,
         id: Option<usize>,
     ) -> usize {
+        //testing only please remove once the direct download plugin finishes
+        if let Some(pluginmanager) = &self._pluginmanager {
+            plugins::plugin_on_tag(pluginmanager.clone(), self, tags, &namespace);
+        }
+
         match id {
             None => {
-                if let Some(pluginmanager) = &self._pluginmanager {
-                    plugins::plugin_on_tag(pluginmanager.clone(), self, tags, &namespace);
-                }
+                //if let Some(pluginmanager) = &self._pluginmanager {
+                //   plugins::plugin_on_tag(pluginmanager.clone(), self, tags, &namespace);
+                //}
 
                 // Do we have an ID coming in to add manually?
                 let tagnns = sharedtypes::DbTagNNS {

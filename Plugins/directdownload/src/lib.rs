@@ -28,7 +28,8 @@ pub fn return_info() -> sharedtypes::PluginInfo {
     let mut tag_vec = Vec::new();
     tag_vec.push((
         Some(sharedtypes::SearchType::Regex(
-            r"(http(s)?://www.|((www.|http(s)?://)))[a-zA-Z0-9-].[a-zA-Z0-9-_.]*/[a-zA-Z0-9/_%]+\.[a-zA-Z0-9/_%\.?=&-]+"
+            //r"(http(s)?://www.|((www.|http(s)?://)))[a-zA-Z0-9-].[a-zA-Z0-9-_.]*/[a-zA-Z0-9/_%]+\.[a-zA-Z0-9/_%\.?=&-]+"
+            r"(http(s)?://www.|((www.|http(s)?://)))[a-zA-Z0-9-].[a-zA-Z0-9-_.]*/[a-zA-Z0-9/_%-]+\.[a-zA-Z0-9/_%\.?=&-]+"
             .to_string(),
         )),
         None,
@@ -61,6 +62,7 @@ pub fn on_regex_match(
     if regex_match.contains("bsky.app") {
         return;
     }
+    dbg!(tag, tag_ns);
 
     let subtag = sharedtypes::SubTag {
         namespace: sharedtypes::GenericNamespaceObj {
@@ -98,5 +100,21 @@ pub fn on_regex_match(
     };
     let ratelimit = (1, Duration::from_secs(1));
 
-    client::add_file_nonblocking(file, ratelimit);
+    client::job_add(
+        None,
+        0,
+        0,
+        "direct download".to_string(),
+        regex_match.to_string(),
+        true,
+        sharedtypes::CommitType::StopOnNothing,
+        sharedtypes::DbJobType::FileUrl,
+        BTreeMap::new(),
+        BTreeMap::new(),
+        sharedtypes::DbJobsManager {
+            jobtype: sharedtypes::DbJobType::FileUrl,
+            recreation: None,
+        },
+    );
+    //client::add_file_nonblocking(file, ratelimit);
 }
