@@ -218,6 +218,19 @@ impl Worker {
                                             None
                                         };
 
+                                    // If we have nothing in either of these then we likely need to
+                                    // pull info from the plugins this is used to pull login info
+                                    // from an external plugin like a web interface or UI
+                                    if ns_stored.is_none() | body_stored.is_none() {
+                                        todo!();
+                                    }
+
+                                    // Special actions need to be taken if we are logging into
+                                    // something that requires a login
+                                    if *login_needed == sharedtypes::LoginNeed::Required {
+                                        break;
+                                    }
+
                                     dbg!(&ns_stored, &body_stored);
                                     if ns_stored.is_some() | body_stored.is_some() {
                                         let apins = sharedtypes::LoginType::ApiNamespaced(
@@ -240,24 +253,6 @@ impl Worker {
                             }
                         }
                         dbg!(&scraper);
-                        /*let datafromdb = unwrappydb
-                            .settings_get_name(&format!("{}_{}", "FILLER", &scraper.name));
-                        match datafromdb {
-                            None => {}
-                            Some(setting) => {
-                                match &setting.param {
-                                    None => {}
-                                    Some(param) => {
-                                        // Adds database tag if applicable.
-                                        let scrap_data = sharedtypes::ScraperParam {
-                                            param_data: param.clone(),
-                                            param_type: sharedtypes::ScraperParamType::Database,
-                                        };
-                                        par_vec.push(scrap_data);
-                                    }
-                                }
-                            }
-                        }*/
                     }
 
                     // Makes recursion possible

@@ -248,10 +248,10 @@ impl PluginManager {
 
         for each in plugininfo.callbacks {
             if std::mem::discriminant(&each)
-                == std::mem::discriminant(&sharedtypes::PluginCallback::OnTag(Vec::new()))
+                == std::mem::discriminant(&sharedtypes::PluginCallback::Tag(Vec::new()))
             {
                 match &each {
-                    sharedtypes::PluginCallback::OnTag(ontaginfo) => {
+                    sharedtypes::PluginCallback::Tag(ontaginfo) => {
                         for (search_type, namespace, not_namespace) in ontaginfo {
                             if let Some(search) = search_type {
                                 match search {
@@ -281,7 +281,7 @@ impl PluginManager {
                     vec_plugin.push(pluginname.clone());
                 }
                 None => match each {
-                    sharedtypes::PluginCallback::OnCallback(plugininfo) => {
+                    sharedtypes::PluginCallback::Callback(plugininfo) => {
                         match self.callbackstorage.get_mut(&plugininfo.func) {
                             Some(callvec) => {
                                 callvec.push(plugininfo);
@@ -307,12 +307,12 @@ impl PluginManager {
         // IF theirs no functions with this callback registered then return
         if !self
             ._callback
-            .contains_key(&sharedtypes::PluginCallback::OnStart)
+            .contains_key(&sharedtypes::PluginCallback::Start)
         {
             return;
         }
         // Gets all callbacks related to a callback and checks if the plugin
-        for plugin in self._callback[&sharedtypes::PluginCallback::OnStart].clone() {
+        for plugin in self._callback[&sharedtypes::PluginCallback::Start].clone() {
             info!("Starting to run plugin: {}", &plugin);
             if !self._plugin.contains_key(&plugin) {
                 error!("Could not call Plugin-OnStart");
@@ -499,6 +499,55 @@ fn parse_plugin_output(
 }
 
 ///
+/// Runs when we have a login needed
+///
+pub fn plugin_on_loginneeded(
+    manager_arc: Arc<Mutex<PluginManager>>,
+    login: &sharedtypes::LoginType,
+) -> Vec<sharedtypes::LoginType> {
+    let plugins_to_run;
+    {
+        let manager = manager_arc.lock().unwrap();
+        plugins_to_run = manager
+            ._callback
+            .get(&sharedtypes::PluginCallback::LoginNeeded)
+            .unwrap_or(&Vec::new())
+            .clone();
+    }
+
+    let mut output = Vec::new();
+    for plugin_name in plugins_to_run {
+        let lib;
+        unsafe {
+            let mgr = manager_arc.lock().unwrap();
+            lib = libloading::Library::new(mgr._thread_path.get(&plugin_name.clone()).unwrap())
+                .unwrap();
+        }
+        unsafe {
+            let plugindatafunc: libloading::Symbol<
+                unsafe extern "C" fn(&sharedtypes::LoginType) -> Option<sharedtypes::LoginType>,
+                //unsafe extern "C" fn(Cursor<Bytes>, &String, &String, Arc<Mutex<database::Main>>),
+            > = match lib.get(b"on_loginneeded") {
+                Ok(lib) => lib,
+                Err(_) => {
+                    logging::info_log(&format!(
+                        "Could not find on_loginneeded for plugin: {}",
+                        plugin_name
+                    ));
+                    continue;
+                }
+            };
+            //unwrappy.
+            if let Some(out) = plugindatafunc(login) {
+                output.push(out);
+            }
+        }
+        lib.close();
+    }
+    output
+}
+
+///
 /// Threadsafe way to call callback on adding a tag into the db
 ///
 pub fn plugin_on_tag(
@@ -524,7 +573,6 @@ pub fn plugin_on_tag(
 
         let regex_iter: Vec<&str> = regex.find_iter(tag).map(|m| m.as_str()).collect();
         for regex_match in regex_iter {
-            //dbg!(regex_match, plugin_name, namespace, not_namespace);
             let tag_ns = match db.namespace_get_string(tag_nsid) {
                 None => continue,
                 Some(namespace_name) => &namespace_name.name,
@@ -533,7 +581,7 @@ pub fn plugin_on_tag(
                 manager_arc.clone(),
                 plugin_name,
                 tag,
-                &tag_ns,
+                tag_ns,
                 &regex_match.to_string(),
                 plugin_callback.clone(),
             );
@@ -558,11 +606,11 @@ pub fn plugin_on_download(
         callback = temp._callback.clone();
     }
 
-    if !callback.contains_key(&sharedtypes::PluginCallback::OnDownload) {
+    if !callback.contains_key(&sharedtypes::PluginCallback::Download) {
         return;
     }
 
-    for plugin in callback[&sharedtypes::PluginCallback::OnDownload].clone() {
+    for plugin in callback[&sharedtypes::PluginCallback::Download].clone() {
         if !manager_arc.lock().unwrap()._plugin.contains_key(&plugin) {
             error!("Could not call Plugin-OnDownload");
             continue;
