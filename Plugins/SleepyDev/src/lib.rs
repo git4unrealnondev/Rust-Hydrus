@@ -6,7 +6,7 @@ static PLUGIN_DESCRIPTION: &str = "Just makes the plugin manager wait. Dev use o
 
 #[no_mangle]
 pub fn return_info() -> sharedtypes::PluginInfo {
-    let callbackvec = vec![sharedtypes::PluginCallback::OnStart];
+    let callbackvec = vec![sharedtypes::PluginCallback::Start];
     sharedtypes::PluginInfo {
         name: PLUGIN_NAME.to_string(),
         description: PLUGIN_DESCRIPTION.to_string(),

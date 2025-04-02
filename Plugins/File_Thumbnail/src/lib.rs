@@ -41,16 +41,16 @@ use webp_animation::EncodingType;
 #[no_mangle]
 pub fn return_info() -> sharedtypes::PluginInfo {
     let callbackvec = vec![
-        sharedtypes::PluginCallback::OnDownload,
-        sharedtypes::PluginCallback::OnStart,
-        sharedtypes::PluginCallback::OnCallback(sharedtypes::CallbackInfo {
+        sharedtypes::PluginCallback::Download,
+        sharedtypes::PluginCallback::Start,
+        sharedtypes::PluginCallback::Callback(sharedtypes::CallbackInfo {
             name: format!("{}", PLUGIN_NAME),
             func: format!("{}_generate_thumbnail_u8", PLUGIN_NAME),
             vers: 0,
             data_name: [format!("image")].to_vec(),
             data: Some([sharedtypes::CallbackCustomData::U8].to_vec()),
         }),
-        sharedtypes::PluginCallback::OnCallback(sharedtypes::CallbackInfo {
+        sharedtypes::PluginCallback::Callback(sharedtypes::CallbackInfo {
             name: format!("{}", PLUGIN_NAME),
             func: format!("{}_give_thumbnail_location", PLUGIN_NAME),
             vers: 0,

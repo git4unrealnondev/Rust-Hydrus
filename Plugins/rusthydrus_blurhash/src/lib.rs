@@ -26,8 +26,8 @@ mod sharedtypes;
 #[no_mangle]
 pub fn return_info() -> sharedtypes::PluginInfo {
     let callbackvec = vec![
-        sharedtypes::PluginCallback::OnDownload,
-        sharedtypes::PluginCallback::OnStart,
+        sharedtypes::PluginCallback::Download,
+        sharedtypes::PluginCallback::Start,
     ];
     sharedtypes::PluginInfo {
         name: PLUGIN_NAME.to_string(),
@@ -138,7 +138,7 @@ pub fn on_start() {
     }
 
     // Logs info to screen
-    client::log(format!(
+    client::log_no_print(format!(
         "BlurHash - We've got {} files to parse.",
         file_ids.len()
     ));
@@ -149,14 +149,14 @@ pub fn on_start() {
 
             if let Ok(img) = image::load_from_memory(&byte[..]) {
                 let string_blurhash = downloadparse(img);
-                client::log(format!(
-                    "BlurHash - ID: {} HASH: {}",
+                client::log_no_print(format!(
+                    "BlurHash - Adding fid: {} to blurhash HASH: {}",
                     &fid.0, &string_blurhash
                 ));
                 let tagid = client::tag_add(string_blurhash, utable, true, None);
                 client::relationship_add(*fid.0, tagid, true);
             } else {
-                client::log(format!(
+                client::log_no_print(format!(
                     "{} Cannot load FID: {} as an image.",
                     PLUGIN_NAME, &fid.0
                 ));

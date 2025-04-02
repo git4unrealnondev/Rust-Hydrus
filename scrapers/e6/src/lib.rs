@@ -706,7 +706,7 @@ fn parse_pools(
 ///
 #[no_mangle]
 pub fn parser(
-    params: &str,
+    params: &String,
     scraperdata: &sharedtypes::ScraperData,
 ) -> Result<(sharedtypes::ScraperObject, sharedtypes::ScraperData), sharedtypes::ScraperReturn> {
     //let vecvecstr: AHashMap<String, AHashMap<String, Vec<String>>> = AHashMap::new();
