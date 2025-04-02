@@ -101,11 +101,37 @@ pub enum TasksRemove {
     bincode::Encode,
     bincode::Decode,
 )]
+///
+/// Holds the login type that we need
+///
 pub enum LoginType {
-    Cookie(Option<String>),
-    Api(Option<String>),
-    Login(Option<(String, String)>),
-    Other(Option<String>),
+    Cookie(String, Option<String>),
+    Api(String, Option<String>),
+    ApiNamespaced(String, Option<String>, Option<String>),
+    Login(String, Option<(String, String)>),
+    Other(String, Option<String>),
+}
+#[derive(
+    Debug,
+    Clone,
+    Eq,
+    Hash,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    Deserialize,
+    Serialize,
+    bincode::Encode,
+    bincode::Decode,
+)]
+
+///
+/// Data storage for the login type needed to determine if we have to use this to access a site or
+/// if its just a nice to have
+///
+pub enum LoginNeed {
+    Required,
+    Optional,
 }
 
 #[derive(Debug, Clone, Eq, Hash, PartialEq)]
@@ -131,7 +157,7 @@ pub struct SiteStruct {
     /// Weather this scraper needs to handle text scraping
     pub should_handle_text_scraping: bool,
     /// Any data thats needed to access restricted content
-    pub login_type: Vec<LoginType>,
+    pub login_type: Vec<(String, LoginType, LoginNeed, Option<String>, bool)>,
     /// Storage for the site scraper, Will be loaded into the user_data slot
     pub stored_info: Option<StoredInfo>,
 }

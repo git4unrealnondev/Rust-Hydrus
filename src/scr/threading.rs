@@ -166,14 +166,81 @@ impl Worker {
                             .map(str::to_string)
                             .collect();
                         for par in parpms {
-                            let temp = sharedtypes::ScraperParam {
-                                param_data: par,
-                                param_type: sharedtypes::ScraperParamType::Normal,
-                            };
+                            let temp = sharedtypes::ScraperParam::Normal(par);
                             par_vec.push(temp)
                         }
+
                         let unwrappydb = &mut db.lock().unwrap();
-                        let datafromdb = unwrappydb
+                        for (key, login, login_needed, help_text, overwrite_db_entry) in
+                            scraper.login_type.iter()
+                        {
+                            match login {
+                                sharedtypes::LoginType::Api(name, api_key) => {
+                                    todo!();
+                                }
+                                sharedtypes::LoginType::ApiNamespaced(
+                                    name,
+                                    api_namespace,
+                                    api_body,
+                                ) => {
+                                    if *overwrite_db_entry && api_namespace.is_some() {
+                                        unwrappydb.setting_add(
+                                            format!("API_NAMESPACED_NAMESPACE_{}_{}", key, name),
+                                            None,
+                                            None,
+                                            api_namespace.clone(),
+                                            true,
+                                        );
+                                    }
+                                    if *overwrite_db_entry && api_body.is_some() {
+                                        unwrappydb.setting_add(
+                                            format!("API_NAMESPACED_BODY_{}_{}", key, name),
+                                            None,
+                                            None,
+                                            api_body.clone(),
+                                            true,
+                                        );
+                                    }
+                                    let ns_stored =
+                                        if let Some(setting_obj) = unwrappydb.settings_get_name(
+                                            &format!("API_NAMESPACED_NAMESPACE_{}_{}", key, name),
+                                        ) {
+                                            setting_obj.param.clone()
+                                        } else {
+                                            None
+                                        };
+                                    let body_stored =
+                                        if let Some(setting_obj) = unwrappydb.settings_get_name(
+                                            &format!("API_NAMESPACED_BODY_{}_{}", key, name),
+                                        ) {
+                                            setting_obj.param.clone()
+                                        } else {
+                                            None
+                                        };
+
+                                    dbg!(&ns_stored, &body_stored);
+                                    if ns_stored.is_some() | body_stored.is_some() {
+                                        let apins = sharedtypes::LoginType::ApiNamespaced(
+                                            name.to_string(),
+                                            ns_stored,
+                                            body_stored,
+                                        );
+                                        par_vec.push(sharedtypes::ScraperParam::Login(apins));
+                                    }
+                                }
+                                sharedtypes::LoginType::Cookie(name, cookie) => {
+                                    todo!();
+                                }
+                                sharedtypes::LoginType::Other(name, other) => {
+                                    todo!();
+                                }
+                                sharedtypes::LoginType::Login(name, login_info) => {
+                                    todo!();
+                                }
+                            }
+                        }
+                        dbg!(&scraper);
+                        /*let datafromdb = unwrappydb
                             .settings_get_name(&format!("{}_{}", "FILLER", &scraper.name));
                         match datafromdb {
                             None => {}
@@ -190,7 +257,7 @@ impl Worker {
                                     }
                                 }
                             }
-                        }
+                        }*/
                     }
 
                     // Makes recursion possible

@@ -258,7 +258,7 @@ fn main() {
             );
         }
     }
-    arc.lock().unwrap().condense_db_all();
+    //arc.lock().unwrap().condense_db_all();
     arc.lock().unwrap().transaction_flush();
 
     // pluginmanager.lock().unwrap().thread_finish_closed(); while

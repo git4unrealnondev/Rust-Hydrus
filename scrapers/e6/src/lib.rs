@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::io;
 use std::io::BufRead;
+use std::mem;
 use std::time::Duration;
 
 //use ahash::HashSet;
@@ -291,68 +292,66 @@ fn nsobjplg(name: &NsIdent, site: &Site) -> sharedtypes::GenericNamespaceObj {
 fn build_url(params: &Vec<sharedtypes::ScraperParam>, pagenum: u64, site: &Site) -> String {
     let lowercase_site = site_to_string(&site).to_lowercase();
     let url_base = format!("https://{}.net/posts.json", lowercase_site);
-    let tag_store = "&tags=";
     let page = "&page=";
-    let mut param_tags_string: String = "".to_string();
-    let mut params_normal: Vec<String> = Vec::new();
-    let mut params_database: Vec<String> = Vec::new();
-    let mut params_normal_count: usize = 0;
-    let mut params_database_count: usize = 0;
+    let mut params_normal: Vec<&String> = Vec::new();
+
+    let mut string_builder = String::new();
+    let mut first_term = true;
 
     if params.is_empty() {
-        return "".to_string();
+        return string_builder;
+    }
+
+    string_builder += &url_base;
+
+    // Adds api login info into the url
+    for each in params.iter() {
+        match each {
+            sharedtypes::ScraperParam::Login(each) => match each {
+                sharedtypes::LoginType::ApiNamespaced(key, username, val) => {
+                    if let (Some(username), Some(val)) = (username, val) {
+                        string_builder += &format!("?login={}&api_key={}", username, val);
+                        first_term = false;
+                    }
+                    break;
+                }
+                _ => {}
+            },
+            _ => {}
+        }
     }
 
     // Gets params into db.
     for each in params {
-        match each.param_type {
-            sharedtypes::ScraperParamType::Normal => {
-                params_normal.push(each.param_data.to_string());
-                params_normal_count += 1;
+        match each {
+            sharedtypes::ScraperParam::Normal(inp) => {
+                params_normal.push(inp);
             }
-            sharedtypes::ScraperParamType::Database => {
-                params_database.push(each.param_data.to_string());
-                params_database_count += 1;
-            }
+            _ => {}
         }
     }
 
-    // Catch for normal tags being lower then 0
-    match params_normal_count {
+    string_builder += if first_term { "?tags=" } else { "&tags=" };
+    match params_normal.len() {
         0 => return "".to_string(),
-        _ => {}
-    }
-
-    // Catch for database tags being correct. "Sould be one"
-    let param_finalize_string = match params_database_count {
-        0 => "?tags=".to_string(),
-        1 => params_database.pop().unwrap() + tag_store,
-        _ => {
-            panic!(
-                "Scraper {}scraper: IS PANICING RECIEVED ONE TOO MANY SAUCY DB COUNTS : {:?} {:?}",
-                site_to_string(site),
-                params_database,
-                params_normal
-            );
+        1 => {
+            string_builder += params_normal.pop().unwrap();
         }
-    };
-
-    // Gets last item in "normal" tags
-    let params_last = params_normal.pop().unwrap();
-
-    // Loops through all normal tags and inserts it into the tag string
-    for each in params_normal {
-        param_tags_string += &(each + "+")
+        _ => {
+            let last_searched_tag = params_normal.pop().unwrap();
+            for each in params_normal {
+                string_builder += each;
+                string_builder += "+";
+            }
+            string_builder += last_searched_tag;
+        }
     }
 
-    // Adds on teh last string to the tags
-    param_tags_string = param_tags_string + &params_last;
-
-    // Does final formatting
-    let url = url_base + &param_finalize_string + &param_tags_string + page + &pagenum.to_string();
+    string_builder += page;
+    string_builder += &pagenum.to_string();
 
     // Returns url
-    return url.to_string();
+    return string_builder;
 }
 
 ///
@@ -369,7 +368,13 @@ pub fn new() -> Vec<sharedtypes::SiteStruct> {
             ratelimit: (1, Duration::from_secs(1)),
             should_handle_file_download: false,
             should_handle_text_scraping: false,
-            login_type: vec![sharedtypes::LoginType::Api(None)],
+            login_type: vec![(
+                format!("E621"),
+                sharedtypes::LoginType::ApiNamespaced("User_Api_Login".to_string(), None, None),
+                sharedtypes::LoginNeed::Optional,
+                Some("Username and API key goes in here.".to_string()),
+                false,
+            )],
             stored_info: Some(sharedtypes::StoredInfo::Storage(vec![(
                 "loaded_site".to_string(),
                 "E621".to_string(),
@@ -382,7 +387,13 @@ pub fn new() -> Vec<sharedtypes::SiteStruct> {
             ratelimit: (1, Duration::from_secs(1)),
             should_handle_file_download: false,
             should_handle_text_scraping: false,
-            login_type: vec![sharedtypes::LoginType::Api(None)],
+            login_type: vec![(
+                format!("E6AI"),
+                sharedtypes::LoginType::ApiNamespaced("User_Api_Login".to_string(), None, None),
+                sharedtypes::LoginNeed::Optional,
+                Some("Username and API key goes in here.".to_string()),
+                false,
+            )],
             stored_info: Some(sharedtypes::StoredInfo::Storage(vec![(
                 "loaded_site".to_string(),
                 "E6AI".to_string(),
