@@ -420,11 +420,11 @@ impl Main {
         let mut searched: Vec<(usize, usize)> = Vec::with_capacity(search.searches.len());
         if search.search_relate.is_none() {
             if search.searches.len() == 1 {
-                stor.push(sharedtypes::SearchHolder::AND((0, 0)));
+                stor.push(sharedtypes::SearchHolder::And((0, 0)));
             } else {
                 // Assume AND search
                 for each in 0..search.searches.len() {
-                    stor.push(sharedtypes::SearchHolder::AND((each, each + 1)));
+                    stor.push(sharedtypes::SearchHolder::And((each, each + 1)));
                 }
             }
         } else {
@@ -433,7 +433,7 @@ impl Main {
         let mut cnt = 0;
         for un in search.searches {
             match un {
-                sharedtypes::SearchHolder::NOT((a, b)) => {
+                sharedtypes::SearchHolder::Not((a, b)) => {
                     let fa = self.relationship_get_fileid(&a);
                     let fb = self.relationship_get_fileid(&b);
                     if let Some(fa) = fa {
@@ -444,7 +444,7 @@ impl Main {
                     searched.push((cnt, a));
                     searched.push((cnt, b));
                 }
-                sharedtypes::SearchHolder::AND((a, b)) => {
+                sharedtypes::SearchHolder::And((a, b)) => {
                     if let Some(fa) = self.relationship_get_fileid(&a) {
                         if let Some(fb) = self.relationship_get_fileid(&b) {
                             fin_temp.insert(cnt, fa.intersection(&fb).cloned().collect());
@@ -453,7 +453,7 @@ impl Main {
                     searched.push((cnt, a));
                     searched.push((cnt, b));
                 }
-                sharedtypes::SearchHolder::OR((a, b)) => {
+                sharedtypes::SearchHolder::Or((a, b)) => {
                     let fa = self.relationship_get_fileid(&a);
                     let fb = self.relationship_get_fileid(&b);
                     if let Some(fa) = &fa {
@@ -469,8 +469,8 @@ impl Main {
         }
         for each in stor {
             match each {
-                sharedtypes::SearchHolder::OR((_a, _b)) => {}
-                sharedtypes::SearchHolder::AND((a, b)) => {
+                sharedtypes::SearchHolder::Or((_a, _b)) => {}
+                sharedtypes::SearchHolder::And((a, b)) => {
                     let fa = fin_temp.get(&a).unwrap();
                     let fb = fin_temp.get(&b).unwrap();
                     let tem = fa.intersection(fb);
@@ -478,7 +478,7 @@ impl Main {
                         fin.insert(*each);
                     }
                 }
-                sharedtypes::SearchHolder::NOT((_a, _b)) => {}
+                sharedtypes::SearchHolder::Not((_a, _b)) => {}
             }
         }
         if !fin.is_empty() {

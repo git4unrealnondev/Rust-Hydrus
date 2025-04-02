@@ -1,9 +1,8 @@
 #![allow(dead_code)]
 #![allow(unused_variables)]
 
-use bincode;
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, HashSet};
 use std::fmt;
 use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
@@ -235,9 +234,9 @@ pub fn stringto_commit_type(into: &String) -> CommitType {
 #[allow(dead_code)]
 #[derive(Debug, EnumIter, PartialEq, Serialize, bincode::Encode, bincode::Decode, Deserialize)]
 pub enum SearchHolder {
-    AND((usize, usize)),
-    OR((usize, usize)),
-    NOT((usize, usize)),
+    And((usize, usize)),
+    Or((usize, usize)),
+    Not((usize, usize)),
 }
 
 /// Allows searching inside the db. search_relate relates the item in the vec with
@@ -576,8 +575,8 @@ pub struct DbSearchObject {
 /// Database search enum between 2 tags
 #[derive(Debug)]
 pub enum DbSearchTypeEnum {
-    AND,
-    OR,
+    And,
+    Or,
 }
 
 /// Database search query
