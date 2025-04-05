@@ -109,7 +109,7 @@ pub fn new() -> Vec<sharedtypes::SiteStruct> {
             stored_info: None,
         },
         sharedtypes::SiteStruct {
-            name: "E6AI.net".to_string(),
+            name: "lulz.net".to_string(),
             sites: vec_of_strings!("lulz", "lulz.net"),
             version: 0,
             ratelimit: (1, Duration::from_secs(2)),

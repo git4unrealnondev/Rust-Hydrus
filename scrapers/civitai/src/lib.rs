@@ -206,42 +206,23 @@ fn md5_decode(inp: &str) -> String {
     attachment_md5
 }
 
-impl InternalScraper {
-    pub fn new() -> Self {
-        InternalScraper {
-            _version: 0,
-            _name: "civitai".to_string(),
-            _sites: vec_of_strings!("civitai"),
-            _ratelimit: (1, Duration::from_secs(1)),
-            _type: sharedtypes::ScraperType::Automatic,
-        }
-    }
-    pub fn version_get(&self) -> usize {
-        self._version
-    }
-    pub fn name_get(&self) -> &String {
-        &self._name
-    }
-    pub fn name_put(&mut self, inp: String) {
-        self._name = inp;
-    }
-    pub fn sites_get(&self) -> Vec<String> {
-        println!("AHAGAFAD");
-        let mut vecs: Vec<String> = Vec::new();
-        for each in &self._sites {
-            vecs.push(each.to_string());
-        }
-        vecs
-    }
-}
-
 ///
 /// Reutrns an internal scraper object.
 /// Only really useful to store variables. not useful for calling functions. :C
 ///
 #[no_mangle]
-pub fn new() -> InternalScraper {
-    InternalScraper::new()
+pub fn new() -> Vec<sharedtypes::SiteStruct> {
+    let out: Vec<sharedtypes::SiteStruct> = vec![sharedtypes::SiteStruct {
+        name: "civitai".to_string(),
+        sites: vec_of_strings!("civitai"),
+        version: 0,
+        ratelimit: (1, Duration::from_secs(1)),
+        should_handle_file_download: false,
+        should_handle_text_scraping: false,
+        login_type: vec![],
+        stored_info: None,
+    }];
+    out
 }
 #[no_mangle]
 pub fn test() -> u8 {
