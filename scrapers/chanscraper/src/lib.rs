@@ -155,14 +155,16 @@ fn filter_boardcodes(
     let mut params_storage = Vec::new();
     let mut catalog_urls = Vec::new();
     for each in params.iter() {
-        if each.param_type == sharedtypes::ScraperParamType::Normal {
-            if let Some(boardcode) = site.filter_board(&each.param_data.to_string()) {
+        if let sharedtypes::ScraperParam::Normal(param_data) = each {
+            if let Some(boardcode) = site.filter_board(&param_data.to_string()) {
                 params_boardcodes.push(boardcode.clone());
                 catalog_urls.push(site.gen_catalog(&boardcode));
             } else {
-                params_storage.push(each.param_data.to_string());
+                params_storage.push(param_data.to_string());
             }
         }
+        //if each.param_type == sharedtypes::ScraperParamType::Normal {
+        //           }
     }
 
     if params_boardcodes.len() == params_storage.len() {

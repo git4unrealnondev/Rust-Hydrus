@@ -27,3 +27,4 @@ rand = "0.8.5"
 serde = { version = "1.0.192", features = ["derive"] }
 strum = "0.25.0"
 strum_macros = "0.25.1"
+bincode = { version = "2.0.1", features = ["serde","alloc"] }
