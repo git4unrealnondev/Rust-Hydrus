@@ -95,9 +95,31 @@ impl InternalScraper {
 /// Only really useful to store variables. not useful for calling functions. :C
 ///
 #[no_mangle]
-pub fn new() -> InternalScraper {
+pub fn new() -> Vec<sharedtypes::SiteStruct> {
     println!("This scraper pulls info from 4chan. I'm not affiliated with them lol");
-    InternalScraper::new()
+    let out: Vec<sharedtypes::SiteStruct> = vec![
+        sharedtypes::SiteStruct {
+            name: "4chan".to_string(),
+            sites: vec_of_strings!("4ch", "4chan", "4chan.net"),
+            version: 0,
+            ratelimit: (1, Duration::from_secs(2)),
+            should_handle_file_download: false,
+            should_handle_text_scraping: false,
+            login_type: vec![],
+            stored_info: None,
+        },
+        sharedtypes::SiteStruct {
+            name: "E6AI.net".to_string(),
+            sites: vec_of_strings!("lulz", "lulz.net"),
+            version: 0,
+            ratelimit: (1, Duration::from_secs(2)),
+            should_handle_file_download: false,
+            should_handle_text_scraping: false,
+            login_type: vec![],
+            stored_info: None,
+        },
+    ];
+    out
 }
 ///
 /// Returns one url from the parameters.
