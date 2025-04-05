@@ -214,7 +214,7 @@ fn md5_decode(inp: &str) -> String {
 pub fn new() -> Vec<sharedtypes::SiteStruct> {
     let out: Vec<sharedtypes::SiteStruct> = vec![sharedtypes::SiteStruct {
         name: "civitai".to_string(),
-        sites: vec_of_strings!("civitai"),
+        sites: vec_of_strings!("civitai", "civitai.com"),
         version: 0,
         ratelimit: (1, Duration::from_secs(1)),
         should_handle_file_download: false,
@@ -229,13 +229,6 @@ pub fn test() -> u8 {
     0
 }
 
-///
-/// Returns one url from the parameters.
-///
-#[no_mangle]
-pub fn url_get(params: &Vec<sharedtypes::ScraperParam>) -> Vec<String> {
-    todo!()
-}
 #[derive(Serialize, Deserialize)]
 pub enum Id {
     id(usize),

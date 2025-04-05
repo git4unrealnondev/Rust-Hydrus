@@ -12,6 +12,7 @@ use std::sync::Arc;
 
 // use std::sync::{Arc, Mutex};
 use std::sync::Mutex;
+use std::time::Duration;
 
 pub struct Jobs {
     // References jobid in _inmemdb hashmap :D
@@ -84,11 +85,9 @@ impl Jobs {
                         self.jobs_remove_dbjob(scraper, &data, true);
                         return;
                     } else {
-                        data.jobmanager.recreation =
-                            Some(sharedtypes::DbJobRecreation::AlwaysTime((
-                                *timestamp,
-                                Some(count - 1),
-                            )));
+                        data.jobmanager.recreation = Some(
+                            sharedtypes::DbJobRecreation::AlwaysTime((*timestamp, Some(count - 1))),
+                        );
                     }
                 }
                 let original_data = data.clone();
@@ -300,6 +299,28 @@ impl Jobs {
         let mut print_loaded_flag = false;
         let mut cnt = 0;
         for (id, jobsobj) in hashjobs.clone() {
+            if let &sharedtypes::DbJobType::FileUrl = &jobsobj.jobmanager.jobtype {
+                let mut db = self.db.lock().unwrap();
+                dbg!("A", db.jobs_get_max());
+
+                let mut temp = HashSet::new();
+                temp.insert(jobsobj);
+                self._jobref.insert(
+                    sharedtypes::SiteStruct {
+                        name: "Direct Download".to_string(),
+                        sites: vec![],
+                        version: 0,
+                        ratelimit: (1, Duration::from_secs(1)),
+                        should_handle_file_download: false,
+                        should_handle_text_scraping: false,
+                        login_type: Vec::new(),
+                        stored_info: None,
+                    },
+                    temp,
+                );
+
+                continue;
+            }
             // If our time is greater then time created + offset then run job. Hella basic but
             // it works need to make this better.
             if let Some(scraper) = scraper_site_map.get(&jobsobj.site) {

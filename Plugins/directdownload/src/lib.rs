@@ -58,9 +58,10 @@ pub fn on_regex_match(
     tag_ns: &String,
     regex_match: &String,
     callback: sharedtypes::PluginCallback,
-) {
+) -> Vec<sharedtypes::DBPluginOutputEnum> {
+    let mut out = Vec::new();
     if regex_match.contains("bsky.app") {
-        return;
+        return out;
     }
     dbg!(tag, tag_ns);
 
@@ -100,7 +101,34 @@ pub fn on_regex_match(
     };
     let ratelimit = (1, Duration::from_secs(1));
 
-    client::job_add(
+    out.push(sharedtypes::DBPluginOutputEnum::Add(vec![
+        sharedtypes::DBPluginOutput {
+            tag: None,
+            setting: None,
+            relationship: None,
+            parents: None,
+            jobs: Some(vec![sharedtypes::DbJobsObj {
+                id: 0,
+                time: Some(0),
+                reptime: Some(0),
+
+                site: "direct download".to_string(),
+                param: Some(regex_match.to_string()),
+                jobmanager: sharedtypes::DbJobsManager {
+                    jobtype: sharedtypes::DbJobType::FileUrl,
+                    recreation: None,
+                },
+                committype: Some(sharedtypes::CommitType::StopOnNothing),
+                isrunning: false,
+                system_data: BTreeMap::new(),
+                user_data: BTreeMap::new(),
+            }]),
+            namespace: None,
+            file: None,
+        },
+    ]));
+
+    /*client::job_add(
         None,
         0,
         0,
@@ -115,6 +143,7 @@ pub fn on_regex_match(
             jobtype: sharedtypes::DbJobType::FileUrl,
             recreation: None,
         },
-    );
+    );*/
+    out
     //client::add_file_nonblocking(file, ratelimit);
 }

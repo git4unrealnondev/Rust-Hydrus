@@ -357,7 +357,7 @@ pub fn write_to_disk(
     while file_path_res.is_err() {
         logging::info_log(&format!(
             "Cannot create file at path: {} Err: {:?}",
-            &location.to_string_lossy(),
+            &local_location.to_string_lossy(),
             file_path_res
         ));
         thread::sleep(Duration::from_secs(1));

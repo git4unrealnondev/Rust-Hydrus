@@ -379,16 +379,8 @@ impl PluginManager {
         }
     }
 }
-///
-/// Parses output from plugin.
-///
-fn parse_plugin_output(
-    plugin_data: Vec<sharedtypes::DBPluginOutputEnum>,
-    unwrappy_locked: Arc<Mutex<Main>>,
-) {
-    let mut unwrappy = unwrappy_locked.lock().unwrap();
-    //let mut unwrappy = self._database.lock().unwrap();
 
+fn parse_plugin_output_andmain(plugin_data: Vec<sharedtypes::DBPluginOutputEnum>, db: &mut Main) {
     for each in plugin_data {
         match each {
             sharedtypes::DBPluginOutputEnum::Add(name) => {
@@ -401,28 +393,25 @@ fn parse_plugin_output(
                         for namespace in temp {
                             // IF Valid ID && Name && Description info are valid then we have a valid namespace id to pull
                             // dbg!(&namespace);
-                            namespace_id = Some(unwrappy.namespace_add(
-                                namespace.name,
-                                namespace.description,
-                                true,
-                            ));
+                            namespace_id =
+                                Some(db.namespace_add(namespace.name, namespace.description, true));
                         }
                     }
                     if let Some(temp) = names.file {
                         for files in temp {
                             if files.id.is_none() && files.hash.is_some() && files.ext.is_some() {
                                 // Gets the extension id
-                                let ext_id = unwrappy.extension_put_string(&files.ext.unwrap());
+                                let ext_id = db.extension_put_string(&files.ext.unwrap());
 
                                 let storage_id = match files.location {
                                     Some(exists) => {
-                                        unwrappy.storage_put(&exists);
-                                        unwrappy.storage_get_id(&exists).unwrap()
+                                        db.storage_put(&exists);
+                                        db.storage_get_id(&exists).unwrap()
                                     }
                                     None => {
-                                        let exists = unwrappy.location_get();
-                                        unwrappy.storage_put(&exists);
-                                        unwrappy.storage_get_id(&exists).unwrap()
+                                        let exists = db.location_get();
+                                        db.storage_put(&exists);
+                                        db.storage_get_id(&exists).unwrap()
                                     }
                                 };
 
@@ -433,28 +422,28 @@ fn parse_plugin_output(
                                         storage_id,
                                     },
                                 );
-                                unwrappy.file_add(file, true);
+                                db.file_add(file, true);
                             }
                         }
                     }
                     if let Some(temp) = names.tag {
                         for tags in temp {
-                            let namespace_id = unwrappy.namespace_get(&tags.namespace).cloned();
+                            let namespace_id = db.namespace_get(&tags.namespace).cloned();
                             //match namespace_id {}
                             //dbg!(&tags);
                             if tags.parents.is_none() && namespace_id.is_some() {
-                                unwrappy.tag_add(&tags.name, namespace_id.unwrap(), true, None);
+                                db.tag_add(&tags.name, namespace_id.unwrap(), true, None);
                             //                                    println!("plugins323 making tag: {}", tags.name);
                             } else {
                                 for _parents_obj in tags.parents.unwrap() {
-                                    unwrappy.tag_add(&tags.name, namespace_id.unwrap(), true, None);
+                                    db.tag_add(&tags.name, namespace_id.unwrap(), true, None);
                                 }
                             }
                         }
                     }
                     if let Some(temp) = names.setting {
                         for settings in temp {
-                            unwrappy.setting_add(
+                            db.setting_add(
                                 settings.name,
                                 settings.pretty,
                                 settings.num,
@@ -464,29 +453,60 @@ fn parse_plugin_output(
                         }
                     }
 
-                    if let Some(_temp) = names.jobs {}
+                    if let Some(temp) = names.jobs {
+                        for job in temp {
+                            db.jobs_add(
+                                None,
+                                job.time.unwrap_or(0),
+                                job.reptime.unwrap_or(0),
+                                job.site,
+                                job.param.unwrap_or("".to_string()),
+                                true,
+                                job.committype
+                                    .unwrap_or(sharedtypes::CommitType::StopOnNothing),
+                                &job.jobmanager.jobtype.clone(),
+                                job.system_data,
+                                job.user_data,
+                                job.jobmanager,
+                            );
+                        }
+                    }
                     if let Some(temp) = names.relationship {
                         for relations in temp {
-                            let file_id = unwrappy.file_get_hash(&relations.file_hash).cloned();
-                            let namespace_id = unwrappy.namespace_get(&relations.tag_namespace);
-                            let tag_id = unwrappy
+                            let file_id = db.file_get_hash(&relations.file_hash).cloned();
+                            let namespace_id = db.namespace_get(&relations.tag_namespace);
+                            let tag_id = db
                                 .tag_get_name(relations.tag_name.clone(), *namespace_id.unwrap())
                                 .cloned();
                             /*println!(
                                 "plugins356 relating: file id {:?} to {:?}",
                                 file_id, relations.tag_name
                             );*/
-                            unwrappy.relationship_add(file_id.unwrap(), tag_id.unwrap(), true);
+                            db.relationship_add(file_id.unwrap(), tag_id.unwrap(), true);
                             //unwrappy.relationship_add(file, tag, addtodb)
                         }
                     }
-                    if let Some(_temp) = names.parents {}
+                    if let Some(temp) = names.parents {
+                        for parent in temp {}
+                    }
                 }
             }
             sharedtypes::DBPluginOutputEnum::Del(name) => for _names in name {},
             sharedtypes::DBPluginOutputEnum::None => {}
         }
     }
+}
+
+///
+/// Parses output from plugin.
+///
+fn parse_plugin_output(
+    plugin_data: Vec<sharedtypes::DBPluginOutputEnum>,
+    unwrappy_locked: Arc<Mutex<Main>>,
+) {
+    let mut unwrappy = unwrappy_locked.lock().unwrap();
+    //let mut unwrappy = self._database.lock().unwrap();
+    parse_plugin_output_andmain(plugin_data, &mut unwrappy);
 }
 
 ///
@@ -553,6 +573,8 @@ pub fn plugin_on_tag(
         tagstorageregex = temp.tagstorageregex.clone();
     }
 
+    let mut storagemap = Vec::new();
+
     for (regex, plugin_name, namespace, not_namespace, plugin_callback) in tagstorageregex.iter() {
         if let Some(not_namespace) = not_namespace {
             if let Some(nsid) = db.namespace_get(not_namespace) {
@@ -566,17 +588,23 @@ pub fn plugin_on_tag(
         for regex_match in regex_iter {
             let tag_ns = match db.namespace_get_string(tag_nsid) {
                 None => continue,
-                Some(namespace_name) => &namespace_name.name,
+                Some(namespace_name) => namespace_name.name.clone(),
             };
-            c_regex_match(
-                manager_arc.clone(),
-                plugin_name,
-                tag,
-                tag_ns,
-                &regex_match.to_string(),
-                plugin_callback.clone(),
-            );
+
+            storagemap.push((plugin_name, tag, tag_ns, regex_match, plugin_callback));
         }
+    }
+
+    for (plugin_name, tag, tag_ns, regex_match, plugin_callback) in storagemap {
+        c_regex_match(
+            manager_arc.clone(),
+            db.into(),
+            plugin_name,
+            tag,
+            &tag_ns,
+            &regex_match.to_string(),
+            plugin_callback.clone(),
+        );
     }
 }
 
@@ -665,6 +693,7 @@ fn c_run_onstart(path: &String) {
 
 fn c_regex_match(
     manager_arc: Arc<Mutex<PluginManager>>,
+    db: &mut Main,
     lib_name: &String,
     tag: &String,
     tag_ns: &String,
@@ -683,10 +712,15 @@ fn c_regex_match(
             }
         }
     }
-
+    let output;
     unsafe {
         let plugindatafunc: libloading::Symbol<
-            unsafe extern "C" fn(&String, &String, &String, sharedtypes::PluginCallback),
+            unsafe extern "C" fn(
+                &String,
+                &String,
+                &String,
+                sharedtypes::PluginCallback,
+            ) -> Vec<sharedtypes::DBPluginOutputEnum>,
         > = match liba.get(b"on_regex_match") {
             Ok(good) => good,
             Err(_) => {
@@ -694,9 +728,15 @@ fn c_regex_match(
             }
         };
         liba.get::<libloading::Symbol<
-            unsafe extern "C" fn(&String, &String, &String, sharedtypes::PluginCallback),
+            unsafe extern "C" fn(
+                &String,
+                &String,
+                &String,
+                sharedtypes::PluginCallback,
+            ) -> Vec<sharedtypes::DBPluginOutputEnum>,
         >>(b"on_regex_match")
             .unwrap();
-        plugindatafunc(tag, tag_ns, regex_match, plugin_callback);
+        output = plugindatafunc(tag, tag_ns, regex_match, plugin_callback);
     };
+    parse_plugin_output_andmain(output, db);
 }
