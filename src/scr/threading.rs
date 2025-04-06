@@ -257,7 +257,9 @@ impl Worker {
 
                     // Makes recursion possible
                     if let Some(recursion) = &job.jobmanager.recreation {
-                        if let sharedtypes::DbJobRecreation::AlwaysTime((timestamp, count)) = recursion {
+                        if let sharedtypes::DbJobRecreation::AlwaysTime(timestamp, count) =
+                            recursion
+                        {
                             let mut temp = jobstorage.lock().unwrap();
                             let mut data = job.clone();
                             data.time = Some(crate::time_func::time_secs());
@@ -298,8 +300,6 @@ impl Worker {
 
                     let urlload = match job.jobmanager.jobtype {
                         sharedtypes::DbJobType::Params => {
-                            
-
                             // job = temp.1;
                             scraper::url_dump(
                                 &par_vec,
@@ -404,11 +404,7 @@ impl Worker {
                     {
                         if should_remove_original_job {
                             let mut joblock = jobstorage.lock().unwrap();
-                            joblock.jobs_remove_dbjob(
-                                &scraper,
-                                &currentjob,
-                                should_remove_original_job,
-                            );
+                            joblock.jobs_remove_dbjob(&scraper, &currentjob);
                             let mut db = db.lock().unwrap();
                             db.transaction_flush();
                         }
@@ -434,7 +430,7 @@ impl Worker {
             }
             threadflagcontrol.stop();
             let mut joblock = jobstorage.lock().unwrap();
-            joblock.reset_previously_seen_cache();
+            joblock.clear_previously_seen_cache(&scraper);
         });
         Worker {
             id,
@@ -630,9 +626,7 @@ fn download_add_to_db(
         );
     }
     match blopt {
-        None => {
-            None
-        }
+        None => None,
         Some((hash, file_ext)) => {
             let unwrappydb = &mut db.lock().unwrap();
 
@@ -666,8 +660,46 @@ fn parse_jobs(
     let urls_to_scrape = parse_tags(db, tag, fileid);
     {
         let mut joblock = jobstorage.lock().unwrap();
-        for url in urls_to_scrape {
-            joblock.jobs_add(scraper, url, true, true);
+        for data in urls_to_scrape {
+            // Defualt job object
+
+            let jobid;
+            {
+                let mut db = db.lock().unwrap();
+                jobid = db.jobs_add(
+                    None,
+                    0,
+                    0,
+                    data.job.site.clone(),
+                    data.job.original_param.clone(),
+                    true,
+                    sharedtypes::CommitType::StopOnNothing,
+                    &data.job.job_type,
+                    data.system_data.clone(),
+                    data.user_data.clone(),
+                    sharedtypes::DbJobsManager {
+                        jobtype: data.job.job_type,
+                        recreation: None,
+                    },
+                );
+            }
+            let dbjob = sharedtypes::DbJobsObj {
+                id: jobid,
+                time: Some(0),
+                reptime: Some(0),
+                site: data.job.site,
+                param: Some(data.job.original_param),
+                jobmanager: sharedtypes::DbJobsManager {
+                    jobtype: data.job.job_type,
+                    recreation: None,
+                },
+                committype: Some(sharedtypes::CommitType::StopOnNothing),
+                isrunning: false,
+                system_data: data.system_data,
+                user_data: data.user_data,
+            };
+
+            joblock.jobs_add(scraper.clone(), dbjob);
         }
     }
 }
@@ -715,7 +747,10 @@ fn parse_skipif(
         sharedtypes::SkipIf::FileTagRelationship(tag) => {
             let unwrappydb = db.lock().unwrap();
             if let Some(nsid) = unwrappydb.namespace_get(&tag.namespace.name) {
-                if unwrappydb.tag_get_name(tag.tag.to_string(), *nsid).is_some() {
+                if unwrappydb
+                    .tag_get_name(tag.tag.to_string(), *nsid)
+                    .is_some()
+                {
                     info_log(&format!(
                         "Skipping file: {} Due to skip tag {} already existing in Tags Table.",
                         file_url_source, tag.tag

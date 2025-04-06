@@ -113,6 +113,8 @@ fn main() {
         "so".to_string(),
     );
 
+    let scrapermanager_arc = Arc::new(Mutex::new(scraper_manager));
+
     // TODO NEEDS MAIN INFO PULLER HERE. PULLS IN EVERYTHING INTO DB. if let
     // scr::sharedtypes::AllFields::EJobsAdd(ref tempe) = all_field { dbg!(tempe);
     // dbg!(&tempe.site); } Checks main.db log location.
@@ -131,7 +133,10 @@ fn main() {
 
     let mut arc = Arc::new(Mutex::new(data));
 
-    let jobmanager = Arc::new(Mutex::new(jobs::Jobs::new(arc.clone())));
+    let jobmanager = Arc::new(Mutex::new(jobs::Jobs::new(
+        arc.clone(),
+        scrapermanager_arc.clone(),
+    )));
     let mut pluginmanager =
         plugins::PluginManager::new(plugin_loc.to_string(), arc.clone(), jobmanager.clone());
 
@@ -151,7 +156,7 @@ fn main() {
     'upgradeloop: loop {
         let repeat;
         {
-            repeat = arc.lock().unwrap().check_version(&mut scraper_manager);
+            repeat = arc.lock().unwrap().check_version();
         }
         if !repeat {
             let lck = arc.lock().unwrap();
@@ -163,7 +168,9 @@ fn main() {
 
     // Actually upgrades the DB from scraper calls
     for db_version in upgradeversvec {
-        for (internal_scraper, scraper_library) in scraper_manager.library_get().iter() {
+        for (internal_scraper, scraper_library) in
+            scrapermanager_arc.lock().unwrap().library_get().iter()
+        {
             logging::info_log(&format!(
                 "Starting scraper upgrade: {}",
                 internal_scraper.name
@@ -177,47 +184,39 @@ fn main() {
     file::folder_make(&location.to_string());
 
     // TODO Put code here
-    cli::main(arc.clone(), &mut scraper_manager);
+    cli::main(arc.clone(), scrapermanager_arc.clone());
 
     // Checks if we need to load any jobs
     logging::info_log(&"Checking if we have any Jobs to run.".to_string());
-    arc.lock()
-        .unwrap()
-        .load_table(&sharedtypes::LoadDBTable::Jobs);
+    jobmanager.lock().unwrap().jobs_load();
 
-    arc.lock().unwrap().transaction_flush();
-    jobmanager.lock().unwrap().jobs_load(&scraper_manager);
+    jobmanager.lock().unwrap().debug();
 
     // Calls the on_start func for the plugins
     pluginmanager.lock().unwrap().plugin_on_start();
 
     // Creates a threadhandler that manages callable threads.
     let mut threadhandler = threading::Threads::new();
-    jobmanager.lock().unwrap().jobs_run_new(
-        &mut arc,
-        &mut threadhandler,
-        &mut pluginmanager,
-        &scraper_manager,
-    );
+
+    // just determines if we have any loaded jobs
+    jobmanager.lock().unwrap().jobs_run_new();
     let arc_jobmanager = jobmanager;
 
     //
     // Loads the scrapers for their on_start function
-    for (scraper, libloading) in scraper_manager.library_get() {
+    for (scraper, libloading) in scrapermanager_arc.lock().unwrap().library_get() {
         {
             on_start(libloading, scraper);
         }
     }
 
-    let arc_scrapermanager = Arc::new(Mutex::new(scraper_manager));
-    for (scraper, _) in arc_jobmanager.lock().unwrap()._jobref.clone() {
-        // let scraper_library = scraper_manager._library.get(&scraper).unwrap();
+    for scraper in arc_jobmanager.lock().unwrap().job_scrapers_get() {
         threadhandler.startwork(
             &mut arc_jobmanager.clone(),
             &mut arc,
-            scraper,
+            scraper.clone(),
             &mut pluginmanager,
-            arc_scrapermanager.clone(),
+            scrapermanager_arc.clone(),
         );
     }
 
@@ -236,19 +235,17 @@ fn main() {
         thread::sleep(one_sec);
         {
             let mut jobmanager = arc_jobmanager.lock().unwrap();
-            if jobmanager.jobs_empty() {
-                jobmanager.jobs_load(&arc_scrapermanager.lock().unwrap());
-            }
+            jobmanager.jobs_load();
         }
         threadhandler.check_threads();
-        for (scraper, _) in arc_jobmanager.lock().unwrap()._jobref.clone() {
+        for scraper in arc_jobmanager.lock().unwrap().job_scrapers_get() {
             // let scraper_library = scraper_manager._library.get(&scraper).unwrap();
             threadhandler.startwork(
                 &mut arc_jobmanager.clone(),
                 &mut arc,
-                scraper,
+                scraper.clone(),
                 &mut pluginmanager,
-                arc_scrapermanager.clone(),
+                scrapermanager_arc.clone(),
             );
         }
     }

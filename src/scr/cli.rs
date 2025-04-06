@@ -46,10 +46,10 @@ fn return_jobtypemanager(
             },
             cli_structs::DbJobRecreationClap::AlwaysTime(timestamp) => sharedtypes::DbJobsManager {
                 jobtype,
-                recreation: Some(sharedtypes::DbJobRecreation::AlwaysTime((
+                recreation: Some(sharedtypes::DbJobRecreation::AlwaysTime(
                     timestamp.timestamp,
                     timestamp.count,
-                ))),
+                )),
             },
         },
     };
@@ -79,17 +79,17 @@ fn return_jobtypemanager_old(
         },
         cli_structs::DbJobRecreationClap::AlwaysTime(timestamp) => sharedtypes::DbJobsManager {
             jobtype,
-            recreation: Some(sharedtypes::DbJobRecreation::AlwaysTime((
+            recreation: Some(sharedtypes::DbJobRecreation::AlwaysTime(
                 timestamp.timestamp,
                 timestamp.count,
-            ))),
+            )),
         },
     };
     (jobtype, jobsmanager)
 }
 
 /// Returns the main argument and parses data.
-pub fn main(data: Arc<Mutex<database::Main>>, scraper: &mut scraper::ScraperManager) {
+pub fn main(data: Arc<Mutex<database::Main>>, scraper: Arc<Mutex<scraper::ScraperManager>>) {
     let args = cli_structs::MainWrapper::parse();
     if args.a.is_none() {
         return;
@@ -310,14 +310,6 @@ pub fn main(data: Arc<Mutex<database::Main>>, scraper: &mut scraper::ScraperMana
         cli_structs::test::Tasks(taskstruct) => match taskstruct {
             cli_structs::TasksStruct::Scraper(action) => match action {
                 cli_structs::ScraperAction::Test(inp) => {
-                    match scraper.return_libloading_string(&inp.scraper) {
-                        Some(lib) => {
-                            dbg!(&lib);
-                        }
-                        None => {
-                            dbg!(scraper.sites_get());
-                        }
-                    }
                     dbg!(&inp);
                 }
             },
@@ -328,7 +320,7 @@ pub fn main(data: Arc<Mutex<database::Main>>, scraper: &mut scraper::ScraperMana
                         println!("Couldn't find location: {}", &loc.location);
                         return;
                     }
-
+                    let scraper = scraper.lock().unwrap();
                     // Loads the scraper info for parsing.
                     let scraperlibrary = scraper.return_libloading_string(&loc.site);
                     let libload = match scraperlibrary {

@@ -490,8 +490,9 @@ pub struct DbJobsManager {
 pub enum DbJobRecreation {
     OnTagId(usize, Option<usize>),
     OnTag(String, usize, Option<usize>),
-    // Runs x seconds after processing
-    AlwaysTime((usize, Option<usize>)),
+    // first number is the wait time betwen jobs second field is a count. If count is eq None then
+    // we should never remove job. Else if count eq zero then remove job
+    AlwaysTime(usize, Option<usize>),
 }
 
 /// Type of job in db. Will be used to confirm what the scraping logic should work.

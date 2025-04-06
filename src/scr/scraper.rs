@@ -9,8 +9,8 @@ static SUPPORTED_VERS: usize = 0;
 
 pub struct ScraperManager {
     _string: Vec<String>,
-    _sites: Vec<Vec<String>>,
     _loaded: Vec<bool>,
+    sites: HashMap<SiteStruct, Vec<String>>,
     pub _library: HashMap<SiteStruct, libloading::Library>,
     _scraper: Vec<SiteStruct>,
 }
@@ -18,8 +18,8 @@ pub struct ScraperManager {
 impl ScraperManager {
     pub fn new() -> Self {
         ScraperManager {
+            sites: HashMap::new(),
             _string: Vec::new(),
-            _sites: Vec::new(),
             _loaded: Vec::new(),
             _library: HashMap::new(),
             _scraper: Vec::new(),
@@ -27,14 +27,17 @@ impl ScraperManager {
     }
     pub fn debug(&self) {
         dbg!(&self._string);
-        dbg!(&self._sites);
         dbg!(&self._loaded);
         dbg!(&self._library);
         dbg!(&self._scraper);
     }
 
-    pub fn sites_get(&self) -> &Vec<Vec<String>> {
-        &self._sites
+    pub fn sites_get(&self, site_struct: &sharedtypes::SiteStruct) -> Vec<String> {
+        if let Some(sites) = self.sites.get(site_struct) {
+            sites.clone()
+        } else {
+            Vec::new()
+        }
     }
 
     pub fn scraper_get(&self) -> &Vec<SiteStruct> {
@@ -77,6 +80,7 @@ impl ScraperManager {
                     panic!("{}", msg);
                 }
                 self._scraper.push(site.clone());
+                self.sites.insert(site.clone(), site.sites.clone());
                 self._library.insert(site, lib_storage);
             }
         }
@@ -229,4 +233,18 @@ pub fn on_start(libloading: &libloading::Library, site_struct: &sharedtypes::Sit
         };
 
     unsafe { temp(site_struct) }
+}
+
+#[cfg(test)]
+pub(crate) mod test_scrapermanager {
+    use super::ScraperManager;
+
+    pub fn create_default() -> ScraperManager {
+        ScraperManager::new()
+    }
+    pub fn emulate_loaded() -> ScraperManager {
+        let mut scrapermanager = create_default();
+
+        scrapermanager
+    }
 }

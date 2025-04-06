@@ -831,7 +831,7 @@ impl Main {
 
     /// Checks if db version is consistent. If this function returns false signifies
     /// that we shouldn't run.
-    pub fn check_version(&mut self, scraper_manager: &mut ScraperManager) -> bool {
+    pub fn check_version(&mut self) -> bool {
         let mut query_string = "SELECT num FROM Settings WHERE name='VERSION';";
         let query_string_manual = "SELECT num FROM Settings_Old WHERE name='VERSION';";
         let mut g1 = self.quer_int(query_string.to_string()).unwrap();
@@ -2469,11 +2469,11 @@ impl Main {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod test_database {
     use super::*;
     use crate::VERS;
 
-    fn setup_default_db() -> Main {
+    pub fn setup_default_db() -> Main {
         let mut db = Main::new(None, VERS);
         db.parents_add(1, 2, Some(3), true);
         db.parents_add(2, 3, Some(4), true);
