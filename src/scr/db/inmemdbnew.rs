@@ -1553,10 +1553,10 @@ mod inmemdb {
         assert_eq!(None, none);
         let jobobj = sharedtypes::DbJobsObj {
             id: *db.jobs_get_max(),
-            time: None,
+            time: 0,
             reptime: None,
             site: "test".to_owned(),
-            param: None,
+            param: vec![],
             jobmanager: sharedtypes::DbJobsManager {
                 jobtype: sharedtypes::DbJobType::Params,
                 recreation: None,

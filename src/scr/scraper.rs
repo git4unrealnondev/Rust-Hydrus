@@ -1,4 +1,4 @@
-use crate::sharedtypes::SiteStruct;
+use crate::sharedtypes::{ScraperParam, SiteStruct};
 
 use crate::{logging, plugins, sharedtypes};
 use log::error;
@@ -176,22 +176,22 @@ pub fn url_dump(
 ///
 pub fn parser_call(
     url_output: &String,
-    actual_params: &sharedtypes::ScraperData,
+    actual_params: &Vec<ScraperParam>,
+    scraperdata: &sharedtypes::ScraperData,
     arc_scrapermanager: Arc<Mutex<ScraperManager>>,
     scraper: &SiteStruct,
-) -> Result<(sharedtypes::ScraperObject, sharedtypes::ScraperData), sharedtypes::ScraperReturn> {
+) -> Result<sharedtypes::ScraperObject, sharedtypes::ScraperReturn> {
     let scrapermanager = arc_scrapermanager.lock().unwrap();
     let scraper_library = scrapermanager.library_get().get(scraper).unwrap();
     let temp: libloading::Symbol<
         unsafe extern "C" fn(
             &String,
+            &Vec<sharedtypes::ScraperParam>,
             &sharedtypes::ScraperData,
-        ) -> Result<
-            (sharedtypes::ScraperObject, sharedtypes::ScraperData),
-            sharedtypes::ScraperReturn,
-        >,
+        )
+            -> Result<sharedtypes::ScraperObject, sharedtypes::ScraperReturn>,
     > = unsafe { scraper_library.get(b"parser\0").unwrap() };
-    unsafe { temp(url_output, actual_params) }
+    unsafe { temp(url_output, actual_params, scraperdata) }
 } //ScraperObject
 
 pub fn url_load_test(libloading: &libloading::Library, params: Vec<String>) -> Vec<String> {

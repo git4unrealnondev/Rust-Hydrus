@@ -252,8 +252,7 @@ impl DbInteract {
         let tmp = data_object;
 
         // let bytd = types::x_to_bytes(tmp).to_vec();
-        let byt: Vec<u8> =
-            bincode::serde::encode_to_vec(tmp, bincode::config::standard()).unwrap();
+        let byt: Vec<u8> = bincode::serde::encode_to_vec(tmp, bincode::config::standard()).unwrap();
         byt
     }
 
@@ -335,9 +334,7 @@ impl DbInteract {
                 reptime,
                 site,
                 param,
-                addtodb,
                 committype,
-                dbjobtype,
                 system_data,
                 user_data,
                 dbjobsmanager,
@@ -349,9 +346,7 @@ impl DbInteract {
                     reptime,
                     site,
                     param,
-                    addtodb,
                     committype,
-                    &dbjobtype,
                     system_data,
                     user_data,
                     dbjobsmanager,

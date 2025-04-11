@@ -441,15 +441,25 @@ pub struct DbNamespaceObj {
     Debug, Hash, Eq, PartialEq, Clone, Serialize, bincode::Encode, bincode::Decode, Deserialize,
 )]
 pub struct DbJobsObj {
+    /// id of the job. If exist then we are gravy baby
     pub id: usize,
-    pub time: Option<usize>,
+    /// time job was added into db
+    pub time: usize,
+    /// Time to run job
     pub reptime: Option<usize>,
+    /// Site we're processing
     pub site: String,
-    pub param: Option<String>,
+    /// any params that need to get passed into the scraper, plugin, scraper etc
+    pub param: Vec<ScraperParam>,
+    /// jobs manager. Configuration goes here for things
     pub jobmanager: DbJobsManager,
+    /// I don't think I use this
     pub committype: Option<CommitType>,
+    /// Is this job currently running
     pub isrunning: bool,
+    /// Any data that should be not tampered with by a scrapre, plugin etc. system useage only
     pub system_data: BTreeMap<String, String>,
+    /// Any data that should be editied by the scraper, plugin etc. Can persist between job runs
     pub user_data: BTreeMap<String, String>,
 }
 
@@ -747,7 +757,6 @@ pub enum SkipIf {
 pub struct JobScraper {
     pub site: String,
     pub param: Vec<ScraperParam>,
-    pub original_param: String,
     pub job_type: DbJobType,
 }
 
@@ -879,7 +888,8 @@ pub enum PluginCommunicationChannel {
     None,
 }
 
-/// Straper type passed to params
+/// Scraper type passed to params
+/// Generic holder for params that are from a job
 #[derive(
     Debug,
     Clone,
@@ -895,6 +905,7 @@ pub enum PluginCommunicationChannel {
 )]
 pub enum ScraperParam {
     Normal(String),
+    Url(String),
     Login(LoginType),
     Database(String),
 }

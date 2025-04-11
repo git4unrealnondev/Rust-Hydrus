@@ -25,16 +25,14 @@ static PLUGIN_DESCRIPTION: &str =
 
 #[no_mangle]
 pub fn return_info() -> sharedtypes::PluginInfo {
-    let mut tag_vec = Vec::new();
-    tag_vec.push((
-        Some(sharedtypes::SearchType::Regex(
+    let  tag_vec = vec![   (     Some(sharedtypes::SearchType::Regex(
             //r"(http(s)?://www.|((www.|http(s)?://)))[a-zA-Z0-9-].[a-zA-Z0-9-_.]*/[a-zA-Z0-9/_%]+\.[a-zA-Z0-9/_%\.?=&-]+"
             r"(http(s)?://www.|((www.|http(s)?://)))[a-zA-Z0-9-].[a-zA-Z0-9-_.]*/[a-zA-Z0-9/_%-]+\.[a-zA-Z0-9/_%\.?=&-]+"
-            .to_string(),
-        )),
+            .to_string()),
+        ),
         None,
         Some("source_url".to_string()),
-    ));
+    )];
 
     let callbackvec = vec![sharedtypes::PluginCallback::Tag(tag_vec)];
     sharedtypes::PluginInfo {
@@ -109,11 +107,11 @@ pub fn on_regex_match(
             parents: None,
             jobs: Some(vec![sharedtypes::DbJobsObj {
                 id: 0,
-                time: Some(0),
+                time: 0,
                 reptime: Some(0),
 
                 site: "direct download".to_string(),
-                param: Some(regex_match.to_string()),
+                param: vec![sharedtypes::ScraperParam::Url(regex_match.to_string())],
                 jobmanager: sharedtypes::DbJobsManager {
                     jobtype: sharedtypes::DbJobType::FileUrl,
                     recreation: None,

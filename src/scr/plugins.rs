@@ -457,14 +457,12 @@ fn parse_plugin_output_andmain(plugin_data: Vec<sharedtypes::DBPluginOutputEnum>
                         for job in temp {
                             db.jobs_add(
                                 None,
-                                job.time.unwrap_or(0),
+                                job.time,
                                 job.reptime.unwrap_or(0),
                                 job.site,
-                                job.param.unwrap_or("".to_string()),
-                                true,
+                                job.param,
                                 job.committype
                                     .unwrap_or(sharedtypes::CommitType::StopOnNothing),
-                                &job.jobmanager.jobtype.clone(),
                                 job.system_data,
                                 job.user_data,
                                 job.jobmanager,

@@ -92,7 +92,7 @@ pub fn client_create() -> Client {
 /// Downloads text into db as responses. Filters responses by default limit if
 /// their's anything wrong with request.
 pub async fn dltext_new(
-    url_string: String,
+    url_string: &String,
     client: &Client,
     ratelimiter_obj: &Arc<Mutex<Ratelimiter>>,
 ) -> Result<String, Box<dyn Error>> {
@@ -101,7 +101,7 @@ pub async fn dltext_new(
     // Url::parse("http://www.google.com").unwrap();
     let mut cnt = 0;
     loop {
-        let url = match Url::parse(&url_string) {
+        let url = match Url::parse(url_string) {
             Ok(out) => out,
             Err(err) => {
                 logging::error_log(&format!(

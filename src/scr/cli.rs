@@ -88,6 +88,19 @@ fn return_jobtypemanager_old(
     (jobtype, jobsmanager)
 }
 
+///
+/// Parses strings into NORMAL inputs as scraperparam
+///
+fn parse_string_to_scraperparam(input: &String) -> Vec<sharedtypes::ScraperParam> {
+    let mut out = Vec::new();
+
+    for item in input.split(' ') {
+        out.push(sharedtypes::ScraperParam::Normal(item.to_string()));
+    }
+
+    out
+}
+
 /// Returns the main argument and parses data.
 pub fn main(data: Arc<Mutex<database::Main>>, scraper: Arc<Mutex<scraper::ScraperManager>>) {
     let args = cli_structs::MainWrapper::parse();
@@ -118,10 +131,8 @@ pub fn main(data: Arc<Mutex<database::Main>>, scraper: Arc<Mutex<scraper::Scrape
                         crate::time_func::time_secs(),
                         crate::time_func::time_conv(&addstruct.time),
                         addstruct.site.clone(),
-                        addstruct.query.clone(),
-                        true,
+                        parse_string_to_scraperparam(&addstruct.query),
                         addstruct.committype,
-                        &jobtype,
                         system_data,
                         BTreeMap::new(),
                         jobsmanager.clone(),
@@ -142,10 +153,8 @@ pub fn main(data: Arc<Mutex<database::Main>>, scraper: Arc<Mutex<scraper::Scrape
                                 crate::time_func::time_secs(),
                                 crate::time_func::time_conv(&addstruct.time),
                                 addstruct.site.clone(),
-                                ins,
-                                true,
+                                parse_string_to_scraperparam(&ins),
                                 addstruct.committype,
-                                &jobtype,
                                 BTreeMap::new(),
                                 BTreeMap::new(),
                                 jobsmanager.clone(),

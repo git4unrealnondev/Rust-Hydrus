@@ -153,23 +153,10 @@ impl Worker {
                     let temp = jobstorage.lock().unwrap();
                     jobsstorage = temp.jobs_get(&scraper).clone();
                 }
-                for job in jobsstorage {
+                for mut job in jobsstorage {
                     should_remove_original_job = true;
                     let currentjob = job.clone();
-                    let mut par_vec: Vec<sharedtypes::ScraperParam> = Vec::new();
                     {
-                        let parpms: Vec<String> = job
-                            .param
-                            .as_ref()
-                            .unwrap()
-                            .split_whitespace()
-                            .map(str::to_string)
-                            .collect();
-                        for par in parpms {
-                            let temp = sharedtypes::ScraperParam::Normal(par);
-                            par_vec.push(temp)
-                        }
-
                         let unwrappydb = &mut db.lock().unwrap();
                         for (key, login, login_needed, help_text, overwrite_db_entry) in
                             scraper.login_type.iter()
@@ -231,14 +218,13 @@ impl Worker {
                                         break;
                                     }
 
-                                    dbg!(&ns_stored, &body_stored);
                                     if ns_stored.is_some() | body_stored.is_some() {
                                         let apins = sharedtypes::LoginType::ApiNamespaced(
                                             name.to_string(),
                                             ns_stored,
                                             body_stored,
                                         );
-                                        par_vec.push(sharedtypes::ScraperParam::Login(apins));
+                                        job.param.push(sharedtypes::ScraperParam::Login(apins));
                                     }
                                 }
                                 sharedtypes::LoginType::Cookie(name, cookie) => {
@@ -252,7 +238,6 @@ impl Worker {
                                 }
                             }
                         }
-                        dbg!(&scraper);
                     }
 
                     // Makes recursion possible
@@ -262,7 +247,7 @@ impl Worker {
                         {
                             let mut temp = jobstorage.lock().unwrap();
                             let mut data = job.clone();
-                            data.time = Some(crate::time_func::time_secs());
+                            data.time = crate::time_func::time_secs();
                             data.reptime = Some(*timestamp);
                             temp.jobs_decrement_count(&data, &scraper);
                             should_remove_original_job = false;
@@ -272,8 +257,7 @@ impl Worker {
                     // Legacy data holder for plugin system
                     let job_holder_legacy = sharedtypes::JobScraper {
                         site: job.site.clone(),
-                        param: par_vec.clone(),
-                        original_param: job.param.clone().unwrap(),
+                        param: job.param.clone(),
                         job_type: job.jobmanager.jobtype,
                     };
 
@@ -284,7 +268,7 @@ impl Worker {
                         user_data: job.user_data,
                     };
 
-                    // Loads anything passed from the scraper at compile time into the user_data
+                    /// Loads anything passed from the scraper at compile time into the user_data
                     // field
                     if let Some(ref stored_info) = scraper.stored_info {
                         match stored_info {
@@ -297,54 +281,72 @@ impl Worker {
                             }
                         }
                     }
-
                     let urlload = match job.jobmanager.jobtype {
                         sharedtypes::DbJobType::Params => {
-                            // job = temp.1;
-                            scraper::url_dump(
-                                &par_vec,
+                            let mut out = Vec::new();
+                            for (url, scraperdata) in scraper::url_dump(
+                                &job.param,
                                 &scraper_data_holder,
                                 arc_scrapermanager.clone(),
                                 &scraper,
-                            )
+                            ) {
+                                out.push((sharedtypes::ScraperParam::Url(url), scraperdata));
+                            }
+                            out
                         }
                         sharedtypes::DbJobType::Plugin => {
                             continue;
                         }
                         sharedtypes::DbJobType::NoScrape => {
-                            vec![(job.param.clone().unwrap(), scraper_data_holder)]
+                            let mut out = Vec::new();
+                            for item in job.param {
+                                out.push((item, scraper_data_holder.clone()));
+                            }
+                            out
                         }
                         sharedtypes::DbJobType::FileUrl => Vec::new(),
                         // sharedtypes::DbJobType::FileUrl => { let parpms: Vec<(String, ScraperData)> = (
                         // job.param .clone() .unwrap() .split_whitespace() .map(str::to_string)
                         // .collect(), scraper_data_holder, ); parpms }
                         sharedtypes::DbJobType::Scraper => {
-                            vec![(job.param.clone().unwrap(), scraper_data_holder)]
+                            let mut out = Vec::new();
+                            for item in job.param {
+                                out.push((item, scraper_data_holder.clone()));
+                            }
+                            out
                         }
                     };
-                    'urlloop: for (urll, scraperdata) in urlload {
+                    'urlloop: for (scraperparam, scraperdata) in urlload {
                         'errloop: loop {
-                            let resp = task::block_on(download::dltext_new(
-                                urll.to_string(),
-                                &mut client,
-                                &ratelimiter_obj,
-                            ));
-                            let st = match resp {
-                                Ok(respstring) => scraper::parser_call(
-                                    &respstring,
-                                    &scraperdata,
-                                    arc_scrapermanager.clone(),
-                                    &scraper,
-                                ),
-                                Err(_) => {
-                                    break 'errloop;
-                                }
-                            };
-                            let (out_st, scraper_data_parser) = match st {
+                            let resp;
+                            let st;
+                            if let sharedtypes::ScraperParam::Url(ref url_string) = scraperparam {
+                                resp = task::block_on(download::dltext_new(
+                                    url_string,
+                                    &mut client,
+                                    &ratelimiter_obj,
+                                ));
+                                st = match resp {
+                                    Ok(respstring) => scraper::parser_call(
+                                        &respstring,
+                                        &scraperdata.job.param,
+                                        &scraperdata,
+                                        arc_scrapermanager.clone(),
+                                        &scraper,
+                                    ),
+                                    Err(_) => {
+                                        break 'errloop;
+                                    }
+                                };
+                            } else {
+                                // Finished checking everything for URLs and other stuff.
+                                break 'errloop;
+                            }
+                            let out_st = match st {
                                 Ok(objectscraper) => objectscraper,
                                 Err(ScraperReturn::Nothing) => {
                                     // job_params.lock().unwrap().remove(&scraper_data);
-                                    dbg!("Exiting loop due to nothing.");
+                                    logging::error_log(&"Exiting loop due to nothing.".to_string());
                                     break 'urlloop;
                                 }
                                 Err(ScraperReturn::EMCStop(emc)) => {
@@ -534,7 +536,6 @@ fn parse_tags(
                                 }
                             }
                             if cnt >= *filter_number {
-                                dbg!(&cnt, &filter_number);
                                 info_log(
                                     &format!(
                                         "Not downloading because unique namespace is greater then limit number. {}",
@@ -666,15 +667,14 @@ fn parse_jobs(
             let jobid;
             {
                 let mut db = db.lock().unwrap();
+                dbg!(&data, tag, &fileid);
                 jobid = db.jobs_add(
                     None,
                     0,
                     0,
                     data.job.site.clone(),
-                    data.job.original_param.clone(),
-                    true,
+                    data.job.param.clone(),
                     sharedtypes::CommitType::StopOnNothing,
-                    &data.job.job_type,
                     data.system_data.clone(),
                     data.user_data.clone(),
                     sharedtypes::DbJobsManager {
@@ -685,10 +685,10 @@ fn parse_jobs(
             }
             let dbjob = sharedtypes::DbJobsObj {
                 id: jobid,
-                time: Some(0),
+                time: 0,
                 reptime: Some(0),
                 site: data.job.site,
-                param: Some(data.job.original_param),
+                param: data.job.param,
                 jobmanager: sharedtypes::DbJobsManager {
                     jobtype: data.job.job_type,
                     recreation: None,

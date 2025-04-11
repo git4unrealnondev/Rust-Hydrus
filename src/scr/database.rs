@@ -2,8 +2,8 @@
 use crate::logging;
 use crate::plugins;
 use crate::plugins::PluginManager;
-use crate::scraper::ScraperManager;
 use crate::sharedtypes;
+use crate::sharedtypes::ScraperParam;
 use eta::{Eta, TimeAcc};
 use log::{error, info};
 use rayon::prelude::*;
@@ -1158,6 +1158,7 @@ impl Main {
                     let man = serde_json::from_str(&manager).unwrap();
                     let system_data_string: String = row.get(7).unwrap();
                     let user_data_string: String = row.get(8).unwrap();
+                    let param_string: String = row.get(5).unwrap();
                     let system_data = serde_json::from_str(&system_data_string).unwrap();
                     let user_data = serde_json::from_str(&user_data_string).unwrap();
                     Ok(sharedtypes::DbJobsObj {
@@ -1165,7 +1166,7 @@ impl Main {
                         time: row.get(1).unwrap(),
                         reptime: row.get(2).unwrap(),
                         site: row.get(4).unwrap(),
-                        param: row.get(5).unwrap(),
+                        param: serde_json::from_str(&param_string).unwrap(),
                         jobmanager: man,
                         committype: Some(sharedtypes::stringto_commit_type(&row.get(6).unwrap())),
                         isrunning: false,
@@ -1706,11 +1707,11 @@ impl Main {
             inp,
             params![
                 data.id.to_string(),
-                data.time.unwrap().to_string(),
+                data.time.to_string(),
                 data.reptime.unwrap().to_string(),
                 serde_json::to_string(&data.jobmanager).unwrap(),
                 data.site,
-                data.param,
+                serde_json::to_string(&data.param).unwrap(),
                 data.committype.unwrap().to_string(),
                 serde_json::to_string(&data.system_data).unwrap(),
                 serde_json::to_string(&data.user_data).unwrap()
@@ -1727,11 +1728,11 @@ impl Main {
             inp,
             params![
                 data.id.to_string(),
-                data.time.unwrap().to_string(),
+                data.time.to_string(),
                 data.reptime.unwrap().to_string(),
                 serde_json::to_string(&data.jobmanager).unwrap(),
                 data.site,
-                data.param,
+                serde_json::to_string(&data.param).unwrap(),
                 data.committype.unwrap().to_string(),
                 serde_json::to_string(&data.system_data).unwrap(),
                 serde_json::to_string(&data.user_data).unwrap(),
@@ -1741,16 +1742,18 @@ impl Main {
         self.db_commit_man();
     }
 
+    ///
+    /// Adds a job into a DB.
+    /// Going to make a better job adding function
+    ///
     pub fn jobs_add(
         &mut self,
         id: Option<usize>,
         time: usize,
         reptime: usize,
         site: String,
-        param: String,
-        addtodb: bool,
+        param: Vec<ScraperParam>,
         committype: sharedtypes::CommitType,
-        dbjobtype: &sharedtypes::DbJobType,
         system_data: BTreeMap<String, String>,
         user_data: BTreeMap<String, String>,
         jobsmanager: sharedtypes::DbJobsManager,
@@ -1759,17 +1762,12 @@ impl Main {
             None => *self._inmemdb.jobs_get_max(),
             Some(id) => id,
         };
-        let params = if param.is_empty() {
-            None
-        } else {
-            Some(param.clone())
-        };
         let jobs_obj: sharedtypes::DbJobsObj = sharedtypes::DbJobsObj {
             id,
-            time: Some(time),
+            time,
             reptime: Some(reptime),
             site: site.clone(),
-            param: params.clone(),
+            param: param.clone(),
             jobmanager: jobsmanager.clone(),
             committype: Some(committype),
             isrunning: false,
@@ -1781,6 +1779,10 @@ impl Main {
         // let jobsmanager = sharedtypes::DbJobsManager { jobtype: *dbjobtype, recreation:
         // None, additionaldata: None, };
         id
+    }
+
+    pub fn jobs_add_new(&mut self, dbjobsobj: sharedtypes::DbJobsObj) -> usize {
+        todo!()
     }
 
     /// Wrapper for inmemdb insert.
@@ -1983,11 +1985,11 @@ impl Main {
         }
     }
 
-    /// Deletes an item from jobs table. critera is the searchterm and collumn is the
+    /*/// Deletes an item from jobs table. critera is the searchterm and collumn is the
     /// collumn to target. Doesn't remove from inmemory database
     pub fn del_from_jobs_table(&mut self, job: &sharedtypes::JobScraper) {
-        self.del_from_jobs_table_sql(&job.site, &job.original_param);
-    }
+        self.del_from_jobs_table_sql(&job.site, &job.param);
+    }*/
 
     /// Removes a job from the database by id. Removes from both memdb and sql.
     pub fn del_from_jobs_byid(&mut self, id: &usize) {
@@ -2023,7 +2025,7 @@ impl Main {
             .unwrap();
     }
 
-    /// Removes a job from the sql table
+    /*/// Removes a job from the sql table
     fn del_from_jobs_table_sql(&mut self, site: &String, param: &String) {
         let mut delcommand = "DELETE FROM Jobs".to_string();
 
@@ -2041,7 +2043,7 @@ impl Main {
                 params![site, param],
             )
             .unwrap();
-    }
+    }*/
 
     /// Handles transactional pushes.
     pub fn transaction_execute(trans: Transaction, inp: String) {

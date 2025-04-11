@@ -489,7 +489,7 @@ fn parse_pools(
     js: &json::JsonValue,
     scraperdata: &sharedtypes::ScraperData,
     site: &Site,
-) -> Result<(sharedtypes::ScraperObject, sharedtypes::ScraperData), sharedtypes::ScraperReturn> {
+) -> Result<sharedtypes::ScraperObject, sharedtypes::ScraperReturn> {
     let mut files: HashSet<sharedtypes::FileObject> = HashSet::default();
     let mut tag: HashSet<sharedtypes::TagObject> = HashSet::default();
 
@@ -625,11 +625,10 @@ fn parse_pools(
                             (sharedtypes::ScraperData {
                                 job: sharedtypes::JobScraper {
                                     site: site_to_string_prefix(site),
-                                    param: Vec::new(),
-                                    original_param: format!(
+                                    param: vec![sharedtypes::ScraperParam::Url(format!(
                                         "https://{}.net/posts.json?tags=id:{}",
                                         lowercase_site, postids
-                                    ),
+                                    ))],
                                     job_type: sharedtypes::DbJobType::Scraper,
                                 },
                                 system_data: BTreeMap::new(),
@@ -652,11 +651,10 @@ fn parse_pools(
                         (sharedtypes::ScraperData {
                             job: sharedtypes::JobScraper {
                                 site: site_to_string_prefix(site),
-                                param: Vec::new(),
-                                original_param: format!(
+                                param: vec![sharedtypes::ScraperParam::Url(format!(
                                     "https://{}.net/posts.json?tags=id:{}",
                                     lowercase_site, postids
-                                ),
+                                ))],
                                 job_type: sharedtypes::DbJobType::Scraper,
                             },
                             system_data: BTreeMap::new(),
@@ -695,10 +693,7 @@ fn parse_pools(
         });
     }
 
-    Ok((
-        sharedtypes::ScraperObject { file: files, tag },
-        scraperdata.clone(),
-    ))
+    Ok(sharedtypes::ScraperObject { file: files, tag })
 }
 
 ///
@@ -706,9 +701,10 @@ fn parse_pools(
 ///
 #[no_mangle]
 pub fn parser(
-    params: &String,
+    html_input: &String,
+    params: &Vec<sharedtypes::ScraperParam>,
     scraperdata: &sharedtypes::ScraperData,
-) -> Result<(sharedtypes::ScraperObject, sharedtypes::ScraperData), sharedtypes::ScraperReturn> {
+) -> Result<sharedtypes::ScraperObject, sharedtypes::ScraperReturn> {
     //let vecvecstr: AHashMap<String, AHashMap<String, Vec<String>>> = AHashMap::new();
 
     let site_a = scraperdata.user_data.get("loaded_site");
@@ -725,14 +721,15 @@ pub fn parser(
     };
 
     let mut files: HashSet<sharedtypes::FileObject> = HashSet::default();
-    let js = match json::parse(params) {
+    let js = match json::parse(html_input) {
         Err(err) => {
-            if params.contains("Please confirm you are not a robot.") {
+            if html_input.contains("Please confirm you are not a robot.") {
                 return Err(sharedtypes::ScraperReturn::Timeout(20));
-            } else if params.contains("502: Bad gateway") | params.contains("SSL handshake failed")
+            } else if html_input.contains("502: Bad gateway")
+                | html_input.contains("SSL handshake failed")
             {
                 return Err(sharedtypes::ScraperReturn::Timeout(10));
-            } else if params.contains(&format!(
+            } else if html_input.contains(&format!(
                 "{} Maintenance",
                 site_to_string(&site).to_lowercase()
             )) {
@@ -831,8 +828,7 @@ pub fn parser(
                             sharedtypes::ScraperData {
                                 job: sharedtypes::JobScraper {
                                     site: site_to_string_prefix(&site).to_string(),
-                                    param: Vec::new(),
-                                    original_param: parse_url,
+                                    param: vec![sharedtypes::ScraperParam::Url(parse_url)],
                                     job_type: sharedtypes::DbJobType::Scraper,
                                 },
 
@@ -929,13 +925,10 @@ pub fn parser(
         };
         files.insert(file);
     }
-    Ok((
-        sharedtypes::ScraperObject {
-            file: files,
-            tag: HashSet::new(),
-        },
-        scraperdata.clone(),
-    ))
+    Ok(sharedtypes::ScraperObject {
+        file: files,
+        tag: HashSet::new(),
+    })
     //return Ok(vecvecstr);
 }
 ///
@@ -1081,7 +1074,6 @@ pub fn db_upgrade_call_3(site: &Site) {
                         /*if let Some(tag_id) =
                             client::parents_get(crate::client::types::ParentsType::Rel, *position)
                         {
-                            //dbg!("FID'S POSITION", &tag_id, tid, &tag_id.len());
                         }*/
                     }*/
                     for fid in hashset_fileid.iter() {
@@ -1139,14 +1131,12 @@ pub fn db_upgrade_call_3(site: &Site) {
                                                 0,
                                                 0,
                                                 site_to_string_prefix(site),
-                                                format!(
+                                                vec![sharedtypes::ScraperParam::Url(format!(
                                                     "https://{}.net/pools.json?search[id]={}",
                                                     site_to_string(site).to_lowercase(),
                                                     client::tag_get_id(*tid_iter).unwrap().name
-                                                ),
-                                                true,
+                                                ))],
                                                 sharedtypes::CommitType::StopOnNothing,
-                                                sharedtypes::DbJobType::Scraper,
                                                 BTreeMap::new(),
                                                 BTreeMap::new(),
                                                 sharedtypes::DbJobsManager {

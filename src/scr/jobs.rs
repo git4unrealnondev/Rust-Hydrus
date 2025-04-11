@@ -1,20 +1,11 @@
 use crate::database;
 use crate::logging;
-use crate::plugins::PluginManager;
-use crate::scraper;
 use crate::scraper::ScraperManager;
 use crate::sharedtypes;
-use crate::sharedtypes::SiteStruct;
-use crate::threading;
 use crate::time_func;
-use crate::time_func::time_secs;
-use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
-
-// use std::sync::{Arc, Mutex};
 use std::sync::Mutex;
-use std::time::Duration;
 
 ///
 /// Holds the previously seen jobs
@@ -23,8 +14,8 @@ use std::time::Duration;
 struct PreviouslySeenObj {
     id: usize,
     site: String,
-    original_param: String,
-    time: Option<usize>,
+    params: Vec<sharedtypes::ScraperParam>,
+    time: usize,
     reptime: Option<usize>,
 }
 
@@ -62,7 +53,7 @@ impl Jobs {
         let obj = PreviouslySeenObj {
             id: dbjobsobj.id,
             site: dbjobsobj.site.clone(),
-            original_param: dbjobsobj.param.clone().unwrap_or("".to_string()),
+            params: dbjobsobj.param.clone(),
             time: dbjobsobj.time,
             reptime: dbjobsobj.reptime,
         };
@@ -73,8 +64,24 @@ impl Jobs {
             }
         }
 
-        if time_func::time_secs() >= dbjobsobj.time.unwrap() + dbjobsobj.reptime.unwrap() {
+        if time_func::time_secs() >= dbjobsobj.time + dbjobsobj.reptime.unwrap() {
             crate::logging::info_log(&format!("Adding job: {:?}", &dbjobsobj));
+
+            let mut unwrappy = self.db.lock().unwrap();
+            /*unwrappy.jobs_add(
+                Some(dbjobsobj.id),
+                dbjobsobj.time.clone(),
+                dbjobsobj.reptime.clone().unwrap(),
+                dbjobsobj.site.clone(),
+                dbjobsobj.param.clone(),
+                dbjobsobj
+                    .committype
+                    .clone()
+                    .unwrap_or(sharedtypes::CommitType::StopOnNothing),
+                dbjobsobj.system_data.clone(),
+                dbjobsobj.user_data.clone(),
+                dbjobsobj.jobmanager.clone(),
+            );*/
 
             match self.previously_seen.get_mut(&scraper) {
                 Some(list) => {
@@ -108,6 +115,7 @@ impl Jobs {
             .cloned()
             .unwrap_or(HashSet::new())
     }
+
     ///
     /// Gets all the sitestruct objs that are loaded for jobs
     ///
@@ -184,7 +192,7 @@ impl Jobs {
     ///
     pub fn jobs_run_new(&mut self) {
         if self.site_job.is_empty() {
-            logging::log(&format!("No jobs to run"));
+            logging::log(&"No jobs to run".to_string());
         } else {
             self.db
                 .lock()
@@ -233,8 +241,13 @@ impl Jobs {
 #[cfg(test)]
 
 mod tests {
-    use std::sync::{Arc, Mutex};
+    use std::collections::{BTreeMap, HashMap};
+    use std::{
+        sync::{Arc, Mutex},
+        time::Duration,
+    };
 
+    use crate::sharedtypes::{DbJobsObj, SiteStruct};
     use crate::{database::test_database, scraper::test_scrapermanager};
 
     use super::Jobs;
@@ -249,10 +262,76 @@ mod tests {
         Jobs::new(db, scraper_manager)
     }
 
+    ///
+    /// Returns a default sitestruct
+    ///
+    fn return_sitestruct() -> SiteStruct {
+        crate::sharedtypes::SiteStruct {
+            name: "test".to_string(),
+            sites: vec!["test".to_string()],
+            version: 1,
+            ratelimit: (1, Duration::from_secs(1)),
+            should_handle_file_download: false,
+            should_handle_text_scraping: false,
+            login_type: vec![],
+            stored_info: None,
+        }
+    }
+
+    ///
+    /// Returns a default jobsobj
+    ///
+    fn return_dbjobsobj() -> DbJobsObj {
+        crate::sharedtypes::DbJobsObj {
+            id: 0,
+            time: 0,
+            reptime: Some(1),
+            site: "test".to_string(),
+            param: vec![],
+            jobmanager: crate::sharedtypes::DbJobsManager {
+                jobtype: crate::sharedtypes::DbJobType::Scraper,
+                recreation: None,
+            },
+            committype: None,
+            isrunning: false,
+            system_data: BTreeMap::new(),
+            user_data: BTreeMap::new(),
+        }
+    }
+
     #[test]
     fn insert_duplicate_job() {
         let mut job = create_default();
 
         job.jobs_load();
+        let scraper = return_sitestruct();
+
+        let dbjobsobj = return_dbjobsobj();
+        job.jobs_add(scraper.clone(), dbjobsobj.clone());
+        job.jobs_add(scraper.clone(), dbjobsobj);
+        assert_eq!(job.site_job.get(&scraper).unwrap().len(), 1);
+        assert_eq!(job.previously_seen.get(&scraper).unwrap().len(), 1);
+
+        let unwrappy = job.db.lock().unwrap();
+
+        assert_eq!(unwrappy.jobs_get_all().keys().len(), 1);
+    }
+    #[test]
+    fn jobs_remove_job() {
+        let mut job = create_default();
+
+        job.jobs_load();
+        let scraper = return_sitestruct();
+
+        let dbjobsobj = return_dbjobsobj();
+        job.jobs_add(scraper.clone(), dbjobsobj.clone());
+        assert_eq!(job.site_job.get(&scraper).unwrap().len(), 1);
+        assert_eq!(job.previously_seen.get(&scraper).unwrap().len(), 1);
+        job.jobs_remove_dbjob(&scraper, &dbjobsobj);
+
+        let unwrappy = job.db.lock().unwrap();
+
+        assert_eq!(unwrappy.jobs_get_all().keys().len(), 0);
+        assert_eq!(job.site_job.get(&scraper).unwrap().len(), 0);
     }
 }
