@@ -44,6 +44,8 @@ impl Jobs {
     }
     ///
     /// Adds job into the storage
+    /// Does not append jobs into db. This is intentional as the threading module adds the jobs to
+    /// db
     ///
     pub fn jobs_add(
         &mut self,
@@ -67,8 +69,8 @@ impl Jobs {
         if time_func::time_secs() >= dbjobsobj.time + dbjobsobj.reptime.unwrap() {
             crate::logging::info_log(&format!("Adding job: {:?}", &dbjobsobj));
 
-            let mut unwrappy = self.db.lock().unwrap();
-            /*unwrappy.jobs_add(
+            /*let mut unwrappy = self.db.lock().unwrap();
+            unwrappy.jobs_add(
                 Some(dbjobsobj.id),
                 dbjobsobj.time.clone(),
                 dbjobsobj.reptime.clone().unwrap(),

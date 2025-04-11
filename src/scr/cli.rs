@@ -200,29 +200,23 @@ pub fn main(data: Arc<Mutex<database::Main>>, scraper: Arc<Mutex<scraper::Scrape
                 let mut data = data.lock().unwrap();
                 data.load_table(&sharedtypes::LoadDBTable::All);
                 let hstags = data.relationship_get_tagid(&id.id);
-                match hstags {
-                    None => {
-                        println!(
-                            "Cannot find any loaded relationships for fileid: {}",
-                            &id.id
-                        );
-                    }
-                    Some(tags) => {
-                        let mut itvec: Vec<usize> = tags.into_iter().collect();
-                        itvec.sort();
-                        for tid in itvec {
-                            let tag = data.tag_id_get(&tid);
-                            match tag {
-                                None => {
-                                    println!("WANRING CORRUPTION DETECTED for tagid: {}", &tid);
-                                }
-                                Some(tagnns) => {
-                                    let ns = data.namespace_get_string(&tagnns.namespace).unwrap();
-                                    println!(
-                                        "ID {} Tag: {} namespace: {}",
-                                        tid, tagnns.name, ns.name
-                                    );
-                                }
+                if hstags.is_empty() {
+                    println!(
+                        "Cannot find any loaded relationships for fileid: {}",
+                        &id.id
+                    );
+                } else {
+                    let mut itvec: Vec<usize> = hstags.into_iter().collect();
+                    itvec.sort();
+                    for tid in itvec {
+                        let tag = data.tag_id_get(&tid);
+                        match tag {
+                            None => {
+                                println!("WANRING CORRUPTION DETECTED for tagid: {}", &tid);
+                            }
+                            Some(tagnns) => {
+                                let ns = data.namespace_get_string(&tagnns.namespace).unwrap();
+                                println!("ID {} Tag: {} namespace: {}", tid, tagnns.name, ns.name);
                             }
                         }
                     }
@@ -232,9 +226,9 @@ pub fn main(data: Arc<Mutex<database::Main>>, scraper: Arc<Mutex<scraper::Scrape
                 let mut data = data.lock().unwrap();
                 data.load_table(&sharedtypes::LoadDBTable::All);
                 let fids = data.relationship_get_fileid(&id.id);
-                if let Some(goodfid) = fids {
+                if !fids.is_empty() {
                     logging::info_log(&"Found Fids:".to_string());
-                    for each in goodfid {
+                    for each in fids {
                         logging::info_log(&format!("{}", &each));
                     }
                 }
@@ -247,16 +241,17 @@ pub fn main(data: Arc<Mutex<database::Main>>, scraper: Arc<Mutex<scraper::Scrape
                     let tid = data.tag_get_name(tag.tag.clone(), *nsid);
                     if let Some(tid) = tid {
                         let fids = data.relationship_get_fileid(tid);
-                        if let Some(goodfid) = fids {
-                            logging::info_log(&"Found Fids:".to_string());
-                            for each in goodfid {
-                                logging::info_log(&format!("{}", &each));
-                            }
-                        } else {
+
+                        if fids.is_empty() {
                             logging::info_log(&format!(
                                 "Cannot find any relationships for tag id: {}",
                                 &tid
                             ));
+                        } else {
+                            logging::info_log(&"Found Fids:".to_string());
+                            for each in fids {
+                                logging::info_log(&format!("{}", &each));
+                            }
                         }
                     } else {
                         logging::info_log(&"Cannot find tag :C".to_string());
@@ -275,39 +270,29 @@ pub fn main(data: Arc<Mutex<database::Main>>, scraper: Arc<Mutex<scraper::Scrape
                     }
                     Some(fid) => {
                         let hstags = data.relationship_get_tagid(fid);
-                        match hstags {
-                            None => {
-                                println!(
-                                    "Cannot find any loaded relationships for fileid: {}",
-                                    &fid
-                                );
-                            }
-                            Some(tags) => {
-                                let mut tvec = Vec::new();
-                                for tid in tags.iter() {
-                                    if let Some(tag) = data.tag_id_get(tid) {
-                                        tvec.push(tid)
-                                    }
+                        if hstags.is_empty() {
+                            println!("Cannot find any loaded relationships for fileid: {}", &fid);
+                        } else {
+                            let mut tvec = Vec::new();
+                            for tid in hstags.iter() {
+                                if let Some(tag) = data.tag_id_get(tid) {
+                                    tvec.push(tid)
                                 }
-                                tvec.sort();
-                                for tid in tvec.iter() {
-                                    let tag = data.tag_id_get(tid);
-                                    match tag {
-                                        None => {
-                                            println!(
-                                                "WANRING CORRUPTION DETECTED for tagid: {}",
-                                                &tid
-                                            );
-                                        }
-                                        Some(tagnns) => {
-                                            let ns = data
-                                                .namespace_get_string(&tagnns.namespace)
-                                                .unwrap();
-                                            println!(
-                                                "ID {} Tag: {} namespace: {}",
-                                                tid, tagnns.name, ns.name
-                                            );
-                                        }
+                            }
+                            tvec.sort();
+                            for tid in tvec.iter() {
+                                let tag = data.tag_id_get(tid);
+                                match tag {
+                                    None => {
+                                        println!("WANRING CORRUPTION DETECTED for tagid: {}", &tid);
+                                    }
+                                    Some(tagnns) => {
+                                        let ns =
+                                            data.namespace_get_string(&tagnns.namespace).unwrap();
+                                        println!(
+                                            "ID {} Tag: {} namespace: {}",
+                                            tid, tagnns.name, ns.name
+                                        );
                                     }
                                 }
                             }
@@ -487,7 +472,48 @@ pub fn main(data: Arc<Mutex<database::Main>>, scraper: Arc<Mutex<scraper::Scrape
                             if !Path::new(&lispa).exists() {
                                 println!("{}", &file.hash);
                                 if nsid.is_some() {
-                                    if let Some(rel) = data.relationship_get_tagid(fid) {
+                                    let rel = data.relationship_get_tagid(fid);
+                                    for eachs in rel.iter() {
+                                        let dat = data.tag_id_get(eachs).unwrap();
+                                        logging::info_log(&format!(
+                                            "Got Tag: {} for fileid: {}",
+                                            dat.name, fid
+                                        ));
+                                        if dat.namespace == nsid.unwrap() {
+                                            let client = download::client_create();
+                                            let mut file = sharedtypes::FileObject {
+                                                source_url: Some(dat.name.clone()),
+                                                hash: sharedtypes::HashesSupported::Sha512(
+                                                    file.hash.clone(),
+                                                ),
+                                                tag_list: Vec::new(),
+                                                skip_if: Vec::new(),
+                                            };
+                                            download::dlfile_new(
+                                                &client,
+                                                dbstore.clone(),
+                                                &mut file,
+                                                &data.location_get(),
+                                                None,
+                                                &ratelimiter_obj,
+                                                &dat.name.clone(),
+                                            );
+                                        }
+                                    }
+                                }
+                            } else {
+                                let fil = std::fs::read(lispa).unwrap();
+                                let hinfo = download::hash_bytes(
+                                    &bytes::Bytes::from(fil),
+                                    &sharedtypes::HashesSupported::Sha512(file.hash.clone()),
+                                );
+                                if !hinfo.1 {
+                                    logging::error_log(&format!(
+                                        "BAD HASH: ID: {}  HASH: {}   2ND HASH: {}",
+                                        &file.id, &file.hash, hinfo.0
+                                    ));
+                                    if nsid.is_some() {
+                                        let rel = data.relationship_get_tagid(fid);
                                         for eachs in rel.iter() {
                                             let dat = data.tag_id_get(eachs).unwrap();
                                             logging::info_log(&format!(
@@ -513,49 +539,6 @@ pub fn main(data: Arc<Mutex<database::Main>>, scraper: Arc<Mutex<scraper::Scrape
                                                     &ratelimiter_obj,
                                                     &dat.name.clone(),
                                                 );
-                                            }
-                                        }
-                                    }
-                                }
-                            } else {
-                                let fil = std::fs::read(lispa).unwrap();
-                                let hinfo = download::hash_bytes(
-                                    &bytes::Bytes::from(fil),
-                                    &sharedtypes::HashesSupported::Sha512(file.hash.clone()),
-                                );
-                                if !hinfo.1 {
-                                    logging::error_log(&format!(
-                                        "BAD HASH: ID: {}  HASH: {}   2ND HASH: {}",
-                                        &file.id, &file.hash, hinfo.0
-                                    ));
-                                    if nsid.is_some() {
-                                        if let Some(rel) = data.relationship_get_tagid(fid) {
-                                            for eachs in rel.iter() {
-                                                let dat = data.tag_id_get(eachs).unwrap();
-                                                logging::info_log(&format!(
-                                                    "Got Tag: {} for fileid: {}",
-                                                    dat.name, fid
-                                                ));
-                                                if dat.namespace == nsid.unwrap() {
-                                                    let client = download::client_create();
-                                                    let mut file = sharedtypes::FileObject {
-                                                        source_url: Some(dat.name.clone()),
-                                                        hash: sharedtypes::HashesSupported::Sha512(
-                                                            file.hash.clone(),
-                                                        ),
-                                                        tag_list: Vec::new(),
-                                                        skip_if: Vec::new(),
-                                                    };
-                                                    download::dlfile_new(
-                                                        &client,
-                                                        dbstore.clone(),
-                                                        &mut file,
-                                                        &data.location_get(),
-                                                        None,
-                                                        &ratelimiter_obj,
-                                                        &dat.name.clone(),
-                                                    );
-                                                }
                                             }
                                         }
                                     }

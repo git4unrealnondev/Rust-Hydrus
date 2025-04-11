@@ -1226,6 +1226,8 @@ pub fn on_start(site_struct: &sharedtypes::SiteStruct) {
     if let Some(_site) = site_op {
         client::load_table(sharedtypes::LoadDBTable::Namespace);
 
+        let source_url_nsid = client::namespace_get("source_url".to_string());
+
         let legacy_ns = [
             "Pool_Updated_At",
             "Pool_Created_At",
@@ -1256,6 +1258,14 @@ pub fn on_start(site_struct: &sharedtypes::SiteStruct) {
         let mut nsids = Vec::new();
         for ns in legacy_ns {
             if let Some(nsid) = client::namespace_get(ns.to_string()) {
+                client::load_table(sharedtypes::LoadDBTable::Tags);
+                if let Some(tagids) = client::namespace_get_tagids(nsid) {
+                    for tagid in tagids {
+                        if let Some(fileids) = client::relationship_get_fileid(tagid) {
+                            for fileid in fileids {}
+                        }
+                    }
+                }
                 nsids.push(nsid);
                 dbg!(ns, nsid);
             }

@@ -436,31 +436,22 @@ impl Main {
                 sharedtypes::SearchHolder::Not((a, b)) => {
                     let fa = self.relationship_get_fileid(&a);
                     let fb = self.relationship_get_fileid(&b);
-                    if let Some(fa) = fa {
-                        if let Some(fb) = fb {
-                            fin_temp.insert(cnt, fa.difference(&fb).cloned().collect());
-                        }
-                    }
+                    fin_temp.insert(cnt, fa.difference(&fb).cloned().collect());
                     searched.push((cnt, a));
                     searched.push((cnt, b));
                 }
                 sharedtypes::SearchHolder::And((a, b)) => {
-                    if let Some(fa) = self.relationship_get_fileid(&a) {
-                        if let Some(fb) = self.relationship_get_fileid(&b) {
-                            fin_temp.insert(cnt, fa.intersection(&fb).cloned().collect());
-                        }
-                    }
+                    let fa = self.relationship_get_fileid(&a);
+                    let fb = self.relationship_get_fileid(&b);
+                    fin_temp.insert(cnt, fa.intersection(&fb).cloned().collect());
+
                     searched.push((cnt, a));
                     searched.push((cnt, b));
                 }
                 sharedtypes::SearchHolder::Or((a, b)) => {
                     let fa = self.relationship_get_fileid(&a);
                     let fb = self.relationship_get_fileid(&b);
-                    if let Some(fa) = &fa {
-                        if let Some(fb) = &fb {
-                            fin_temp.insert(cnt, fa.union(fb).cloned().collect());
-                        }
-                    }
+                    fin_temp.insert(cnt, fa.union(&fb).cloned().collect());
                     searched.push((cnt, a));
                     searched.push((cnt, b));
                 }
@@ -521,7 +512,7 @@ impl Main {
     }
 
     /// returns file id's based on relationships with a tag
-    pub fn relationship_get_fileid(&self, tag: &usize) -> Option<HashSet<usize>> {
+    pub fn relationship_get_fileid(&self, tag: &usize) -> HashSet<usize> {
         self._inmemdb.relationship_get_fileid(tag)
     }
 
@@ -530,7 +521,7 @@ impl Main {
     }
 
     /// Returns tagid's based on relationship with a fileid.
-    pub fn relationship_get_tagid(&self, tag: &usize) -> Option<HashSet<usize>> {
+    pub fn relationship_get_tagid(&self, tag: &usize) -> HashSet<usize> {
         self._inmemdb.relationship_get_tagid(tag)
     }
 
@@ -2104,31 +2095,29 @@ impl Main {
         let relationships = self.relationship_get_fileid(tag_id);
 
         // Gets list of fileids from internal db.
-        match relationships {
-            None => (),
-            Some(fileids) => {
+
+        for fileids in relationships.iter() {
+            logging::log(&format!(
+                "Found {} relationships's effected for tagid: {}.",
+                relationships.len(),
+                tag_id
+            ));
+
+            // let mut sql = String::new();
+            for file_id in relationships.clone() {
                 logging::log(&format!(
-                    "Found {} relationships's effected for tagid: {}.",
-                    fileids.len(),
-                    tag_id
+                    "Removing file: {} tagid: {} from db.",
+                    file_id, tag_id
                 ));
 
-                // let mut sql = String::new();
-                for file_id in fileids.clone() {
-                    logging::log(&format!(
-                        "Removing file: {} tagid: {} from db.",
-                        file_id, tag_id
-                    ));
+                logging::log(&"Removing relationship sql".to_string());
 
-                    logging::log(&"Removing relationship sql".to_string());
-
-                    self.relationship_remove(&file_id, tag_id);
-                }
-
-                // self._conn.lock().unwrap().execute_batch(&sql).unwrap();
-                logging::log(&"Relationship Loop".to_string());
-                // self.transaction_flush();
+                self.relationship_remove(&file_id, tag_id);
             }
+
+            // self._conn.lock().unwrap().execute_batch(&sql).unwrap();
+            logging::log(&"Relationship Loop".to_string());
+            // self.transaction_flush();
         }
     }
 
@@ -2307,12 +2296,12 @@ impl Main {
                     if flag {
                         logging::log(&format!("Moving tagid: {} to {}", &id, &cnt));
                         self.tag_add(&tag.name.clone(), tag.namespace, true, Some(cnt));
-                        if let Some(fileids) = self.relationship_get_fileid(&id) {
-                            for file_id in fileids {
-                                self.relationship_add(file_id, cnt, true);
-                                self.relationship_remove(&file_id, &id);
-                            }
+                        let fileids = self.relationship_get_fileid(&id);
+                        for file_id in fileids {
+                            self.relationship_add(file_id, cnt, true);
+                            self.relationship_remove(&file_id, &id);
                         }
+
                         // Removes parent by ID and readds it with the new id
                         for parent in self.parents_tagid_remove(&id) {
                             logging::log(&format!(
@@ -2429,7 +2418,7 @@ impl Main {
         if let Some(tids) = tida {
             let mut cnt: usize = 0;
             for tid in tids.clone() {
-                let file_listop = self._inmemdb.relationship_get_fileid(&tid).unwrap().clone();
+                let file_listop = self._inmemdb.relationship_get_fileid(&tid).clone();
                 let tag = self._inmemdb.tags_get_data(&tid).unwrap().clone();
                 self.tag_add_sql(&cnt, &tag.name, &tag.namespace);
                 for file in file_listop {

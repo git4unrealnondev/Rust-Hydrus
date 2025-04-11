@@ -178,7 +178,7 @@ pub fn file_get_list_id() -> HashSet<usize> {
 
 /// See the database reference for this function. I'm a lazy turd just check it
 /// their
-pub fn relationship_get_fileid(id: usize) -> Option<HashSet<usize>> {
+pub fn relationship_get_fileid(id: usize) -> HashSet<usize> {
     init_data_request(&types::SupportedRequests::Database(
         types::SupportedDBRequests::RelationshipGetFileid(id),
     ))
@@ -193,7 +193,7 @@ pub fn file_get_id(fid: usize) -> Option<sharedtypes::DbFileStorage> {
 
 /// See the database reference for this function. I'm a lazy turd just check it
 /// their
-pub fn relationship_get_tagid(id: usize) -> Option<HashSet<usize>> {
+pub fn relationship_get_tagid(id: usize) -> HashSet<usize> {
     init_data_request(&types::SupportedRequests::Database(
         types::SupportedDBRequests::RelationshipGetTagid(id),
     ))

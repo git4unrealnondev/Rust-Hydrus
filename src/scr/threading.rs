@@ -501,97 +501,83 @@ fn parse_tags(
                 None => {
                     url_return.insert(jobscraped.clone());
                 }
-                Some(skip_if) => {
-                    match skip_if {
-                        sharedtypes::SkipIf::FileNamespaceNumber((
-                            unique_tag,
-                            namespace_filter,
-                            filter_number,
-                        )) => {
-                            let mut cnt = 0;
-                            if let Some(nidf) = unwrappy.namespace_get(&namespace_filter.name) {
-                                if let Some(nid) =
-                                    unwrappy.namespace_get(&unique_tag.namespace.name)
+                Some(skip_if) => match skip_if {
+                    sharedtypes::SkipIf::FileNamespaceNumber((
+                        unique_tag,
+                        namespace_filter,
+                        filter_number,
+                    )) => {
+                        let mut cnt = 0;
+                        if let Some(nidf) = unwrappy.namespace_get(&namespace_filter.name) {
+                            if let Some(nid) = unwrappy.namespace_get(&unique_tag.namespace.name) {
+                                if let Some(tid) =
+                                    unwrappy.tag_get_name(unique_tag.tag.clone(), *nid)
                                 {
-                                    if let Some(tid) =
-                                        unwrappy.tag_get_name(unique_tag.tag.clone(), *nid)
-                                    {
-                                        if let Some(fids) = unwrappy.relationship_get_fileid(tid) {
-                                            if fids.len() == 1 {
-                                                let fid = fids.iter().next().unwrap();
-                                                for tidtofilter in unwrappy
-                                                    .relationship_get_tagid(fid)
-                                                    .unwrap()
-                                                    .iter()
-                                                {
-                                                    if unwrappy
-                                                        .namespace_contains_id(nidf, tidtofilter)
-                                                    {
-                                                        cnt += 1;
-                                                    }
-                                                }
+                                    let fids = unwrappy.relationship_get_fileid(tid);
+                                    if fids.len() == 1 {
+                                        let fid = fids.iter().next().unwrap();
+                                        for tidtofilter in
+                                            unwrappy.relationship_get_tagid(fid).iter()
+                                        {
+                                            if unwrappy.namespace_contains_id(nidf, tidtofilter) {
+                                                cnt += 1;
                                             }
                                         }
                                     }
                                 }
                             }
-                            if cnt >= *filter_number {
-                                info_log(
+                        }
+                        if cnt >= *filter_number {
+                            info_log(
                                     &format!(
                                         "Not downloading because unique namespace is greater then limit number. {}",
                                         unique_tag.tag
                                     ),
                                 );
-                            } else {
-                                info_log(
+                        } else {
+                            info_log(
                                     &"Downloading due to unique namespace not existing or number less then limit number.".to_string(),
                                 );
+                            url_return.insert(jobscraped.clone());
+                        }
+                    }
+                    sharedtypes::SkipIf::FileTagRelationship(taginfo) => 'tag: {
+                        dbg!(&file_id);
+                        let nid = unwrappy.namespace_get(&taginfo.namespace.name);
+                        let id = match nid {
+                            None => {
+                                println!("Namespace does not exist: {:?}", taginfo.namespace);
+                                url_return.insert(jobscraped.clone());
+                                break 'tag;
+                            }
+                            Some(id) => id,
+                        };
+                        match unwrappy.tag_get_name(taginfo.tag.clone(), *id) {
+                            None => {
+                                println!("WillDownload: {}", taginfo.tag);
                                 url_return.insert(jobscraped.clone());
                             }
-                        }
-                        sharedtypes::SkipIf::FileTagRelationship(taginfo) => 'tag: {
-                            let nid = unwrappy.namespace_get(&taginfo.namespace.name);
-                            let id = match nid {
-                                None => {
-                                    println!("Namespace does not exist: {:?}", taginfo.namespace);
+                            Some(tag_id) => {
+                                let rel_hashset = unwrappy.relationship_get_fileid(tag_id);
+                                if rel_hashset.is_empty() {
+                                    println!(
+                                        "Downloading: {} because no relationship",
+                                        taginfo.tag
+                                    );
+                                    println!("Will download from: {}", taginfo.tag);
                                     url_return.insert(jobscraped.clone());
-                                    break 'tag;
+                                } else {
+                                    info_log(&format!(
+                                        "Skipping because this already has a relationship. {}",
+                                        taginfo.tag
+                                    ));
                                 }
-                                Some(id) => id,
-                            };
-                            match unwrappy.tag_get_name(taginfo.tag.clone(), *id) {
-                                None => {
-                                    println!("WillDownload: {}", taginfo.tag);
-                                    url_return.insert(jobscraped.clone());
-                                }
-                                Some(tag_id) => {
-                                    let rel_hashset = unwrappy.relationship_get_fileid(tag_id);
-                                    match rel_hashset {
-                                        None => {
-                                            println!(
-                                                "Downloading: {} because no relationship",
-                                                taginfo.tag
-                                            );
-                                            println!("Will download from: {}", taginfo.tag);
-                                            url_return.insert(jobscraped.clone());
-                                        }
-                                        Some(_) => {
-                                            info_log(
-                                                &format!(
-                                                    "Skipping because this already has a relationship. {}",
-                                                    taginfo.tag
-                                                ),
-                                            );
-                                            // println!("Will download from: {}", taginfo.tag); url_return.insert(jobscraped);
-                                        }
-                                    }
-                                    println!("Ignoring: {}", taginfo.tag);
-                                    break 'tag;
-                                }
+                                println!("Ignoring: {}", taginfo.tag);
+                                break 'tag;
                             }
                         }
                     }
-                }
+                },
             }
 
             // Returns the url that we need to parse.
@@ -667,7 +653,6 @@ fn parse_jobs(
             let jobid;
             {
                 let mut db = db.lock().unwrap();
-                dbg!(&data, tag, &fileid);
                 jobid = db.jobs_add(
                     None,
                     0,
@@ -717,15 +702,12 @@ fn parse_skipif(
             if let Some(nidf) = unwrappydb.namespace_get(&namespace_filter.name) {
                 if let Some(nid) = unwrappydb.namespace_get(&unique_tag.namespace.name) {
                     if let Some(tid) = unwrappydb.tag_get_name(unique_tag.tag.clone(), *nid) {
-                        if let Some(fids) = unwrappydb.relationship_get_fileid(tid) {
-                            if fids.len() == 1 {
-                                let fid = fids.iter().next().unwrap();
-                                for tidtofilter in
-                                    unwrappydb.relationship_get_tagid(fid).unwrap().iter()
-                                {
-                                    if unwrappydb.namespace_contains_id(nidf, tidtofilter) {
-                                        cnt += 1;
-                                    }
+                        let fids = unwrappydb.relationship_get_fileid(tid);
+                        if fids.len() == 1 {
+                            let fid = fids.iter().next().unwrap();
+                            for tidtofilter in unwrappydb.relationship_get_tagid(fid).iter() {
+                                if unwrappydb.namespace_contains_id(nidf, tidtofilter) {
+                                    cnt += 1;
                                 }
                             }
                         }

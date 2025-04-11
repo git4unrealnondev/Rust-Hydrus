@@ -256,24 +256,31 @@ impl NewinMemDB {
     }
 
     /// Returns a list of file id's based on a tag id.
-    pub fn relationship_get_fileid(&self, tag: &usize) -> Option<HashSet<usize>> {
+    pub fn relationship_get_fileid(&self, tag: &usize) -> HashSet<usize> {
         match self._relationship_tag_file.get(tag) {
-            None => None,
+            None => HashSet::new(),
             Some(relref) => {
                 let mut out = HashSet::default();
                 for each in relref {
                     out.insert(*each);
                 }
-                Some(out)
+                out
             }
         }
     }
 
     /// Returns a list of tag id's based on a file id
-    pub fn relationship_get_tagid(&self, file: &usize) -> Option<HashSet<usize>> {
-        self._relationship_file_tag
-            .get(file)
-            .map(|relref| HashSet::from_iter(relref.clone()))
+    pub fn relationship_get_tagid(&self, file: &usize) -> HashSet<usize> {
+        match self._relationship_file_tag.get(file) {
+            None => HashSet::new(),
+            Some(relref) => {
+                let mut out = HashSet::default();
+                for each in relref {
+                    out.insert(*each);
+                }
+                out
+            }
+        }
     }
 
     /// relationship gets only one fileid
@@ -558,10 +565,10 @@ impl NewinMemDB {
         let namespace_opt = self._namespace_id_tag.get_mut(&tag_info.namespace);
         match namespace_opt {
             None => {
-                logging::info_log(&format!(
+                /*logging::info_log(&format!(
                     "Making namespace with id : {}",
                     &tag_info.namespace
-                ));
+                ));*/
 
                 // Gets called when the namespace id wasn't found as a key
                 let mut idset = HashSet::new();

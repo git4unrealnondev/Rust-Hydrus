@@ -474,7 +474,7 @@ impl DbInteract {
             types::SupportedDBRequests::RelationshipGetTagid(id) => {
                 let unwrappy = self._database.lock().unwrap();
                 let tmep = unwrappy.relationship_get_tagid(&id);
-                Self::option_to_bytes(tmep.as_ref())
+                Self::data_size_to_b(&tmep)
             }
             types::SupportedDBRequests::GetFile(id) => {
                 let unwrappy = self._database.lock().unwrap();
@@ -484,7 +484,7 @@ impl DbInteract {
             types::SupportedDBRequests::RelationshipGetFileid(id) => {
                 let unwrappy = self._database.lock().unwrap();
                 let tmep = unwrappy.relationship_get_fileid(&id);
-                Self::option_to_bytes(tmep.as_ref())
+                Self::data_size_to_b(&tmep)
             }
             types::SupportedDBRequests::SettingsGetName(id) => {
                 let unwrappy = self._database.lock().unwrap();
