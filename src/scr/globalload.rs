@@ -98,7 +98,7 @@ impl GlobalLoad {
         if let Some(valid_func) = self.callbackstorage.get_mut(func_name) {
             for each in valid_func.iter() {
                 if *vers == each.vers {
-                    let plugin_lib = self._plugin.get_mut(&each.name)?;
+                    let plugin_lib = self.library_lib.get_mut(&each.name)?;
                     let plugininfo;
                     unsafe {
                         let plugindatafunc: libloading::Symbol<
