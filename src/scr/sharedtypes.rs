@@ -161,8 +161,70 @@ pub struct SiteStruct {
     pub stored_info: Option<StoredInfo>,
 }
 
+///
+/// Info for scrapers as apart of the Global merge
+///
+#[derive(Debug, Clone, Eq, Hash, PartialEq)]
+pub struct ScraperInfo {
+    /// Ratelimit for this site
+    pub ratelimit: (u64, std::time::Duration),
+}
+
+///
+/// Info for plugins as apart of the Global merge
+///
+#[derive(Debug, Clone, Eq, Hash, PartialEq)]
+pub struct PluginInfo2 {
+    /// Manages com settings between Plugin and host
+    pub com_type: PluginThreadType,
+    pub com_channel: bool,
+}
+
+///
+/// Used to hold plugin or scraper data.
+///
+#[derive(Debug, Clone, Eq, Hash, PartialEq)]
+pub enum ScraperOrPlugin {
+    Scraper(ScraperInfo),
+    Plugin(PluginInfo2),
+}
+
+/// A conjoined twin of scrapers and plugins
+#[derive(Debug, Clone, Eq, Hash, PartialEq)]
+pub struct GlobalPluginScraper {
+    /// Name of the site (human readable plz)
+    pub name: String,
+    /// Verison of the item
+    pub version: usize,
+    /// Weather this item should handle the file download
+    pub should_handle_file_download: bool,
+    /// Weather this item needs to handle text scraping
+    pub should_handle_text_scraping: bool,
+    /// Any data thats needed to access restricted content
+    pub login_type: Vec<(String, LoginType, LoginNeed, Option<String>, bool)>,
+    /// Storage for the item, Will be loaded into the user_data slot for scrapers
+    pub stored_info: Option<StoredInfo>,
+    /// Any callbacks that should run on any events
+    pub callbacks: Vec<GlobalCallbacks>,
+    /// Storage for plugin or scraper info. Determines type.
+    pub storage_type: Option<ScraperOrPlugin>,
+}
+
+pub fn return_default_globalpluginparser() -> GlobalPluginScraper {
+    GlobalPluginScraper {
+        name: "".to_string(),
+        version: 0,
+        should_handle_file_download: false,
+        should_handle_text_scraping: false,
+        login_type: vec![],
+        stored_info: None,
+        callbacks: vec![],
+        storage_type: None,
+    }
+}
+
 /// Determines how to run a function
-#[derive(Debug, EnumIter, Display)]
+#[derive(Debug, EnumIter, Display, Clone, Eq, Hash, PartialEq)]
 pub enum PluginThreadType {
     // Run plugin inside of the calling function. DEFAULT
     Inline,
@@ -801,6 +863,22 @@ pub enum AllFields {
 /// Plugin Callable actions for callbacks
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub enum PluginCallback {
+    // Ran when a file is downloaded
+    Download,
+    // Starts when the software start
+    Start,
+    // Used for when we need to get / register a login
+    LoginNeeded,
+    // Custom callback to be used for cross communication
+    Callback(CallbackInfo),
+    // Runs when a tag has exists.
+    // First when the tag exists OR when the namespace exists
+    // Use None when searching all or Some when searching restrictivly
+    Tag(Vec<(Option<SearchType>, Option<String>, Option<String>)>),
+}
+
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
+pub enum GlobalCallbacks {
     // Ran when a file is downloaded
     Download,
     // Starts when the software start

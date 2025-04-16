@@ -3,9 +3,10 @@
 
 use crate::database;
 use crate::download;
+use crate::globalload::GlobalLoad;
 use crate::jobs::Jobs;
 use crate::logging;
-use crate::plugins::PluginManager;
+use crate::plugins::globalload;
 use crate::sharedtypes;
 use crate::threading;
 use anyhow::Context;
@@ -147,13 +148,13 @@ pub struct PluginIpcInteract {
 impl PluginIpcInteract {
     pub fn new(
         main_db: Arc<Mutex<database::Main>>,
-        pluginmanager: Arc<Mutex<PluginManager>>,
+        globalload: Arc<Mutex<PluginManager>>,
         jobs: Arc<Mutex<Jobs>>,
     ) -> Self {
         PluginIpcInteract {
             db_interface: DbInteract {
                 _database: main_db.clone(),
-                pluginmanager,
+                globalload,
                 jobmanager: jobs.clone(),
                 threads: Vec::new(),
             },
@@ -240,7 +241,7 @@ another process and try again.",
 
 struct DbInteract {
     _database: Arc<Mutex<database::Main>>,
-    pluginmanager: Arc<Mutex<PluginManager>>,
+    globalload: Arc<Mutex<GlobalLoad>>,
     jobmanager: Arc<Mutex<Jobs>>,
     threads: Vec<thread::JoinHandle<()>>,
 }
@@ -262,18 +263,10 @@ impl DbInteract {
     pub fn dbactions_to_function(&mut self, dbaction: types::SupportedDBRequests) -> Vec<u8> {
         match dbaction {
             types::SupportedDBRequests::PutFileNoBlock((mut file, ratelimit)) => {
-                let scraper = sharedtypes::SiteStruct {
-                    name: "InternalFileAdd".to_string(),
-                    sites: Vec::new(),
-                    version: 0,
-                    ratelimit,
-                    should_handle_file_download: false,
-                    should_handle_text_scraping: false,
-                    login_type: vec![],
-                    stored_info: None,
-                };
+                let mut global_pluginscraper = sharedtypes::return_default_globalpluginparser();
+                global_pluginscraper.name = "InternalFileAdd".to_string();
                 let ratelimiter_obj = threading::create_ratelimiter(ratelimit);
-                let manageeplugin = self.pluginmanager.clone();
+                let manageeplugin = self.globalload.clone();
                 let client = download::client_create();
                 let mut jobstorage = self.jobmanager.clone();
                 let mut database = self._database.clone();
@@ -285,7 +278,7 @@ impl DbInteract {
                         manageeplugin,
                         &client.clone(),
                         &mut jobstorage,
-                        &scraper,
+                        &global_pluginscraper,
                     );
                 });
                 let thread_max = 1000;
@@ -301,19 +294,11 @@ impl DbInteract {
             }
 
             types::SupportedDBRequests::PutFile((mut file, ratelimit)) => {
-                let scraper = sharedtypes::SiteStruct {
-                    name: "InternalFileAdd".to_string(),
-                    sites: Vec::new(),
-                    version: 0,
-                    ratelimit,
-                    should_handle_file_download: false,
-                    should_handle_text_scraping: false,
-                    login_type: vec![],
-                    stored_info: None,
-                };
+                let mut global_pluginscraper = sharedtypes::return_default_globalpluginparser();
+                global_pluginscraper.name = "InternalFileAdd".to_string();
 
                 let ratelimiter_obj = threading::create_ratelimiter(ratelimit);
-                let manageeplugin = self.pluginmanager.clone();
+                let manageeplugin = self.globalload.clone();
                 let client = &download::client_create();
                 let jobstorage = &mut self.jobmanager;
                 threading::main_file_loop(
@@ -323,7 +308,7 @@ impl DbInteract {
                     manageeplugin,
                     client,
                     jobstorage,
-                    &scraper,
+                    &global_pluginscraper,
                 );
 
                 Self::data_size_to_b(&true)
@@ -402,8 +387,9 @@ impl DbInteract {
                 Self::data_size_to_b(&out)
             }
             types::SupportedDBRequests::ReloadLoadedPlugins() => {
-                let mut plugin = self.pluginmanager.lock().unwrap();
-                plugin.reload_loaded_plugins();
+                todo!("NOOP on linux ignoring");
+                let mut plugin = self.globalload.lock().unwrap();
+                //plugin.reload_loaded_plugins();
                 Self::data_size_to_b(&true)
             }
             types::SupportedDBRequests::NamespaceContainsId(namespaceid, tagid) => {
@@ -412,7 +398,7 @@ impl DbInteract {
                 Self::data_size_to_b(&tmep)
             }
             types::SupportedDBRequests::PluginCallback(func_name, version, input_data) => {
-                let mut plugin = self.pluginmanager.lock().unwrap();
+                let mut plugin = self.globalload.lock().unwrap();
                 let out = plugin.external_plugin_call(&func_name, &version, &input_data);
                 Self::data_size_to_b(&out)
             }

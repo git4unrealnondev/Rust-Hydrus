@@ -601,7 +601,7 @@ pub fn plugin_on_tag(
             tag,
             &tag_ns,
             &regex_match.to_string(),
-            plugin_callback.clone(),
+            plugin_callback,
         );
     }
 }
@@ -696,7 +696,7 @@ fn c_regex_match(
     tag: &String,
     tag_ns: &String,
     regex_match: &String,
-    plugin_callback: sharedtypes::PluginCallback,
+    plugin_callback: &sharedtypes::PluginCallback,
 ) {
     let pluginmanager = manager_arc.lock().unwrap();
     let liba;
@@ -717,7 +717,7 @@ fn c_regex_match(
                 &String,
                 &String,
                 &String,
-                sharedtypes::PluginCallback,
+                &sharedtypes::PluginCallback,
             ) -> Vec<sharedtypes::DBPluginOutputEnum>,
         > = match liba.get(b"on_regex_match") {
             Ok(good) => good,
@@ -730,7 +730,7 @@ fn c_regex_match(
                 &String,
                 &String,
                 &String,
-                sharedtypes::PluginCallback,
+                &sharedtypes::PluginCallback,
             ) -> Vec<sharedtypes::DBPluginOutputEnum>,
         >>(b"on_regex_match")
             .unwrap();

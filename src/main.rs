@@ -3,11 +3,16 @@
 use log::{error, warn};
 use scraper::db_upgrade_call;
 use scraper::on_start;
+use std::path::Path;
 use std::sync::Arc;
 use std::sync::Mutex;
 
 // use std::sync::{Arc, Mutex};
 use std::{thread, time};
+
+pub const VERS: usize = 5;
+pub const DEFAULT_LOC_PLUGIN: &str = "plugin";
+pub const DEFAULT_LOC_SCRAPER: &str = "scrapers";
 
 extern crate ratelimit;
 
@@ -19,6 +24,8 @@ mod database;
 mod download;
 #[path = "./scr/file.rs"]
 mod file;
+#[path = "./scr/globalload.rs"]
+mod globalload;
 #[path = "./scr/jobs.rs"]
 mod jobs;
 #[path = "./scr/logging.rs"]
@@ -48,8 +55,6 @@ mod os;
 #[path = "./scr/intcoms/server.rs"]
 mod server;
 
-pub const VERS: usize = 5;
-
 // mod scr { pub mod cli; pub mod database; pub mod download; pub mod file; pub
 // mod jobs; pub mod logging; pub mod plugins; pub mod scraper; pub mod
 // sharedtypes; pub mod tasks; pub mod threading; pub mod time; }
@@ -75,7 +80,6 @@ fn makedb(dbloc: &str) -> database::Main {
     // let dbcon = data.load_mem(&mut data._conn);
 }
 
-// opt-level = 3 lto="fat" codegenunits=1 strip = true panic = "abort"
 /// Gets file setup out of main. Checks if null data was written to data.
 fn db_file_sanity(dbloc: &str) {
     let _dbzero = file::size_eq(dbloc.to_string(), 0);
@@ -99,11 +103,40 @@ fn db_file_sanity(dbloc: &str) {
 /// Main function.
 fn main() {
     let dbloc = "main.db";
-    let logloc = "log.txt";
+    {
+        let logloc = "log.txt";
 
-    // Makes Logging work
-    logging::main(&logloc.to_string());
+        // Makes Logging work
+        logging::main(&logloc.to_string());
+    }
     os::check_os_compatibility();
+
+    // Inits Database.
+    let mut data = makedb(dbloc);
+    data.load_table(&sharedtypes::LoadDBTable::Settings);
+
+    let mut globalload = globalload::GlobalLoad::new();
+    {
+        globalload.load_folder(&data.loaded_scraper_folder());
+        globalload.load_folder(&data.loaded_plugin_folder());
+    }
+
+    let mut arc = Arc::new(Mutex::new(data));
+
+    let mut globalload_arc = Arc::new(Mutex::new(globalload));
+
+    let jobmanager = Arc::new(Mutex::new(jobs::Jobs::new(
+        arc.clone(),
+        globalload_arc.clone(),
+    )));
+    //let mut globalload_arc =
+    //    plugins::globalload_arc::new(plugin_loc.to_string(), arc.clone(), jobmanager.clone());
+
+    // Adds plugin and scraper callback capability from inside the db
+    // Things like callbacks and the like
+    arc.lock().unwrap().setup_globalload(globalload_arc.clone());
+
+    return;
     let mut scraper_manager = scraper::ScraperManager::new();
 
     // Makes new scraper manager.
@@ -120,31 +153,11 @@ fn main() {
     // dbg!(&tempe.site); } Checks main.db log location.
     db_file_sanity(dbloc);
 
-    // Inits Database.
-    let mut data = makedb(dbloc);
-
-    // NOTE ONLY USER FOR LOADING DB DYNAMICALLY
-    data.load_table(&sharedtypes::LoadDBTable::Settings);
     let plugin_option = data.settings_get_name(&"pluginloadloc".to_string());
     let plugin_loc = match plugin_option {
-        None => "".to_string(),
+        None => "plugins".to_string(),
         Some(pluginobj) => pluginobj.param.as_ref().unwrap().clone(),
     };
-
-    let mut arc = Arc::new(Mutex::new(data));
-
-    let jobmanager = Arc::new(Mutex::new(jobs::Jobs::new(
-        arc.clone(),
-        scrapermanager_arc.clone(),
-    )));
-    let mut pluginmanager =
-        plugins::PluginManager::new(plugin_loc.to_string(), arc.clone(), jobmanager.clone());
-
-    // Adds pluginmanager capability from inside the db
-    // Things like callbacks and the like
-    arc.lock()
-        .unwrap()
-        .setup_pluginmanager(pluginmanager.clone());
 
     // Putting this down here after plugin manager because that's when the IPC server
     // starts and we can then inside of the scraper start calling IPC functions
@@ -193,7 +206,7 @@ fn main() {
     jobmanager.lock().unwrap().debug();
 
     // Calls the on_start func for the plugins
-    pluginmanager.lock().unwrap().plugin_on_start();
+    globalload_arc.lock().unwrap().plugin_on_start();
 
     // Creates a threadhandler that manages callable threads.
     let mut threadhandler = threading::Threads::new();
@@ -215,8 +228,7 @@ fn main() {
             &mut arc_jobmanager.clone(),
             &mut arc,
             scraper.clone(),
-            &mut pluginmanager,
-            scrapermanager_arc.clone(),
+            &mut globalload_arc,
         );
     }
 
@@ -226,8 +238,8 @@ fn main() {
     loop {
         let brk;
         {
-            pluginmanager.lock().unwrap().thread_finish_closed();
-            brk = pluginmanager.lock().unwrap().return_thread();
+            globalload_arc.lock().unwrap().thread_finish_closed();
+            brk = globalload_arc.lock().unwrap().return_thread();
         }
         if brk {
             break;
@@ -244,23 +256,18 @@ fn main() {
                 &mut arc_jobmanager.clone(),
                 &mut arc,
                 scraper.clone(),
-                &mut pluginmanager,
-                scrapermanager_arc.clone(),
+                &mut globalload_arc,
             );
         }
     }
     arc.lock().unwrap().condense_db_all();
     arc.lock().unwrap().transaction_flush();
 
-    // pluginmanager.lock().unwrap().thread_finish_closed(); while
-    // !pluginmanager.lock().unwrap().return_thread() { let one_sec =
-    // time::Duration::from_secs(1);
-    // pluginmanager.lock().unwrap().thread_finish_closed(); thread::sleep(one_sec); }
     // This wait is done for allowing any thread to "complete" Shouldn't be nessisary
     // but hey. :D
     let mills_fifty = time::Duration::from_millis(5);
     std::thread::sleep(mills_fifty);
     logging::info_log(&"UNLOADING".to_string());
     log::logger().flush();
-    // drop(pluginmanager.lock().unwrap()); unsafe { libc::malloc_trim(0) };
+    // drop(globalload_arc.lock().unwrap()); unsafe { libc::malloc_trim(0) };
 }

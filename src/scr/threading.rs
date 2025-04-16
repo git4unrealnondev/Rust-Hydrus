@@ -1,11 +1,13 @@
 use crate::database;
 use crate::download;
+use crate::globalload;
+use crate::globalload::GlobalLoad;
 use crate::logging;
 use crate::scraper::ScraperManager;
 
 // use crate::jobs::JobsRef;
+use crate::globalload::globalload;
 use crate::logging::info_log;
-use crate::plugins::PluginManager;
 use crate::scraper;
 use crate::sharedtypes;
 use crate::sharedtypes::ScraperReturn;
@@ -29,7 +31,7 @@ pub struct Threads {
     _workers: usize,
     worker: HashMap<usize, Worker>,
     worker_control: HashMap<usize, Flag>,
-    scraper_storage: HashMap<sharedtypes::SiteStruct, usize>,
+    scraper_storage: HashMap<sharedtypes::GlobalPluginScraper, usize>,
 }
 
 /// Holder for workers. Workers manage their own threads.
@@ -49,9 +51,8 @@ impl Threads {
         &mut self,
         jobstorage: &mut Arc<Mutex<crate::jobs::Jobs>>,
         db: &mut Arc<Mutex<database::Main>>,
-        scrapermanager: sharedtypes::SiteStruct,
-        pluginmanager: &mut Arc<Mutex<PluginManager>>,
-        arc_scrapermanager: Arc<Mutex<ScraperManager>>,
+        scrapermanager: sharedtypes::GlobalPluginScraper,
+        globalload: &mut Arc<Mutex<GlobalLoad>>,
     ) {
         if !self.scraper_storage.contains_key(&scrapermanager) {
             let (flag, control) = make_pair();
@@ -62,9 +63,8 @@ impl Threads {
                 jobstorage,
                 db,
                 scrapermanager,
-                pluginmanager,
+                globalload,
                 control,
-                arc_scrapermanager,
             );
             self.worker_control.insert(self._workers, flag);
             self.worker.insert(self._workers, worker);
@@ -131,17 +131,20 @@ impl Worker {
         id: usize,
         jobstorage: &mut Arc<Mutex<crate::jobs::Jobs>>,
         dba: &mut Arc<Mutex<database::Main>>,
-        scraper: sharedtypes::SiteStruct,
-        pluginmanager: &mut Arc<Mutex<PluginManager>>,
+        scraper: sharedtypes::GlobalPluginScraper,
+        globalload: &mut Arc<Mutex<GlobalLoad>>,
         threadflagcontrol: Control,
-        arc_scrapermanager: Arc<Mutex<ScraperManager>>,
     ) -> Worker {
         // info_log(&format!( "Creating Worker for id: {} Scraper Name: {} With a jobs
         // length of: {}", &id, &scraper._name, &jobstorage..len() ));
         let mut db = dba.clone();
         let mut jobstorage = jobstorage.clone();
-        let manageeplugin = pluginmanager.clone();
-        let ratelimiter_main = create_ratelimiter(scraper.ratelimit);
+        let ratelimiter_main;
+        if let Some(sharedtypes::ScraperOrPlugin::Scraper(scraper_info)) = scraper.storage_type {
+            ratelimiter_main = create_ratelimiter(scraper_info.ratelimit);
+        } else {
+            return Worker { id, thread: None };
+        }
         let thread = thread::spawn(move || {
             let ratelimiter_obj = ratelimiter_main.clone();
 
@@ -208,7 +211,10 @@ impl Worker {
                                     // If we have nothing in either of these then we likely need to
                                     // pull info from the plugins this is used to pull login info
                                     // from an external plugin like a web interface or UI
-                                    if ns_stored.is_none() | body_stored.is_none() {
+                                    if (ns_stored.is_none() | body_stored.is_none())
+                                        & (*login_needed == sharedtypes::LoginNeed::Required)
+                                    {
+                                        dbg!(&login_needed);
                                         todo!();
                                     }
 
@@ -284,10 +290,10 @@ impl Worker {
                     let urlload = match job.jobmanager.jobtype {
                         sharedtypes::DbJobType::Params => {
                             let mut out = Vec::new();
-                            for (url, scraperdata) in scraper::url_dump(
+                            for (url, scraperdata) in globalload::url_dump(
                                 &job.param,
                                 &scraper_data_holder,
-                                arc_scrapermanager.clone(),
+                                globalload.clone(),
                                 &scraper,
                             ) {
                                 out.push((sharedtypes::ScraperParam::Url(url), scraperdata));
@@ -327,11 +333,11 @@ impl Worker {
                                     &ratelimiter_obj,
                                 ));
                                 st = match resp {
-                                    Ok(respstring) => scraper::parser_call(
+                                    Ok(respstring) => globalload::parser_call(
                                         &respstring,
                                         &scraperdata.job.param,
                                         &scraperdata,
-                                        arc_scrapermanager.clone(),
+                                        globalload.clone(),
                                         &scraper,
                                     ),
                                     Err(_) => {
@@ -376,7 +382,7 @@ impl Worker {
                             // Parses files from urls
                             for mut file in out_st.file {
                                 let ratelimiter_obj = ratelimiter_main.clone();
-                                let manageeplugin = manageeplugin.clone();
+                                let globalload = globalload.clone();
                                 let mut db = db.clone();
                                 let client = client.clone();
                                 let mut jobstorage = jobstorage.clone();
@@ -386,7 +392,7 @@ impl Worker {
                                         &mut file,
                                         &mut db,
                                         ratelimiter_obj,
-                                        manageeplugin,
+                                        globalload,
                                         &client,
                                         &mut jobstorage,
                                         &scraper,
@@ -594,7 +600,7 @@ fn download_add_to_db(
     ratelimiter_obj: Arc<Mutex<Ratelimiter>>,
     source: &String,
     location: String,
-    manageeplugin: Arc<Mutex<PluginManager>>,
+    globalload: Arc<Mutex<GlobalLoad>>,
     client: &Client,
     db: Arc<Mutex<database::Main>>,
     file: &mut sharedtypes::FileObject,
@@ -607,7 +613,7 @@ fn download_add_to_db(
             db.clone(),
             file,
             &location,
-            Some(manageeplugin),
+            Some(globalload),
             &ratelimiter_obj,
             source,
         );
@@ -642,7 +648,7 @@ fn parse_jobs(
     fileid: Option<usize>,
     jobstorage: &mut Arc<Mutex<crate::jobs::Jobs>>,
     db: &mut Arc<Mutex<database::Main>>,
-    scraper: &sharedtypes::SiteStruct,
+    scraper: &sharedtypes::GlobalPluginScraper,
 ) {
     let urls_to_scrape = parse_tags(db, tag, fileid);
     {
@@ -750,10 +756,10 @@ pub fn main_file_loop(
     file: &mut sharedtypes::FileObject,
     db: &mut Arc<Mutex<database::Main>>,
     ratelimiter_obj: Arc<Mutex<Ratelimiter>>,
-    manageeplugin: Arc<Mutex<PluginManager>>,
+    globalload: Arc<Mutex<GlobalLoad>>,
     client: &Client,
     jobstorage: &mut Arc<Mutex<crate::jobs::Jobs>>,
-    scraper: &sharedtypes::SiteStruct,
+    scraper: &sharedtypes::GlobalPluginScraper,
 ) {
     if let Some(source) = &file.source_url.clone() {
         // If url exists in db then don't download thread::sleep(Duration::from_secs(10));
@@ -789,7 +795,7 @@ pub fn main_file_loop(
                     ratelimiter_obj,
                     source,
                     location,
-                    manageeplugin,
+                    globalload,
                     client,
                     db.clone(),
                     file,
@@ -823,7 +829,7 @@ pub fn main_file_loop(
                             ratelimiter_obj,
                             source,
                             location,
-                            manageeplugin,
+                            globalload,
                             client,
                             db.clone(),
                             file,

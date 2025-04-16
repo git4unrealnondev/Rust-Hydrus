@@ -1,6 +1,6 @@
 use crate::database;
+use crate::globalload::GlobalLoad;
 use crate::logging;
-use crate::scraper::ScraperManager;
 use crate::sharedtypes;
 use crate::time_func;
 use std::collections::{HashMap, HashSet};
@@ -21,19 +21,16 @@ struct PreviouslySeenObj {
 
 pub struct Jobs {
     db: Arc<Mutex<database::Main>>,
-    scraper_manager: Arc<Mutex<ScraperManager>>,
-    site_job: HashMap<sharedtypes::SiteStruct, HashSet<sharedtypes::DbJobsObj>>,
-    previously_seen: HashMap<sharedtypes::SiteStruct, HashSet<PreviouslySeenObj>>,
+    global_load: Arc<Mutex<GlobalLoad>>,
+    site_job: HashMap<sharedtypes::GlobalPluginScraper, HashSet<sharedtypes::DbJobsObj>>,
+    previously_seen: HashMap<sharedtypes::GlobalPluginScraper, HashSet<PreviouslySeenObj>>,
 }
 
 impl Jobs {
-    pub fn new(
-        db: Arc<Mutex<database::Main>>,
-        scraper_manager: Arc<Mutex<ScraperManager>>,
-    ) -> Self {
+    pub fn new(db: Arc<Mutex<database::Main>>, global_load: Arc<Mutex<GlobalLoad>>) -> Self {
         Jobs {
             db,
-            scraper_manager,
+            global_load,
             site_job: HashMap::new(),
             previously_seen: HashMap::new(),
         }
@@ -49,7 +46,7 @@ impl Jobs {
     ///
     pub fn jobs_add(
         &mut self,
-        scraper: sharedtypes::SiteStruct,
+        scraper: sharedtypes::GlobalPluginScraper,
         dbjobsobj: sharedtypes::DbJobsObj,
     ) {
         let obj = PreviouslySeenObj {
@@ -111,7 +108,10 @@ impl Jobs {
     ///
     /// Gets if a job exists inside for a scraper
     ///
-    pub fn jobs_get(&self, scraper: &sharedtypes::SiteStruct) -> HashSet<sharedtypes::DbJobsObj> {
+    pub fn jobs_get(
+        &self,
+        scraper: &sharedtypes::GlobalPluginScraper,
+    ) -> HashSet<sharedtypes::DbJobsObj> {
         self.site_job
             .get(scraper)
             .cloned()
@@ -119,9 +119,9 @@ impl Jobs {
     }
 
     ///
-    /// Gets all the sitestruct objs that are loaded for jobs
+    /// Gets all the GlobalPluginScraper objs that are loaded for jobs
     ///
-    pub fn job_scrapers_get(&self) -> HashSet<&sharedtypes::SiteStruct> {
+    pub fn job_scrapers_get(&self) -> HashSet<&sharedtypes::GlobalPluginScraper> {
         self.site_job.keys().into_iter().collect()
     }
 
@@ -130,7 +130,7 @@ impl Jobs {
     ///
     pub fn jobs_remove_dbjob(
         &mut self,
-        scraper: &sharedtypes::SiteStruct,
+        scraper: &sharedtypes::GlobalPluginScraper,
         data: &sharedtypes::DbJobsObj,
     ) {
         if let Some(job_list) = self.site_job.get_mut(scraper) {
@@ -150,7 +150,7 @@ impl Jobs {
     pub fn jobs_decrement_count(
         &mut self,
         data: &sharedtypes::DbJobsObj,
-        scraper: &sharedtypes::SiteStruct,
+        scraper: &sharedtypes::GlobalPluginScraper,
     ) {
         if let Some(job_list) = self.site_job.get_mut(scraper) {
             if let Some(job) = job_list.get(data) {
@@ -178,13 +178,13 @@ impl Jobs {
     ///
     /// Clears the previously seen cache if the site_job contains the scraper
     ///
-    pub fn clear_previously_seen_cache(&mut self, scraper: &sharedtypes::SiteStruct) {
+    pub fn clear_previously_seen_cache(&mut self, scraper: &sharedtypes::GlobalPluginScraper) {
         if self.site_job.remove(scraper).is_some() {
             self.previously_seen.clear();
         }
     }
 
-    // pub fn jobs_remove(&mut self, scraper: &sharedtypes::SiteStruct, data: &sharedtypes::ScraperData) {
+    // pub fn jobs_remove(&mut self, scraper: &sharedtypes::GlobalPluginScraper, data: &sharedtypes::ScraperData) {
     //
     // }
 
@@ -221,9 +221,9 @@ impl Jobs {
 
         let mut jobs_vec = Vec::new();
         {
-            let scrapermanager = self.scraper_manager.lock().unwrap();
-            for scraper in scrapermanager.scraper_get() {
-                for sites in scrapermanager.sites_get(scraper) {
+            let GlobalLoad = self.global_load.lock().unwrap();
+            for scraper in GlobalLoad.scraper_get() {
+                for sites in GlobalLoad.sites_get(&scraper) {
                     for (id, job) in hashjobs.iter() {
                         if sites == job.site {
                             jobs_vec.push((scraper.clone(), *id, job.clone()));
@@ -249,35 +249,19 @@ mod tests {
         time::Duration,
     };
 
-    use crate::sharedtypes::{DbJobsObj, SiteStruct};
-    use crate::{database::test_database, scraper::test_scrapermanager};
+    use crate::sharedtypes::{DbJobsObj, GlobalPluginScraper};
+    use crate::{database::test_database, globalload::test_GlobalLoad};
 
     use super::Jobs;
 
     fn create_default() -> Jobs {
-        let sc = test_scrapermanager::emulate_loaded();
-        let scraper_manager = Arc::new(Mutex::new(sc));
+        let sc = test_GlobalLoad::emulate_loaded();
+        let global_load = Arc::new(Mutex::new(sc));
 
         let dsb = test_database::setup_default_db();
         let db = Arc::new(Mutex::new(dsb));
 
-        Jobs::new(db, scraper_manager)
-    }
-
-    ///
-    /// Returns a default sitestruct
-    ///
-    fn return_sitestruct() -> SiteStruct {
-        crate::sharedtypes::SiteStruct {
-            name: "test".to_string(),
-            sites: vec!["test".to_string()],
-            version: 1,
-            ratelimit: (1, Duration::from_secs(1)),
-            should_handle_file_download: false,
-            should_handle_text_scraping: false,
-            login_type: vec![],
-            stored_info: None,
-        }
+        Jobs::new(db, global_load)
     }
 
     ///
@@ -306,7 +290,7 @@ mod tests {
         let mut job = create_default();
 
         job.jobs_load();
-        let scraper = return_sitestruct();
+        let scraper = return_GlobalPluginScraper();
 
         let dbjobsobj = return_dbjobsobj();
         job.jobs_add(scraper.clone(), dbjobsobj.clone());
@@ -323,7 +307,7 @@ mod tests {
         let mut job = create_default();
 
         job.jobs_load();
-        let scraper = return_sitestruct();
+        let scraper = return_GlobalPluginScraper();
 
         let dbjobsobj = return_dbjobsobj();
         job.jobs_add(scraper.clone(), dbjobsobj.clone());

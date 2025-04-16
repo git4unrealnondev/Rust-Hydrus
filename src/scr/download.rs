@@ -1,5 +1,5 @@
-use super::plugins::PluginManager;
 use crate::database::Main;
+use crate::globalload::GlobalLoad;
 
 // extern crate urlparse;
 use super::sharedtypes;
@@ -194,7 +194,7 @@ pub fn dlfile_new(
     db: Arc<Mutex<Main>>,
     file: &mut sharedtypes::FileObject,
     location: &String,
-    pluginmanager: Option<Arc<Mutex<PluginManager>>>,
+    globalload: Option<Arc<Mutex<GlobalLoad>>>,
     ratelimiter_obj: &Arc<Mutex<Ratelimiter>>,
     source_url: &String,
 ) -> Option<(String, String)> {
@@ -288,9 +288,9 @@ pub fn dlfile_new(
     // If the plugin manager is None then don't do anything plugin wise. Useful for if
     // doing something that we CANNOT allow plugins to run.
     {
-        if let Some(pluginmanager) = pluginmanager {
-            crate::plugins::plugin_on_download(
-                pluginmanager,
+        if let Some(globalload) = globalload {
+            crate::globalload::plugin_on_download(
+                globalload,
                 db.clone(),
                 bytes.as_ref(),
                 &hash,
@@ -347,7 +347,7 @@ pub fn write_to_disk(
     }
 
     // Gives file extension
-    let file_ext = FileFormat::from_bytes(bytes).extension().to_string();
+    //let file_ext = FileFormat::from_bytes(bytes).extension().to_string();
 
     local_location.set_file_name(sha512hash);
     //local_location.set_extension(file_ext);

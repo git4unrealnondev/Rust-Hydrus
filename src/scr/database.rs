@@ -1,4 +1,5 @@
 #![forbid(unsafe_code)]
+use crate::globalload::GlobalLoad;
 use crate::logging;
 use crate::plugins;
 use crate::plugins::PluginManager;
@@ -16,6 +17,7 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::panic;
 use std::path::Path;
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::time::Duration;
@@ -60,7 +62,7 @@ pub struct Main {
     _tables_loaded: Vec<sharedtypes::LoadDBTable>,
     _tables_loading: Vec<sharedtypes::LoadDBTable>,
     _cache: CacheType,
-    _pluginmanager: Option<Arc<Mutex<PluginManager>>>,
+    globalload: Option<Arc<Mutex<GlobalLoad>>>,
 }
 
 /// Contains DB functions.
@@ -87,7 +89,7 @@ impl Main {
                     _tables_loaded: vec![],
                     _tables_loading: vec![],
                     _cache: CacheType::Bare(file_path.to_string()),
-                    _pluginmanager: None,
+                    globalload: None,
                 };
                 let mut main = Main {
                     _dbpath: path,
@@ -100,7 +102,7 @@ impl Main {
                     _tables_loaded: vec![],
                     _tables_loading: vec![],
                     _cache: CacheType::InMemdb,
-                    _pluginmanager: None,
+                    globalload: None,
                 };
                 main._conn = Arc::new(Mutex::new(connection));
                 main
@@ -118,7 +120,7 @@ impl Main {
                     _tables_loaded: vec![],
                     _tables_loading: vec![],
                     _cache: CacheType::InMemory,
-                    _pluginmanager: None,
+                    globalload: None,
                 };
                 let mut main = Main {
                     _dbpath: None,
@@ -131,7 +133,7 @@ impl Main {
                     _tables_loaded: vec![],
                     _tables_loading: vec![],
                     _cache: CacheType::InMemdb,
-                    _pluginmanager: None,
+                    globalload: None,
                 };
                 main._conn = Arc::new(Mutex::new(Connection::open_in_memory().unwrap()));
                 main
@@ -665,7 +667,6 @@ impl Main {
             None,
             true,
         );
-        info!("Set VERSION to 1.");
         self.setting_add("DEFAULTRATELIMIT".to_string(), None, Some(5), None, true);
         self.setting_add(
             "FilesLoc".to_string(),
@@ -685,13 +686,85 @@ impl Main {
             "pluginloadloc".to_string(),
             Some("Where plugins get loaded into.".to_string()),
             None,
-            Some("./Plugins/".to_string()),
+            Some(crate::DEFAULT_LOC_PLUGIN.to_string()),
+            true,
+        );
+
+        self.setting_add(
+            "scraperloadloc".to_string(),
+            Some("Where scrapers get loaded into.".to_string()),
+            None,
+            Some(crate::DEFAULT_LOC_SCRAPER.to_string()),
             true,
         );
 
         self.enclave_create_default_file_download(self.location_get());
 
         self.transaction_flush();
+    }
+
+    ///
+    /// Gets a scraper folder. If it doesn't exist then please create it in db
+    ///
+    pub fn loaded_scraper_folder(&mut self) -> PathBuf {
+        match self.settings_get_name(&"scraperloadloc".to_string()) {
+            Some(setting) => {
+                if let Some(param) = &setting.param {
+                    Path::new(param).to_path_buf()
+                } else {
+                    self.setting_add(
+                        "scraperloadloc".to_string(),
+                        Some("Where scrapers get loaded into.".to_string()),
+                        None,
+                        Some(crate::DEFAULT_LOC_SCRAPER.to_string()),
+                        true,
+                    );
+                    Path::new(crate::DEFAULT_LOC_SCRAPER).to_path_buf()
+                }
+            }
+            None => {
+                self.setting_add(
+                    "scraperloadloc".to_string(),
+                    Some("Where scrapers get loaded into.".to_string()),
+                    None,
+                    Some(crate::DEFAULT_LOC_SCRAPER.to_string()),
+                    true,
+                );
+                Path::new(crate::DEFAULT_LOC_SCRAPER).to_path_buf()
+            }
+        }
+    }
+
+    ///
+    /// Gets a plugin folder. If it doesn't exist then please create it in db
+    ///
+    pub fn loaded_plugin_folder(&mut self) -> PathBuf {
+        match self.settings_get_name(&"pluginloadloc".to_string()) {
+            Some(setting) => {
+                if let Some(param) = &setting.param {
+                    Path::new(param).to_path_buf()
+                } else {
+                    self.setting_add(
+                        "pluginloadloc".to_string(),
+                        Some("Where plugins get loaded into.".to_string()),
+                        None,
+                        Some(crate::DEFAULT_LOC_PLUGIN.to_string()),
+                        true,
+                    );
+                    Path::new(crate::DEFAULT_LOC_PLUGIN).to_path_buf()
+                }
+            }
+            None => {
+                self.setting_add(
+                    "pluginloadloc".to_string(),
+                    Some("Where plugins get loaded into.".to_string()),
+                    None,
+                    Some(crate::DEFAULT_LOC_PLUGIN.to_string()),
+                    true,
+                );
+                Path::new(crate::DEFAULT_LOC_PLUGIN).to_path_buf()
+            }
+        }
     }
 
     ///
@@ -1596,8 +1669,8 @@ impl Main {
         self._inmemdb.dumpe_data();
     }
 
-    pub fn setup_pluginmanager(&mut self, pluginmanager: Arc<Mutex<PluginManager>>) {
-        self._pluginmanager = Some(pluginmanager);
+    pub fn setup_globalload(&mut self, globalload: Arc<Mutex<GlobalLoad>>) {
+        self.globalload = Some(globalload);
     }
 
     /// Adds tag into DB if it doesn't exist in the memdb.
@@ -1612,11 +1685,8 @@ impl Main {
 
         match id {
             None => {
-                //if let Some(pluginmanager) = &self._pluginmanager {
-                //   plugins::plugin_on_tag(pluginmanager.clone(), self, tags, &namespace);
-                //}
-                if let Some(pluginmanager) = &self._pluginmanager {
-                    plugins::plugin_on_tag(pluginmanager.clone(), self, tags, &namespace);
+                if let Some(globalload) = &self.globalload {
+                    plugins::plugin_on_tag(globalload.clone(), self, tags, &namespace);
                 }
 
                 // Do we have an ID coming in to add manually?

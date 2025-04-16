@@ -19,22 +19,23 @@ macro_rules! vec_of_strings {
     ($($x:expr),*) => (vec![$($x.to_string()),*]);
 }
 
-static PLUGIN_NAME: &str = "File Downloader";
-static PLUGIN_DESCRIPTION: &str =
-    "Tries to download files directly if this plugin can recognize a url.";
+static PLUGIN_NAME: &str = "Catbox Downloader";
+static PLUGIN_DESCRIPTION: &str = "Scrapes catbox urls into jobs.";
 
 #[no_mangle]
 pub fn return_info() -> sharedtypes::PluginInfo {
-    let  tag_vec = vec![   (     Some(sharedtypes::SearchType::Regex(
-            //r"(http(s)?://www.|((www.|http(s)?://)))[a-zA-Z0-9-].[a-zA-Z0-9-_.]*/[a-zA-Z0-9/_%]+\.[a-zA-Z0-9/_%\.?=&-]+"
-            r"(http(s)?://www.|((www.|http(s)?://)))[a-zA-Z0-9-].[a-zA-Z0-9-_.]*/[a-zA-Z0-9/_%-]+\.[a-zA-Z0-9/_%\.?=&-]+"
-            .to_string()),
-        ),
+    let tag_vec = vec![(
+        Some(sharedtypes::SearchType::Regex(
+            r"(http(s)?://www.|((www.|http(s)?://)))catbox.moe/c/[a-z0-9]{6}".to_string(),
+        )),
         None,
-        Some("source_url".to_string()),
+        None,
     )];
 
-    let callbackvec = vec![sharedtypes::PluginCallback::Tag(tag_vec)];
+    let callbackvec = vec![
+        sharedtypes::PluginCallback::Tag(tag_vec),
+        sharedtypes::PluginCallback::Start,
+    ];
     sharedtypes::PluginInfo {
         name: PLUGIN_NAME.to_string(),
         description: PLUGIN_DESCRIPTION.to_string(),
@@ -49,14 +50,28 @@ pub fn return_info() -> sharedtypes::PluginInfo {
         }),
     }
 }
+#[no_mangle]
+pub fn get_global_info() -> Vec<sharedtypes::GlobalPluginScraper> {
+    let mut plugin = sharedtypes::return_default_globalpluginparser();
+    plugin.name = "Catbox Scraper".to_string();
+    plugin.storage_type = Some(sharedtypes::ScraperOrPlugin::Plugin(
+        sharedtypes::PluginInfo2 {
+            com_type: sharedtypes::PluginThreadType::Inline,
+            com_channel: true,
+        },
+    ));
+
+    vec![plugin]
+}
 
 #[no_mangle]
 pub fn on_regex_match(
     tag: &String,
     tag_ns: &String,
     regex_match: &String,
-    callback: sharedtypes::PluginCallback,
+    callback: &sharedtypes::PluginCallback,
 ) -> Vec<sharedtypes::DBPluginOutputEnum> {
+    use scraper::selector;
     let mut out = Vec::new();
     if regex_match.contains("bsky.app") {
         return out;
@@ -110,10 +125,10 @@ pub fn on_regex_match(
                 time: 0,
                 reptime: Some(0),
 
-                site: "direct download".to_string(),
+                site: "catbox_album".to_string(),
                 param: vec![sharedtypes::ScraperParam::Url(regex_match.to_string())],
                 jobmanager: sharedtypes::DbJobsManager {
-                    jobtype: sharedtypes::DbJobType::FileUrl,
+                    jobtype: sharedtypes::DbJobType::Scraper,
                     recreation: None,
                 },
                 committype: Some(sharedtypes::CommitType::StopOnNothing),
@@ -126,22 +141,6 @@ pub fn on_regex_match(
         },
     ]));
 
-    /*client::job_add(
-        None,
-        0,
-        0,
-        "direct download".to_string(),
-        regex_match.to_string(),
-        true,
-        sharedtypes::CommitType::StopOnNothing,
-        sharedtypes::DbJobType::FileUrl,
-        BTreeMap::new(),
-        BTreeMap::new(),
-        sharedtypes::DbJobsManager {
-            jobtype: sharedtypes::DbJobType::FileUrl,
-            recreation: None,
-        },
-    );*/
     out
     //client::add_file_nonblocking(file, ratelimit);
 }

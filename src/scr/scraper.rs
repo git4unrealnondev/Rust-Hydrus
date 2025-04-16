@@ -119,42 +119,6 @@ pub fn scraper_file_return(
     unsafe { temp(regen) }
 }
 
-///
-/// Checks job storage type. If manual then do nothing if Automatic then it will store info before
-/// the scraper even starts. Useful for storing API keys or anything similar to that.
-///
-pub fn cookie_need_LEGACY(libloading: &libloading::Library) -> (sharedtypes::ScraperType, String) {
-    let temp: libloading::Symbol<unsafe extern "C" fn() -> (sharedtypes::ScraperType, String)> =
-        unsafe { libloading.get(b"cookie_needed\0").unwrap() };
-    unsafe { temp() }
-}
-///
-/// Tells downloader to allow scraper to download.
-///
-pub fn scraper_download_get(libloading: &libloading::Library) -> bool {
-    let temp: libloading::Symbol<unsafe extern "C" fn() -> bool> =
-        unsafe { libloading.get(b"scraper_download_get\0").unwrap() };
-    unsafe { temp() }
-}
-///
-/// Should only be called when scraper needs to download something assuming scraper_download_get returns true.
-/// TODO NOT YET IMPLEMENTED PROPERLY.
-///
-pub fn scraper_download(libloading: &libloading::Library, _params: String) -> bool {
-    let temp: libloading::Symbol<unsafe extern "C" fn() -> bool> =
-        unsafe { libloading.get(b"scraper_download\0").unwrap() };
-    unsafe { temp() }
-}
-
-pub fn url_load(
-    libloading: &libloading::Library,
-    params: &Vec<sharedtypes::ScraperParam>,
-) -> Vec<String> {
-    let temp: libloading::Symbol<
-        unsafe extern "C" fn(&Vec<sharedtypes::ScraperParam>) -> Vec<String>,
-    > = unsafe { libloading.get(b"url_get\0").unwrap() };
-    unsafe { temp(params) }
-}
 pub fn url_dump(
     params: &Vec<sharedtypes::ScraperParam>,
     scraperdata: &sharedtypes::ScraperData,
@@ -193,12 +157,6 @@ pub fn parser_call(
     > = unsafe { scraper_library.get(b"parser\0").unwrap() };
     unsafe { temp(url_output, actual_params, scraperdata) }
 } //ScraperObject
-
-pub fn url_load_test(libloading: &libloading::Library, params: Vec<String>) -> Vec<String> {
-    let temp: libloading::Symbol<unsafe extern "C" fn(&Vec<String>) -> Vec<String>> =
-        unsafe { libloading.get(b"url_get\0").unwrap() };
-    unsafe { temp(&params) }
-}
 
 pub fn db_upgrade_call(
     libloading: &libloading::Library,

@@ -30,6 +30,12 @@ pub fn error_log(error: &String) {
     error!("{}", error);
 }
 
+/// Dumps error to log and doesn't panic.
+/// Does NOT print anything to the screen
+pub fn error_log_silent(error: &String) {
+    error!("{}", error);
+}
+
 /// Dumps info to log and prints it.
 pub fn info_log(info: &String) {
     info!("{}", info);
