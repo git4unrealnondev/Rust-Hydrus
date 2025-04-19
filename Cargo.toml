@@ -42,6 +42,12 @@ libloading = "0.8.5"
 thread-control = "0.1.2"
 regex = "1.11.1"
 
+[features]
+default = ["exe_build"]
+exe_build = ["regex"]
+# Enables sending and recieving regex
+regex = []
+
 [profile.release]
 opt-level = 3
 lto=true

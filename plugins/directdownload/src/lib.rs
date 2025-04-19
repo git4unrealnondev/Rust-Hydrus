@@ -55,7 +55,7 @@ pub fn on_regex_match(
     tag: &String,
     tag_ns: &String,
     regex_match: &String,
-    callback: &sharedtypes::PluginCallback,
+    callback: &Option<SearchType>,
 ) -> Vec<sharedtypes::DBPluginOutputEnum> {
     let mut out = Vec::new();
     if regex_match.contains("bsky.app") {

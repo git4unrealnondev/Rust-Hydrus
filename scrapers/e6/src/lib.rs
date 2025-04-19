@@ -360,13 +360,11 @@ fn build_url(params: &Vec<sharedtypes::ScraperParam>, pagenum: u64, site: &Site)
 /// Only really useful to store variables. not useful for calling functions. :C
 ///
 #[no_mangle]
-pub fn new() -> Vec<sharedtypes::SiteStruct> {
-    let out: Vec<sharedtypes::SiteStruct> = vec![
-        sharedtypes::SiteStruct {
+pub fn get_global_info() -> Vec<sharedtypes::GlobalPluginScraper> {
+    let out: Vec<sharedtypes::GlobalPluginScraper> = vec![
+        sharedtypes::GlobalPluginScraper {
             name: "E621.net".to_string(),
-            sites: vec_of_strings!("e6", "e621", "e621.net"),
             version: 0,
-            ratelimit: (1, Duration::from_secs(1)),
             should_handle_file_download: false,
             should_handle_text_scraping: false,
             login_type: vec![(
@@ -380,12 +378,17 @@ pub fn new() -> Vec<sharedtypes::SiteStruct> {
                 "loaded_site".to_string(),
                 "E621".to_string(),
             )])),
+            storage_type: Some(sharedtypes::ScraperOrPlugin::Scraper(
+                sharedtypes::ScraperInfo {
+                    ratelimit: (1, Duration::from_secs(1)),
+                    sites: vec_of_strings!("e6", "e621", "e621.net"),
+                },
+            )),
+            callbacks: vec![],
         },
-        sharedtypes::SiteStruct {
+        sharedtypes::GlobalPluginScraper {
             name: "E6AI.net".to_string(),
-            sites: vec_of_strings!("e6ai", "e6ai.net"),
             version: 0,
-            ratelimit: (1, Duration::from_secs(1)),
             should_handle_file_download: false,
             should_handle_text_scraping: false,
             login_type: vec![(
@@ -399,10 +402,18 @@ pub fn new() -> Vec<sharedtypes::SiteStruct> {
                 "loaded_site".to_string(),
                 "E6AI".to_string(),
             )])),
+            storage_type: Some(sharedtypes::ScraperOrPlugin::Scraper(
+                sharedtypes::ScraperInfo {
+                    ratelimit: (1, Duration::from_secs(1)),
+                    sites: vec_of_strings!("e6ai", "e6ai.net"),
+                },
+            )),
+            callbacks: vec![],
         },
     ];
     out
 }
+
 #[no_mangle]
 pub fn test() -> u8 {
     0
@@ -1160,7 +1171,7 @@ pub fn db_upgrade_call_3(site: &Site) {
 }
 
 #[no_mangle]
-pub fn db_upgrade_call(db_version: &usize, site_struct: &sharedtypes::SiteStruct) {
+pub fn db_upgrade_call(db_version: &usize, site_struct: &sharedtypes::GlobalPluginScraper) {
     let mut site_op = None;
 
     if let Some(ref stored_info) = site_struct.stored_info {
@@ -1200,7 +1211,7 @@ pub fn db_upgrade_call(db_version: &usize, site_struct: &sharedtypes::SiteStruct
 /// Runs on startup of the software before any jobs run
 ///
 #[no_mangle]
-pub fn on_start(site_struct: &sharedtypes::SiteStruct) {
+pub fn on_start(site_struct: &sharedtypes::GlobalPluginScraper) {
     let mut site_op = None;
 
     if let Some(ref stored_info) = site_struct.stored_info {

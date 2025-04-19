@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 #![allow(unused_variables)]
 
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashSet};
 use std::fmt;
@@ -138,7 +139,7 @@ pub enum StoredInfo {
     Storage(Vec<(String, String)>),
 }
 
-///
+/*///
 /// An individual site according to the scraper
 ///
 #[derive(Debug, Clone, Eq, Hash, PartialEq)]
@@ -159,7 +160,7 @@ pub struct SiteStruct {
     pub login_type: Vec<(String, LoginType, LoginNeed, Option<String>, bool)>,
     /// Storage for the site scraper, Will be loaded into the user_data slot
     pub stored_info: Option<StoredInfo>,
-}
+}*/
 
 ///
 /// Info for scrapers as apart of the Global merge
@@ -168,6 +169,7 @@ pub struct SiteStruct {
 pub struct ScraperInfo {
     /// Ratelimit for this site
     pub ratelimit: (u64, std::time::Duration),
+    pub sites: Vec<String>,
 }
 
 ///
@@ -732,10 +734,35 @@ pub struct FileObject {
 /// String just checks that a string exists in the tag and it runs the callback
 /// Regex searches the tag via regex searching
 ///
-#[derive(Clone, Debug, Hash, Eq, PartialEq)]
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub enum SearchType {
     String(String),
-    Regex(String),
+    #[cfg(feature = "regex")]
+    Regex(RegexStorage),
+
+    #[cfg(not(feature = "regex"))]
+    Regex(),
+}
+
+#[cfg(feature = "regex")]
+#[derive(Clone, Debug)]
+pub struct RegexStorage(pub Regex);
+
+#[cfg(feature = "regex")]
+impl Eq for RegexStorage {}
+
+#[cfg(feature = "regex")]
+impl PartialEq for RegexStorage {
+    fn eq(&self, other: &RegexStorage) -> bool {
+        self.0.as_str() == other.0.as_str()
+    }
+}
+
+#[cfg(feature = "regex")]
+impl std::hash::Hash for RegexStorage {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.0.as_str().hash(state);
+    }
 }
 
 /// Holder of Tag info. Keeps relationalship info into account.
@@ -888,9 +915,9 @@ pub enum GlobalCallbacks {
     // Custom callback to be used for cross communication
     Callback(CallbackInfo),
     // Runs when a tag has exists.
-    // First when the tag exists OR when the namespace exists
+    // First when the ns exists, 2nd when the namespace does not exist
     // Use None when searching all or Some when searching restrictivly
-    Tag(Vec<(Option<SearchType>, Option<String>, Option<String>)>),
+    Tag((Option<SearchType>, Option<String>, Option<String>)),
 }
 
 /// Callback info for live plugins Gets sent to plugins

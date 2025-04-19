@@ -32,6 +32,26 @@ pub fn return_info() -> sharedtypes::PluginInfo {
 }
 
 #[no_mangle]
+pub fn get_global_info() -> Vec<sharedtypes::GlobalPluginScraper> {
+    let mut main = sharedtypes::return_default_globalpluginparser();
+    main.name = PLUGIN_NAME.to_string();
+    main.version = 0;
+    main.storage_type = Some(sharedtypes::ScraperOrPlugin::Plugin(
+        sharedtypes::PluginInfo2 {
+            com_type: sharedtypes::PluginThreadType::Inline,
+            com_channel: true,
+        },
+    ));
+    main.callbacks = vec![
+        sharedtypes::GlobalCallbacks::Start,
+        sharedtypes::GlobalCallbacks::Download,
+    ];
+    let out = vec![main];
+
+    out
+}
+
+#[no_mangle]
 pub fn on_download(
     byte_c: &[u8],
     hash_in: &String,
@@ -69,6 +89,7 @@ pub fn on_download(
             output.push(sharedtypes::DBPluginOutputEnum::Add(vec![tag_output]));
         }
     }
+    dbg!(&output);
 
     output
 }
@@ -206,10 +227,8 @@ fn check_existing_db() {
         };
 
         for each in huetable {
-            if let Some(tags) = client::relationship_get_fileid(each) {
-                for tag in tags {
-                    total.remove(&tag);
-                }
+            for tag in client::relationship_get_fileid(each) {
+                total.remove(&tag);
             }
         }
 

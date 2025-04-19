@@ -1,10 +1,15 @@
 use crate::{
-    logging,
+    database::{self, Main},
+    jobs::Jobs,
+    logging, server,
     sharedtypes::{self, GlobalPluginScraper},
 };
 use libloading::Library;
-use std::sync::{Arc, Mutex};
 use std::{collections::HashMap, path::Path, thread};
+use std::{
+    fmt::format,
+    sync::{Arc, Mutex},
+};
 use std::{path::PathBuf, thread::JoinHandle};
 
 ///
@@ -59,6 +64,417 @@ pub fn parser_call(
     }
 }
 
+///
+/// Calls a regex function
+///
+fn c_regex_match(
+    db: &mut Main,
+    tag: &String,
+    tag_ns: &String,
+    regex_match: &String,
+    plugin_callback: &Option<sharedtypes::SearchType>,
+    liba: &libloading::Library,
+) {
+    let output;
+    unsafe {
+        let plugindatafunc: libloading::Symbol<
+            unsafe extern "C" fn(
+                &String,
+                &String,
+                &String,
+                &Option<sharedtypes::SearchType>,
+            ) -> Vec<sharedtypes::DBPluginOutputEnum>,
+        > = match liba.get(b"on_regex_match") {
+            Ok(good) => good,
+            Err(_) => {
+                return;
+            }
+        };
+        liba.get::<libloading::Symbol<
+            unsafe extern "C" fn(
+                &String,
+                &String,
+                &String,
+                &Option<sharedtypes::SearchType>,
+            ) -> Vec<sharedtypes::DBPluginOutputEnum>,
+        >>(b"on_regex_match")
+            .unwrap();
+        output = plugindatafunc(tag, tag_ns, regex_match, plugin_callback);
+    };
+    parse_plugin_output_andmain(output, db);
+}
+
+///
+/// Gets a scraper to output any URLs based on params
+///
+pub fn url_dump(
+    params: &Vec<sharedtypes::ScraperParam>,
+    scraperdata: &sharedtypes::ScraperData,
+    arc_scrapermanager: Arc<Mutex<GlobalLoad>>,
+    scraper: &sharedtypes::GlobalPluginScraper,
+) -> Vec<(String, sharedtypes::ScraperData)> {
+    let mut out = Vec::new();
+    let mut libstorage = Vec::new();
+
+    // Loads the valid libraries
+    let globalload = arc_scrapermanager.lock().unwrap();
+    for loaded_scraper in globalload.scraper_get().iter() {
+        if scraper == loaded_scraper {
+            if let Some(lib) = globalload.library_get(loaded_scraper) {
+                libstorage.push(lib);
+            }
+        }
+    }
+
+    for lib in libstorage {
+        let temp: libloading::Symbol<
+            unsafe extern "C" fn(
+                &Vec<sharedtypes::ScraperParam>,
+                &sharedtypes::ScraperData,
+            ) -> Vec<(String, sharedtypes::ScraperData)>,
+        > = unsafe { lib.get(b"url_dump\0").unwrap() };
+        for item in unsafe { temp(params, scraperdata) } {
+            out.push(item);
+        }
+    }
+
+    /*let scrapermanager = arc_scrapermanager.lock().unwrap();
+    let scraper_library = scrapermanager.library_get().get(scraper).unwrap();
+    let temp: libloading::Symbol<
+        unsafe extern "C" fn(
+            &Vec<sharedtypes::ScraperParam>,
+            &sharedtypes::ScraperData,
+        ) -> Vec<(String, sharedtypes::ScraperData)>,
+    > = unsafe { scraper_library.get(b"url_dump\0").unwrap() };
+    unsafe { temp(params, scraperdata) }*/
+
+    out
+}
+
+///
+/// Parses output from plugin.
+///
+fn parse_plugin_output(
+    plugin_data: Vec<sharedtypes::DBPluginOutputEnum>,
+    unwrappy_locked: Arc<Mutex<Main>>,
+) {
+    let mut unwrappy = unwrappy_locked.lock().unwrap();
+    //let mut unwrappy = self._database.lock().unwrap();
+    parse_plugin_output_andmain(plugin_data, &mut unwrappy);
+}
+
+///
+/// Hopefully a thread-safe way to call plugins per thread avoiding a lock.
+///
+pub fn plugin_on_download(
+    manager_arc: Arc<Mutex<GlobalLoad>>,
+    db: Arc<Mutex<Main>>,
+    cursorpass: &[u8],
+    hash: &String,
+    ext: &String,
+) {
+    let libp;
+    {
+        let manager = manager_arc.lock().unwrap();
+        libp = manager.get_lib_path_from_callback(&sharedtypes::GlobalCallbacks::Download);
+    }
+    for lib_path in libp {
+        let lib;
+        unsafe {
+            match libloading::Library::new(&lib_path) {
+                Ok(good_lib) => lib = good_lib,
+                Err(_) => {
+                    logging::error_log(&format!(
+                        "Cannot load library at path: {}",
+                        lib_path.to_string_lossy()
+                    ));
+                    continue;
+                }
+            }
+        }
+        let output;
+        unsafe {
+            let plugindatafunc: libloading::Symbol<
+                unsafe extern "C" fn(
+                    &[u8],
+                    &String,
+                    &String,
+                ) -> Vec<sharedtypes::DBPluginOutputEnum>,
+                //unsafe extern "C" fn(Cursor<Bytes>, &String, &String, Arc<Mutex<database::Main>>),
+            > = match lib.get(b"on_download") {
+                Ok(lib) => lib,
+                Err(_) => {
+                    logging::info_log(&format!(
+                        "Could not find on_download for plugin: {}",
+                        lib_path.to_string_lossy()
+                    ));
+                    continue;
+                }
+            };
+            //unwrappy.
+            output = plugindatafunc(cursorpass, hash, ext);
+        }
+        parse_plugin_output(output, db.clone());
+        lib.close();
+    }
+}
+
+///
+/// Gets called onstartup of the software
+///
+pub fn on_start(libloading: &libloading::Library, site_struct: &sharedtypes::GlobalPluginScraper) {
+    let temp: libloading::Symbol<unsafe extern "C" fn(&sharedtypes::GlobalPluginScraper)> =
+        match unsafe { libloading.get(b"on_start\0") } {
+            Err(_) => {
+                logging::error_log_silent(&format!(
+                    "Cannot run on_start for name: {}",
+                    site_struct.name
+                ));
+                return;
+            }
+            Ok(lib) => lib,
+        };
+
+    logging::log(&format!(
+        "Running on_start call for name: {}",
+        site_struct.name
+    ));
+    unsafe { temp(site_struct) }
+}
+
+///
+/// This function gets called after a DB upgrade
+///
+pub fn db_upgrade_call(
+    libloading: &libloading::Library,
+    db_version: &usize,
+    site_struct: &sharedtypes::GlobalPluginScraper,
+) {
+    let temp: libloading::Symbol<unsafe extern "C" fn(&usize, &sharedtypes::GlobalPluginScraper)> =
+        match unsafe { libloading.get(b"db_upgrade_call\0") } {
+            Err(err) => {
+                logging::error_log(&format!(
+                    "Could not run scraper upgrade for db version {} because of {}.",
+                    db_version, err
+                ));
+                return;
+            }
+            Ok(lib) => lib,
+        };
+
+    unsafe { temp(db_version, site_struct) }
+}
+
+///
+/// Threadsafe way to call callback on adding a tag into the db
+///
+pub fn plugin_on_tag(
+    manager_arc: Arc<Mutex<GlobalLoad>>,
+    db: &mut Main,
+    tag: &String,
+    tag_nsid: &usize,
+) {
+    let tagstorageregex;
+    {
+        let temp = manager_arc.lock().unwrap();
+        tagstorageregex = temp.regex_storage.clone();
+    }
+
+    let mut storagemap = Vec::new();
+
+    for ((searchtype, ns, not_ns), pluginscraper_list) in tagstorageregex.iter() {
+        // Filtering for weather we should apply this to a tag of X namespace
+        if let Some(ns) = ns {
+            if ns != tag_nsid {
+                continue;
+            }
+        }
+
+        if let Some(not_ns) = not_ns {
+            if not_ns == tag_nsid {
+                continue;
+            }
+        }
+
+        // Actual matching going on here
+        match &searchtype {
+            sharedtypes::SearchType::String(searchstring) => if tag.contains(searchstring) {},
+            sharedtypes::SearchType::Regex(sharedtypes::RegexStorage(regex)) => {
+                let regex_iter: Vec<&str> = regex.find_iter(tag).map(|m| m.as_str()).collect();
+                for regex in regex_iter {
+                    for pluginscraper in pluginscraper_list {
+                        storagemap.push((pluginscraper, regex, Some(searchtype.clone())));
+                    }
+                }
+            }
+        }
+    }
+
+    for (pluginscraper, regex, searchtype) in storagemap {
+        let tag_ns;
+        {
+            match db.namespace_get_string(tag_nsid) {
+                None => {
+                    continue;
+                }
+                Some(nso) => {
+                    tag_ns = nso.name.clone();
+                }
+            }
+        }
+
+        let temp = manager_arc.lock().unwrap();
+        let liba = temp.library_get(pluginscraper);
+        if let Some(liba) = liba {
+            c_regex_match(db, tag, &tag_ns, &regex.to_string(), &searchtype, liba);
+        }
+    }
+
+    /*for (regex, plugin_name, namespace, not_namespace, plugin_callback) in tagstorageregex.iter() {
+        if let Some(not_namespace) = not_namespace {
+            if let Some(nsid) = db.namespace_get(not_namespace) {
+                if tag_nsid == nsid {
+                    return;
+                }
+            }
+        }
+
+        let regex_iter: Vec<&str> = regex.find_iter(tag).map(|m| m.as_str()).collect();
+        for regex_match in regex_iter {
+            let tag_ns = match db.namespace_get_string(tag_nsid) {
+                None => continue,
+                Some(namespace_name) => namespace_name.name.clone(),
+            };
+
+            storagemap.push((plugin_name, tag, tag_ns, regex_match, plugin_callback));
+        }
+    }
+
+    for (plugin_name, tag, tag_ns, regex_match, plugin_callback) in storagemap {
+        c_regex_match(
+            db.into(),
+            tag,
+            &tag_ns,
+            &regex_match.to_string(),
+            plugin_callback,
+        );
+    }*/
+}
+fn parse_plugin_output_andmain(plugin_data: Vec<sharedtypes::DBPluginOutputEnum>, db: &mut Main) {
+    for each in plugin_data {
+        match each {
+            sharedtypes::DBPluginOutputEnum::Add(name) => {
+                for names in name {
+                    let mut namespace_id: Option<usize> = Some(0); // holder of namespace
+
+                    // Loops through the namespace objects and selects the last one that's valid.
+                    // IF ONE IS NOT VALID THEN THEIR WILL NOT BE ONE ADDED INTO THE DB
+                    if let Some(temp) = names.namespace {
+                        for namespace in temp {
+                            // IF Valid ID && Name && Description info are valid then we have a valid namespace id to pull
+                            // dbg!(&namespace);
+                            namespace_id =
+                                Some(db.namespace_add(namespace.name, namespace.description, true));
+                        }
+                    }
+                    if let Some(temp) = names.file {
+                        for files in temp {
+                            if files.id.is_none() && files.hash.is_some() && files.ext.is_some() {
+                                // Gets the extension id
+                                let ext_id = db.extension_put_string(&files.ext.unwrap());
+
+                                let storage_id = match files.location {
+                                    Some(exists) => {
+                                        db.storage_put(&exists);
+                                        db.storage_get_id(&exists).unwrap()
+                                    }
+                                    None => {
+                                        let exists = db.location_get();
+                                        db.storage_put(&exists);
+                                        db.storage_get_id(&exists).unwrap()
+                                    }
+                                };
+
+                                let file = sharedtypes::DbFileStorage::NoIdExist(
+                                    sharedtypes::DbFileObjNoId {
+                                        hash: files.hash.unwrap(),
+                                        ext_id,
+                                        storage_id,
+                                    },
+                                );
+                                db.file_add(file, true);
+                            }
+                        }
+                    }
+                    if let Some(temp) = names.tag {
+                        for tags in temp {
+                            let namespace_id = db.namespace_get(&tags.namespace).cloned();
+                            //match namespace_id {}
+                            //dbg!(&tags);
+                            if tags.parents.is_none() && namespace_id.is_some() {
+                                db.tag_add(&tags.name, namespace_id.unwrap(), true, None);
+                            //                                    println!("plugins323 making tag: {}", tags.name);
+                            } else {
+                                for _parents_obj in tags.parents.unwrap() {
+                                    db.tag_add(&tags.name, namespace_id.unwrap(), true, None);
+                                }
+                            }
+                        }
+                    }
+                    if let Some(temp) = names.setting {
+                        for settings in temp {
+                            db.setting_add(
+                                settings.name,
+                                settings.pretty,
+                                settings.num,
+                                settings.param,
+                                true,
+                            );
+                        }
+                    }
+
+                    if let Some(temp) = names.jobs {
+                        for job in temp {
+                            db.jobs_add(
+                                None,
+                                job.time,
+                                job.reptime.unwrap_or(0),
+                                job.site,
+                                job.param,
+                                job.committype
+                                    .unwrap_or(sharedtypes::CommitType::StopOnNothing),
+                                job.system_data,
+                                job.user_data,
+                                job.jobmanager,
+                            );
+                        }
+                    }
+                    if let Some(temp) = names.relationship {
+                        for relations in temp {
+                            let file_id = db.file_get_hash(&relations.file_hash).cloned();
+                            let namespace_id = db.namespace_get(&relations.tag_namespace);
+                            let tag_id = db
+                                .tag_get_name(relations.tag_name.clone(), *namespace_id.unwrap())
+                                .cloned();
+                            /*println!(
+                                "plugins356 relating: file id {:?} to {:?}",
+                                file_id, relations.tag_name
+                            );*/
+                            db.relationship_add(file_id.unwrap(), tag_id.unwrap(), true);
+                            //unwrappy.relationship_add(file, tag, addtodb)
+                        }
+                    }
+                    if let Some(temp) = names.parents {
+                        for parent in temp {}
+                    }
+                }
+            }
+            sharedtypes::DBPluginOutputEnum::Del(name) => for _names in name {},
+            sharedtypes::DBPluginOutputEnum::None => {}
+        }
+    }
+}
+
 pub struct GlobalLoad {
     callback: HashMap<sharedtypes::GlobalCallbacks, Vec<sharedtypes::GlobalPluginScraper>>,
     callback_cross: HashMap<sharedtypes::GlobalPluginScraper, Vec<sharedtypes::CallbackInfo>>,
@@ -67,6 +483,12 @@ pub struct GlobalLoad {
     library_lib: HashMap<sharedtypes::GlobalPluginScraper, libloading::Library>,
     default_load: LoadableType,
     thread: HashMap<sharedtypes::GlobalPluginScraper, JoinHandle<()>>,
+    searchtype_storage: HashMap<sharedtypes::SearchType, sharedtypes::GlobalCallbacks>,
+    ipc_server: Option<JoinHandle<()>>,
+    regex_storage: HashMap<
+        (sharedtypes::SearchType, Option<usize>, Option<usize>),
+        Vec<sharedtypes::GlobalPluginScraper>,
+    >,
 }
 
 ///
@@ -78,8 +500,10 @@ enum LoadableType {
 }
 
 impl GlobalLoad {
-    pub fn new() -> Self {
-        GlobalLoad {
+    pub fn new(db: Arc<Mutex<database::Main>>, jobs: Arc<Mutex<Jobs>>) -> Arc<Mutex<Self>> {
+        logging::log(&"Starting IPC Server.".to_string());
+
+        Arc::new(Mutex::new(GlobalLoad {
             callback: HashMap::new(),
             callback_cross: HashMap::new(),
             sites: HashMap::new(),
@@ -87,15 +511,113 @@ impl GlobalLoad {
             library_lib: HashMap::new(),
             default_load: LoadableType::Release,
             thread: HashMap::new(),
-        }
+            searchtype_storage: HashMap::new(),
+            ipc_server: None,
+            regex_storage: HashMap::new(),
+        }))
     }
+
+    pub fn setup_ipc(
+        &mut self,
+        globalload: Arc<Mutex<GlobalLoad>>,
+        db: Arc<Mutex<Main>>,
+        jobs: Arc<Mutex<Jobs>>,
+    ) {
+        let globalload = globalload.clone();
+        let srv = std::thread::spawn(move || {
+            let mut ipc_coms = server::PluginIpcInteract::new(db.clone(), globalload.clone(), jobs);
+            //let _ = rcv.recv();
+
+            //println!("v");
+            match ipc_coms.spawn_listener() {
+                Ok(out) => out,
+                Err(err) => {
+                    logging::panic_log(&format!("Failed to spawn IPC Server"));
+                }
+            }
+        });
+
+        self.ipc_server = Some(srv);
+    }
+
+    ///
+    /// Debug function for development
+    ///
+    pub fn debug(&self) {
+        dbg!(&self.callback, &self.sites, &self.library_path);
+    }
+
+    ///
+    /// Gets a library path from each valid callback
+    ///
+    pub fn get_lib_path_from_callback(
+        &self,
+        callback: &sharedtypes::GlobalCallbacks,
+    ) -> Vec<PathBuf> {
+        let mut out = Vec::new();
+        if let Some(callbacklist) = self.callback.get(callback) {
+            for callback_item in callbacklist {
+                if let Some(libp) = self.library_path.get(callback_item) {
+                    out.push(libp.clone());
+                }
+            }
+        }
+        out
+    }
+
+    ///
+    /// Returns a tag callback list based on limitations passed in by the end search
+    ///
+    pub fn get_tag_callback(
+        &self,
+        searchtype: Option<sharedtypes::SearchType>,
+        namespace: Option<String>,
+        not_namespace: Option<String>,
+    ) -> Vec<sharedtypes::GlobalPluginScraper> {
+        let mut out = Vec::new();
+        for (callback, pluginscrapers) in self.callback.iter() {
+            if let sharedtypes::GlobalCallbacks::Tag((st, ns, not_ns)) = callback {
+                if let Some(searchtype) = &searchtype {
+                    if let Some(st) = st {
+                        if st != searchtype {
+                            continue;
+                        }
+                    }
+                }
+                if let Some(namespace) = &namespace {
+                    if let Some(ns) = ns {
+                        if ns != namespace {
+                            continue;
+                        }
+                    }
+                }
+                if let Some(not_namespace) = &not_namespace {
+                    if let Some(not_ns) = not_ns {
+                        if not_ns != not_namespace {
+                            continue;
+                        }
+                    }
+                }
+
+                for each in pluginscrapers {
+                    out.push(each.clone());
+                }
+            }
+        }
+
+        out
+    }
+
+    ///
+    /// Calls a plugin from another plugin
+    ///
     pub fn external_plugin_call(
         &mut self,
         func_name: &String,
         vers: &usize,
         input_data: &sharedtypes::CallbackInfoInput,
     ) -> Option<HashMap<String, sharedtypes::CallbackCustomDataReturning>> {
-        if let Some(valid_func) = self.callbackstorage.get_mut(func_name) {
+        /*if let Some(valid_func) = self.callbackstorage.get_mut(func_name) {
             for each in valid_func.iter() {
                 if *vers == each.vers {
                     let plugin_lib = self.library_lib.get_mut(&each.name)?;
@@ -113,7 +635,8 @@ impl GlobalLoad {
                     return plugininfo;
                 }
             }
-        }
+        }*/
+        todo!();
         None
     }
 
@@ -130,6 +653,21 @@ impl GlobalLoad {
     pub fn library_get(&self, global: &sharedtypes::GlobalPluginScraper) -> Option<&Library> {
         self.library_lib.get(global)
     }
+
+    ///
+    /// Returns a library path if it exists
+    ///
+    pub fn library_get_path(&self, global: &sharedtypes::GlobalPluginScraper) -> Option<&PathBuf> {
+        self.library_path.get(global)
+    }
+
+    ///
+    /// Returns the libraries raw
+    ///
+    pub fn library_get_raw(&self) -> &HashMap<GlobalPluginScraper, Library> {
+        &self.library_lib
+    }
+
     ///
     /// Closes any open threads that might still be open
     ///
@@ -212,31 +750,51 @@ impl GlobalLoad {
                     return;
                 }
                 for global in items {
-                    if global.storage_type.is_none() {
-                        logging::error_log(&format!(
+                    match global.storage_type {
+                        None => {
+                            logging::error_log(&format!(
                     "Skipping parsing of name: {} due to storage_type not being set.From {}",
                     global.name,
                     path.to_string_lossy()
                 ));
 
-                        continue;
+                            continue;
+                        }
+                        Some(ref scraperplugin) => match scraperplugin {
+                            sharedtypes::ScraperOrPlugin::Scraper(scraperinfo) => {
+                                self.sites.insert(global.clone(), scraperinfo.sites.clone());
+                            }
+                            sharedtypes::ScraperOrPlugin::Plugin(plugininfo) => {}
+                        },
                     }
 
-                    for callbacks in global.callbacks {
+                    for callbacks in global.callbacks.iter() {
                         match callbacks {
                             sharedtypes::GlobalCallbacks::Callback(callback_info) => {
-                                self.callback_cross.insert(global.clone(), callback_info);
+                                match self.callback_cross.get_mut(&global) {
+                                    None => {
+                                        self.callback_cross
+                                            .insert(global.clone(), vec![callback_info.clone()]);
+                                    }
+                                    Some(list) => {
+                                        list.push(callback_info.clone());
+                                    }
+                                }
                             }
                             _ => match self.callback.get_mut(&callbacks) {
                                 None => {
-                                    let mut temp = vec![global];
-                                    self.callback.insert(callbacks, temp);
+                                    let temp = vec![global.clone()];
+                                    self.callback.insert(callbacks.clone(), temp);
                                 }
                                 Some(plugin_list) => {
                                     plugin_list.push(global.clone());
                                 }
                             },
                         }
+
+                        if let sharedtypes::GlobalCallbacks::Tag((searchtype, ns, not_ns)) =
+                            callbacks
+                        {}
                     }
 
                     self.library_path.insert(global.clone(), path.to_path_buf());
@@ -258,6 +816,10 @@ impl GlobalLoad {
         lib: &Library,
         path: &Path,
     ) -> Option<Vec<sharedtypes::GlobalPluginScraper>> {
+        logging::log(&format!(
+            "Trying to load library at path: {}",
+            path.to_string_lossy()
+        ));
         let temp: libloading::Symbol<
             unsafe extern "C" fn() -> Vec<sharedtypes::GlobalPluginScraper>,
         > = match unsafe { lib.get(b"get_global_info\0") } {
@@ -316,5 +878,54 @@ impl GlobalLoad {
                 }
             }
         }
+    }
+
+    pub fn filter_sites_return_lib(&self, site: &String) -> Option<&Library> {
+        for scraper in self.scraper_get().iter() {
+            if let Some(ref storage_type) = scraper.storage_type {
+                if let sharedtypes::ScraperOrPlugin::Scraper(ref scraperinfo) = storage_type {
+                    if scraperinfo.sites.contains(site) {
+                        return self.library_get(scraper);
+                    }
+                }
+            }
+        }
+        None
+    }
+}
+
+///
+/// Returns filehashes that have to be regenned.
+/// I don't think this gets used?
+///
+pub fn scraper_file_regen(libloading: &libloading::Library) -> sharedtypes::ScraperFileRegen {
+    let temp: libloading::Symbol<unsafe extern "C" fn() -> sharedtypes::ScraperFileRegen> =
+        unsafe { libloading.get(b"scraper_file_regen\0").unwrap() };
+    unsafe { temp() }
+}
+///
+/// Used to generate a download link given the input data
+///
+pub fn scraper_file_return(
+    libloading: &libloading::Library,
+    regen: &sharedtypes::ScraperFileInput,
+) -> sharedtypes::SubTag {
+    let temp: libloading::Symbol<
+        unsafe extern "C" fn(&sharedtypes::ScraperFileInput) -> sharedtypes::SubTag,
+    > = unsafe { libloading.get(b"scraper_file_return\0").unwrap() };
+    unsafe { temp(regen) }
+}
+
+#[cfg(test)]
+pub(crate) mod test_globalload {
+
+    use crate::jobs;
+
+    use super::*;
+    pub fn emulate_loaded(
+        db: Arc<Mutex<database::Main>>,
+        jobs: Arc<Mutex<Jobs>>,
+    ) -> Arc<Mutex<GlobalLoad>> {
+        GlobalLoad::new(db, jobs)
     }
 }

@@ -21,16 +21,14 @@ struct PreviouslySeenObj {
 
 pub struct Jobs {
     db: Arc<Mutex<database::Main>>,
-    global_load: Arc<Mutex<GlobalLoad>>,
     site_job: HashMap<sharedtypes::GlobalPluginScraper, HashSet<sharedtypes::DbJobsObj>>,
     previously_seen: HashMap<sharedtypes::GlobalPluginScraper, HashSet<PreviouslySeenObj>>,
 }
 
 impl Jobs {
-    pub fn new(db: Arc<Mutex<database::Main>>, global_load: Arc<Mutex<GlobalLoad>>) -> Self {
+    pub fn new(db: Arc<Mutex<database::Main>>) -> Self {
         Jobs {
             db,
-            global_load,
             site_job: HashMap::new(),
             previously_seen: HashMap::new(),
         }
@@ -206,7 +204,7 @@ impl Jobs {
     ///
     ///Loads jobs from DB into the internal Jobs structure
     ///
-    pub fn jobs_load(&mut self) {
+    pub fn jobs_load(&mut self, global_load: Arc<Mutex<GlobalLoad>>) {
         // Loads table if this hasn't been loaded yet
         self.db
             .lock()
@@ -221,9 +219,10 @@ impl Jobs {
 
         let mut jobs_vec = Vec::new();
         {
-            let GlobalLoad = self.global_load.lock().unwrap();
+            let GlobalLoad = global_load.lock().unwrap();
             for scraper in GlobalLoad.scraper_get() {
                 for sites in GlobalLoad.sites_get(&scraper) {
+                    dbg!(&sites);
                     for (id, job) in hashjobs.iter() {
                         if sites == job.site {
                             jobs_vec.push((scraper.clone(), *id, job.clone()));
@@ -249,19 +248,29 @@ mod tests {
         time::Duration,
     };
 
-    use crate::sharedtypes::{DbJobsObj, GlobalPluginScraper};
-    use crate::{database::test_database, globalload::test_GlobalLoad};
+    use crate::database::test_database;
+    use crate::database::Main;
+    use crate::globalload::{test_globalload, GlobalLoad};
+    use crate::sharedtypes;
+    use crate::sharedtypes::DbJobsObj;
 
     use super::Jobs;
 
-    fn create_default() -> Jobs {
-        let sc = test_GlobalLoad::emulate_loaded();
-        let global_load = Arc::new(Mutex::new(sc));
-
+    ///
+    /// Creates a default job obj to use
+    ///
+    pub fn create_default() -> Jobs {
         let dsb = test_database::setup_default_db();
         let db = Arc::new(Mutex::new(dsb));
 
-        Jobs::new(db, global_load)
+        Jobs::new(db)
+    }
+
+    ///
+    /// Sets up for globalloading
+    ///
+    fn get_globalload(db: Arc<Mutex<Main>>, jobs: Arc<Mutex<Jobs>>) -> Arc<Mutex<GlobalLoad>> {
+        test_globalload::emulate_loaded(db, jobs)
     }
 
     ///
@@ -288,9 +297,10 @@ mod tests {
     #[test]
     fn insert_duplicate_job() {
         let mut job = create_default();
+        let globalload = get_globalload(job.db.clone(), Arc::new(Mutex::new(create_default())));
 
-        job.jobs_load();
-        let scraper = return_GlobalPluginScraper();
+        job.jobs_load(globalload);
+        let scraper = sharedtypes::return_default_globalpluginparser();
 
         let dbjobsobj = return_dbjobsobj();
         job.jobs_add(scraper.clone(), dbjobsobj.clone());
@@ -299,15 +309,16 @@ mod tests {
         assert_eq!(job.previously_seen.get(&scraper).unwrap().len(), 1);
 
         let unwrappy = job.db.lock().unwrap();
-
-        assert_eq!(unwrappy.jobs_get_all().keys().len(), 1);
+        dbg!(job.jobs_get(&scraper));
+        assert_eq!(job.jobs_get(&scraper).len(), 1);
     }
     #[test]
     fn jobs_remove_job() {
         let mut job = create_default();
 
-        job.jobs_load();
-        let scraper = return_GlobalPluginScraper();
+        let globalload = get_globalload(job.db.clone(), Arc::new(Mutex::new(create_default())));
+        job.jobs_load(globalload);
+        let scraper = sharedtypes::return_default_globalpluginparser();
 
         let dbjobsobj = return_dbjobsobj();
         job.jobs_add(scraper.clone(), dbjobsobj.clone());

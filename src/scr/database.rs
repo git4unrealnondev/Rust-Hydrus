@@ -1,8 +1,7 @@
 #![forbid(unsafe_code)]
+use crate::globalload;
 use crate::globalload::GlobalLoad;
 use crate::logging;
-use crate::plugins;
-use crate::plugins::PluginManager;
 use crate::sharedtypes;
 use crate::sharedtypes::ScraperParam;
 use eta::{Eta, TimeAcc};
@@ -1686,7 +1685,7 @@ impl Main {
         match id {
             None => {
                 if let Some(globalload) = &self.globalload {
-                    plugins::plugin_on_tag(globalload.clone(), self, tags, &namespace);
+                    globalload::plugin_on_tag(globalload.clone(), self, tags, &namespace);
                 }
 
                 // Do we have an ID coming in to add manually?

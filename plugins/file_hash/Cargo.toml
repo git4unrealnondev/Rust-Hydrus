@@ -28,6 +28,7 @@ ipfs-cid = "2.0.0"
 clap = { version = "4.5.17", features = ["derive"] }
 image_hasher = "2.0.0"
 image = "0.25.4"
+regex = "1.11.1"
 [lib]
 crate-type = ["dylib"]
 

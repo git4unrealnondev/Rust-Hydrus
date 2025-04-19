@@ -9,7 +9,9 @@ use strfmt::Format;
 // use std::str::pattern::Searcher;
 use crate::download;
 use crate::{
-    database, logging, pause, scraper,
+    database,
+    globalload::GlobalLoad,
+    logging, pause,
     sharedtypes::{self},
 };
 use clap::Parser;
@@ -102,7 +104,7 @@ fn parse_string_to_scraperparam(input: &String) -> Vec<sharedtypes::ScraperParam
 }
 
 /// Returns the main argument and parses data.
-pub fn main(data: Arc<Mutex<database::Main>>, scraper: Arc<Mutex<scraper::ScraperManager>>) {
+pub fn main(data: Arc<Mutex<database::Main>>, scraper: Arc<Mutex<GlobalLoad>>) {
     let args = cli_structs::MainWrapper::parse();
     if args.a.is_none() {
         return;
@@ -316,7 +318,7 @@ pub fn main(data: Arc<Mutex<database::Main>>, scraper: Arc<Mutex<scraper::Scrape
                     }
                     let scraper = scraper.lock().unwrap();
                     // Loads the scraper info for parsing.
-                    let scraperlibrary = scraper.return_libloading_string(&loc.site);
+                    let scraperlibrary = scraper.filter_sites_return_lib(&loc.site);
                     let libload = match scraperlibrary {
                         None => {
                             println!("Cannot find a loaded scraper. {}", &loc.site);
@@ -326,7 +328,7 @@ pub fn main(data: Arc<Mutex<database::Main>>, scraper: Arc<Mutex<scraper::Scrape
                     };
                     data.load_table(&sharedtypes::LoadDBTable::All);
                     let failedtoparse: HashSet<String> = HashSet::new();
-                    let file_regen = crate::scraper::scraper_file_regen(libload);
+                    let file_regen = crate::globalload::scraper_file_regen(libload);
                     std::env::set_var("RAYON_NUM_THREADS", "50");
                     println!("Found location: {} Starting to process.", &loc.location);
 
@@ -362,7 +364,7 @@ pub fn main(data: Arc<Mutex<database::Main>>, scraper: Arc<Mutex<scraper::Scrape
                             hash: Some(fhist),
                             ext: Some(ext.clone()),
                         };
-                        let tag = crate::scraper::scraper_file_return(libload, &scraperinput);
+                        let tag = crate::globalload::scraper_file_return(libload, &scraperinput);
 
                         // gets sha 256 from the file.
                         let (sha2, _a) = download::hash_bytes(

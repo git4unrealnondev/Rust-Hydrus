@@ -6,7 +6,6 @@ use crate::download;
 use crate::globalload::GlobalLoad;
 use crate::jobs::Jobs;
 use crate::logging;
-use crate::plugins::globalload;
 use crate::sharedtypes;
 use crate::threading;
 use anyhow::Context;
@@ -148,7 +147,7 @@ pub struct PluginIpcInteract {
 impl PluginIpcInteract {
     pub fn new(
         main_db: Arc<Mutex<database::Main>>,
-        globalload: Arc<Mutex<PluginManager>>,
+        globalload: Arc<Mutex<GlobalLoad>>,
         jobs: Arc<Mutex<Jobs>>,
     ) -> Self {
         PluginIpcInteract {

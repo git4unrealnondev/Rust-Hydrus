@@ -3,12 +3,8 @@ use crate::download;
 use crate::globalload;
 use crate::globalload::GlobalLoad;
 use crate::logging;
-use crate::scraper::ScraperManager;
 
-// use crate::jobs::JobsRef;
-use crate::globalload::globalload;
 use crate::logging::info_log;
-use crate::scraper;
 use crate::sharedtypes;
 use crate::sharedtypes::ScraperReturn;
 use async_std::task;
@@ -139,8 +135,10 @@ impl Worker {
         // length of: {}", &id, &scraper._name, &jobstorage..len() ));
         let mut db = dba.clone();
         let mut jobstorage = jobstorage.clone();
+        let globalload = globalload.clone();
         let ratelimiter_main;
-        if let Some(sharedtypes::ScraperOrPlugin::Scraper(scraper_info)) = scraper.storage_type {
+        if let Some(sharedtypes::ScraperOrPlugin::Scraper(ref scraper_info)) = scraper.storage_type
+        {
             ratelimiter_main = create_ratelimiter(scraper_info.ratelimit);
         } else {
             return Worker { id, thread: None };
