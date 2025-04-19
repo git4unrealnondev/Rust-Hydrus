@@ -654,7 +654,7 @@ fn parse_jobs(
         for data in urls_to_scrape {
             // Defualt job object
 
-            let jobid;
+            /*let jobid;
             {
                 let mut db = db.lock().unwrap();
                 jobid = db.jobs_add(
@@ -671,9 +671,9 @@ fn parse_jobs(
                         recreation: None,
                     },
                 );
-            }
+            }*/
             let dbjob = sharedtypes::DbJobsObj {
-                id: jobid,
+                id: 0,
                 time: 0,
                 reptime: Some(0),
                 site: data.job.site,
@@ -688,7 +688,7 @@ fn parse_jobs(
                 user_data: data.user_data,
             };
 
-            joblock.jobs_add(scraper.clone(), dbjob);
+            joblock.jobs_add(scraper.clone(), None, dbjob);
         }
     }
 }

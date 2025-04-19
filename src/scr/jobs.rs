@@ -12,7 +12,6 @@ use std::sync::Mutex;
 ///
 #[derive(Debug, Hash, PartialEq, Eq)]
 struct PreviouslySeenObj {
-    id: usize,
     site: String,
     params: Vec<sharedtypes::ScraperParam>,
     time: usize,
@@ -39,16 +38,19 @@ impl Jobs {
     }
     ///
     /// Adds job into the storage
-    /// Does not append jobs into db. This is intentional as the threading module adds the jobs to
-    /// db
     ///
     pub fn jobs_add(
         &mut self,
         scraper: sharedtypes::GlobalPluginScraper,
+        id: Option<usize>,
         dbjobsobj: sharedtypes::DbJobsObj,
     ) {
+        let mut dbjobsobj = dbjobsobj;
+        if let Some(id) = id {
+            dbjobsobj.id = id;
+        }
+
         let obj = PreviouslySeenObj {
-            id: dbjobsobj.id,
             site: dbjobsobj.site.clone(),
             params: dbjobsobj.param.clone(),
             time: dbjobsobj.time,
@@ -62,23 +64,27 @@ impl Jobs {
         }
 
         if time_func::time_secs() >= dbjobsobj.time + dbjobsobj.reptime.unwrap() {
-            crate::logging::info_log(&format!("Adding job: {:?}", &dbjobsobj));
+            if id.is_none() {
+                crate::logging::info_log(&format!("Adding job: {:?}", &dbjobsobj));
+                let mut unwrappy = self.db.lock().unwrap();
+                let id = unwrappy.jobs_add(
+                    None,
+                    dbjobsobj.time.clone(),
+                    dbjobsobj.reptime.clone().unwrap(),
+                    dbjobsobj.site.clone(),
+                    dbjobsobj.param.clone(),
+                    dbjobsobj
+                        .committype
+                        .clone()
+                        .unwrap_or(sharedtypes::CommitType::StopOnNothing),
+                    dbjobsobj.system_data.clone(),
+                    dbjobsobj.user_data.clone(),
+                    dbjobsobj.jobmanager.clone(),
+                );
 
-            /*let mut unwrappy = self.db.lock().unwrap();
-            unwrappy.jobs_add(
-                Some(dbjobsobj.id),
-                dbjobsobj.time.clone(),
-                dbjobsobj.reptime.clone().unwrap(),
-                dbjobsobj.site.clone(),
-                dbjobsobj.param.clone(),
-                dbjobsobj
-                    .committype
-                    .clone()
-                    .unwrap_or(sharedtypes::CommitType::StopOnNothing),
-                dbjobsobj.system_data.clone(),
-                dbjobsobj.user_data.clone(),
-                dbjobsobj.jobmanager.clone(),
-            );*/
+                // Updates the ID field with something from the db
+                dbjobsobj.id = id;
+            }
 
             match self.previously_seen.get_mut(&scraper) {
                 Some(list) => {
@@ -131,6 +137,8 @@ impl Jobs {
         scraper: &sharedtypes::GlobalPluginScraper,
         data: &sharedtypes::DbJobsObj,
     ) {
+        self.debug();
+        dbg!(scraper, data);
         if let Some(job_list) = self.site_job.get_mut(scraper) {
             let job_list_static = job_list.clone();
             for job in job_list_static {
@@ -233,7 +241,7 @@ impl Jobs {
         for (scraper, id, job) in jobs_vec {
             hashjobs.remove(&id);
 
-            self.jobs_add(scraper.clone(), job.clone());
+            self.jobs_add(scraper.clone(), Some(job.id), job.clone());
         }
     }
 }
@@ -298,8 +306,8 @@ mod tests {
         let scraper = sharedtypes::return_default_globalpluginparser();
 
         let dbjobsobj = return_dbjobsobj();
-        job.jobs_add(scraper.clone(), dbjobsobj.clone());
-        job.jobs_add(scraper.clone(), dbjobsobj);
+        job.jobs_add(scraper.clone(), Some(0), dbjobsobj.clone());
+        job.jobs_add(scraper.clone(), Some(0), dbjobsobj);
         assert_eq!(job.site_job.get(&scraper).unwrap().len(), 1);
         assert_eq!(job.previously_seen.get(&scraper).unwrap().len(), 1);
 
@@ -316,7 +324,7 @@ mod tests {
         let scraper = sharedtypes::return_default_globalpluginparser();
 
         let dbjobsobj = return_dbjobsobj();
-        job.jobs_add(scraper.clone(), dbjobsobj.clone());
+        job.jobs_add(scraper.clone(), Some(0), dbjobsobj.clone());
         assert_eq!(job.site_job.get(&scraper).unwrap().len(), 1);
         assert_eq!(job.previously_seen.get(&scraper).unwrap().len(), 1);
         job.jobs_remove_dbjob(&scraper, &dbjobsobj);
