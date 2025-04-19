@@ -3,7 +3,6 @@
 use log::{error, warn};
 //use scraper::db_upgrade_call;
 //use scraper::on_start;
-use std::path::Path;
 use std::sync::Arc;
 use std::sync::Mutex;
 

@@ -5,11 +5,8 @@ use crate::{
     sharedtypes::{self, GlobalPluginScraper},
 };
 use libloading::Library;
+use std::sync::{Arc, Mutex};
 use std::{collections::HashMap, path::Path, thread};
-use std::{
-    fmt::format,
-    sync::{Arc, Mutex},
-};
 use std::{path::PathBuf, thread::JoinHandle};
 
 ///
@@ -483,7 +480,6 @@ pub struct GlobalLoad {
     library_lib: HashMap<sharedtypes::GlobalPluginScraper, libloading::Library>,
     default_load: LoadableType,
     thread: HashMap<sharedtypes::GlobalPluginScraper, JoinHandle<()>>,
-    searchtype_storage: HashMap<sharedtypes::SearchType, sharedtypes::GlobalCallbacks>,
     ipc_server: Option<JoinHandle<()>>,
     regex_storage: HashMap<
         (sharedtypes::SearchType, Option<usize>, Option<usize>),
@@ -511,7 +507,6 @@ impl GlobalLoad {
             library_lib: HashMap::new(),
             default_load: LoadableType::Release,
             thread: HashMap::new(),
-            searchtype_storage: HashMap::new(),
             ipc_server: None,
             regex_storage: HashMap::new(),
         }))
@@ -918,8 +913,6 @@ pub fn scraper_file_return(
 
 #[cfg(test)]
 pub(crate) mod test_globalload {
-
-    use crate::jobs;
 
     use super::*;
     pub fn emulate_loaded(

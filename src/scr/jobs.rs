@@ -219,10 +219,9 @@ impl Jobs {
 
         let mut jobs_vec = Vec::new();
         {
-            let GlobalLoad = global_load.lock().unwrap();
-            for scraper in GlobalLoad.scraper_get() {
-                for sites in GlobalLoad.sites_get(&scraper) {
-                    dbg!(&sites);
+            let globalload = global_load.lock().unwrap();
+            for scraper in globalload.scraper_get() {
+                for sites in globalload.sites_get(&scraper) {
                     for (id, job) in hashjobs.iter() {
                         if sites == job.site {
                             jobs_vec.push((scraper.clone(), *id, job.clone()));
@@ -240,13 +239,9 @@ impl Jobs {
 }
 
 #[cfg(test)]
-
 mod tests {
-    use std::collections::{BTreeMap, HashMap};
-    use std::{
-        sync::{Arc, Mutex},
-        time::Duration,
-    };
+    use std::collections::BTreeMap;
+    use std::sync::{Arc, Mutex};
 
     use crate::database::test_database;
     use crate::database::Main;

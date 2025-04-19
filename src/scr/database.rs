@@ -530,7 +530,7 @@ impl Main {
         self._inmemdb.settings_get_name(name)
     }
 
-    /// Returns total jobs from _inmemdb
+    /// Returns next jobid from _inmemdb
     pub fn jobs_get_max(&self) -> &usize {
         self._inmemdb.jobs_get_max()
     }
@@ -1819,7 +1819,7 @@ impl Main {
         jobsmanager: sharedtypes::DbJobsManager,
     ) -> usize {
         let id = match id {
-            None => *self._inmemdb.jobs_get_max(),
+            None => *self.jobs_get_max(),
             Some(id) => id,
         };
         let jobs_obj: sharedtypes::DbJobsObj = sharedtypes::DbJobsObj {
@@ -2547,5 +2547,48 @@ pub(crate) mod test_database {
         main.parents_tagid_remove(&1);
         assert_eq!(main.parents_rel_get(&1), None);
         assert_eq!(main.parents_tag_get(&1), None);
+    }
+
+    ///
+    /// This test does not deduplicate data. We rely on the jobs obj to deduplicate
+    ///
+    #[test]
+    fn db_jobs_check_id() {
+        let mut main = setup_default_db();
+        dbg!(main.jobs_get_max());
+        main.jobs_add(
+            None,
+            0,
+            0,
+            "".to_string(),
+            vec![],
+            sharedtypes::CommitType::StopOnNothing,
+            BTreeMap::new(),
+            BTreeMap::new(),
+            sharedtypes::DbJobsManager {
+                jobtype: sharedtypes::DbJobType::NoScrape,
+                recreation: None,
+            },
+        );
+        dbg!(main.jobs_get_max());
+        assert_eq!(main.jobs_get_max(), &1);
+        main.jobs_add(
+            None,
+            0,
+            0,
+            "".to_string(),
+            vec![],
+            sharedtypes::CommitType::StopOnNothing,
+            BTreeMap::new(),
+            BTreeMap::new(),
+            sharedtypes::DbJobsManager {
+                jobtype: sharedtypes::DbJobType::NoScrape,
+                recreation: None,
+            },
+        );
+        dbg!(main.jobs_get_max());
+        dbg!(main.jobs_get_all());
+        assert_eq!(main.jobs_get_max(), &2);
+        assert!(main.jobs_get(&1).is_some());
     }
 }

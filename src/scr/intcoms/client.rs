@@ -337,10 +337,6 @@ pub fn external_plugin_call(
 /// This shouldn't come back to haunt me. :x Returns a Vec of bytes that represent
 /// the data structure sent from server.
 fn init_data_request<T: serde::de::DeserializeOwned>(requesttype: &types::SupportedRequests) -> T {
-    let _coms_struct = types::Coms {
-        com_type: types::EComType::BiDirectional,
-        control: types::EControlSigs::Send,
-    };
     let name = types::SOCKET_NAME
         .to_ns_name::<GenericNamespaced>()
         .unwrap();
