@@ -61,7 +61,7 @@ pub struct Main {
     _tables_loaded: Vec<sharedtypes::LoadDBTable>,
     _tables_loading: Vec<sharedtypes::LoadDBTable>,
     _cache: CacheType,
-    globalload: Option<Arc<Mutex<GlobalLoad>>>,
+    pub globalload: Option<Arc<Mutex<GlobalLoad>>>,
 }
 
 /// Contains DB functions.
@@ -1815,6 +1815,17 @@ impl Main {
             None => *self.jobs_get_max(),
             Some(id) => id,
         };
+
+        for each in self.jobs_get_all() {
+            if time == each.1.time
+                && Some(reptime) == each.1.reptime
+                && site == each.1.site
+                && param == each.1.param
+            {
+                return id;
+            }
+        }
+
         let jobs_obj: sharedtypes::DbJobsObj = sharedtypes::DbJobsObj {
             id,
             time,

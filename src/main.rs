@@ -189,6 +189,9 @@ fn main() {
     // Calls the on_start func for the plugins
     globalload_arc.lock().unwrap().plugin_on_start();
 
+    // One flush after all the on_start unless needed
+    arc.lock().unwrap().transaction_flush();
+
     // Creates a threadhandler that manages callable threads.
     let mut threadhandler = threading::Threads::new();
 
@@ -223,15 +226,14 @@ fn main() {
             globalload_arc.lock().unwrap().thread_finish_closed();
             brk = globalload_arc.lock().unwrap().return_thread();
         }
-        if brk {
+
+        if brk && threadhandler.check_empty() {
             break;
         }
-        thread::sleep(one_sec);
         {
             let mut jobmanager = arc_jobmanager.lock().unwrap();
             jobmanager.jobs_load(globalload_arc.clone());
         }
-        threadhandler.check_threads();
         for scraper in arc_jobmanager.lock().unwrap().job_scrapers_get() {
             // let scraper_library = scraper_manager._library.get(&scraper).unwrap();
             threadhandler.startwork(
@@ -241,6 +243,8 @@ fn main() {
                 &mut globalload_arc,
             );
         }
+        thread::sleep(one_sec);
+        threadhandler.check_threads();
     }
 
     // This wait is done for allowing any thread to "complete" Shouldn't be nessisary
@@ -250,6 +254,4 @@ fn main() {
     std::thread::sleep(mills_fifty);
     logging::info_log(&"UNLOADING".to_string());
     log::logger().flush();
-
-    return;
 }

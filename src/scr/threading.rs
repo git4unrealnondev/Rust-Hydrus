@@ -69,6 +69,13 @@ impl Threads {
         // self._workers.push(worker);
     }
 
+    ///
+    /// Checks if we're empty
+    ///
+    pub fn check_empty(&self) -> bool {
+        self.worker_control.is_empty()
+    }
+
     /// Checks and clears the worker pools & long stored data
     pub fn check_threads(&mut self) {
         let mut temp = Vec::new();

@@ -535,6 +535,23 @@ impl DbInteract {
                 Self::data_size_to_b(tmep)
                 //bincode::serialize(&tmep).unwrap()
             }
+            types::SupportedDBRequests::ReloadRegex => {
+                let globalload;
+                {
+                    let unwrappy = self._database.lock().unwrap();
+                    if let Some(globalload_arc) = unwrappy.globalload.clone() {
+                        globalload = globalload_arc.clone();
+                    } else {
+                        return Self::data_size_to_b(&true);
+                    }
+                }
+
+                let mut global = globalload.lock().unwrap();
+
+                global.reload_regex();
+
+                Self::data_size_to_b(&true)
+            }
         }
     }
 

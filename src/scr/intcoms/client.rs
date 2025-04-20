@@ -281,6 +281,15 @@ pub fn tag_add(tag: String, namespace_id: usize, addtodb: bool, id: Option<usize
     ))
 }
 
+///
+/// Reloads regex
+///
+pub fn reload_regex() -> bool {
+    init_data_request(&types::SupportedRequests::Database(
+        types::SupportedDBRequests::ReloadRegex,
+    ))
+}
+
 /// Adds job into db
 pub fn job_add(
     id: Option<usize>,

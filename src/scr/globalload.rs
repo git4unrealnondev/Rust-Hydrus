@@ -1,6 +1,6 @@
 use crate::{
     database::{self, Main},
-    jobs::Jobs,
+    jobs::{self, Jobs},
     logging, server,
     sharedtypes::{self, GlobalPluginScraper},
 };
@@ -72,6 +72,8 @@ fn c_regex_match(
     regex_match: &String,
     plugin_callback: &Option<sharedtypes::SearchType>,
     liba: &libloading::Library,
+    scraper: &GlobalPluginScraper,
+    jobmanager: Arc<Mutex<Jobs>>,
 ) {
     dbg!(tag, tag_ns, regex_match);
     let output;
@@ -100,7 +102,7 @@ fn c_regex_match(
             .unwrap();
         output = plugindatafunc(tag, tag_ns, regex_match, plugin_callback);
     };
-    parse_plugin_output_andmain(output, db);
+    parse_plugin_output_andmain(output, db, scraper, jobmanager);
 }
 
 ///
@@ -156,10 +158,12 @@ pub fn url_dump(
 fn parse_plugin_output(
     plugin_data: Vec<sharedtypes::DBPluginOutputEnum>,
     unwrappy_locked: Arc<Mutex<Main>>,
+    scraper: &GlobalPluginScraper,
+    jobmanager: Arc<Mutex<Jobs>>,
 ) {
     let mut unwrappy = unwrappy_locked.lock().unwrap();
     //let mut unwrappy = self._database.lock().unwrap();
-    parse_plugin_output_andmain(plugin_data, &mut unwrappy);
+    parse_plugin_output_andmain(plugin_data, &mut unwrappy, scraper, jobmanager);
 }
 
 ///
@@ -172,12 +176,16 @@ pub fn plugin_on_download(
     hash: &String,
     ext: &String,
 ) {
-    let libp;
+    let (libpath, libscraper);
     {
         let manager = manager_arc.lock().unwrap();
-        libp = manager.get_lib_path_from_callback(&sharedtypes::GlobalCallbacks::Download);
+        (libpath, libscraper) = (
+            manager.get_lib_path_from_callback(&sharedtypes::GlobalCallbacks::Download),
+            manager.get_scrapers_from_callback(&sharedtypes::GlobalCallbacks::Download),
+        );
     }
-    for lib_path in libp {
+
+    for (cnt, lib_path) in libpath.iter().enumerate() {
         let lib;
         unsafe {
             match libloading::Library::new(&lib_path) {
@@ -213,7 +221,13 @@ pub fn plugin_on_download(
             //unwrappy.
             output = plugindatafunc(cursorpass, hash, ext);
         }
-        parse_plugin_output(output, db.clone());
+
+        let mut jobmanager;
+        {
+            let mut manager = manager_arc.lock().unwrap();
+            jobmanager = manager.jobmanager.clone();
+        }
+        parse_plugin_output(output, db.clone(), libscraper.get(cnt).unwrap(), jobmanager);
         lib.close();
     }
 }
@@ -281,18 +295,19 @@ pub fn plugin_on_tag(
 
     let mut storagemap = Vec::new();
 
-    for (((search_string, search_regex), ns, not_ns), pluginscraper_list) in tagstorageregex.iter()
+    'searchloop: for (((search_string, search_regex), ns, not_ns), pluginscraper_list) in
+        tagstorageregex.iter()
     {
         // Filtering for weather we should apply this to a tag of X namespace
         for ns in ns {
             if ns != tag_nsid {
-                continue;
+                continue 'searchloop;
             }
         }
 
         for not_ns in not_ns {
             if not_ns == tag_nsid {
-                continue;
+                continue 'searchloop;
             }
         }
 
@@ -330,44 +345,40 @@ pub fn plugin_on_tag(
             }
         }
 
-        let temp = manager_arc.lock().unwrap();
-        let liba = temp.library_get(pluginscraper);
-        if let Some(liba) = liba {
-            c_regex_match(db, tag, &tag_ns, &regex.to_string(), &searchtype, liba);
-        }
-    }
-
-    /*for (regex, plugin_name, namespace, not_namespace, plugin_callback) in tagstorageregex.iter() {
-        if let Some(not_namespace) = not_namespace {
-            if let Some(nsid) = db.namespace_get(not_namespace) {
-                if tag_nsid == nsid {
-                    return;
+        let jobmanager;
+        let liba;
+        {
+            let temp = manager_arc.lock().unwrap();
+            jobmanager = temp.jobmanager.clone();
+            match temp.library_get_path(pluginscraper) {
+                None => {
+                    liba = None;
+                }
+                Some(libpath) => {
+                    liba = Some(unsafe { libloading::Library::new(libpath).unwrap() });
                 }
             }
         }
-
-        let regex_iter: Vec<&str> = regex.find_iter(tag).map(|m| m.as_str()).collect();
-        for regex_match in regex_iter {
-            let tag_ns = match db.namespace_get_string(tag_nsid) {
-                None => continue,
-                Some(namespace_name) => namespace_name.name.clone(),
-            };
-
-            storagemap.push((plugin_name, tag, tag_ns, regex_match, plugin_callback));
+        if let Some(liba) = liba {
+            c_regex_match(
+                db,
+                tag,
+                &tag_ns,
+                &regex.to_string(),
+                &searchtype,
+                &liba,
+                pluginscraper,
+                jobmanager,
+            );
         }
     }
-
-    for (plugin_name, tag, tag_ns, regex_match, plugin_callback) in storagemap {
-        c_regex_match(
-            db.into(),
-            tag,
-            &tag_ns,
-            &regex_match.to_string(),
-            plugin_callback,
-        );
-    }*/
 }
-fn parse_plugin_output_andmain(plugin_data: Vec<sharedtypes::DBPluginOutputEnum>, db: &mut Main) {
+fn parse_plugin_output_andmain(
+    plugin_data: Vec<sharedtypes::DBPluginOutputEnum>,
+    db: &mut Main,
+    scraper: &GlobalPluginScraper,
+    jobmanager: Arc<Mutex<Jobs>>,
+) {
     for each in plugin_data {
         match each {
             sharedtypes::DBPluginOutputEnum::Add(name) => {
@@ -442,7 +453,6 @@ fn parse_plugin_output_andmain(plugin_data: Vec<sharedtypes::DBPluginOutputEnum>
 
                     if let Some(temp) = names.jobs {
                         for job in temp {
-                            dbg!(&job);
                             db.jobs_add(
                                 None,
                                 job.time,
@@ -455,7 +465,6 @@ fn parse_plugin_output_andmain(plugin_data: Vec<sharedtypes::DBPluginOutputEnum>
                                 job.user_data,
                                 job.jobmanager,
                             );
-                            dbg!("bb");
                         }
                     }
                     if let Some(temp) = names.relationship {
@@ -502,6 +511,7 @@ pub struct GlobalLoad {
         ),
         Vec<sharedtypes::GlobalPluginScraper>,
     >,
+    jobmanager: Arc<Mutex<Jobs>>,
 }
 
 ///
@@ -527,6 +537,7 @@ impl GlobalLoad {
             thread: HashMap::new(),
             ipc_server: None,
             regex_storage: HashMap::new(),
+            jobmanager: jobs,
         }))
     }
 
@@ -563,6 +574,20 @@ impl GlobalLoad {
             &self.library_path,
             &self.regex_storage
         );
+    }
+
+    ///
+    ///
+    ///
+    fn get_scrapers_from_callback(
+        &self,
+        callback: &sharedtypes::GlobalCallbacks,
+    ) -> Vec<GlobalPluginScraper> {
+        if let Some(callbacklist) = self.callback.get(callback) {
+            callbacklist.clone()
+        } else {
+            Vec::new()
+        }
     }
 
     ///
@@ -753,6 +778,33 @@ impl GlobalLoad {
                     }
                 }
             }
+        }
+    }
+
+    ///
+    /// Clears the regex cache and callbacks
+    ///
+    fn clear_regex(&mut self) {
+        self.callback.clear();
+        self.callback_cross.clear();
+        self.regex_storage.clear();
+    }
+
+    ///
+    /// Reloads the regex stores
+    ///
+    pub fn reload_regex(&mut self) {
+        self.clear_regex();
+        {
+            let scraper_folder;
+            let plugin_folder;
+            {
+                let mut unwrappy = self.db.lock().unwrap();
+                scraper_folder = unwrappy.loaded_scraper_folder();
+                plugin_folder = unwrappy.loaded_plugin_folder();
+            }
+            self.load_folder(&scraper_folder);
+            self.load_folder(&plugin_folder);
         }
     }
 
