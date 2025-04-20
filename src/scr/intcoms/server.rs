@@ -278,6 +278,8 @@ impl DbInteract {
                         &client.clone(),
                         &mut jobstorage,
                         &global_pluginscraper,
+                        &0,
+                        &0,
                     );
                 });
                 let thread_max = 1000;
@@ -308,6 +310,8 @@ impl DbInteract {
                     client,
                     jobstorage,
                     &global_pluginscraper,
+                    &0,
+                    &0,
                 );
 
                 Self::data_size_to_b(&true)

@@ -152,14 +152,10 @@ impl Main {
         } else {
             // Database does exist.
             main.transaction_start();
-            println!(
+            logging::log(&format!(
                 "Database Exists: {} : Skipping creation.",
                 first_time_load_flag
-            );
-            info!(
-                "Database Exists: {} : Skipping creation.",
-                first_time_load_flag
-            );
+            ));
         }
         main
     }
@@ -1708,9 +1704,6 @@ impl Main {
             Some(id_some) => {
                 // We've got an ID coming in will check if it exists.
                 let tag_id = self.tag_add_db(tags, &namespace, id);
-
-                // println!( "test: {} {} {:?} {}", &tag_id, tagnns.name.clone(), id.clone(),
-                // &tagnns.namespace );
                 if addtodb {
                     self.tag_add_sql(&tag_id, tags, &namespace);
                 }

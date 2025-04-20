@@ -65,7 +65,6 @@ impl Jobs {
 
         if time_func::time_secs() >= dbjobsobj.time + dbjobsobj.reptime.unwrap() {
             if id.is_none() {
-                crate::logging::info_log(&format!("Adding job: {:?}", &dbjobsobj));
                 let mut unwrappy = self.db.lock().unwrap();
                 let id = unwrappy.jobs_add(
                     None,
@@ -84,6 +83,7 @@ impl Jobs {
 
                 // Updates the ID field with something from the db
                 dbjobsobj.id = id;
+                crate::logging::info_log(&format!("Adding job: {:?}", &dbjobsobj));
             }
 
             match self.previously_seen.get_mut(&scraper) {
@@ -137,8 +137,6 @@ impl Jobs {
         scraper: &sharedtypes::GlobalPluginScraper,
         data: &sharedtypes::DbJobsObj,
     ) {
-        self.debug();
-        dbg!(scraper, data);
         if let Some(job_list) = self.site_job.get_mut(scraper) {
             let job_list_static = job_list.clone();
             for job in job_list_static {
@@ -199,9 +197,18 @@ impl Jobs {
     /// Might add the login info here if I can
     ///
     pub fn jobs_run_new(&mut self) {
+        logging::info_log(&"Checking if we have any Jobs to run.".to_string());
         if self.site_job.is_empty() {
-            logging::log(&"No jobs to run".to_string());
+            logging::info_log(&"No jobs to run".to_string());
         } else {
+            for (scraper, jobsobj) in self.site_job.iter() {
+                logging::info_log(&format!(
+                    "Scraper: {} has {} jobs to run.",
+                    scraper.name,
+                    jobsobj.len()
+                ));
+            }
+
             self.db
                 .lock()
                 .unwrap()

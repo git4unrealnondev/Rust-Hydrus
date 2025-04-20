@@ -23,35 +23,20 @@ static PLUGIN_NAME: &str = "Catbox Downloader";
 static PLUGIN_DESCRIPTION: &str = "Scrapes catbox urls into jobs.";
 
 #[no_mangle]
-pub fn return_info() -> sharedtypes::PluginInfo {
-    let tag_vec = vec![(
+pub fn get_global_info() -> Vec<sharedtypes::GlobalPluginScraper> {
+    let tag_vec = (
         Some(sharedtypes::SearchType::Regex(
-            r"(http(s)?://www.|((www.|http(s)?://)))catbox.moe/c/[a-z0-9]{6}".to_string(),
+            "(http(s)?://www.|((www.|http(s)?://)))catbox.moe/c/[a-z0-9]{6}".into(),
         )),
-        None,
-        None,
-    )];
+        vec![],
+        vec!["source_url".to_string()],
+    );
 
     let callbackvec = vec![
-        sharedtypes::PluginCallback::Tag(tag_vec),
-        sharedtypes::PluginCallback::Start,
+        sharedtypes::GlobalCallbacks::Tag(tag_vec),
+        sharedtypes::GlobalCallbacks::Start,
     ];
-    sharedtypes::PluginInfo {
-        name: PLUGIN_NAME.to_string(),
-        description: PLUGIN_DESCRIPTION.to_string(),
-        version: 1.00,
-        api_version: 1.00,
-        callbacks: callbackvec,
-        communication: Some(sharedtypes::PluginSharedData {
-            thread: sharedtypes::PluginThreadType::Inline,
-            com_channel: Some(sharedtypes::PluginCommunicationChannel::Pipe(
-                "beans".to_string(),
-            )),
-        }),
-    }
-}
-#[no_mangle]
-pub fn get_global_info() -> Vec<sharedtypes::GlobalPluginScraper> {
+
     let mut plugin = sharedtypes::return_default_globalpluginparser();
     plugin.name = "Catbox Scraper".to_string();
     plugin.storage_type = Some(sharedtypes::ScraperOrPlugin::Plugin(
@@ -60,6 +45,7 @@ pub fn get_global_info() -> Vec<sharedtypes::GlobalPluginScraper> {
             com_channel: true,
         },
     ));
+    plugin.callbacks = callbackvec;
 
     vec![plugin]
 }
@@ -69,9 +55,10 @@ pub fn on_regex_match(
     tag: &String,
     tag_ns: &String,
     regex_match: &String,
-    callback: &sharedtypes::PluginCallback,
+    callback: &Option<sharedtypes::SearchType>,
 ) -> Vec<sharedtypes::DBPluginOutputEnum> {
     use scraper::selector;
+    dbg!(tag, tag_ns, callback);
     let mut out = Vec::new();
     if regex_match.contains("bsky.app") {
         return out;
@@ -140,6 +127,8 @@ pub fn on_regex_match(
             file: None,
         },
     ]));
+
+    dbg!(&out);
 
     out
     //client::add_file_nonblocking(file, ratelimit);

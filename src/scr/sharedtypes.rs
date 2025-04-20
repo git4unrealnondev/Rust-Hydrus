@@ -1,7 +1,9 @@
 #![allow(dead_code)]
 #![allow(unused_variables)]
 
+#[cfg(feature = "regex")]
 use regex::Regex;
+
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashSet};
 use std::fmt;
@@ -139,29 +141,6 @@ pub enum StoredInfo {
     Storage(Vec<(String, String)>),
 }
 
-/*///
-/// An individual site according to the scraper
-///
-#[derive(Debug, Clone, Eq, Hash, PartialEq)]
-pub struct SiteStruct {
-    /// Name of the site (human readable plz)
-    pub name: String,
-    /// List of Strings to match to determine if we should use this scraper.
-    pub sites: Vec<String>,
-    /// Verison of the scraper
-    pub version: usize,
-    /// Ratelimit for this site
-    pub ratelimit: (u64, std::time::Duration),
-    /// Weather this scraper should handle the file download
-    pub should_handle_file_download: bool,
-    /// Weather this scraper needs to handle text scraping
-    pub should_handle_text_scraping: bool,
-    /// Any data thats needed to access restricted content
-    pub login_type: Vec<(String, LoginType, LoginNeed, Option<String>, bool)>,
-    /// Storage for the site scraper, Will be loaded into the user_data slot
-    pub stored_info: Option<StoredInfo>,
-}*/
-
 ///
 /// Info for scrapers as apart of the Global merge
 ///
@@ -212,6 +191,9 @@ pub struct GlobalPluginScraper {
     pub storage_type: Option<ScraperOrPlugin>,
 }
 
+///
+/// Returns a default item for the GlobalPluginScraper
+///
 pub fn return_default_globalpluginparser() -> GlobalPluginScraper {
     GlobalPluginScraper {
         name: "".to_string(),
@@ -737,11 +719,7 @@ pub struct FileObject {
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub enum SearchType {
     String(String),
-    #[cfg(feature = "regex")]
-    Regex(RegexStorage),
-
-    #[cfg(not(feature = "regex"))]
-    Regex(),
+    Regex(String),
 }
 
 #[cfg(feature = "regex")]
@@ -917,7 +895,7 @@ pub enum GlobalCallbacks {
     // Runs when a tag has exists.
     // First when the ns exists, 2nd when the namespace does not exist
     // Use None when searching all or Some when searching restrictivly
-    Tag((Option<SearchType>, Option<String>, Option<String>)),
+    Tag((Option<SearchType>, Vec<String>, Vec<String>)),
 }
 
 /// Callback info for live plugins Gets sent to plugins

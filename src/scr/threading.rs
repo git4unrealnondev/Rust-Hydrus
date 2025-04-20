@@ -112,7 +112,6 @@ impl Drop for Worker {
         if let Some(thread) = self.thread.take() {
             futures::executor::block_on(async { thread.join().unwrap() });
             info_log(&format!("Shutting Down Worker from Worker: {}", self.id));
-            println!("Shutting Down Worker from Worker: {}", self.id);
         }
     }
 }
@@ -272,7 +271,7 @@ impl Worker {
                         user_data: job.user_data,
                     };
 
-                    /// Loads anything passed from the scraper at compile time into the user_data
+                    // Loads anything passed from the scraper at compile time into the user_data
                     // field
                     if let Some(ref stored_info) = scraper.stored_info {
                         match stored_info {
@@ -350,7 +349,10 @@ impl Worker {
                                 Ok(objectscraper) => objectscraper,
                                 Err(ScraperReturn::Nothing) => {
                                     // job_params.lock().unwrap().remove(&scraper_data);
-                                    logging::error_log(&"Exiting loop due to nothing.".to_string());
+                                    logging::info_log(&format!(
+                                        "Worker: {id} JobId: {} -- Exiting loop due to nothing.",
+                                        job.id
+                                    ));
                                     break 'urlloop;
                                 }
                                 Err(ScraperReturn::EMCStop(emc)) => {
@@ -371,7 +373,15 @@ impl Worker {
 
                             // Parses tags from the tags field
                             for tag in out_st.tag.iter() {
-                                parse_jobs(tag, None, &mut jobstorage, &mut db, &scraper);
+                                parse_jobs(
+                                    tag,
+                                    None,
+                                    &mut jobstorage,
+                                    &mut db,
+                                    &scraper,
+                                    &id,
+                                    &job.id,
+                                );
                             }
 
                             // Spawns the multithreaded pool
@@ -394,6 +404,8 @@ impl Worker {
                                         &client,
                                         &mut jobstorage,
                                         &scraper,
+                                        &id,
+                                        &job.id,
                                     );
                                 });
                                 // End of err catching loop. break 'errloop;
@@ -450,6 +462,8 @@ fn parse_tags(
     db: &Arc<Mutex<database::Main>>,
     tag: &sharedtypes::TagObject,
     file_id: Option<usize>,
+    worker_id: &usize,
+    job_id: &usize,
 ) -> BTreeSet<sharedtypes::ScraperData> {
     let mut url_return: BTreeSet<sharedtypes::ScraperData> = BTreeSet::new();
     let unwrappy = &mut db.lock().unwrap();
@@ -546,7 +560,6 @@ fn parse_tags(
                         }
                     }
                     sharedtypes::SkipIf::FileTagRelationship(taginfo) => 'tag: {
-                        dbg!(&file_id);
                         let nid = unwrappy.namespace_get(&taginfo.namespace.name);
                         let id = match nid {
                             None => {
@@ -564,19 +577,18 @@ fn parse_tags(
                             Some(tag_id) => {
                                 let rel_hashset = unwrappy.relationship_get_fileid(tag_id);
                                 if rel_hashset.is_empty() {
-                                    println!(
-                                        "Downloading: {} because no relationship",
-                                        taginfo.tag
-                                    );
-                                    println!("Will download from: {}", taginfo.tag);
+                                    dbg!(&tag_id);
+                                    info_log(&format!(
+                                        "Worker: {worker_id} JobId: {job_id} -- Will download from {} because tag name {} has no relationship.",
+                                        jobscraped.job.site, taginfo.tag
+                                    ));
                                     url_return.insert(jobscraped.clone());
                                 } else {
                                     info_log(&format!(
-                                        "Skipping because this already has a relationship. {}",
+                                        "Worker: {worker_id} JobId: {job_id} -- Skipping because this already has a relationship. {}",
                                         taginfo.tag
                                     ));
                                 }
-                                println!("Ignoring: {}", taginfo.tag);
                                 break 'tag;
                             }
                         }
@@ -647,31 +659,15 @@ fn parse_jobs(
     jobstorage: &mut Arc<Mutex<crate::jobs::Jobs>>,
     db: &mut Arc<Mutex<database::Main>>,
     scraper: &sharedtypes::GlobalPluginScraper,
+
+    worker_id: &usize,
+    job_id: &usize,
 ) {
-    let urls_to_scrape = parse_tags(db, tag, fileid);
+    let urls_to_scrape = parse_tags(db, tag, fileid, worker_id, job_id);
     {
         let mut joblock = jobstorage.lock().unwrap();
         for data in urls_to_scrape {
             // Defualt job object
-
-            /*let jobid;
-            {
-                let mut db = db.lock().unwrap();
-                jobid = db.jobs_add(
-                    None,
-                    0,
-                    0,
-                    data.job.site.clone(),
-                    data.job.param.clone(),
-                    sharedtypes::CommitType::StopOnNothing,
-                    data.system_data.clone(),
-                    data.user_data.clone(),
-                    sharedtypes::DbJobsManager {
-                        jobtype: data.job.job_type,
-                        recreation: None,
-                    },
-                );
-            }*/
             let dbjob = sharedtypes::DbJobsObj {
                 id: 0,
                 time: 0,
@@ -698,6 +694,8 @@ fn parse_skipif(
     file_tag: &sharedtypes::SkipIf,
     file_url_source: &String,
     db: &mut Arc<Mutex<database::Main>>,
+    worker_id: &usize,
+    job_id: &usize,
 ) -> bool {
     match file_tag {
         sharedtypes::SkipIf::FileNamespaceNumber((unique_tag, namespace_filter, filter_number)) => {
@@ -738,7 +736,7 @@ fn parse_skipif(
                     .is_some()
                 {
                     info_log(&format!(
-                        "Skipping file: {} Due to skip tag {} already existing in Tags Table.",
+                        "Worker: {worker_id} JobId: {job_id} -- Skipping file: {} Due to skip tag {} already existing in Tags Table.",
                         file_url_source, tag.tag
                     ));
                     return true;
@@ -758,11 +756,13 @@ pub fn main_file_loop(
     client: &Client,
     jobstorage: &mut Arc<Mutex<crate::jobs::Jobs>>,
     scraper: &sharedtypes::GlobalPluginScraper,
+    worker_id: &usize,
+    job_id: &usize,
 ) {
     if let Some(source) = &file.source_url.clone() {
         // If url exists in db then don't download thread::sleep(Duration::from_secs(10));
         for file_tag in file.skip_if.iter() {
-            if parse_skipif(file_tag, source, db) {
+            if parse_skipif(file_tag, source, db, worker_id, job_id) {
                 return;
             }
         }
@@ -817,7 +817,7 @@ pub fn main_file_loop(
                 match file_id {
                     Some(file_id) => {
                         info_log(&format!(
-                            "Skipping file: {} Due to already existing in Tags Table.",
+                            "Worker: {worker_id} JobId: {job_id} -- Skipping file: {} Due to already existing in Tags Table.",
                             &source
                         ));
                         file_id
@@ -842,7 +842,15 @@ pub fn main_file_loop(
 
         // We've got valid fileid for reference.
         for tag in file.tag_list.iter() {
-            parse_jobs(tag, Some(fileid), jobstorage, db, scraper);
+            parse_jobs(
+                tag,
+                Some(fileid),
+                jobstorage,
+                db,
+                scraper,
+                worker_id,
+                job_id,
+            );
         }
     }
 }

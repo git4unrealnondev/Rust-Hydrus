@@ -384,7 +384,7 @@ pub fn get_global_info() -> Vec<sharedtypes::GlobalPluginScraper> {
                     sites: vec_of_strings!("e6", "e621", "e621.net"),
                 },
             )),
-            callbacks: vec![],
+            callbacks: vec![sharedtypes::GlobalCallbacks::Start],
         },
         sharedtypes::GlobalPluginScraper {
             name: "E6AI.net".to_string(),
@@ -408,7 +408,7 @@ pub fn get_global_info() -> Vec<sharedtypes::GlobalPluginScraper> {
                     sites: vec_of_strings!("e6ai", "e6ai.net"),
                 },
             )),
-            callbacks: vec![],
+            callbacks: vec![sharedtypes::GlobalCallbacks::Start],
         },
     ];
     out
@@ -449,7 +449,7 @@ pub fn url_dump(
 
     let mut ret = Vec::new();
     let hardlimit = 751;
-    for i in 0..hardlimit {
+    for i in 1..hardlimit {
         let a = build_url(params, i, &site);
         ret.push((a, scraperdata.clone()));
     }
@@ -637,7 +637,7 @@ fn parse_pools(
                                 job: sharedtypes::JobScraper {
                                     site: site_to_string_prefix(site),
                                     param: vec![sharedtypes::ScraperParam::Url(format!(
-                                        "https://{}.net/posts.json?tags=id:{}",
+                                        "https://{}.net/posts.json?tags=id:{}+status:any",
                                         lowercase_site, postids
                                     ))],
                                     job_type: sharedtypes::DbJobType::Scraper,
@@ -663,7 +663,7 @@ fn parse_pools(
                             job: sharedtypes::JobScraper {
                                 site: site_to_string_prefix(site),
                                 param: vec![sharedtypes::ScraperParam::Url(format!(
-                                    "https://{}.net/posts.json?tags=id:{}",
+                                    "https://{}.net/posts.json?tags=id:{}+status:any",
                                     lowercase_site, postids
                                 ))],
                                 job_type: sharedtypes::DbJobType::Scraper,
@@ -1262,7 +1262,7 @@ pub fn on_start(site_struct: &sharedtypes::GlobalPluginScraper) {
             "Director",
         ];
 
-        let mut nsids = Vec::new();
+        /*let mut nsids = Vec::new();
         for ns in legacy_ns {
             if let Some(nsid) = client::namespace_get(ns.to_string()) {
                 client::load_table(sharedtypes::LoadDBTable::Tags);
@@ -1275,6 +1275,6 @@ pub fn on_start(site_struct: &sharedtypes::GlobalPluginScraper) {
                 nsids.push(nsid);
                 dbg!(ns, nsid);
             }
-        }
+        }*/
     }
 }

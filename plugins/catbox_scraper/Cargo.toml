@@ -38,3 +38,10 @@ strum_macros = "0.25.1"
 [profile.release-with-debug]
 inherits = "release"
 debug = true
+
+[features]
+default = ["exe_build"]
+exe_build = ["regex"]
+# Enables sending and recieving regex
+regex = []
+

@@ -89,7 +89,6 @@ pub fn on_download(
             output.push(sharedtypes::DBPluginOutputEnum::Add(vec![tag_output]));
         }
     }
-    dbg!(&output);
 
     output
 }
@@ -97,7 +96,6 @@ pub fn on_download(
 #[no_mangle]
 pub fn on_start() {
     check_existing_db();
-    client::transaction_flush();
 }
 
 struct SettingInfo {

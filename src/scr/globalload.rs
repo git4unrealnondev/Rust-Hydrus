@@ -5,6 +5,7 @@ use crate::{
     sharedtypes::{self, GlobalPluginScraper},
 };
 use libloading::Library;
+use regex::Regex;
 use std::sync::{Arc, Mutex};
 use std::{collections::HashMap, path::Path, thread};
 use std::{path::PathBuf, thread::JoinHandle};
@@ -72,6 +73,7 @@ fn c_regex_match(
     plugin_callback: &Option<sharedtypes::SearchType>,
     liba: &libloading::Library,
 ) {
+    dbg!(tag, tag_ns, regex_match);
     let output;
     unsafe {
         let plugindatafunc: libloading::Symbol<
@@ -279,30 +281,38 @@ pub fn plugin_on_tag(
 
     let mut storagemap = Vec::new();
 
-    for ((searchtype, ns, not_ns), pluginscraper_list) in tagstorageregex.iter() {
+    for (((search_string, search_regex), ns, not_ns), pluginscraper_list) in tagstorageregex.iter()
+    {
         // Filtering for weather we should apply this to a tag of X namespace
-        if let Some(ns) = ns {
+        for ns in ns {
             if ns != tag_nsid {
                 continue;
             }
         }
 
-        if let Some(not_ns) = not_ns {
+        for not_ns in not_ns {
             if not_ns == tag_nsid {
                 continue;
             }
         }
 
         // Actual matching going on here
-        match &searchtype {
-            sharedtypes::SearchType::String(searchstring) => if tag.contains(searchstring) {},
-            sharedtypes::SearchType::Regex(sharedtypes::RegexStorage(regex)) => {
-                let regex_iter: Vec<&str> = regex.find_iter(tag).map(|m| m.as_str()).collect();
-                for regex in regex_iter {
-                    for pluginscraper in pluginscraper_list {
-                        storagemap.push((pluginscraper, regex, Some(searchtype.clone())));
-                    }
+        if let Some(search) = search_string {
+            if tag.contains(search) {}
+        } else if let Some(regex) = search_regex {
+            let regex_iter: Vec<&str> = regex.0.find_iter(tag).map(|m| m.as_str()).collect();
+            for regexmatch in regex_iter {
+                for pluginscraper in pluginscraper_list {
+                    storagemap.push((
+                        pluginscraper,
+                        regexmatch,
+                        Some(sharedtypes::SearchType::Regex(regex.0.to_string())),
+                    ));
                 }
+            }
+        } else {
+            for pluginscraper in pluginscraper_list {
+                storagemap.push((pluginscraper, &"", None));
             }
         }
     }
@@ -432,6 +442,7 @@ fn parse_plugin_output_andmain(plugin_data: Vec<sharedtypes::DBPluginOutputEnum>
 
                     if let Some(temp) = names.jobs {
                         for job in temp {
+                            dbg!(&job);
                             db.jobs_add(
                                 None,
                                 job.time,
@@ -444,6 +455,7 @@ fn parse_plugin_output_andmain(plugin_data: Vec<sharedtypes::DBPluginOutputEnum>
                                 job.user_data,
                                 job.jobmanager,
                             );
+                            dbg!("bb");
                         }
                     }
                     if let Some(temp) = names.relationship {
@@ -473,6 +485,7 @@ fn parse_plugin_output_andmain(plugin_data: Vec<sharedtypes::DBPluginOutputEnum>
 }
 
 pub struct GlobalLoad {
+    db: Arc<Mutex<Main>>,
     callback: HashMap<sharedtypes::GlobalCallbacks, Vec<sharedtypes::GlobalPluginScraper>>,
     callback_cross: HashMap<sharedtypes::GlobalPluginScraper, Vec<sharedtypes::CallbackInfo>>,
     sites: HashMap<sharedtypes::GlobalPluginScraper, Vec<String>>,
@@ -482,7 +495,11 @@ pub struct GlobalLoad {
     thread: HashMap<sharedtypes::GlobalPluginScraper, JoinHandle<()>>,
     ipc_server: Option<JoinHandle<()>>,
     regex_storage: HashMap<
-        (sharedtypes::SearchType, Option<usize>, Option<usize>),
+        (
+            (Option<String>, Option<sharedtypes::RegexStorage>),
+            Vec<usize>,
+            Vec<usize>,
+        ),
         Vec<sharedtypes::GlobalPluginScraper>,
     >,
 }
@@ -500,6 +517,7 @@ impl GlobalLoad {
         logging::log(&"Starting IPC Server.".to_string());
 
         Arc::new(Mutex::new(GlobalLoad {
+            db,
             callback: HashMap::new(),
             callback_cross: HashMap::new(),
             sites: HashMap::new(),
@@ -539,7 +557,12 @@ impl GlobalLoad {
     /// Debug function for development
     ///
     pub fn debug(&self) {
-        dbg!(&self.callback, &self.sites, &self.library_path);
+        dbg!(
+            &self.callback,
+            &self.sites,
+            &self.library_path,
+            &self.regex_storage
+        );
     }
 
     ///
@@ -560,7 +583,7 @@ impl GlobalLoad {
         out
     }
 
-    ///
+    /*///
     /// Returns a tag callback list based on limitations passed in by the end search
     ///
     pub fn get_tag_callback(
@@ -580,14 +603,14 @@ impl GlobalLoad {
                     }
                 }
                 if let Some(namespace) = &namespace {
-                    if let Some(ns) = ns {
+                    for ns in ns {
                         if ns != namespace {
                             continue;
                         }
                     }
                 }
                 if let Some(not_namespace) = &not_namespace {
-                    if let Some(not_ns) = not_ns {
+                    for not_ns in not_ns {
                         if not_ns != not_namespace {
                             continue;
                         }
@@ -601,7 +624,7 @@ impl GlobalLoad {
         }
 
         out
-    }
+    }*/
 
     ///
     /// Calls a plugin from another plugin
@@ -701,6 +724,9 @@ impl GlobalLoad {
         }
     }
 
+    ///
+    /// Triggers the on_start for the plugins
+    ///
     pub fn plugin_on_start(&mut self) {
         if let Some(plugin_list) = self.callback.get(&sharedtypes::GlobalCallbacks::Start) {
             for plugin in plugin_list {
@@ -789,7 +815,61 @@ impl GlobalLoad {
 
                         if let sharedtypes::GlobalCallbacks::Tag((searchtype, ns, not_ns)) =
                             callbacks
-                        {}
+                        {
+                            let mut unwrappy = self.db.lock().unwrap();
+                            unwrappy.load_table(&sharedtypes::LoadDBTable::Namespace);
+                            let mut ns_u = Vec::new();
+                            let mut ns_not_u = Vec::new();
+                            for ns in ns {
+                                if let Some(nsid) = unwrappy.namespace_get(ns) {
+                                    ns_u.push(nsid.clone());
+                                }
+                            }
+                            for ns in not_ns {
+                                if let Some(nsid) = unwrappy.namespace_get(ns) {
+                                    ns_not_u.push(nsid.clone());
+                                }
+                            }
+                            let searchtype = match searchtype {
+                                Some(searchtype) => match searchtype {
+                                    sharedtypes::SearchType::String(temp) => {
+                                        (Some(temp.clone()), None)
+                                    }
+                                    sharedtypes::SearchType::Regex(temp) => {
+                                        let regex = regex::Regex::new(temp);
+
+                                        if let Ok(regex) = regex {
+                                            (None, Some(sharedtypes::RegexStorage(regex)))
+                                        } else {
+                                            logging::error_log(&format!(
+                                                "Cannot load the regex from plugin: {} at path: {}",
+                                                &global.name,
+                                                path.to_string_lossy()
+                                            ));
+                                            continue;
+                                        }
+                                    }
+                                },
+                                None => {
+                                    todo!();
+                                }
+                            };
+                            match self.regex_storage.get_mut(&(
+                                searchtype.clone(),
+                                ns_u.clone(),
+                                ns_not_u.clone(),
+                            )) {
+                                None => {
+                                    self.regex_storage.insert(
+                                        (searchtype.clone(), ns_u, ns_not_u),
+                                        vec![global.clone()],
+                                    );
+                                }
+                                Some(temp) => {
+                                    temp.push(global.clone());
+                                }
+                            }
+                        }
                     }
 
                     self.library_path.insert(global.clone(), path.to_path_buf());
