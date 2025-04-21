@@ -180,14 +180,11 @@ fn main() {
     // Processes any CLI input here
     cli::main(arc.clone(), globalload_arc.clone());
 
-    arc.lock()
-        .unwrap()
-        .load_table(&sharedtypes::LoadDBTable::All);
-    // Checks if we need to load any jobs
-    jobmanager.lock().unwrap().jobs_load(globalload_arc.clone());
-
     // Calls the on_start func for the plugins
     globalload_arc.lock().unwrap().plugin_on_start();
+
+    // Checks if we need to load any jobs
+    jobmanager.lock().unwrap().jobs_load(globalload_arc.clone());
 
     // One flush after all the on_start unless needed
     arc.lock().unwrap().transaction_flush();

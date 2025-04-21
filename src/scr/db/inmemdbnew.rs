@@ -251,8 +251,11 @@ impl NewinMemDB {
     }
 
     /// Returns tag id's based on namespace id.
-    pub fn namespace_get_tagids(&self, id: &usize) -> Option<&HashSet<usize>> {
-        self._namespace_id_tag.get(id)
+    pub fn namespace_get_tagids(&self, id: &usize) -> HashSet<usize> {
+        match self._namespace_id_tag.get(id) {
+            None => HashSet::new(),
+            Some(hashset) => hashset.clone(),
+        }
     }
 
     /// Returns a list of file id's based on a tag id.

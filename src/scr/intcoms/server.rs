@@ -341,6 +341,11 @@ impl DbInteract {
                 );
                 Self::data_size_to_b(&true)
             }
+            types::SupportedDBRequests::GetNamespaceIDsAll => {
+                let unwrappy = self._database.lock().unwrap();
+                Self::data_size_to_b(&unwrappy.namespace_keys())
+            }
+
             types::SupportedDBRequests::GetFileExt(ext_id) => {
                 let unwrappy = self._database.lock().unwrap();
                 Self::option_to_bytes(unwrappy.extension_get_string(&ext_id).as_ref())

@@ -112,6 +112,7 @@ pub enum SupportedDBRequests {
     PutFile((sharedtypes::FileObject, (u64, std::time::Duration))),
     PutFileNoBlock((sharedtypes::FileObject, (u64, std::time::Duration))),
     ReloadRegex,
+    GetNamespaceIDsAll,
 }
 
 /// A descriptor for the parents and the type of data that we're sending

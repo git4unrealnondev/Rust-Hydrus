@@ -1,6 +1,8 @@
+use regex::Regex;
 use scraper::Html;
 use scraper::Selector;
 use std::collections::BTreeMap;
+use std::collections::BTreeSet;
 use std::collections::HashSet;
 use std::time::Duration;
 
@@ -8,6 +10,9 @@ use std::time::Duration;
 mod client;
 #[path = "../../../src/scr/sharedtypes.rs"]
 mod sharedtypes;
+
+pub const REGEX_COLLECTIONS: &str =
+    "(http(s)?://www.|((www.|http(s)?://)))catbox.moe/c/[a-z0-9]{6}";
 
 #[macro_export]
 macro_rules! vec_of_strings {
@@ -17,9 +22,7 @@ macro_rules! vec_of_strings {
 #[no_mangle]
 pub fn get_global_info() -> Vec<sharedtypes::GlobalPluginScraper> {
     let tag_vec = (
-        Some(sharedtypes::SearchType::Regex(
-            "(http(s)?://www.|((www.|http(s)?://)))catbox.moe/c/[a-z0-9]{6}".into(),
-        )),
+        Some(sharedtypes::SearchType::Regex(REGEX_COLLECTIONS.into())),
         vec![],
         vec!["source_url".to_string(), "Catbox Collection".into()],
     );
@@ -44,7 +47,11 @@ pub fn get_global_info() -> Vec<sharedtypes::GlobalPluginScraper> {
     scraper.storage_type = Some(sharedtypes::ScraperOrPlugin::Scraper(
         sharedtypes::ScraperInfo {
             ratelimit: (1, Duration::from_secs(1)),
-            sites: vec!["catbox album".into(), "catbox.moe".into()],
+            sites: vec![
+                "catbox album".into(),
+                "catbox.moe".into(),
+                "Catbox Collection".into(),
+            ],
         },
     ));
     vec![plugin, scraper]
@@ -175,6 +182,106 @@ pub fn on_start(parserscraper: &sharedtypes::GlobalPluginScraper) {
     if should_reload_regex {
         client::reload_regex();
     }
+
+    let should_search_regex;
+    match client::settings_get_name("Catbox Collection Regex Has Searched".into()) {
+        None => {
+            client::setting_add("Catbox Collection Regex Has Searched".into(), Some("Should the catbox regex be run on all tags in db to find any tags that are applicable?".into()), None, Some("True".into()), true);
+            should_search_regex = true;
+        }
+        Some(setting) => {
+            if let Some(param) = setting.param {
+                should_search_regex = param != "False";
+            } else {
+                should_search_regex = true;
+            }
+        }
+    }
+
+    if should_search_regex {
+        client::load_table(sharedtypes::LoadDBTable::Tags);
+        client::load_table(sharedtypes::LoadDBTable::Namespace);
+        client::load_table(sharedtypes::LoadDBTable::Jobs);
+        client::log(
+            "Starting to run a regex search on tags in the DB for Catbox Regex".to_string(),
+        );
+        let source_url_nsid = match client::namespace_get("source_url".to_string()) {
+            None => {
+                client::log(
+                    "Early Exit for Catbox Regex Search. No source_url namespace id can be found."
+                        .to_string(),
+                );
+                return;
+            }
+            Some(nsid) => nsid,
+        };
+        let catbox_collection_nsid = match client::namespace_get("Catbox Collection".to_string()) {
+            None => {
+                client::log(
+                    "Early Exit for Catbox Regex Search. No Catbox Collection namespace id can be found."
+                        .to_string(),
+                );
+                return;
+            }
+            Some(nsid) => nsid,
+        };
+
+        let mut list: Vec<usize> = client::namespace_get_tagids_all();
+        {
+            let temp_list = list.clone();
+            for (item, cnt) in temp_list.iter().enumerate() {
+                if item == source_url_nsid {
+                    list.remove(*cnt);
+                }
+            }
+        }
+
+        let mut need_to_search = BTreeSet::new();
+        let mut need_to_remove = BTreeSet::new();
+
+        let regex = Regex::new(REGEX_COLLECTIONS).unwrap();
+        for item in list {
+            for tagid in client::namespace_get_tagids(item) {
+                if let Some(tag_nns) = client::tag_get_id(tagid) {
+                    for item_match in regex.find_iter(&tag_nns.name).map(|c| c.as_str()) {
+                        if tag_nns.namespace == catbox_collection_nsid {
+                            need_to_remove.insert(item_match.to_string());
+                        } else {
+                            need_to_search.insert(item_match.to_string());
+                        }
+                    }
+                }
+            }
+        }
+
+        // Filters anything that we haven't touched yet.
+        // If a collection has updated but we've already scraped it then not my problem.
+        need_to_search.retain(|e| !need_to_remove.contains(e));
+
+        for item in need_to_search {
+            client::log(format!("Adding job to scrape catbox collection: {}", item));
+            client::job_add(
+                None,
+                0,
+                0,
+                "Catbox Collection".into(),
+                vec![sharedtypes::ScraperParam::Url(item)],
+                sharedtypes::CommitType::StopOnNothing,
+                BTreeMap::new(),
+                BTreeMap::new(),
+                sharedtypes::DbJobsManager {
+                    jobtype: sharedtypes::DbJobType::Scraper,
+                    recreation: None,
+                },
+            );
+        }
+        client::log(
+            "Finished running scrape catbox collection job. Telling DB to not run this again."
+                .to_string(),
+        );
+
+        client::setting_add("Catbox Collection Regex Has Searched".into(), Some("Should the catbox regex be run on all tags in db to find any tags that are applicable?".into()), None, Some("False".into()), true);
+    }
 }
 
 #[no_mangle]
@@ -188,7 +295,6 @@ pub fn on_regex_match(
     if regex_match.contains("bsky.app") {
         return out;
     }
-    dbg!(tag, tag_ns);
 
     out.push(sharedtypes::DBPluginOutputEnum::Add(vec![
         sharedtypes::DBPluginOutput {

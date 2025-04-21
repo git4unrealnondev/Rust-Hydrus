@@ -766,12 +766,19 @@ impl GlobalLoad {
                 if let Some(stored_info) = &plugin.storage_type {
                     match stored_info {
                         sharedtypes::ScraperOrPlugin::Plugin(plugin_info) => {
-                            if plugin_info.com_channel {
-                                let file = self.library_path.get(plugin).unwrap().clone();
-                                let thread = thread::spawn(move || {
+                            // Runs the onstart
+
+                            let file = self.library_path.get(plugin).unwrap().clone();
+                            match plugin_info.com_type {
+                                sharedtypes::PluginThreadType::Spawn => {
+                                    let thread = thread::spawn(move || {
+                                        c_run_onstart(&file);
+                                    });
+                                    self.thread.insert(plugin.clone(), thread);
+                                }
+                                sharedtypes::PluginThreadType::Inline => {
                                     c_run_onstart(&file);
-                                });
-                                self.thread.insert(plugin.clone(), thread);
+                                }
                             }
                         }
                         sharedtypes::ScraperOrPlugin::Scraper(_) => {}

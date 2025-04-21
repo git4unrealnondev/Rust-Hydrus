@@ -233,7 +233,7 @@ pub fn tag_get_id(id: usize) -> Option<sharedtypes::DbTagNNS> {
 
 /// See the database reference for this function. I'm a lazy turd just check it
 /// their
-pub fn namespace_get_tagids(id: usize) -> Option<HashSet<usize>> {
+pub fn namespace_get_tagids(id: usize) -> HashSet<usize> {
     init_data_request(&types::SupportedRequests::Database(
         types::SupportedDBRequests::GetNamespaceTagIDs(id),
     ))
@@ -287,6 +287,15 @@ pub fn tag_add(tag: String, namespace_id: usize, addtodb: bool, id: Option<usize
 pub fn reload_regex() -> bool {
     init_data_request(&types::SupportedRequests::Database(
         types::SupportedDBRequests::ReloadRegex,
+    ))
+}
+
+///
+/// Gets a list of loaded namespace IDs
+///
+pub fn namespace_get_tagids_all() -> Vec<usize> {
+    init_data_request(&types::SupportedRequests::Database(
+        types::SupportedDBRequests::GetNamespaceIDsAll,
     ))
 }
 

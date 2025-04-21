@@ -2260,20 +2260,18 @@ impl Main {
             logging::info_log(&"Stopping because I cannot get ns string.".to_string());
             return;
         }
-        let tagida = self.namespace_get_tagids(id);
-        if let Some(tagids) = tagida {
-            for each in tagids.clone().iter() {
-                self.tag_remove(each);
+        let tagids = self.namespace_get_tagids(id);
+        for each in tagids.clone().iter() {
+            self.tag_remove(each);
 
-                // tag_sql += &format!("DELETE FROM Tags WHERE id = {}; ", each);
-                self.delete_tag_relationship(each);
-            }
-
-            // elf._conn.lock().unwrap().execute_batch(&tag_sql).unwrap();
-            // self.transaction_flush();
-            self._inmemdb.namespace_delete(id);
-            self.delete_namespace_sql(id);
+            // tag_sql += &format!("DELETE FROM Tags WHERE id = {}; ", each);
+            self.delete_tag_relationship(each);
         }
+
+        // elf._conn.lock().unwrap().execute_batch(&tag_sql).unwrap();
+        // self.transaction_flush();
+        self._inmemdb.namespace_delete(id);
+        self.delete_namespace_sql(id);
     }
 
     /// Retuns namespace id's
@@ -2439,12 +2437,8 @@ impl Main {
         //self.namespace_delete_id(&2);
 
         for namespace_id in self.namespace_keys() {
-            if self.namespace_get_tagids(&namespace_id).is_none() {
+            if self.namespace_get_tagids(&namespace_id).is_empty() {
                 dbg!(&namespace_id);
-            } else if let Some(ns_set) = self.namespace_get_tagids(&namespace_id) {
-                if ns_set.is_empty() {
-                    dbg!(&namespace_id);
-                }
             }
         }
     }
@@ -2460,16 +2454,13 @@ impl Main {
     }
 
     /// Gets all tag's assocated a singular namespace
-    pub fn namespace_get_tagids(&self, id: &usize) -> Option<&HashSet<usize>> {
+    pub fn namespace_get_tagids(&self, id: &usize) -> HashSet<usize> {
         self._inmemdb.namespace_get_tagids(id)
     }
 
     /// Checks if a tag exists in a namespace
     pub fn namespace_contains_id(&self, namespace_id: &usize, tag_id: &usize) -> bool {
-        if let Some(ns_data) = self.namespace_get_tagids(namespace_id) {
-            return ns_data.contains(tag_id);
-        }
-        false
+        !self.namespace_get_tagids(namespace_id).is_empty()
     }
 
     /// Recreates the db with only one ns in it.
@@ -2488,26 +2479,24 @@ impl Main {
         // let tag_max = self._inmemdb.tags_max_return().clone();
         self._inmemdb.tags_max_reset();
         let tida = self.namespace_get_tagids(id);
-        if let Some(tids) = tida {
-            let mut cnt: usize = 0;
-            for tid in tids.clone() {
-                let file_listop = self._inmemdb.relationship_get_fileid(&tid).clone();
-                let tag = self._inmemdb.tags_get_data(&tid).unwrap().clone();
-                self.tag_add_sql(&cnt, &tag.name, &tag.namespace);
-                for file in file_listop {
-                    self.relationship_add_sql(file, cnt);
-                }
-                cnt += 1;
+        let mut cnt: usize = 0;
+        for tid in tida.clone() {
+            let file_listop = self._inmemdb.relationship_get_fileid(&tid).clone();
+            let tag = self._inmemdb.tags_get_data(&tid).unwrap().clone();
+            self.tag_add_sql(&cnt, &tag.name, &tag.namespace);
+            for file in file_listop {
+                self.relationship_add_sql(file, cnt);
             }
-            self._inmemdb.tags_clear();
-            self._inmemdb.parents_clear();
-            self._inmemdb.relationships_clear();
-            self.vacuum();
-            self.transaction_flush();
-
-            // self.condese_relationships_tags();
-            self.transaction_flush();
+            cnt += 1;
         }
+        self._inmemdb.tags_clear();
+        self._inmemdb.parents_clear();
+        self._inmemdb.relationships_clear();
+        self.vacuum();
+        self.transaction_flush();
+
+        // self.condese_relationships_tags();
+        self.transaction_flush();
     }
 
     /// Returns all file id's loaded in db

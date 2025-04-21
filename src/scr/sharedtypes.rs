@@ -210,15 +210,10 @@ pub fn return_default_globalpluginparser() -> GlobalPluginScraper {
 /// Determines how to run a function
 #[derive(Debug, EnumIter, Display, Clone, Eq, Hash, PartialEq)]
 pub enum PluginThreadType {
-    // Run plugin inside of the calling function. DEFAULT
+    // DEFAULT - Runs plugin and waits until it finished
     Inline,
     // Spawns a new thread, Runs concurrently to the calling function.
     Spawn,
-    // Spawns a new thread, Blocks the main thread until the plugin finishes work.
-    SpawnBlocking,
-    // Spawns a thread as a daemon all calls to the plugin will be routed to the
-    // daemon thread.
-    Daemon,
 }
 
 /// Information about CSV what we should do with the files.
