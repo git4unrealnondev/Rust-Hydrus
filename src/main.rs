@@ -183,6 +183,16 @@ fn main() {
     // Calls the on_start func for the plugins
     globalload_arc.lock().unwrap().plugin_on_start();
 
+    // A way to get around a mutex lock but it works lol
+    let one_sec = time::Duration::from_millis(100);
+    loop {
+        if !globalload_arc.lock().unwrap().plugin_on_start_should_wait() {
+            break;
+        } else {
+            thread::sleep(one_sec);
+        }
+    }
+
     // Checks if we need to load any jobs
     jobmanager.lock().unwrap().jobs_load(globalload_arc.clone());
 
@@ -216,7 +226,6 @@ fn main() {
 
     // Anything below here will run automagically. Jobs run in OS threads Waits until
     // all threads have closed.
-    let one_sec = time::Duration::from_millis(100);
     loop {
         let brk;
         {

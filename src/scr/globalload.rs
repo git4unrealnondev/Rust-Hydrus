@@ -789,6 +789,30 @@ impl GlobalLoad {
     }
 
     ///
+    /// Waits if a flag was set if we should wait for the thread to finish
+    ///
+    pub fn plugin_on_start_should_wait(&mut self) -> bool {
+        self.thread_finish_closed();
+        if let Some(plugin_list) = self.callback.get(&sharedtypes::GlobalCallbacks::Start) {
+            for plugin in plugin_list {
+                if let Some(stored_info) = &plugin.storage_type {
+                    match stored_info {
+                        sharedtypes::ScraperOrPlugin::Plugin(plugin_info) => {
+                            if plugin_info.should_wait_on_start {
+                                if self.thread.get(plugin).is_some() {
+                                    return true;
+                                }
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        }
+        false
+    }
+
+    ///
     /// Clears the regex cache and callbacks
     ///
     fn clear_regex(&mut self) {

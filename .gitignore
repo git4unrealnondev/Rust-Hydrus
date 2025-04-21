@@ -32,7 +32,7 @@ e6poolsgen
 /Cargo.lock
 scrapers/e6scraper/target
 Files
-
+catboxtest
 **.db
 **.sync-conflict*
 **.data

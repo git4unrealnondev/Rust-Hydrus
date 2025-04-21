@@ -159,6 +159,7 @@ pub struct PluginInfo2 {
     /// Manages com settings between Plugin and host
     pub com_type: PluginThreadType,
     pub com_channel: bool,
+    pub should_wait_on_start: bool,
 }
 
 ///

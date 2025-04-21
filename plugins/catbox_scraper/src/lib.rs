@@ -36,8 +36,9 @@ pub fn get_global_info() -> Vec<sharedtypes::GlobalPluginScraper> {
     plugin.name = "Catbox Regex Parser".to_string();
     plugin.storage_type = Some(sharedtypes::ScraperOrPlugin::Plugin(
         sharedtypes::PluginInfo2 {
-            com_type: sharedtypes::PluginThreadType::Inline,
+            com_type: sharedtypes::PluginThreadType::Spawn,
             com_channel: true,
+            should_wait_on_start: true,
         },
     ));
     plugin.callbacks = callbackvec;
@@ -199,12 +200,12 @@ pub fn on_start(parserscraper: &sharedtypes::GlobalPluginScraper) {
     }
 
     if should_search_regex {
-        client::load_table(sharedtypes::LoadDBTable::Tags);
-        client::load_table(sharedtypes::LoadDBTable::Namespace);
-        client::load_table(sharedtypes::LoadDBTable::Jobs);
         client::log(
             "Starting to run a regex search on tags in the DB for Catbox Regex".to_string(),
         );
+        client::load_table(sharedtypes::LoadDBTable::Tags);
+        client::load_table(sharedtypes::LoadDBTable::Namespace);
+        client::load_table(sharedtypes::LoadDBTable::Jobs);
         let source_url_nsid = match client::namespace_get("source_url".to_string()) {
             None => {
                 client::log(
@@ -225,24 +226,46 @@ pub fn on_start(parserscraper: &sharedtypes::GlobalPluginScraper) {
             }
             Some(nsid) => nsid,
         };
-
         let mut list: Vec<usize> = client::namespace_get_tagids_all();
-        {
-            let temp_list = list.clone();
-            for (item, cnt) in temp_list.iter().enumerate() {
-                if item == source_url_nsid {
-                    list.remove(*cnt);
+
+        let mut removal_namespace_ids = vec![source_url_nsid];
+
+        let removal_namespace_names = ["FileHash", "BlurHash"];
+
+        for nsid in list.iter() {
+            if let Some(nsobj) = client::namespace_get_string(*nsid) {
+                for item in removal_namespace_names {
+                    if nsobj.name.to_lowercase().contains(&item.to_lowercase()) {
+                        removal_namespace_ids.push(*nsid);
+                    }
                 }
             }
         }
+        client::log(format!("We've got: {} items to filter", list.len()));
+        {
+            for removal in removal_namespace_ids.iter() {
+                let temp_list = list.clone();
+                for (cnt, item) in temp_list.iter().enumerate() {
+                    if item == removal {
+                        list.remove(cnt);
+                    }
+                }
+            }
+        }
+        client::log(format!("We've got: {} items post filter", list.len()));
 
         let mut need_to_search = BTreeSet::new();
         let mut need_to_remove = BTreeSet::new();
 
         let regex = Regex::new(REGEX_COLLECTIONS).unwrap();
+        let mut cnt = 0;
         for item in list {
             for tagid in client::namespace_get_tagids(item) {
                 if let Some(tag_nns) = client::tag_get_id(tagid) {
+                    cnt += 1;
+                    if cnt >= 1000 {
+                        cnt = 0;
+                    }
                     for item_match in regex.find_iter(&tag_nns.name).map(|c| c.as_str()) {
                         if tag_nns.namespace == catbox_collection_nsid {
                             need_to_remove.insert(item_match.to_string());
