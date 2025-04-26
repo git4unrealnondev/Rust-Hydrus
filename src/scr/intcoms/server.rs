@@ -264,7 +264,7 @@ impl DbInteract {
             types::SupportedDBRequests::PutFileNoBlock((mut file, ratelimit)) => {
                 let mut global_pluginscraper = sharedtypes::return_default_globalpluginparser();
                 global_pluginscraper.name = "InternalFileAdd".to_string();
-                let ratelimiter_obj = threading::create_ratelimiter(ratelimit);
+                let ratelimiter_obj = threading::create_ratelimiter(ratelimit, &0, &0);
                 let manageeplugin = self.globalload.clone();
                 let client = download::client_create();
                 let mut jobstorage = self.jobmanager.clone();
@@ -298,7 +298,7 @@ impl DbInteract {
                 let mut global_pluginscraper = sharedtypes::return_default_globalpluginparser();
                 global_pluginscraper.name = "InternalFileAdd".to_string();
 
-                let ratelimiter_obj = threading::create_ratelimiter(ratelimit);
+                let ratelimiter_obj = threading::create_ratelimiter(ratelimit, &0, &0);
                 let manageeplugin = self.globalload.clone();
                 let client = &download::client_create();
                 let jobstorage = &mut self.jobmanager;

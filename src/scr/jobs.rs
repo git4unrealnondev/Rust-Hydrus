@@ -149,6 +149,20 @@ impl Jobs {
     }
 
     ///
+    /// Removes from the internal list only.
+    /// Does not touch DB
+    ///
+    pub fn jobs_remove_job(
+        &mut self,
+        scraper: &sharedtypes::GlobalPluginScraper,
+        data: &sharedtypes::DbJobsObj,
+    ) {
+        if let Some(job_list) = self.site_job.get_mut(scraper) {
+            job_list.remove(data);
+        }
+    }
+
+    ///
     /// Decrements count if this is applicable to job
     ///
     pub fn jobs_decrement_count(

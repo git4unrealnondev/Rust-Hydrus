@@ -5,12 +5,14 @@ use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::collections::HashSet;
 use std::time::Duration;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 #[path = "../../../src/scr/intcoms/client.rs"]
 mod client;
 #[path = "../../../src/scr/sharedtypes.rs"]
 mod sharedtypes;
 
+use crate::sharedtypes::DEFAULT_PRIORITY;
 pub const REGEX_COLLECTIONS: &str =
     "(http(s)?://www.|((www.|http(s)?://)))catbox.moe/c/[a-z0-9]{6}";
 
@@ -36,9 +38,8 @@ pub fn get_global_info() -> Vec<sharedtypes::GlobalPluginScraper> {
     plugin.name = "Catbox Regex Parser".to_string();
     plugin.storage_type = Some(sharedtypes::ScraperOrPlugin::Plugin(
         sharedtypes::PluginInfo2 {
-            com_type: sharedtypes::PluginThreadType::Spawn,
+            com_type: sharedtypes::PluginThreadType::SpawnInline,
             com_channel: true,
-            should_wait_on_start: true,
         },
     ));
     plugin.callbacks = callbackvec;
@@ -49,13 +50,45 @@ pub fn get_global_info() -> Vec<sharedtypes::GlobalPluginScraper> {
         sharedtypes::ScraperInfo {
             ratelimit: (1, Duration::from_secs(1)),
             sites: vec![
+                "catbox".into(),
                 "catbox album".into(),
                 "catbox.moe".into(),
                 "Catbox Collection".into(),
             ],
+            priority: DEFAULT_PRIORITY,
         },
     ));
     vec![plugin, scraper]
+}
+
+#[no_mangle]
+pub fn url_dump(
+    params: &Vec<sharedtypes::ScraperParam>,
+    scraperdata: &sharedtypes::ScraperData,
+) -> Vec<(String, sharedtypes::ScraperData)> {
+    let mut out = Vec::new();
+
+    let regex = Regex::new(REGEX_COLLECTIONS).unwrap();
+
+    let mut scraperdata = scraperdata.clone();
+    scraperdata.job.job_type = sharedtypes::DbJobType::Scraper;
+    scraperdata.job.param.clear();
+
+    for param in params {
+        if let sharedtypes::ScraperParam::Normal(temp) = param {
+            for item_match in regex.find_iter(temp).map(|c| c.as_str()) {
+                let mut sc = scraperdata.clone();
+                sc.job
+                    .param
+                    .push(sharedtypes::ScraperParam::Url(item_match.into()));
+                out.push((item_match.into(), sc));
+            }
+        }
+    }
+
+    dbg!(&out);
+
+    out
 }
 
 #[no_mangle]
@@ -66,23 +99,93 @@ pub fn parser(
 ) -> Result<sharedtypes::ScraperObject, sharedtypes::ScraperReturn> {
     let mut file_list = HashSet::new();
     let mut tag_list = HashSet::new();
-    let mut url = None;
+    let mut url = Vec::new();
+    let mut html_usertext = Vec::new();
+
     for param in params {
         if let sharedtypes::ScraperParam::Url(link) = param {
-            url = Some(link);
+            url.push(link);
         }
     }
 
-    if url.is_none() {
+    if url.is_empty() {
         return Err(sharedtypes::ScraperReturn::Stop(
             "Could not find url in params field".into(),
         ));
     }
 
     let document = Html::parse_document(html_input);
+
+    let selector = Selector::parse(r#"div[class="title"]"#).unwrap();
+
+    {
+        let mut should_add = false;
+        for list_elements in document.select(&selector) {
+            for element in list_elements.descendants() {
+                if let Some(text) = element.value().as_text() {
+                    if should_add {
+                        let text = text.to_string();
+                        let lines = text
+                            .split('\n')
+                            .map(|line| line.strip_suffix('\r').unwrap_or(line));
+                        for line in lines {
+                            html_usertext.push(line.to_string());
+                        }
+                    }
+                    should_add = !should_add;
+                }
+            }
+        }
+    }
+
+    let mut html_collection_text = String::new();
+    let first = html_usertext.first();
+    if let Some(first) = first {
+        html_collection_text.push_str(first);
+        html_usertext.remove(0);
+        let last = html_usertext.pop();
+        if let Some(last) = last {
+            for text in html_usertext {
+                html_collection_text = format!("{}\n{}", html_collection_text, text)
+            }
+            html_collection_text.push_str(&last);
+        }
+    }
+
+    if !html_collection_text.is_empty() {
+        let start = SystemTime::now();
+        let since_the_epoch = start
+            .duration_since(UNIX_EPOCH)
+            .expect("Time went backwards")
+            .as_millis();
+        tag_list.insert(sharedtypes::TagObject {
+            namespace: sharedtypes::GenericNamespaceObj {
+                name: "Catbox Collection Text".to_string(),
+                description: Some("The text that is inside of a catbox collection.".to_string()),
+            },
+            tag: html_collection_text,
+            tag_type: sharedtypes::TagType::Normal,
+            relates_to: Some(sharedtypes::SubTag {
+                namespace: sharedtypes::GenericNamespaceObj {
+                    name: "Catbox Collection".into(),
+                    description: Some("A CatBox collection album. Stores Pictures.".into()),
+                },
+                tag: url.first().unwrap().to_string(),
+                tag_type: sharedtypes::TagType::Normal,
+                limit_to: Some(sharedtypes::Tag {
+                    namespace: sharedtypes::GenericNamespaceObj {
+                        name: "Catbox Collection Scraping Time".into(),
+                        description: Some("When the last time was an album touched".into()),
+                    },
+                    tag: format!("{}", since_the_epoch),
+                }),
+            }),
+        });
+    }
+
     let selector = Selector::parse(r#"div[class="imagelist"]"#).unwrap();
     let selector_link = Selector::parse(r#"a"#).unwrap();
-    if let Some(url) = url {
+    for url in url {
         let mut cnt = 0;
         for list_elements in document.select(&selector) {
             for img in list_elements.select(&selector_link) {

@@ -5,6 +5,7 @@ use crate::globalload::GlobalLoad;
 use super::sharedtypes;
 use crate::logging;
 use bytes::Bytes;
+use core::time;
 use file_format::FileFormat;
 use log::{error, info};
 use reqwest::blocking::Client;
@@ -30,11 +31,16 @@ use std::sync::Mutex;
 use std::thread;
 
 /// Makes ratelimiter and example
-pub fn ratelimiter_create(number: u64, duration: Duration) -> Ratelimiter {
-    println!(
-        "Making ratelimiter with: {} Request Per: {:?}",
-        &number, &duration
-    );
+pub fn ratelimiter_create(
+    workerid: &usize,
+    jobid: &usize,
+    number: u64,
+    duration: Duration,
+) -> Ratelimiter {
+    logging::info_log(&format!(
+        "Worker: {} JobId: {} -- Making ratelimiter with: {} Request Per: {:?}",
+        workerid, jobid, &number, &duration
+    ));
     loop {
         // The wrapper that implements ratelimiting
 
@@ -85,6 +91,7 @@ pub fn client_create() -> Client {
         .brotli(true)
         .deflate(true)
         .zstd(true)
+        .timeout(time::Duration::from_secs(1200))
         .build()
         .unwrap()
 }

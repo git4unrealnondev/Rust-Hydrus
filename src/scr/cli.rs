@@ -451,6 +451,8 @@ pub fn main(data: Arc<Mutex<database::Main>>, scraper: Arc<Mutex<GlobalLoad>>) {
 
                         // Spawn default ratelimiter of 1 item per second
                         let ratelimiter_obj = Arc::new(Mutex::new(download::ratelimiter_create(
+                            &0,
+                            &0,
                             1,
                             std::time::Duration::from_secs(1),
                         )));

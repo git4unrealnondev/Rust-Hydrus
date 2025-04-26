@@ -113,7 +113,7 @@ pub fn url_dump(
     scraperdata: &sharedtypes::ScraperData,
     arc_scrapermanager: Arc<Mutex<GlobalLoad>>,
     scraper: &sharedtypes::GlobalPluginScraper,
-) -> Vec<(String, sharedtypes::ScraperData)> {
+) -> Result<Vec<(String, sharedtypes::ScraperData)>, libloading::Error> {
     let mut out = Vec::new();
     let mut libstorage = Vec::new();
 
@@ -133,7 +133,7 @@ pub fn url_dump(
                 &Vec<sharedtypes::ScraperParam>,
                 &sharedtypes::ScraperData,
             ) -> Vec<(String, sharedtypes::ScraperData)>,
-        > = unsafe { lib.get(b"url_dump\0").unwrap() };
+        > = unsafe { lib.get(b"url_dump\0")? };
         for item in unsafe { temp(params, scraperdata) } {
             out.push(item);
         }
@@ -149,7 +149,7 @@ pub fn url_dump(
     > = unsafe { scraper_library.get(b"url_dump\0").unwrap() };
     unsafe { temp(params, scraperdata) }*/
 
-    out
+    Ok(out)
 }
 
 ///
@@ -776,6 +776,12 @@ impl GlobalLoad {
                                     });
                                     self.thread.insert(plugin.clone(), thread);
                                 }
+                                sharedtypes::PluginThreadType::SpawnInline => {
+                                    let thread = thread::spawn(move || {
+                                        c_run_onstart(&file);
+                                    });
+                                    self.thread.insert(plugin.clone(), thread);
+                                }
                                 sharedtypes::PluginThreadType::Inline => {
                                     c_run_onstart(&file);
                                 }
@@ -798,7 +804,7 @@ impl GlobalLoad {
                 if let Some(stored_info) = &plugin.storage_type {
                     match stored_info {
                         sharedtypes::ScraperOrPlugin::Plugin(plugin_info) => {
-                            if plugin_info.should_wait_on_start {
+                            if sharedtypes::PluginThreadType::SpawnInline == plugin_info.com_type {
                                 if self.thread.get(plugin).is_some() {
                                     return true;
                                 }

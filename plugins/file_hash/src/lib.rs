@@ -11,34 +11,13 @@ static PLUGIN_NAME: &str = "File Hash";
 static PLUGIN_DESCRIPTION: &str = "Gets hash information from a file.";
 
 #[no_mangle]
-pub fn return_info() -> sharedtypes::PluginInfo {
-    let callbackvec = vec![
-        sharedtypes::PluginCallback::Start,
-        sharedtypes::PluginCallback::Download,
-    ];
-    sharedtypes::PluginInfo {
-        name: PLUGIN_NAME.to_string(),
-        description: PLUGIN_DESCRIPTION.to_string(),
-        version: 1.00,
-        api_version: 1.00,
-        callbacks: callbackvec,
-        communication: Some(sharedtypes::PluginSharedData {
-            thread: sharedtypes::PluginThreadType::Inline,
-            com_channel: Some(sharedtypes::PluginCommunicationChannel::Pipe(
-                "beans".to_string(),
-            )),
-        }),
-    }
-}
-
-#[no_mangle]
 pub fn get_global_info() -> Vec<sharedtypes::GlobalPluginScraper> {
     let mut main = sharedtypes::return_default_globalpluginparser();
     main.name = PLUGIN_NAME.to_string();
     main.version = 0;
     main.storage_type = Some(sharedtypes::ScraperOrPlugin::Plugin(
         sharedtypes::PluginInfo2 {
-            com_type: sharedtypes::PluginThreadType::Inline,
+            com_type: sharedtypes::PluginThreadType::SpawnInline,
             com_channel: true,
         },
     ));
@@ -218,11 +197,7 @@ fn check_existing_db() {
         };
         let utable = check_existing_db_table(ctab);
         utable_storage.insert(table, utable);
-        let hutable = client::namespace_get_tagids(utable);
-        let huetable = match hutable {
-            None => HashSet::new(),
-            Some(set) => set,
-        };
+        let huetable = client::namespace_get_tagids(utable);
 
         for each in huetable {
             for tag in client::relationship_get_fileid(each) {

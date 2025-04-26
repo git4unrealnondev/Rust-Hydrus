@@ -8,7 +8,6 @@ use eta::{Eta, TimeAcc};
 use log::{error, info};
 use rayon::prelude::*;
 pub use rusqlite::types::ToSql;
-use rusqlite::OptionalExtension;
 pub use rusqlite::{params, types::Null, Connection, Result, Transaction};
 use std::borrow::BorrowMut;
 use std::collections::BTreeMap;
@@ -21,11 +20,13 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use std::time::Duration;
 
-mod db;
+pub mod enclave;
+pub mod helpers;
+pub mod inmemdbnew;
+pub mod sqlitedb;
+pub mod updatehandler;
 
-use self::db::helpers;
-use crate::database::db::inmemdbnew::NewinMemDB;
-
+use crate::database::inmemdbnew::NewinMemDB;
 /// I dont want to keep writing .to_string on EVERY vector of strings. Keeps me
 /// lazy. vec_of_strings["one", "two"];
 #[macro_export]
@@ -545,7 +546,7 @@ impl Main {
     ///
     /// Pulls collums info -> (Vec`<String>`, Vec`<String>` SELECT sql FROM
     /// sqlite_master WHERE tbl_name='File' AND type = 'table';
-    pub fn table_collumns(&mut self, table: String) -> (Vec<String>, Vec<String>, Vec<String>) {
+    /*pub fn table_collumns(&mut self, table: String) -> (Vec<String>, Vec<String>, Vec<String>) {
         let mut t1: Vec<String> = Vec::new();
         let mut t2: Vec<String> = Vec::new();
         let parsedstring = format!(
@@ -570,10 +571,10 @@ impl Main {
             outvec.push(g1);
         }
         (outvec, t1, t2)
-    }
+    }*/
 
     /// Get table names Returns: Vec of strings
-    pub fn table_names(&mut self) -> Vec<String> {
+    /*pub fn table_names(&mut self) -> Vec<String> {
         let conmut = self._conn.borrow_mut();
         let binding = conmut.lock().unwrap();
         let mut toexec = binding
@@ -590,7 +591,7 @@ impl Main {
 
         // println!("{:?}", outvec);
         outvec
-    }
+    }*/
 
     /// Sets up first database interaction. Makes tables and does first time setup.
     pub fn first_db(&mut self) {
@@ -1028,48 +1029,6 @@ impl Main {
         self._inmemdb.file_put(file)
     }
 
-    ///
-    /// Gets a file storage location id
-    ///
-    pub fn storage_get_id(&self, location: &String) -> Option<usize> {
-        let conn = self._conn.lock().unwrap();
-        conn.query_row(
-            "SELECT id from FileStorageLocations where location = ?",
-            params![location],
-            |row| row.get(0),
-        )
-        .optional()
-        .unwrap_or_default()
-    }
-
-    ///
-    /// Gets a string from the ID of the storage location
-    ///
-    pub fn storage_get_string(&self, id: &usize) -> Option<String> {
-        let conn = self._conn.lock().unwrap();
-        conn.query_row(
-            "SELECT location from FileStorageLocations where id = ?",
-            params![id],
-            |row| row.get(0),
-        )
-        .optional()
-        .unwrap_or_default()
-    }
-
-    ///
-    /// Inserts into storage the location
-    ///
-    pub fn storage_put(&mut self, location: &String) {
-        if self.storage_get_id(location).is_some() {
-            return;
-        }
-        let conn = self._conn.lock().unwrap();
-        let mut prep = conn
-            .prepare("INSERT OR REPLACE INTO FileStorageLocations (location) VALUES (?)")
-            .unwrap();
-        let _ = prep.insert(params![location]);
-    }
-
     /// NOTE USES PASSED CONNECTION FROM FUNCTION NOT THE DB CONNECTION GETS ARROUND
     /// MEMROY SAFETY ISSUES WITH CLASSES IN RUST
     fn load_files(&mut self) {
@@ -1244,159 +1203,6 @@ impl Main {
         }
     }
 
-    /// Loads Parents in from DB Connection
-    fn load_parents(&mut self) {
-        logging::info_log(&"Database is Loading: Parents".to_string());
-        let binding = self._conn.clone();
-        let temp_test = binding.lock().unwrap();
-        let temp = temp_test.prepare("SELECT * FROM Parents");
-        if let Ok(mut con) = temp {
-            let parents = con
-                .query_map([], |row| {
-                    Ok(sharedtypes::DbParentsObj {
-                        tag_id: row.get(0).unwrap(),
-                        relate_tag_id: row.get(1).unwrap(),
-                        limit_to: row.get(2).unwrap(),
-                    })
-                })
-                .unwrap();
-            for each in parents {
-                if let Ok(res) = each {
-                    self.parents_add_db(res);
-                } else {
-                    error!("Bad Parent cant load {:?}", each);
-                }
-            }
-        }
-    }
-
-    /// Loads Relationships in from DB connection
-    fn load_relationships(&mut self) {
-        logging::info_log(&"Database is Loading: Relationships".to_string());
-        let binding = self._conn.clone();
-        let temp_test = binding.lock().unwrap();
-        let temp = temp_test.prepare("SELECT * FROM Relationship");
-        if let Ok(mut con) = temp {
-            let relationship = con
-                .query_map([], |row| {
-                    Ok(sharedtypes::DbRelationshipObj {
-                        fileid: row.get(0).unwrap(),
-                        tagid: row.get(1).unwrap(),
-                    })
-                })
-                .unwrap();
-            for each in relationship {
-                match each {
-                    Ok(res) => {
-                        self.relationship_add_db(res.fileid, res.tagid);
-                    }
-                    Err(err) => {
-                        error!("Bad relationship cant load");
-                        err.to_string().contains("database disk image is malformed");
-                        error!("DATABASE IMAGE IS MALFORMED PANICING rel {:?}", &err);
-                        panic!("DATABASE IMAGE IS MALFORMED PANICING rel {:?}", &err);
-                    }
-                }
-            }
-        }
-    }
-
-    /// Loads settings into db
-    fn load_settings(&mut self) {
-        logging::info_log(&"Database is Loading: Settings".to_string());
-        let binding = self._conn.clone();
-        let temp_test = binding.lock().unwrap();
-        let temp = temp_test.prepare("SELECT * FROM Settings");
-        match temp {
-            Ok(mut con) => {
-                let settings = con
-                    .query_map([], |row| {
-                        Ok(sharedtypes::DbSettingObj {
-                            name: row.get(0)?,
-                            pretty: row.get(1)?,
-                            num: row.get(2)?,
-                            param: row.get(3)?,
-                        })
-                    })
-                    .unwrap();
-                for each in settings {
-                    if let Ok(res) = each {
-                        self.setting_add_db(res.name, res.pretty, res.num, res.param);
-                    } else {
-                        error!("Bad Setting cant load {:?}", each);
-                    }
-                }
-            }
-            Err(_) => return,
-        };
-        self.db_commit_man_set();
-    }
-
-    /// Loads tags into db
-    fn load_tags(&mut self) {
-        logging::info_log(&"Database is Loading: Tags".to_string());
-
-        // let mut delete_tags = HashSet::new();
-        {
-            let binding = self._conn.clone();
-            let temp_test = binding.lock().unwrap();
-            let temp = temp_test.prepare("SELECT * FROM Tags");
-            if let Ok(mut con) = temp {
-                let tag = con.query_map([], |row| {
-                    Ok(sharedtypes::DbTagObjCompatability {
-                        id: row.get(0).unwrap(),
-                        name: row.get(1).unwrap(),
-                        namespace: row.get(2).unwrap(),
-                    })
-                });
-                match tag {
-                    Ok(tags) => {
-                        for each in tags {
-                            if let Ok(res) = each {
-                                // if let Some(id) = self._inmemdb.tags_get_data(&res.id) {
-                                // logging::info_log(&format!( "Already have tag {:?} adding {} {} {}", id,
-                                // res.name, res.namespace, res.id )); continue;
-                                // delete_tags.insert((res.name.clone(), res.namespace.clone())); }
-                                self.tag_add(&res.name, res.namespace, false, Some(res.id));
-                            } else {
-                                error!("Bad Tag cant load {:?}", each);
-                            }
-                        }
-                    }
-                    Err(errer) => {
-                        error!("WARNING COULD NOT LOAD TAG: {:?} DUE TO ERROR", errer);
-                    }
-                }
-            }
-        }
-        // if self.check_table_exists("Tags_New".to_string()) {
-        // self.db_drop_table(&"Tags_New".to_string()); self.transaction_flush(); }
-        // self.table_create( &"Tags_New".to_string(), &[ "id".to_string(),
-        // "name".to_string(), "namespace".to_string(), ] .to_vec(), &[
-        // "INTEGER".to_string(), "TEXT".to_string(), "INTEGER".to_string(), ] .to_vec(),
-        // ); { let conn = self._conn.lock().unwrap(); let mut stmt = conn
-        // .prepare("INSERT INTO Tags_New (id,name,namespace) VALUES (?1,?2,?3)")
-        // .unwrap();
-        //
-        // for i in 0..self._inmemdb.tags_max_return() { if let Some(taginfo) =
-        // self._inmemdb.tags_get_data(&i) { stmt.execute((i, taginfo.name.clone(),
-        // taginfo.namespace)) .unwrap(); } } } self.db_drop_table(&"Tags".to_string());
-        // if !self.check_table_exists("Tags".to_string()) {
-        // self.alter_table(&"Tags_New".to_string(), &"Tags".to_string()); }
-        // self.transaction_flush();
-    }
-
-    /// Sets advanced settings for journaling. NOTE Experimental badness
-    pub fn db_open(&mut self) {
-        self._conn
-            .borrow_mut()
-            .lock()
-            .unwrap()
-            .execute("PRAGMA secure_delete = 0;", params![]);
-        // self.execute("PRAGMA journal_mode = MEMORY".to_string()); self.execute("PRAGMA
-        // synchronous = OFF".to_string()); info!("Setting synchronous = OFF");
-    }
-
     /// Wrapper
     pub fn file_get_hash(&self, hash: &String) -> Option<&usize> {
         self._inmemdb.file_get_hash(hash)
@@ -1443,24 +1249,6 @@ impl Main {
             .settings_get_name(&"DBCOMMITNUM".to_string())
             .unwrap()
             .num;
-    }
-
-    /// Adds file via SQL
-    fn file_add_sql(
-        &mut self,
-        hash: &Option<String>,
-        extension: &Option<usize>,
-        storage_id: &Option<usize>,
-        file_id: &usize,
-    ) {
-        let inp = "INSERT INTO File VALUES(?, ?, ?, ?)";
-        let _out = self
-            ._conn
-            .borrow_mut()
-            .lock()
-            .unwrap()
-            .execute(inp, params![file_id, hash, extension, storage_id]);
-        self.db_commit_man();
     }
 
     /// Adds a file into the db sqlite. Do this first.
@@ -1526,18 +1314,6 @@ impl Main {
     /// Wrapper for inmemdb adding
     fn namespace_add_db(&mut self, namespace_obj: sharedtypes::DbNamespaceObj) -> usize {
         self._inmemdb.namespace_put(namespace_obj)
-    }
-
-    /// Adds namespace to the SQL database
-    fn namespace_add_sql(&mut self, name: &String, description: &Option<String>, name_id: &usize) {
-        let inp = "INSERT INTO Namespace VALUES(?, ?, ?)";
-        let _out = self
-            ._conn
-            .borrow_mut()
-            .lock()
-            .unwrap()
-            .execute(inp, params![name_id, name, description]);
-        self.db_commit_man();
     }
 
     /// Adds namespace into DB. Returns the ID of the namespace.
@@ -1645,18 +1421,6 @@ impl Main {
         };
 
         selected_id
-    }
-
-    /// Adds tags into sql database
-    fn tag_add_sql(&mut self, tag_id: &usize, tags: &String, namespace: &usize) {
-        let inp = "INSERT INTO Tags VALUES(?, ?, ?)";
-        let _out = self
-            ._conn
-            .borrow_mut()
-            .lock()
-            .unwrap()
-            .execute(inp, params![tag_id, tags, namespace]);
-        self.db_commit_man();
     }
 
     /// Prints db info
@@ -2531,6 +2295,9 @@ pub(crate) mod test_database {
         db.parents_add(1, 2, Some(3), true);
         db.parents_add(2, 3, Some(4), true);
         db.parents_add(3, 4, Some(5), true);
+        db.tag_add(&"test".to_string(), 1, false, None);
+        db.tag_add(&"test1".to_string(), 1, false, None);
+        db.tag_add(&"test2".to_string(), 1, false, None);
         db
     }
 
@@ -2540,6 +2307,16 @@ pub(crate) mod test_database {
         main.parents_tagid_remove(&1);
         assert_eq!(main.parents_rel_get(&1), None);
         assert_eq!(main.parents_tag_get(&1), None);
+    }
+
+    #[test]
+    fn db_test_load_tags() {
+        let mut main = setup_default_db();
+        assert_eq!(main._inmemdb.tags_max_return(), 3);
+        let id = main.tag_add(&"test3".to_string(), 3, false, None);
+        assert_eq!(id, 3);
+
+        assert!(main.tag_id_get(&2).is_some());
     }
 
     ///
@@ -2569,7 +2346,7 @@ pub(crate) mod test_database {
             None,
             0,
             0,
-            "".to_string(),
+            "yeet".to_string(),
             vec![],
             sharedtypes::CommitType::StopOnNothing,
             BTreeMap::new(),

@@ -557,8 +557,14 @@ impl NewinMemDB {
                     }
                 }
 
-                if self._tag_max < out {
-                    self._tag_max = out;
+                match self._tag_max.cmp(&out) {
+                    std::cmp::Ordering::Greater => {}
+                    std::cmp::Ordering::Equal => {
+                        self._tag_max += 1;
+                    }
+                    std::cmp::Ordering::Less => {
+                        self._tag_max = out;
+                    }
                 }
 
                 out

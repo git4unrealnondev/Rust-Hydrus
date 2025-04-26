@@ -11,14 +11,14 @@ use std::sync::Mutex;
 use std::{thread, time};
 
 pub const VERS: usize = 5;
-pub const DEFAULT_LOC_PLUGIN: &str = "plugin";
+pub const DEFAULT_LOC_PLUGIN: &str = "plugins";
 pub const DEFAULT_LOC_SCRAPER: &str = "scrapers";
 
 extern crate ratelimit;
 
 #[path = "./scr/cli.rs"]
 mod cli;
-#[path = "./scr/database.rs"]
+#[path = "./scr/db/database.rs"]
 mod database;
 #[path = "./scr/download.rs"]
 mod download;

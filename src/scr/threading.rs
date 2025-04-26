@@ -124,8 +124,14 @@ impl Drop for Worker {
 }
 ///
 /// Creates a relelimiter object
-pub fn create_ratelimiter(input: (u64, Duration)) -> Arc<Mutex<Ratelimiter>> {
-    Arc::new(Mutex::new(download::ratelimiter_create(input.0, input.1)))
+pub fn create_ratelimiter(
+    input: (u64, Duration),
+    worker_id: &usize,
+    job_id: &usize,
+) -> Arc<Mutex<Ratelimiter>> {
+    Arc::new(Mutex::new(download::ratelimiter_create(
+        worker_id, job_id, input.0, input.1,
+    )))
 }
 
 impl Worker {
@@ -145,7 +151,7 @@ impl Worker {
         let ratelimiter_main;
         if let Some(sharedtypes::ScraperOrPlugin::Scraper(ref scraper_info)) = scraper.storage_type
         {
-            ratelimiter_main = create_ratelimiter(scraper_info.ratelimit);
+            ratelimiter_main = create_ratelimiter(scraper_info.ratelimit, &id, &0);
         } else {
             return Worker { id, thread: None };
         }
@@ -159,6 +165,10 @@ impl Worker {
                 {
                     let temp = jobstorage.lock().unwrap();
                     jobsstorage = temp.jobs_get(&scraper).clone();
+                }
+
+                if jobsstorage.is_empty() {
+                    break 'bigloop;
                 }
                 for mut job in jobsstorage {
                     should_remove_original_job = true;
@@ -274,8 +284,8 @@ impl Worker {
                     // Legacy data holder obj for plguins
                     let mut scraper_data_holder = sharedtypes::ScraperData {
                         job: job_holder_legacy.clone(),
-                        system_data: job.system_data,
-                        user_data: job.user_data,
+                        system_data: job.system_data.clone(),
+                        user_data: job.user_data.clone(),
                     };
 
                     // Loads anything passed from the scraper at compile time into the user_data
@@ -294,13 +304,32 @@ impl Worker {
                     let urlload = match job.jobmanager.jobtype {
                         sharedtypes::DbJobType::Params => {
                             let mut out = Vec::new();
-                            for (url, scraperdata) in globalload::url_dump(
+                            match globalload::url_dump(
                                 &job.param,
                                 &scraper_data_holder,
                                 globalload.clone(),
                                 &scraper,
                             ) {
-                                out.push((sharedtypes::ScraperParam::Url(url), scraperdata));
+                                Ok(temp) => {
+                                    for (url, scraperdata) in temp {
+                                        out.push((
+                                            sharedtypes::ScraperParam::Url(url),
+                                            scraperdata,
+                                        ));
+                                    }
+                                }
+                                Err(err) => {
+                                    logging::error_log(&format!(
+                                        "
+Worker: {id} JobId: {} -- While trying to parse parameters we got this error: {:?}
+                                        ",
+                                        job.id, err
+                                    ));
+                                    logging::error_log(&format!("Worker: {} JobId: {} -- Telling system to keep job due to previous error.", id, job.id));
+                                    let mut jobstorage = jobstorage.lock().unwrap();
+                                    jobstorage.jobs_remove_job(&scraper, &job);
+                                    should_remove_original_job = false;
+                                }
                             }
                             out
                         }

@@ -9,6 +9,7 @@ use std::time::Duration;
 #[path = "../../../src/scr/sharedtypes.rs"]
 mod sharedtypes;
 
+use crate::sharedtypes::DEFAULT_PRIORITY;
 #[macro_export]
 macro_rules! vec_of_strings {
     ($($x:expr),*) => (vec![$($x.to_string()),*]);
@@ -382,6 +383,7 @@ pub fn get_global_info() -> Vec<sharedtypes::GlobalPluginScraper> {
                 sharedtypes::ScraperInfo {
                     ratelimit: (1, Duration::from_secs(1)),
                     sites: vec_of_strings!("e6", "e621", "e621.net"),
+                    priority: DEFAULT_PRIORITY,
                 },
             )),
             callbacks: vec![sharedtypes::GlobalCallbacks::Start],
@@ -406,6 +408,7 @@ pub fn get_global_info() -> Vec<sharedtypes::GlobalPluginScraper> {
                 sharedtypes::ScraperInfo {
                     ratelimit: (1, Duration::from_secs(1)),
                     sites: vec_of_strings!("e6ai", "e6ai.net"),
+                    priority: DEFAULT_PRIORITY,
                 },
             )),
             callbacks: vec![sharedtypes::GlobalCallbacks::Start],
@@ -1013,7 +1016,7 @@ pub fn db_upgrade_call_3(site: &Site) {
     };
 
     // Loads all tagid's that are attached to the pool
-    let pool_table = client::namespace_get_tagids(pool_nsid).unwrap_or_default();
+    let pool_table = client::namespace_get_tagids(pool_nsid);
     // Gets namespace id from source urls ensures that we're only working on e621 files
     let sourceurl_nsid = match client::namespace_get("source_url".to_string()) {
         Some(id) => id,
@@ -1021,12 +1024,12 @@ pub fn db_upgrade_call_3(site: &Site) {
     };
 
     // Loads all tagid's that are attached to the e621 sources
-    let sourceurl_table = client::namespace_get_tagids(sourceurl_nsid).unwrap_or_default();
+    let sourceurl_table = client::namespace_get_tagids(sourceurl_nsid);
 
     // Loads all tagid's that are attached to the parents sources
-    let parent_table = client::namespace_get_tagids(parent_nsid).unwrap_or_default(); // Loads all tagid's that are attached to the children sources
-    let children_table = client::namespace_get_tagids(children_nsid).unwrap_or_default(); // Loads all tagid's that are attached to the position
-    let position_table = client::namespace_get_tagids(poolposition_nsid).unwrap_or_default();
+    let parent_table = client::namespace_get_tagids(parent_nsid); // Loads all tagid's that are attached to the children sources
+    let children_table = client::namespace_get_tagids(children_nsid); // Loads all tagid's that are attached to the position
+    let position_table = client::namespace_get_tagids(poolposition_nsid);
 
     client::log(format!(
         "{} Scraper-Starting to strip: {} fileids from processing list",

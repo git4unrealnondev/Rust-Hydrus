@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 #![allow(unused_variables)]
+#![allow(unexpected_cfgs)]
 
 #[cfg(feature = "regex")]
 use regex::Regex;
@@ -10,6 +11,9 @@ use std::fmt;
 use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
 use strum_macros::{Display, EnumString};
+
+// Default priority for a scraper
+pub const DEFAULT_PRIORITY: usize = 5;
 
 ///
 /// Manages the conditions that determines which enclave should trigger
@@ -149,6 +153,7 @@ pub struct ScraperInfo {
     /// Ratelimit for this site
     pub ratelimit: (u64, std::time::Duration),
     pub sites: Vec<String>,
+    pub priority: usize,
 }
 
 ///
@@ -159,7 +164,6 @@ pub struct PluginInfo2 {
     /// Manages com settings between Plugin and host
     pub com_type: PluginThreadType,
     pub com_channel: bool,
-    pub should_wait_on_start: bool,
 }
 
 ///
@@ -215,6 +219,8 @@ pub enum PluginThreadType {
     Inline,
     // Spawns a new thread, Runs concurrently to the calling function.
     Spawn,
+    // Waits for the on_start to finish. Runs cocurently to other on_start functions
+    SpawnInline,
 }
 
 /// Information about CSV what we should do with the files.
