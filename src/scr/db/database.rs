@@ -542,57 +542,6 @@ impl Main {
         logging::info_log(&"Finishing Vacuum db!".to_string());
     }
 
-    /// Pulls data of table into form. Parses Data
-    ///
-    /// Pulls collums info -> (Vec`<String>`, Vec`<String>` SELECT sql FROM
-    /// sqlite_master WHERE tbl_name='File' AND type = 'table';
-    /*pub fn table_collumns(&mut self, table: String) -> (Vec<String>, Vec<String>, Vec<String>) {
-        let mut t1: Vec<String> = Vec::new();
-        let mut t2: Vec<String> = Vec::new();
-        let parsedstring = format!(
-            "SELECT sql FROM sqlite_master WHERE tbl_name='{}' AND type = 'table';",
-            &table.as_str()
-        );
-        let conmut = self._conn.borrow_mut();
-        let binding = conmut.lock().unwrap();
-        let mut toexec = binding.prepare(&parsedstring).unwrap();
-        let mut outvec = Vec::new();
-        let mut outs = toexec.query(params![]).unwrap();
-        while let Some(out) = outs.next().unwrap() {
-            let g1: String = out.get(0).unwrap();
-            let g2: Vec<&str> = g1.split('(').collect();
-            let g3: Vec<&str> = g2[1].split(')').collect();
-            let g4: Vec<&str> = g3[0].split(", ").collect();
-            for e in &g4 {
-                let e1: Vec<&str> = e.split(' ').collect();
-                t1.push(e1[0].to_string());
-                t2.push(e1[1].to_string());
-            }
-            outvec.push(g1);
-        }
-        (outvec, t1, t2)
-    }*/
-
-    /// Get table names Returns: Vec of strings
-    /*pub fn table_names(&mut self) -> Vec<String> {
-        let conmut = self._conn.borrow_mut();
-        let binding = conmut.lock().unwrap();
-        let mut toexec = binding
-            .prepare("SELECT name FROM sqlite_master WHERE type='table';")
-            .unwrap();
-        let mut outvec = Vec::new();
-        let mut outs = toexec.query(params![]).unwrap();
-
-        // println!("{:?}", out);
-        while let Some(out) = outs.next().unwrap() {
-            let vecpop = out.get(0).unwrap();
-            outvec.push(vecpop);
-        }
-
-        // println!("{:?}", outvec);
-        outvec
-    }*/
-
     /// Sets up first database interaction. Makes tables and does first time setup.
     pub fn first_db(&mut self) {
         // Making Relationship Table

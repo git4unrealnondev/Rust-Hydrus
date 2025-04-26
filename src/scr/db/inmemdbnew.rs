@@ -2,6 +2,7 @@ use crate::logging;
 use crate::sharedtypes;
 use crate::sharedtypes::DbJobsObj;
 use fnv::{FnvHashMap, FnvHashSet};
+use futures::stream::iter;
 use std::collections::{HashMap, HashSet};
 use std::hash::Hash;
 
@@ -294,11 +295,9 @@ impl NewinMemDB {
                 if relref.is_empty() {
                     None
                 } else {
-                    let temp = relref.iter();
                     let mut temp_int = &0;
-                    for each in temp {
+                    if let Some(each) = relref.iter().next() {
                         temp_int = each;
-                        break;
                     }
                     Some(temp_int)
                     // return Some(&relref.take(&0).unwrap());

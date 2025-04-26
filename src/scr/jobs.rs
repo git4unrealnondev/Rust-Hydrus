@@ -180,7 +180,7 @@ impl Jobs {
                         sharedtypes::DbJobRecreation::OnTagId(_, _) => {}
                         sharedtypes::DbJobRecreation::AlwaysTime(_, count) => {
                             if let Some(mut count) = count {
-                                if count <= 0 {
+                                if count == 0 {
                                     self.jobs_remove_dbjob(scraper, data);
                                 } else {
                                     count -= 1;

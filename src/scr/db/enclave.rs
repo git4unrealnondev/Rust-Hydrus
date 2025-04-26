@@ -681,10 +681,6 @@ impl Main {
     }
 
     ///
-    /// Gets condition ID
-    ///
-
-    ///
     /// Inserts the name and action into the database
     ///
     pub fn enclave_action_put(&mut self, name: &String, action: sharedtypes::EnclaveAction) {
