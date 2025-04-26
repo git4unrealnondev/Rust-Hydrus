@@ -1,7 +1,6 @@
 // use crate::scr::sharedtypes::jobs_add; use
 // crate::scr::sharedtypes::AllFields::EJobsAdd; use crate::scr::tasks;
 use log::{error, warn};
-use std::collections::HashMap;
 //use scraper::db_upgrade_call;
 //use scraper::on_start;
 use std::sync::Arc;

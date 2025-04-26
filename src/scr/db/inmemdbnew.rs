@@ -2,7 +2,6 @@ use crate::logging;
 use crate::sharedtypes;
 use crate::sharedtypes::DbJobsObj;
 use fnv::{FnvHashMap, FnvHashSet};
-use futures::stream::iter;
 use std::collections::{HashMap, HashSet};
 use std::hash::Hash;
 
@@ -563,6 +562,7 @@ impl NewinMemDB {
                     }
                     std::cmp::Ordering::Less => {
                         self._tag_max = out;
+                        self._tag_max += 1;
                     }
                 }
 
@@ -1119,7 +1119,72 @@ mod inmemdb {
     }
 
     #[test]
-    fn tags_test() {
+    fn tags_test_id_some() {
+        let mut db = setup_db();
+        db.tags_put(
+            &sharedtypes::DbTagNNS {
+                name: "yeet2".to_string(),
+                namespace: 0,
+            },
+            None,
+        );
+        assert_eq!(db.tags_max_return(), 1);
+
+        db.tags_put(
+            &sharedtypes::DbTagNNS {
+                name: "yeet".to_string(),
+                namespace: 0,
+            },
+            Some(5),
+        );
+        assert_eq!(db.tags_max_return(), 6);
+        db.tags_put(
+            &sharedtypes::DbTagNNS {
+                name: "yeet1".to_string(),
+                namespace: 0,
+            },
+            None,
+        );
+        assert_eq!(db.tags_max_return(), 7);
+        db.tags_put(
+            &sharedtypes::DbTagNNS {
+                name: "yeet3".to_string(),
+                namespace: 0,
+            },
+            None,
+        );
+        assert_eq!(db.tags_max_return(), 8);
+
+        db.tags_put(
+            &sharedtypes::DbTagNNS {
+                name: "yeet4".to_string(),
+                namespace: 0,
+            },
+            Some(3),
+        );
+        assert_eq!(db.tags_max_return(), 8);
+
+        assert_eq!(
+            db.tags_get_id(&sharedtypes::DbTagNNS {
+                name: "yeet1".to_string(),
+                namespace: 0
+            })
+            .unwrap(),
+            &6
+        );
+        assert_eq!(
+            db.tags_get_id(&sharedtypes::DbTagNNS {
+                name: "yeet3".to_string(),
+                namespace: 0
+            })
+            .unwrap(),
+            &7
+        );
+        assert_eq!(db.tags_max_return(), 8);
+    }
+
+    #[test]
+    fn tags_test_id_none() {
         let mut db = setup_db();
         db.tags_put(
             &sharedtypes::DbTagNNS {

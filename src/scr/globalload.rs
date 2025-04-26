@@ -1,11 +1,10 @@
 use crate::{
     database::{self, Main},
-    jobs::{self, Jobs},
+    jobs::{Jobs},
     logging, server,
     sharedtypes::{self, GlobalPluginScraper},
 };
 use libloading::Library;
-use regex::Regex;
 use std::sync::{Arc, Mutex};
 use std::{collections::HashMap, path::Path, thread};
 use std::{path::PathBuf, thread::JoinHandle};
@@ -188,7 +187,7 @@ pub fn plugin_on_download(
     for (cnt, lib_path) in libpath.iter().enumerate() {
         let lib;
         unsafe {
-            match libloading::Library::new(&lib_path) {
+            match libloading::Library::new(lib_path) {
                 Ok(good_lib) => lib = good_lib,
                 Err(_) => {
                     logging::error_log(&format!(
@@ -222,9 +221,9 @@ pub fn plugin_on_download(
             output = plugindatafunc(cursorpass, hash, ext);
         }
 
-        let mut jobmanager;
+        let jobmanager;
         {
-            let mut manager = manager_arc.lock().unwrap();
+            let manager = manager_arc.lock().unwrap();
             jobmanager = manager.jobmanager.clone();
         }
         parse_plugin_output(output, db.clone(), libscraper.get(cnt).unwrap(), jobmanager);
@@ -327,7 +326,7 @@ pub fn plugin_on_tag(
             }
         } else {
             for pluginscraper in pluginscraper_list {
-                storagemap.push((pluginscraper, &"", None));
+                storagemap.push((pluginscraper, "", None));
             }
         }
     }
@@ -556,7 +555,7 @@ impl GlobalLoad {
             match ipc_coms.spawn_listener() {
                 Ok(out) => out,
                 Err(err) => {
-                    logging::panic_log(&format!("Failed to spawn IPC Server"));
+                    logging::panic_log(&"Failed to spawn IPC Server".to_string());
                 }
             }
         });
@@ -802,15 +801,10 @@ impl GlobalLoad {
         if let Some(plugin_list) = self.callback.get(&sharedtypes::GlobalCallbacks::Start) {
             for plugin in plugin_list {
                 if let Some(stored_info) = &plugin.storage_type {
-                    match stored_info {
-                        sharedtypes::ScraperOrPlugin::Plugin(plugin_info) => {
-                            if sharedtypes::PluginThreadType::SpawnInline == plugin_info.com_type {
-                                if self.thread.get(plugin).is_some() {
-                                    return true;
-                                }
-                            }
+                    if let sharedtypes::ScraperOrPlugin::Plugin(plugin_info) = stored_info {
+                        if sharedtypes::PluginThreadType::SpawnInline == plugin_info.com_type && self.thread.get(plugin).is_some() {
+                            return true;
                         }
-                        _ => {}
                     }
                 }
             }
@@ -850,127 +844,122 @@ impl GlobalLoad {
     /// TODO needs to make easy pulls for scraper and plugin info
     ///
     fn parse_lib(&mut self, lib: Library, path: &Path) {
-        match self.get_info(&lib, path) {
-            Some(items) => {
-                if items.is_empty() {
-                    logging::error_log(&format!(
-                        "Was unable to pull any sites from: {}",
-                        path.to_string_lossy()
-                    ));
-                    return;
-                }
-                for global in items {
-                    match global.storage_type {
-                        None => {
-                            logging::error_log(&format!(
-                    "Skipping parsing of name: {} due to storage_type not being set.From {}",
-                    global.name,
+        if let Some(items) = self.get_info(&lib, path) {
+            if items.is_empty() {
+                logging::error_log(&format!(
+                    "Was unable to pull any sites from: {}",
                     path.to_string_lossy()
                 ));
+                return;
+            }
+            for global in items {
+                match global.storage_type {
+                    None => {
+                        logging::error_log(&format!(
+                "Skipping parsing of name: {} due to storage_type not being set.From {}",
+                global.name,
+                path.to_string_lossy()
+            ));
 
-                            continue;
+                        continue;
+                    }
+                    Some(ref scraperplugin) => match scraperplugin {
+                        sharedtypes::ScraperOrPlugin::Scraper(scraperinfo) => {
+                            self.sites.insert(global.clone(), scraperinfo.sites.clone());
                         }
-                        Some(ref scraperplugin) => match scraperplugin {
-                            sharedtypes::ScraperOrPlugin::Scraper(scraperinfo) => {
-                                self.sites.insert(global.clone(), scraperinfo.sites.clone());
+                        sharedtypes::ScraperOrPlugin::Plugin(plugininfo) => {}
+                    },
+                }
+
+                for callbacks in global.callbacks.iter() {
+                    match callbacks {
+                        sharedtypes::GlobalCallbacks::Callback(callback_info) => {
+                            match self.callback_cross.get_mut(&global) {
+                                None => {
+                                    self.callback_cross
+                                        .insert(global.clone(), vec![callback_info.clone()]);
+                                }
+                                Some(list) => {
+                                    list.push(callback_info.clone());
+                                }
                             }
-                            sharedtypes::ScraperOrPlugin::Plugin(plugininfo) => {}
+                        }
+                        _ => match self.callback.get_mut(callbacks) {
+                            None => {
+                                let temp = vec![global.clone()];
+                                self.callback.insert(callbacks.clone(), temp);
+                            }
+                            Some(plugin_list) => {
+                                plugin_list.push(global.clone());
+                            }
                         },
                     }
 
-                    for callbacks in global.callbacks.iter() {
-                        match callbacks {
-                            sharedtypes::GlobalCallbacks::Callback(callback_info) => {
-                                match self.callback_cross.get_mut(&global) {
-                                    None => {
-                                        self.callback_cross
-                                            .insert(global.clone(), vec![callback_info.clone()]);
-                                    }
-                                    Some(list) => {
-                                        list.push(callback_info.clone());
-                                    }
-                                }
+                    if let sharedtypes::GlobalCallbacks::Tag((searchtype, ns, not_ns)) =
+                        callbacks
+                    {
+                        let mut unwrappy = self.db.lock().unwrap();
+                        unwrappy.load_table(&sharedtypes::LoadDBTable::Namespace);
+                        let mut ns_u = Vec::new();
+                        let mut ns_not_u = Vec::new();
+                        for ns in ns {
+                            if let Some(nsid) = unwrappy.namespace_get(ns) {
+                                ns_u.push(*nsid);
                             }
-                            _ => match self.callback.get_mut(&callbacks) {
-                                None => {
-                                    let temp = vec![global.clone()];
-                                    self.callback.insert(callbacks.clone(), temp);
+                        }
+                        for ns in not_ns {
+                            if let Some(nsid) = unwrappy.namespace_get(ns) {
+                                ns_not_u.push(*nsid);
+                            }
+                        }
+                        let searchtype = match searchtype {
+                            Some(searchtype) => match searchtype {
+                                sharedtypes::SearchType::String(temp) => {
+                                    (Some(temp.clone()), None)
                                 }
-                                Some(plugin_list) => {
-                                    plugin_list.push(global.clone());
+                                sharedtypes::SearchType::Regex(temp) => {
+                                    let regex = regex::Regex::new(temp);
+
+                                    if let Ok(regex) = regex {
+                                        (None, Some(sharedtypes::RegexStorage(regex)))
+                                    } else {
+                                        logging::error_log(&format!(
+                                            "Cannot load the regex from plugin: {} at path: {}",
+                                            &global.name,
+                                            path.to_string_lossy()
+                                        ));
+                                        continue;
+                                    }
                                 }
                             },
-                        }
-
-                        if let sharedtypes::GlobalCallbacks::Tag((searchtype, ns, not_ns)) =
-                            callbacks
-                        {
-                            let mut unwrappy = self.db.lock().unwrap();
-                            unwrappy.load_table(&sharedtypes::LoadDBTable::Namespace);
-                            let mut ns_u = Vec::new();
-                            let mut ns_not_u = Vec::new();
-                            for ns in ns {
-                                if let Some(nsid) = unwrappy.namespace_get(ns) {
-                                    ns_u.push(nsid.clone());
-                                }
+                            None => {
+                                todo!();
                             }
-                            for ns in not_ns {
-                                if let Some(nsid) = unwrappy.namespace_get(ns) {
-                                    ns_not_u.push(nsid.clone());
-                                }
+                        };
+                        match self.regex_storage.get_mut(&(
+                            searchtype.clone(),
+                            ns_u.clone(),
+                            ns_not_u.clone(),
+                        )) {
+                            None => {
+                                self.regex_storage.insert(
+                                    (searchtype.clone(), ns_u, ns_not_u),
+                                    vec![global.clone()],
+                                );
                             }
-                            let searchtype = match searchtype {
-                                Some(searchtype) => match searchtype {
-                                    sharedtypes::SearchType::String(temp) => {
-                                        (Some(temp.clone()), None)
-                                    }
-                                    sharedtypes::SearchType::Regex(temp) => {
-                                        let regex = regex::Regex::new(temp);
-
-                                        if let Ok(regex) = regex {
-                                            (None, Some(sharedtypes::RegexStorage(regex)))
-                                        } else {
-                                            logging::error_log(&format!(
-                                                "Cannot load the regex from plugin: {} at path: {}",
-                                                &global.name,
-                                                path.to_string_lossy()
-                                            ));
-                                            continue;
-                                        }
-                                    }
-                                },
-                                None => {
-                                    todo!();
-                                }
-                            };
-                            match self.regex_storage.get_mut(&(
-                                searchtype.clone(),
-                                ns_u.clone(),
-                                ns_not_u.clone(),
-                            )) {
-                                None => {
-                                    self.regex_storage.insert(
-                                        (searchtype.clone(), ns_u, ns_not_u),
-                                        vec![global.clone()],
-                                    );
-                                }
-                                Some(temp) => {
-                                    temp.push(global.clone());
-                                }
+                            Some(temp) => {
+                                temp.push(global.clone());
                             }
                         }
                     }
-
-                    self.library_path.insert(global.clone(), path.to_path_buf());
-                    let lib;
-                    unsafe {
-                        lib = libloading::Library::new(path).unwrap();
-                    }
-                    self.library_lib.insert(global, lib);
                 }
-            }
-            None => {
-                return;
+
+                self.library_path.insert(global.clone(), path.to_path_buf());
+                let lib;
+                unsafe {
+                    lib = libloading::Library::new(path).unwrap();
+                }
+                self.library_lib.insert(global, lib);
             }
         }
     }

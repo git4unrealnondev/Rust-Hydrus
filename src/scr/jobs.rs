@@ -68,13 +68,12 @@ impl Jobs {
                 let mut unwrappy = self.db.lock().unwrap();
                 let id = unwrappy.jobs_add(
                     None,
-                    dbjobsobj.time.clone(),
-                    dbjobsobj.reptime.clone().unwrap(),
+                    dbjobsobj.time,
+                    dbjobsobj.reptime.unwrap(),
                     dbjobsobj.site.clone(),
                     dbjobsobj.param.clone(),
                     dbjobsobj
                         .committype
-                        .clone()
                         .unwrap_or(sharedtypes::CommitType::StopOnNothing),
                     dbjobsobj.system_data.clone(),
                     dbjobsobj.user_data.clone(),
@@ -126,7 +125,7 @@ impl Jobs {
     /// Gets all the GlobalPluginScraper objs that are loaded for jobs
     ///
     pub fn job_scrapers_get(&self) -> HashSet<&sharedtypes::GlobalPluginScraper> {
-        self.site_job.keys().into_iter().collect()
+        self.site_job.keys().collect()
     }
 
     ///
