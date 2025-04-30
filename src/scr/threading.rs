@@ -714,7 +714,6 @@ fn parse_jobs(
                     jobtype: data.job.job_type,
                     recreation: None,
                 },
-                committype: Some(sharedtypes::CommitType::StopOnNothing),
                 isrunning: false,
                 system_data: data.system_data,
                 user_data: data.user_data,

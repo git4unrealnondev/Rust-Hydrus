@@ -8,8 +8,11 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashSet};
 use std::fmt;
+#[cfg(feature = "clap")]
 use strum::IntoEnumIterator;
+#[cfg(feature = "clap")]
 use strum_macros::EnumIter;
+#[cfg(feature = "clap")]
 use strum_macros::{Display, EnumString};
 
 // Default priority for a scraper
@@ -70,7 +73,8 @@ pub struct DbTagObjCompatability {
     pub namespace: usize,
 }
 
-#[derive(Debug, EnumIter, Display)]
+#[derive(Debug)]
+#[cfg_attr(feature = "clap", derive(EnumIter, Display))]
 // Manages what the search can do.
 pub enum Search {
     Fid(Vec<String>),
@@ -79,14 +83,16 @@ pub enum Search {
     Hash(Vec<String>),
 }
 
-#[derive(Debug, EnumIter, Display)]
+#[derive(Debug)]
+#[cfg_attr(feature = "clap", derive(EnumIter, Display))]
 pub enum Tasks {
     // CSV importation. cp mv hardlink
     Csv(String, CsvCopyMvHard),
     Remove(TasksRemove),
 }
 
-#[derive(Debug, EnumIter, Display, Default)]
+#[derive(Debug, Default)]
+#[cfg_attr(feature = "clap", derive(EnumIter, Display))]
 pub enum TasksRemove {
     RemoveNamespaceId(usize),
     RemoveNamespaceString(String),
@@ -213,7 +219,8 @@ pub fn return_default_globalpluginparser() -> GlobalPluginScraper {
 }
 
 /// Determines how to run a function
-#[derive(Debug, EnumIter, Display, Clone, Eq, Hash, PartialEq)]
+#[derive(Debug, Clone, Eq, Hash, PartialEq)]
+#[cfg_attr(feature = "clap", derive(EnumIter, Display))]
 pub enum PluginThreadType {
     // DEFAULT - Runs plugin and waits until it finished
     Inline,
@@ -224,7 +231,8 @@ pub enum PluginThreadType {
 }
 
 /// Information about CSV what we should do with the files.
-#[derive(Debug, EnumIter, Display, Default)]
+#[derive(Debug, Default)]
+#[cfg_attr(feature = "clap", derive(EnumIter, Display))]
 pub enum CsvCopyMvHard {
     #[default]
     Copy,
@@ -234,17 +242,9 @@ pub enum CsvCopyMvHard {
 
 /// Tells DB which table to load.
 #[derive(
-    EnumIter,
-    PartialEq,
-    Debug,
-    Serialize,
-    bincode::Encode,
-    bincode::Decode,
-    Deserialize,
-    Clone,
-    Copy,
-    ValueEnum,
+    PartialEq, Debug, Serialize, bincode::Encode, bincode::Decode, Deserialize, Clone, Copy,
 )]
+#[cfg_attr(feature = "clap", derive(EnumIter))]
 pub enum LoadDBTable {
     // Files table
     Files,
@@ -263,7 +263,7 @@ pub enum LoadDBTable {
     // Loads all unloaded tables.
     All,
 }
-
+/*
 #[allow(dead_code)]
 pub fn stringto_commit_type(into: &String) -> CommitType {
     for each in CommitType::iter() {
@@ -276,17 +276,17 @@ pub fn stringto_commit_type(into: &String) -> CommitType {
         panic += format!("{} ", each).as_str();
     }
     panic!("{}", panic);
-}
+}*/
 
 /// Dummy Holder Dummy thick
 #[allow(dead_code)]
-#[derive(Debug, EnumIter, PartialEq, Serialize, bincode::Encode, bincode::Decode, Deserialize)]
+#[derive(Debug, PartialEq, Serialize, bincode::Encode, bincode::Decode, Deserialize)]
+#[cfg_attr(feature = "clap", derive(EnumIter))]
 pub enum SearchHolder {
     And((usize, usize)),
     Or((usize, usize)),
     Not((usize, usize)),
 }
-
 /// Allows searching inside the db. search_relate relates the item in the vec with
 /// eachother the IDs in search relate correspond to the id's in searches. IE: if 0
 /// & 1 are an AND search then the 4 search items are AND searched in db in
@@ -297,6 +297,8 @@ pub struct SearchObj {
     pub search_relate: Option<Vec<SearchHolder>>,
     pub searches: Vec<SearchHolder>,
 }
+
+/*
 
 #[allow(dead_code)]
 pub fn stringto_search_type(into: &String) -> Search {
@@ -324,44 +326,13 @@ pub fn stringto_jobtype(into: &String) -> DbJobType {
         panic += format!("{} ", each).as_str();
     }
     panic!("{}", panic);
-}
+}*/
 
+#[cfg(feature = "clap")]
 use clap::ValueEnum;
 
-#[derive(
-    Debug,
-    EnumIter,
-    Clone,
-    Eq,
-    Hash,
-    PartialEq,
-    Copy,
-    EnumString,
-    Serialize,
-    bincode::Encode,
-    bincode::Decode,
-    Deserialize,
-    ValueEnum,
-)]
-#[serde(rename_all = "PascalCase")]
-#[clap(rename_all = "kebab_case")]
-pub enum CommitType {
-    /// Processes all files and data doesn't stop processing.
-    StopOnNothing,
-    /// Stops processing if it sees a file it's already seen.
-    // SkipOnFile,
-    StopOnFile,
-    // AddToDB,
-}
-
-impl fmt::Display for CommitType {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:?}", self)
-        // or, alternatively: fmt::Debug::fmt(self, f)
-    }
-}
-
-#[derive(Debug, EnumIter, Clone, PartialEq, Hash, Eq, Display)]
+#[derive(Debug, Clone, PartialEq, Hash, Eq)]
+#[cfg_attr(feature = "clap", derive(Display, EnumIter))]
 pub enum ScraperType {
     Manual,
     Automatic,
@@ -501,8 +472,6 @@ pub struct DbJobsObj {
     pub param: Vec<ScraperParam>,
     /// jobs manager. Configuration goes here for things
     pub jobmanager: DbJobsManager,
-    /// I don't think I use this
-    pub committype: Option<CommitType>,
     /// Is this job currently running
     pub isrunning: bool,
     /// Any data that should be not tampered with by a scrapre, plugin etc. system useage only
@@ -561,17 +530,19 @@ pub enum DbJobRecreation {
     Eq,
     PartialEq,
     Clone,
-    EnumIter,
-    Display,
     Serialize,
     bincode::Encode,
     bincode::Decode,
     Deserialize,
-    ValueEnum,
     Ord,
     PartialOrd,
 )]
-#[clap(rename_all = "kebab_case")]
+#[serde(rename_all = "PascalCase")]
+#[cfg_attr(
+    feature = "clap",
+    derive(EnumIter, ValueEnum, EnumString),
+    clap(rename_all = "kebab_case")
+)]
 pub enum DbJobType {
     /// Default recognises this as a param query.
     Params,
@@ -830,9 +801,10 @@ pub struct JobScraper {
 }
 
 /// Supported types of hashes in Rust Hydrus
-#[derive(Debug, Clone, Display, Deserialize, Serialize, bincode::Encode, bincode::Decode)]
+#[derive(Debug, Clone, Deserialize, Serialize, bincode::Encode, bincode::Decode)]
 #[allow(dead_code)]
 #[derive(Eq, Hash, PartialEq)]
+#[cfg_attr(feature = "clap", derive(Display))]
 pub enum HashesSupported {
     Md5(String),
     Sha1(String),
@@ -846,7 +818,6 @@ pub struct JobsAdd {
     pub site: String,
     pub query: String,
     pub time: String,
-    pub committype: CommitType,
 }
 
 // Manages what the jobs are.

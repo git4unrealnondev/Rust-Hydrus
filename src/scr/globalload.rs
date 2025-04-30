@@ -1,6 +1,6 @@
 use crate::{
     database::{self, Main},
-    jobs::{Jobs},
+    jobs::Jobs,
     logging, server,
     sharedtypes::{self, GlobalPluginScraper},
 };
@@ -227,7 +227,7 @@ pub fn plugin_on_download(
             jobmanager = manager.jobmanager.clone();
         }
         parse_plugin_output(output, db.clone(), libscraper.get(cnt).unwrap(), jobmanager);
-        lib.close();
+        let _ = lib.close();
     }
 }
 
@@ -458,8 +458,6 @@ fn parse_plugin_output_andmain(
                                 job.reptime.unwrap_or(0),
                                 job.site,
                                 job.param,
-                                job.committype
-                                    .unwrap_or(sharedtypes::CommitType::StopOnNothing),
                                 job.system_data,
                                 job.user_data,
                                 job.jobmanager,
@@ -802,7 +800,9 @@ impl GlobalLoad {
             for plugin in plugin_list {
                 if let Some(stored_info) = &plugin.storage_type {
                     if let sharedtypes::ScraperOrPlugin::Plugin(plugin_info) = stored_info {
-                        if sharedtypes::PluginThreadType::SpawnInline == plugin_info.com_type && self.thread.get(plugin).is_some() {
+                        if sharedtypes::PluginThreadType::SpawnInline == plugin_info.com_type
+                            && self.thread.get(plugin).is_some()
+                        {
                             return true;
                         }
                     }
@@ -895,9 +895,7 @@ impl GlobalLoad {
                         },
                     }
 
-                    if let sharedtypes::GlobalCallbacks::Tag((searchtype, ns, not_ns)) =
-                        callbacks
-                    {
+                    if let sharedtypes::GlobalCallbacks::Tag((searchtype, ns, not_ns)) = callbacks {
                         let mut unwrappy = self.db.lock().unwrap();
                         unwrappy.load_table(&sharedtypes::LoadDBTable::Namespace);
                         let mut ns_u = Vec::new();
@@ -914,9 +912,7 @@ impl GlobalLoad {
                         }
                         let searchtype = match searchtype {
                             Some(searchtype) => match searchtype {
-                                sharedtypes::SearchType::String(temp) => {
-                                    (Some(temp.clone()), None)
-                                }
+                                sharedtypes::SearchType::String(temp) => (Some(temp.clone()), None),
                                 sharedtypes::SearchType::Regex(temp) => {
                                     let regex = regex::Regex::new(temp);
 

@@ -270,7 +270,8 @@ impl Main {
 
     /// Sets advanced settings for journaling. NOTE Experimental badness
     pub fn db_open(&mut self) {
-        self._conn
+        let _ = self
+            ._conn
             .borrow_mut()
             .lock()
             .unwrap()

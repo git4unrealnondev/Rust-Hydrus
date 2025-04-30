@@ -392,7 +392,6 @@ pub fn on_start(parserscraper: &sharedtypes::GlobalPluginScraper) {
                 0,
                 "Catbox Collection".into(),
                 vec![sharedtypes::ScraperParam::Url(item)],
-                sharedtypes::CommitType::StopOnNothing,
                 BTreeMap::new(),
                 BTreeMap::new(),
                 sharedtypes::DbJobsManager {
@@ -439,7 +438,6 @@ pub fn on_regex_match(
                     jobtype: sharedtypes::DbJobType::Scraper,
                     recreation: None,
                 },
-                committype: Some(sharedtypes::CommitType::StopOnNothing),
                 isrunning: false,
                 system_data: BTreeMap::new(),
                 user_data: BTreeMap::new(),

@@ -428,8 +428,7 @@ impl Main {
         } else {
             stor = search.search_relate.unwrap();
         }
-        let mut cnt = 0;
-        for un in search.searches {
+        for (cnt, un) in search.searches.into_iter().enumerate() {
             match un {
                 sharedtypes::SearchHolder::Not((a, b)) => {
                     let fa = self.relationship_get_fileid(&a);
@@ -454,7 +453,6 @@ impl Main {
                     searched.push((cnt, b));
                 }
             }
-            cnt += 1
         }
         for each in stor {
             match each {
@@ -1128,6 +1126,7 @@ impl Main {
                     let param_string: String = row.get(5).unwrap();
                     let system_data = serde_json::from_str(&system_data_string).unwrap();
                     let user_data = serde_json::from_str(&user_data_string).unwrap();
+                    let commitstr: String = row.get(6).unwrap();
                     Ok(sharedtypes::DbJobsObj {
                         id: row.get(0).unwrap(),
                         time: row.get(1).unwrap(),
@@ -1135,7 +1134,6 @@ impl Main {
                         site: row.get(4).unwrap(),
                         param: serde_json::from_str(&param_string).unwrap(),
                         jobmanager: man,
-                        committype: Some(sharedtypes::stringto_commit_type(&row.get(6).unwrap())),
                         isrunning: false,
                         user_data,
                         system_data,
@@ -1478,7 +1476,7 @@ impl Main {
                 serde_json::to_string(&data.jobmanager).unwrap(),
                 data.site,
                 serde_json::to_string(&data.param).unwrap(),
-                data.committype.unwrap().to_string(),
+                "",
                 serde_json::to_string(&data.system_data).unwrap(),
                 serde_json::to_string(&data.user_data).unwrap()
             ],
@@ -1499,7 +1497,7 @@ impl Main {
                 serde_json::to_string(&data.jobmanager).unwrap(),
                 data.site,
                 serde_json::to_string(&data.param).unwrap(),
-                data.committype.unwrap().to_string(),
+                "",
                 serde_json::to_string(&data.system_data).unwrap(),
                 serde_json::to_string(&data.user_data).unwrap(),
                 data.id.to_string()
@@ -1519,7 +1517,6 @@ impl Main {
         reptime: usize,
         site: String,
         param: Vec<ScraperParam>,
-        committype: sharedtypes::CommitType,
         system_data: BTreeMap<String, String>,
         user_data: BTreeMap<String, String>,
         jobsmanager: sharedtypes::DbJobsManager,
@@ -1546,7 +1543,6 @@ impl Main {
             site: site.clone(),
             param: param.clone(),
             jobmanager: jobsmanager.clone(),
-            committype: Some(committype),
             isrunning: false,
             system_data: system_data.clone(),
             user_data: user_data.clone(),

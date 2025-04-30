@@ -44,9 +44,10 @@ regex = "1.11.1"
 
 [features]
 default = ["exe_build"]
-exe_build = ["regex"]
+exe_build = ["regex", "clap"]
 # Enables sending and recieving regex
 regex = []
+clap = []
 
 [profile.release]
 opt-level = 3

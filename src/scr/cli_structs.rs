@@ -147,9 +147,6 @@ pub struct JobBulkAddStruct {
     /// Time, special time of now for running a job now.
     #[arg(exclusive = false, required = true)]
     pub time: String,
-    /// How we will process the job
-    #[arg(exclusive = false, required = true)]
-    pub committype: sharedtypes::CommitType,
     /// Job type to run
     #[arg(exclusive = false, required = true)]
     pub jobtype: Option<sharedtypes::DbJobType>,
@@ -225,9 +222,6 @@ pub struct JobAddStruct {
     /// Time, special time of now for running a job now.
     #[arg(exclusive = false, required = true)]
     pub time: String,
-    /// How we will process the job
-    #[arg(exclusive = false, required = true)]
-    pub committype: sharedtypes::CommitType,
     /// Job type to run
     #[arg(exclusive = false, required = false)]
     pub jobtype: Option<sharedtypes::DbJobType>,

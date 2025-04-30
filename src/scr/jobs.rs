@@ -72,9 +72,6 @@ impl Jobs {
                     dbjobsobj.reptime.unwrap(),
                     dbjobsobj.site.clone(),
                     dbjobsobj.param.clone(),
-                    dbjobsobj
-                        .committype
-                        .unwrap_or(sharedtypes::CommitType::StopOnNothing),
                     dbjobsobj.system_data.clone(),
                     dbjobsobj.user_data.clone(),
                     dbjobsobj.jobmanager.clone(),

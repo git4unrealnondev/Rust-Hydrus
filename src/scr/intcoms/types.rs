@@ -102,7 +102,6 @@ pub enum SupportedDBRequests {
             usize,
             String,
             Vec<sharedtypes::ScraperParam>,
-            sharedtypes::CommitType,
             BTreeMap<String, String>,
             BTreeMap<String, String>,
             sharedtypes::DbJobsManager,
