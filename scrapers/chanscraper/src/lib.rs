@@ -90,37 +90,33 @@ impl InternalScraper {
     }
 }
 
-///
-/// Reutrns an internal scraper object.
-/// Only really useful to store variables. not useful for calling functions. :C
-///
+use crate::sharedtypes::DEFAULT_PRIORITY;
+
 #[no_mangle]
-pub fn new() -> Vec<sharedtypes::SiteStruct> {
-    println!("This scraper pulls info from 4chan. I'm not affiliated with them lol");
-    let out: Vec<sharedtypes::SiteStruct> = vec![
-        sharedtypes::SiteStruct {
-            name: "4chan".to_string(),
-            sites: vec_of_strings!("4ch", "4chan", "4chan.net"),
-            version: 0,
+pub fn get_global_info() -> Vec<sharedtypes::GlobalPluginScraper> {
+    let mut fourchan = sharedtypes::return_default_globalpluginparser();
+    fourchan.name = "4chan".into();
+    fourchan.storage_type = Some(sharedtypes::ScraperOrPlugin::Scraper(
+        sharedtypes::ScraperInfo {
             ratelimit: (1, Duration::from_secs(2)),
-            should_handle_file_download: false,
-            should_handle_text_scraping: false,
-            login_type: vec![],
-            stored_info: None,
+            sites: vec!["4ch".into(), "4chan".into(), "4chan.net".into()],
+            priority: DEFAULT_PRIORITY,
         },
-        sharedtypes::SiteStruct {
-            name: "lulz.net".to_string(),
-            sites: vec_of_strings!("lulz", "lulz.net"),
-            version: 0,
+    ));
+
+    let mut lulz = sharedtypes::return_default_globalpluginparser();
+    lulz.name = "lulz.net".into();
+    lulz.storage_type = Some(sharedtypes::ScraperOrPlugin::Scraper(
+        sharedtypes::ScraperInfo {
             ratelimit: (1, Duration::from_secs(2)),
-            should_handle_file_download: false,
-            should_handle_text_scraping: false,
-            login_type: vec![],
-            stored_info: None,
+            sites: vec!["lulz".into(), "lulz.net".into()],
+            priority: DEFAULT_PRIORITY,
         },
-    ];
-    out
+    ));
+
+    vec![fourchan, lulz]
 }
+
 ///
 /// Returns one url from the parameters.
 /// TODO Not implemented yet
@@ -265,9 +261,10 @@ fn nsout(inp: &Nsid) -> sharedtypes::GenericNamespaceObj {
 ///
 #[no_mangle]
 pub fn parser(
-    params: &String,
+    html_input: &String,
+    params: &Vec<sharedtypes::ScraperParam>,
     actual_params: &sharedtypes::ScraperData,
-) -> Result<(sharedtypes::ScraperObject, sharedtypes::ScraperData), sharedtypes::ScraperReturn> {
+) -> Result<sharedtypes::ScraperObject, sharedtypes::ScraperReturn> {
     let mut scraper_data = actual_params.clone();
     let mut out = sharedtypes::ScraperObject {
         file: HashSet::new(),
@@ -283,7 +280,7 @@ pub fn parser(
             let jobtype_str: &str = jobtype;
             match jobtype_str {
                 "Thread" => {
-                    if let Ok(chjson) = json::parse(params) {
+                    if let Ok(chjson) = json::parse(html_input) {
                         out.tag.insert(sharedtypes::TagObject {
                             namespace: nsout(&Nsid::ThreadSite),
                             tag: site.site_get().to_string(),
@@ -442,7 +439,7 @@ pub fn parser(
                 }
             }
         }
-        if let Ok(chjson) = json::parse(params) {
+        if let Ok(chjson) = json::parse(&html_input) {
             for each in chjson.members() {
                 for thread in each["threads"].members() {
                     let mut cnt = 0;
@@ -484,8 +481,9 @@ pub fn parser(
                                         sharedtypes::ScraperData {
                                             job: sharedtypes::JobScraper {
                                                 site: actual_params.job.site.to_string(),
-                                                param: Vec::new(),
-                                                original_param: threadurl,
+                                                param: vec![sharedtypes::ScraperParam::Url(
+                                                    threadurl,
+                                                )],
                                                 job_type: sharedtypes::DbJobType::Scraper,
                                             },
                                             system_data: scraper_data.system_data.clone(),
@@ -509,7 +507,7 @@ pub fn parser(
             .insert("Stop".to_string(), "Stop".to_string());
     }
 
-    Ok((out, scraper_data))
+    Ok(out)
 }
 ///
 /// Should this scraper handle anything relating to downloading.
