@@ -145,6 +145,7 @@ impl Main {
         // Sets default settings for db settings.
         main.db_open();
         if !first_time_load_flag {
+            dbg!("AAA");
             // Database Doesn't exist
             main.transaction_start();
             main.first_db();
@@ -1192,10 +1193,9 @@ impl Main {
     /// loads the commit number into memory
     ///
     pub fn db_commit_man_set(&mut self) {
-        self._dbcommitnum_static = self
-            .settings_get_name(&"DBCOMMITNUM".to_string())
-            .unwrap()
-            .num;
+        if let Some(num) = self.settings_get_name(&"DBCOMMITNUM".to_string()) {
+            self._dbcommitnum_static = num.num;
+        }
     }
 
     /// Adds a file into the db sqlite. Do this first.

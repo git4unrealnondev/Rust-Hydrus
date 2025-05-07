@@ -3,6 +3,7 @@ use scraper::Html;
 use scraper::Selector;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
+use std::collections::HashMap;
 use std::collections::HashSet;
 use std::time::Duration;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -359,6 +360,7 @@ pub fn on_start(parserscraper: &sharedtypes::GlobalPluginScraper) {
 
         let mut need_to_search = BTreeSet::new();
         let mut need_to_remove = BTreeSet::new();
+        let mut need_to_store = HashMap::new();
 
         let regex = Regex::new(REGEX_COLLECTIONS).unwrap();
         let mut cnt = 0;
@@ -374,6 +376,14 @@ pub fn on_start(parserscraper: &sharedtypes::GlobalPluginScraper) {
                             need_to_remove.insert(item_match.to_string());
                         } else {
                             need_to_search.insert(item_match.to_string());
+                            match need_to_store.get_mut(item_match) {
+                                None => {
+                                    need_to_store.insert(item_match.to_string(), vec![tagid]);
+                                }
+                                Some(storelist) => {
+                                    storelist.push(tagid);
+                                }
+                            }
                         }
                     }
                 }
@@ -384,14 +394,32 @@ pub fn on_start(parserscraper: &sharedtypes::GlobalPluginScraper) {
         // If a collection has updated but we've already scraped it then not my problem.
         need_to_search.retain(|e| !need_to_remove.contains(e));
 
-        for item in need_to_search {
-            client::log(format!("Adding job to scrape catbox collection: {}", item));
+        for item in need_to_search.iter() {
+            client::log(format!("Adding job to scrape catbox collection: {}", &item));
+
+            {
+                if let Some(tagidlist) = need_to_store.get(item) {
+                    // Should already exist in db.
+                    // let url_ns = client::namespace_put("Catbox Collection", None, false);
+
+                    let url_id =
+                        client::tag_add(item.to_string(), catbox_collection_nsid, true, None);
+                    for tagid in tagidlist {
+                        client::parents_put(sharedtypes::DbParentsObj {
+                            tag_id: url_id,
+                            relate_tag_id: *tagid,
+                            limit_to: None,
+                        });
+                    }
+                }
+            }
+
             client::job_add(
                 None,
                 0,
                 0,
                 "Catbox Collection".into(),
-                vec![sharedtypes::ScraperParam::Url(item)],
+                vec![sharedtypes::ScraperParam::Url(item.to_string())],
                 BTreeMap::new(),
                 BTreeMap::new(),
                 sharedtypes::DbJobsManager {
@@ -423,7 +451,15 @@ pub fn on_regex_match(
 
     out.push(sharedtypes::DBPluginOutputEnum::Add(vec![
         sharedtypes::DBPluginOutput {
-            tag: None,
+            tag: Some(vec![sharedtypes::DBPluginTagOut {
+                name: regex_match.to_string(),
+                namespace: "Catbox Collection".to_string(),
+                parents: Some(vec![sharedtypes::DbPluginParentsObj {
+                    tag_namespace_string: "Catbox Collection".to_string(),
+                    relate_namespace_id: tag_ns.to_string(),
+                    relate_tag_id: tag.to_string(),
+                }]),
+            }]),
             setting: None,
             relationship: None,
             parents: None,
