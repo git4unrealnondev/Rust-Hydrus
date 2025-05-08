@@ -908,6 +908,8 @@ pub enum CallbackCustomData {
     VUsize,
 }
 
+pub enum FileDownloadReturn {}
+
 /// Data that gets sent to a plugin
 #[derive(
     Debug, PartialEq, Eq, Hash, Serialize, bincode::Encode, bincode::Decode, Deserialize, Clone,

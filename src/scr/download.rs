@@ -1,5 +1,6 @@
 use crate::database::Main;
 use crate::globalload::GlobalLoad;
+use crate::logging::error_log;
 
 // extern crate urlparse;
 use super::sharedtypes;
@@ -226,8 +227,19 @@ pub fn dlfile_new(
             logging::info_log(&format!("Downloading: {} to: {}", &fileurlmatch, &location));
             let mut futureresult = client.get(url.as_ref()).send();
             loop {
-                match futureresult {
-                    Ok(_) => {
+                match &futureresult {
+                    Ok(result) => {
+                        if let Err(err) = result.error_for_status_ref() {
+                            if let Some(err_status) = err.status() {
+                                if err_status.is_client_error() {
+                                    logging::error_log(&format!(
+                                        "Stopping file download due to: {:?}",
+                                        err
+                                    ));
+                                    return None;
+                                }
+                            }
+                        }
                         break;
                     }
                     Err(_) => {
@@ -244,8 +256,9 @@ pub fn dlfile_new(
             let byte = futureresult.unwrap().bytes();
             // Error handling for dling a file. Waits 10 secs to retry
             match byte {
-                Ok(_) => {
-                    bytes = byte.unwrap();
+                Ok(out) => {
+                    bytes = out;
+
                     break;
                 }
                 Err(_) => {
@@ -309,7 +322,6 @@ pub fn dlfile_new(
         let mut unwrappydb = db.lock().unwrap();
         let source_url_ns_id = unwrappydb.create_default_source_url_ns_id();
         unwrappydb.enclave_determine_processing(file, bytes, &hash, source_url);
-        return None;
     }
 
     Some((hash, file_ext))
