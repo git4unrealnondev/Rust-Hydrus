@@ -271,6 +271,12 @@ impl Worker {
                             data.reptime = Some(*timestamp);
                             temp.jobs_decrement_count(&data, &scraper);
                             should_remove_original_job = false;
+
+                            // Updates the database with the "new" object. Will have the same ID
+                            // but time and reptime will be consistient to when we should run this
+                            // job next
+                            let unwrappydb = &mut db.lock().unwrap();
+                            unwrappydb.jobs_update_db(data);
                         }
                     }
 
