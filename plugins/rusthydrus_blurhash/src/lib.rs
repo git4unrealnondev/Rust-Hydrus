@@ -23,26 +23,27 @@ static PLUGIN_DESCRIPTION: &str = "Introduces Blurhash imaging support.";
 mod client;
 #[path = "../../../src/scr/sharedtypes.rs"]
 mod sharedtypes;
+
 #[no_mangle]
-pub fn return_info() -> sharedtypes::PluginInfo {
-    let callbackvec = vec![
-        sharedtypes::PluginCallback::Download,
-        sharedtypes::PluginCallback::Start,
+pub fn get_global_info() -> Vec<sharedtypes::GlobalPluginScraper> {
+    let mut main = sharedtypes::return_default_globalpluginparser();
+    main.name = PLUGIN_NAME.to_string();
+    main.version = 0;
+    main.storage_type = Some(sharedtypes::ScraperOrPlugin::Plugin(
+        sharedtypes::PluginInfo2 {
+            com_type: sharedtypes::PluginThreadType::SpawnInline,
+            com_channel: true,
+        },
+    ));
+    main.callbacks = vec![
+        sharedtypes::GlobalCallbacks::Start,
+        sharedtypes::GlobalCallbacks::Download,
     ];
-    sharedtypes::PluginInfo {
-        name: PLUGIN_NAME.to_string(),
-        description: PLUGIN_DESCRIPTION.to_string(),
-        version: 1.00,
-        api_version: 1.00,
-        callbacks: callbackvec,
-        communication: Some(sharedtypes::PluginSharedData {
-            thread: sharedtypes::PluginThreadType::Inline,
-            com_channel: Some(sharedtypes::PluginCommunicationChannel::Pipe(
-                "beans".to_string(),
-            )),
-        }),
-    }
+    let out = vec![main];
+
+    out
 }
+
 ///
 /// resizes img and inserts into db
 ///
@@ -123,17 +124,11 @@ pub fn on_start() {
     }
 
     // Gets the tags inside a namespace
-    let nids = match client::namespace_get_tagids(utable) {
-        None => HashSet::new(),
-        Some(set) => set,
-    };
-
+    let nids = client::namespace_get_tagids(utable);
     // Removes fileid if it contains our tag if it has the namespace for it.
     for each in nids {
-        if let Some(tag_id) = client::relationship_get_fileid(each) {
-            for tag in tag_id {
-                file_ids.remove(&tag);
-            }
+        for tag in client::relationship_get_fileid(each) {
+            file_ids.remove(&tag);
         }
     }
 
