@@ -1147,7 +1147,6 @@ pub fn db_upgrade_call_3(site: &Site) {
                                                 site_to_string(site).to_lowercase(),
                                                 client::tag_get_id(*tid_iter).unwrap().name
                                             ))],
-                                            sharedtypes::CommitType::StopOnNothing,
                                             BTreeMap::new(),
                                             BTreeMap::new(),
                                             sharedtypes::DbJobsManager {
