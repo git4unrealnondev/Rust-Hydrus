@@ -370,6 +370,7 @@ Worker: {id} JobId: {} -- While trying to parse parameters we got this error: {:
                                     url_string,
                                     &mut client,
                                     &ratelimiter_obj,
+                                    &id,
                                 ));
                                 st = match resp {
                                     Ok(respstring) => globalload::parser_call(
@@ -660,7 +661,21 @@ fn download_add_to_db(
     client: &Client,
     db: Arc<Mutex<database::Main>>,
     file: &mut sharedtypes::FileObject,
+    worker_id: &usize,
+    job_id: &usize,
 ) -> Option<usize> {
+    // Early exit for if the file is a dead url
+    {
+        let unwrappydb = &mut db.lock().unwrap();
+        if unwrappydb.check_dead_url(source) {
+            logging::info_log(&format!(
+                "Worker: {worker_id} JobID: {job_id} -- Skipping {} because it's a dead link.",
+                source
+            ));
+            return None;
+        }
+    }
+
     // Download file doesn't exist. URL doesn't exist in DB Will download
     let blopt;
     {
@@ -672,11 +687,13 @@ fn download_add_to_db(
             Some(globalload),
             &ratelimiter_obj,
             source,
+            worker_id,
+            job_id,
         );
     }
+
     match blopt {
-        None => None,
-        Some((hash, file_ext)) => {
+        download::FileReturnStatus::File((hash, file_ext)) => {
             let unwrappydb = &mut db.lock().unwrap();
 
             let ext_id = unwrappydb.extension_put_string(&file_ext);
@@ -693,9 +710,16 @@ fn download_add_to_db(
             let source_url_ns_id = unwrappydb.create_default_source_url_ns_id();
             let tagid = unwrappydb.tag_add(source, source_url_ns_id, true, None);
             unwrappydb.relationship_add(fileid, tagid, true);
-            Some(fileid)
+            return Some(fileid);
         }
+        download::FileReturnStatus::DeadUrl(dead_url) => {
+            let unwrappydb = &mut db.lock().unwrap();
+            unwrappydb.add_dead_url(&dead_url);
+        }
+        _ => {}
     }
+
+    None
 }
 
 /// Simple code to add jobs from a tag object
@@ -842,6 +866,8 @@ pub fn main_file_loop(
                     client,
                     db.clone(),
                     file,
+                    worker_id,
+                    job_id,
                 ) {
                     None => return,
                     Some(id) => id,
@@ -876,6 +902,8 @@ pub fn main_file_loop(
                             client,
                             db.clone(),
                             file,
+                            worker_id,
+                            job_id,
                         ) {
                             None => return,
                             Some(id) => id,

@@ -1,6 +1,5 @@
 use rayon::iter::IntoParallelRefIterator;
 use rayon::iter::ParallelIterator;
-use std::collections::HashSet;
 
 use blurhash::encode;
 use image::imageops::resize;

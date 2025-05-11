@@ -85,9 +85,14 @@ impl Main {
                 if self.check_table_exists("Jobs".to_string())
                     && !self.check_table_exists("Jobs_Old".to_string())
                 {
-                    logging::info_log(&"DB-Ugrade: Already processed Jobs table moving on.".to_string());
+                    logging::info_log(
+                        &"DB-Ugrade: Already processed Jobs table moving on.".to_string(),
+                    );
                 } else {
-                    logging::panic_log(&"DB IS IN WEIRD INCONSISTEINT STATE PLEASE ROLLBACK TO LATEST BACKUP.".to_string())
+                    logging::panic_log(
+                        &"DB IS IN WEIRD INCONSISTEINT STATE PLEASE ROLLBACK TO LATEST BACKUP."
+                            .to_string(),
+                    )
                 }
             }
             _ => {
@@ -95,7 +100,10 @@ impl Main {
                     "Weird table loading. Should be 5 or 7 for db upgrade. Pulled {}",
                     &jobs_cnt
                 ));
-                logging::panic_log(&"DB IS IN WEIRD INCONSISTEINT STATE PLEASE ROLLBACK TO LATEST BACKUP.".to_string());
+                logging::panic_log(
+                    &"DB IS IN WEIRD INCONSISTEINT STATE PLEASE ROLLBACK TO LATEST BACKUP."
+                        .to_string(),
+                );
             }
         }
         let tags_cnt = self.db_table_collumn_getnames(&"Tags".to_string()).len();
@@ -104,9 +112,14 @@ impl Main {
                 if self.check_table_exists("Tags".to_string())
                     && !self.check_table_exists("Tags_Old".to_string())
                 {
-                    logging::info_log(&"DB-Ugrade: Already processed Tags table moving on.".to_string());
+                    logging::info_log(
+                        &"DB-Ugrade: Already processed Tags table moving on.".to_string(),
+                    );
                 } else {
-                    logging::panic_log(&"DB IS IN WEIRD INCONSISTEINT STATE PLEASE ROLLBACK TO LATEST BACKUP.".to_string())
+                    logging::panic_log(
+                        &"DB IS IN WEIRD INCONSISTEINT STATE PLEASE ROLLBACK TO LATEST BACKUP."
+                            .to_string(),
+                    )
                 }
             }
             4 => {
@@ -151,7 +164,10 @@ impl Main {
                     "Weird tags table loading. Should be 3 or 4 for db upgrade. Was {}",
                     tags_cnt
                 ));
-                logging::panic_log(&"DB IS IN WEIRD INCONSISTEINT STATE PLEASE ROLLBACK TO LATEST BACKUP.".to_string());
+                logging::panic_log(
+                    &"DB IS IN WEIRD INCONSISTEINT STATE PLEASE ROLLBACK TO LATEST BACKUP."
+                        .to_string(),
+                );
             }
         }
         let tags_cnt = self.db_table_collumn_getnames(&"Parents".to_string()).len();
@@ -160,9 +176,14 @@ impl Main {
                 if self.check_table_exists("Parents".to_string())
                     && !self.check_table_exists("Parents_Old".to_string())
                 {
-                    logging::info_log(&"DB-Ugrade: Already processed Parents table moving on.".to_string());
+                    logging::info_log(
+                        &"DB-Ugrade: Already processed Parents table moving on.".to_string(),
+                    );
                 } else {
-                    logging::panic_log(&"DB IS IN WEIRD INCONSISTEINT STATE PLEASE ROLLBACK TO LATEST BACKUP.".to_string())
+                    logging::panic_log(
+                        &"DB IS IN WEIRD INCONSISTEINT STATE PLEASE ROLLBACK TO LATEST BACKUP."
+                            .to_string(),
+                    )
                 }
             }
             4 => {
@@ -206,7 +227,10 @@ impl Main {
                     "Weird parents table loading. Should be 3 or 4 for db upgrade. Was {}",
                     tags_cnt
                 ));
-                logging::panic_log(&"DB IS IN WEIRD INCONSISTEINT STATE PLEASE ROLLBACK TO LATEST BACKUP.".to_string());
+                logging::panic_log(
+                    &"DB IS IN WEIRD INCONSISTEINT STATE PLEASE ROLLBACK TO LATEST BACKUP."
+                        .to_string(),
+                );
             }
         }
         self.db_version_set(3);
@@ -545,5 +569,23 @@ impl Main {
 
         self.db_version_set(5);
         //self.vacuum();
+    }
+
+    ///
+    /// Handles the DB upgrade from five to six
+    ///
+    pub fn db_update_five_to_six(&mut self) {
+        logging::info_log(&"Backing up db this could be messy.".to_string());
+        self.backup_db();
+
+        // If table does not exist then create the dead source url tables
+        if !self.check_table_exists("dead_source_urls".to_string()) {
+            self.table_create(
+                &"dead_source_urls".to_string(),
+                &vec_of_strings!("id", "dead_url"),
+                &vec_of_strings!("INTEGER PRIMARY KEY", "TEXT NOT NULL"),
+            );
+        }
+        self.db_version_set(6);
     }
 }

@@ -103,6 +103,7 @@ pub async fn dltext_new(
     url_string: &String,
     client: &Client,
     ratelimiter_obj: &Arc<Mutex<Ratelimiter>>,
+    worker_id: &usize,
 ) -> Result<String, Box<dyn Error>> {
     // let mut ret: Vec<AHashMap<String, AHashMap<String, Vec`<String>`>>> =
     // Vec::new(); let ex = Executor::new(); let url =
@@ -121,7 +122,10 @@ pub async fn dltext_new(
         };
 
         // let requestit = Request::new(Method::GET, url); fut.push();
-        logging::info_log(&format!("Spawned web reach to: {}", &url_string));
+        logging::info_log(&format!(
+            "Worker: {} -- Spawned web reach to: {}",
+            worker_id, &url_string
+        ));
 
         // let futureresult = futures::executor::block_on(ratelimit_object.ready())
         // .unwrap()
@@ -196,6 +200,18 @@ pub fn hash_bytes(bytes: &Bytes, hash: &sharedtypes::HashesSupported) -> (String
     }
 }
 
+///
+/// Determines the file return status
+///
+pub enum FileReturnStatus {
+    // If a URL is dead (400+) error
+    DeadUrl(String),
+    // File hash,ext
+    File((String, String)),
+    // Other issue. Try again later
+    TryLater,
+}
+
 /// Downloads file to position
 pub fn dlfile_new(
     client: &Client,
@@ -205,7 +221,9 @@ pub fn dlfile_new(
     globalload: Option<Arc<Mutex<GlobalLoad>>>,
     ratelimiter_obj: &Arc<Mutex<Ratelimiter>>,
     source_url: &String,
-) -> Option<(String, String)> {
+    workerid: &usize,
+    jobid: &usize,
+) -> FileReturnStatus {
     let mut boolloop = true;
     let mut hash = String::new();
     let mut bytes: bytes::Bytes = Bytes::from(&b""[..]);
@@ -233,18 +251,18 @@ pub fn dlfile_new(
                             if let Some(err_status) = err.status() {
                                 if err_status.is_client_error() {
                                     logging::error_log(&format!(
-                                        "Stopping file download due to: {:?}",
+                                        "Worker: {workerid} JobID: {jobid} -- Stopping file download due to: {:?}",
                                         err
                                     ));
-                                    return None;
+                                    return FileReturnStatus::DeadUrl(source_url.clone());
                                 }
                             }
                         }
                         break;
                     }
                     Err(_) => {
-                        error!("Repeating: {}", &url);
-                        dbg!("Repeating: {}", &url);
+                        error!("Worker: {workerid} JobID: {jobid} -- Repeating: {}", &url);
+                        dbg!("Worker: {workerid} JobID: {jobid} -- Repeating: {}", &url);
                         let time_dur = Duration::from_secs(10);
                         thread::sleep(time_dur);
                         futureresult = client.get(url.as_ref()).send();
@@ -262,14 +280,22 @@ pub fn dlfile_new(
                     break;
                 }
                 Err(_) => {
-                    error!("Repeating: {} , Due to: {:?}", &url, &byte.as_ref().err());
-                    dbg!("Repeating: {} , Due to: {:?}", &url, &byte.as_ref().err());
+                    error!(
+                        "Worker: {workerid} JobID: {jobid} -- Repeating: {} , Due to: {:?}",
+                        &url,
+                        &byte.as_ref().err()
+                    );
+                    dbg!(
+                        "Worker: {workerid} JobID: {jobid} -- Repeating: {} , Due to: {:?}",
+                        &url,
+                        &byte.as_ref().err()
+                    );
                     let time_dur = Duration::from_secs(10);
                     thread::sleep(time_dur);
                 }
             }
             if cnt >= 3 {
-                return None;
+                return FileReturnStatus::TryLater;
             }
             cnt += 1;
         }
@@ -289,7 +315,7 @@ pub fn dlfile_new(
                 // Logging
                 if !status.1 {
                     error!(
-                        "Parser file: {} FAILED HASHCHECK: {} {}",
+                        "Worker: {workerid} JobID: {jobid} -- Parser file: {} FAILED HASHCHECK: {} {}",
                         &file.hash, status.0, status.1
                     );
                     cnt += 1;
@@ -297,7 +323,7 @@ pub fn dlfile_new(
                     // dbg!("Parser returned: {} Got: {}", &file.hash, status.0);
                 }
                 if cnt >= 3 {
-                    return None;
+                    return FileReturnStatus::TryLater;
                 }
                 boolloop = !status.1;
             }
@@ -323,8 +349,7 @@ pub fn dlfile_new(
         let source_url_ns_id = unwrappydb.create_default_source_url_ns_id();
         unwrappydb.enclave_determine_processing(file, bytes, &hash, source_url);
     }
-
-    Some((hash, file_ext))
+    FileReturnStatus::File((hash, file_ext))
 }
 
 /// Hashes file from location string with specified hash into the hash of the file.

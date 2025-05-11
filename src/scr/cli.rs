@@ -499,6 +499,8 @@ pub fn main(data: Arc<Mutex<database::Main>>, scraper: Arc<Mutex<GlobalLoad>>) {
                                                 None,
                                                 &ratelimiter_obj,
                                                 &dat.name.clone(),
+                                                &0,
+                                                &0,
                                             );
                                         }
                                     }
@@ -540,6 +542,8 @@ pub fn main(data: Arc<Mutex<database::Main>>, scraper: Arc<Mutex<GlobalLoad>>) {
                                                     None,
                                                     &ratelimiter_obj,
                                                     &dat.name.clone(),
+                                                    &0,
+                                                    &0,
                                                 );
                                             }
                                         }

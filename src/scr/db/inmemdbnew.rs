@@ -53,6 +53,19 @@ pub struct NewinMemDB {
     _relationship_file_tag: FnvHashMap<usize, FnvHashSet<usize>>,
     _relationship_tag_file: FnvHashMap<usize, FnvHashSet<usize>>,
     _relationship_dual: FnvHashSet<usize>,
+
+    file_enclave: FnvHashMap<usize, (String, usize)>,
+    file_enclave_action: FnvHashMap<usize, (String, sharedtypes::EnclaveAction)>,
+    file_enclave_action_reverse: FnvHashMap<String, usize>,
+    file_enclave_action_orderlist: FnvHashMap<usize, (usize, usize, usize)>,
+    file_enclave_condition:
+        FnvHashMap<usize, (sharedtypes::EnclaveAction, sharedtypes::EnclaveCondition)>,
+    file_enclave_condition_list: FnvHashMap<usize, (usize, Option<usize>, usize)>,
+    file_enclave_condition_list_reverse: FnvHashMap<(usize, usize), usize>,
+    file_enclave_condition_list_max: usize,
+    file_enclave_condition_max: usize,
+    file_enclave_action_max: usize,
+
     _file_location_count: usize,
     _tag_max: usize,
     _relationship_max: usize,
@@ -88,6 +101,16 @@ impl NewinMemDB {
             _namespace_id_tag: HashMap::default(),
             _relationship_tag_file: HashMap::default(),
             _relationship_file_tag: HashMap::default(),
+            file_enclave: HashMap::default(),
+            file_enclave_action: HashMap::default(),
+            file_enclave_action_reverse: HashMap::default(),
+            file_enclave_action_orderlist: HashMap::default(),
+            file_enclave_condition: HashMap::default(),
+            file_enclave_condition_list: HashMap::default(),
+            file_enclave_condition_list_reverse: HashMap::default(),
+            file_enclave_condition_list_max: 1,
+            file_enclave_condition_max: 1,
+            file_enclave_action_max: 1,
             _relationship_dual: HashSet::default(),
             _file_location_count: 0,
             _tag_max: 0,
@@ -1100,6 +1123,67 @@ impl NewinMemDB {
     pub fn jobs_get_all(&self) -> &HashMap<usize, sharedtypes::DbJobsObj> {
         &self._jobs_id_data
     }
+
+    ///
+    /// Returns the id of a conditional
+    ///
+    pub fn enclave_condition_link_get_id(
+        &self,
+        condition_id: &usize,
+        action_id: &usize,
+    ) -> Option<&usize> {
+        self.file_enclave_condition_list_reverse
+            .get(&(*condition_id, *action_id))
+    }
+
+    ///
+    /// Inserts into the db a conditional linkage for enclave
+    ///
+    pub fn enclave_condition_link_put(
+        &mut self,
+        condition_id: &usize,
+        action_id: &usize,
+        failed_enclave_id: Option<&usize>,
+    ) {
+        self.file_enclave_condition_list_reverse.insert(
+            (*condition_id, *action_id),
+            self.file_enclave_condition_list_max,
+        );
+        self.file_enclave_condition_list.insert(
+            self.file_enclave_condition_list_max,
+            (*condition_id, failed_enclave_id.copied(), *action_id),
+        );
+        self.file_enclave_condition_list_max += 1;
+    }
+
+    ///
+    /// Gets an id for an enclave_action
+    ///
+    pub fn enclave_action_get_id(&self, name: &String) -> Option<&usize> {
+        self.file_enclave_action_reverse.get(name)
+    }
+
+    ///
+    /// Inserts an enclave action into the db
+    ///
+    pub fn enclave_action_put(&mut self, name: &String, action: sharedtypes::EnclaveAction) {
+        // If we've already added the action name to db then exit
+        if self.enclave_action_get_id(name).is_some() {
+            return;
+        }
+
+        self.file_enclave_action
+            .insert(self.file_enclave_action_max, (name.clone(), action));
+        self.file_enclave_action_reverse
+            .insert(name.clone(), self.file_enclave_action_max);
+        self.file_enclave_action_max += 1;
+    }
+
+    pub fn enclave_action_order_enclave_get_list_id(&self, enclave_id: &usize) -> Vec<usize> {
+        let mut out = Vec::new();
+
+        out
+    }
 }
 
 #[cfg(test)]
@@ -1641,7 +1725,6 @@ mod inmemdb {
                 jobtype: sharedtypes::DbJobType::Params,
                 recreation: None,
             },
-            committype: None,
             isrunning: false,
             system_data: BTreeMap::new(),
             user_data: BTreeMap::new(),

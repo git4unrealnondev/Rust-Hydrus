@@ -9,7 +9,7 @@ use std::sync::Mutex;
 // use std::sync::{Arc, Mutex};
 use std::{thread, time};
 
-pub const VERS: usize = 5;
+pub const VERS: usize = 6;
 pub const DEFAULT_LOC_PLUGIN: &str = "plugins";
 pub const DEFAULT_LOC_SCRAPER: &str = "scrapers";
 

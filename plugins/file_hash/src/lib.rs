@@ -347,39 +347,39 @@ fn hash_file(hashtype: Supset, byte: &[u8]) -> Option<String> {
             hasher.update(byte);
 
             let hash = hex::encode(hasher.finalize());
-            return Some(hash);
+            Some(hash)
         }
         Supset::SHA1 => {
             let mut hasher = Sha1::new();
             hasher.update(byte);
             let hash = hex::encode(hasher.finalize());
-            return Some(hash);
+            Some(hash)
         }
         Supset::SHA256 => {
             let mut hasher = Sha256::new();
             hasher.update(byte);
             let hash = hex::encode(hasher.finalize());
-            return Some(hash);
+            Some(hash)
         }
         Supset::SHA512 => {
             let mut hasher = Sha512::new();
             hasher.update(byte);
             let hash = hex::encode(hasher.finalize());
-            return Some(hash);
+            Some(hash)
         }
         Supset::IPFSCID => {
             if let Ok(cid) = ipfs_cid::generate_cid_v0(byte) {
                 return Some(cid);
             }
 
-            return None;
+            None
         }
         Supset::IPFSCID1 => {
             if let Ok(cid) = ipfs_cid::generate_cid_v1(byte) {
                 return Some(cid);
             }
 
-            return None;
+            None
         }
         Supset::IMAGEHASH => {
             use image_hasher::BitOrder;

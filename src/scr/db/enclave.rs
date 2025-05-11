@@ -599,11 +599,9 @@ impl Main {
                 }
             })
             .unwrap();
-        for ids in row {
-            if let Ok(ids) = ids {
-                if !out.contains(&ids) {
-                    out.push(ids);
-                }
+        for ids in row.flatten() {
+            if !out.contains(&ids) {
+                out.push(ids);
             }
         }
 
@@ -611,10 +609,6 @@ impl Main {
 
         out
     }
-
-    ///
-    /// Gets enclave action order IDs based on file enclave id
-    ///
 
     ///
     /// Adds the conditional link between for a condition and it's priority in the enclave list

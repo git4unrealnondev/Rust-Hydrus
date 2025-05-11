@@ -341,6 +341,32 @@ impl Main {
         None
     }
 
+    ///
+    /// Adds a dead url into the db
+    ///
+    pub fn add_dead_url(&mut self, url: &String) {
+        let conn = self._conn.lock().unwrap();
+        let _ = conn
+            .execute(
+                "INSERT INTO dead_source_urls(dead_url) VALUES (?)",
+                params![url],
+            )
+            .unwrap();
+    }
+
+    ///
+    ///Checks if a url is dead
+    ///
+    pub fn check_dead_url(&self, url: &String) -> bool {
+        let conn = self._conn.lock().unwrap();
+        conn.query_row(
+            "SELECT id from dead_source_urls WHERE dead_url = ?",
+            params![url],
+            |row| Ok(row.get(0).unwrap_or(false)),
+        )
+        .unwrap_or(false)
+    }
+
     /// Adds the job to the inmemdb
     pub fn jobs_add_new_todb(&mut self, job: sharedtypes::DbJobsObj) {
         // let querya = query.split(' ').map(|s| s.to_string()).collect(); let wrap =
@@ -592,6 +618,12 @@ impl Main {
         self.table_create(&name, &keys, &vals);
 
         self.enclave_create_database_v5();
+
+        // Making dead urls Table
+        name = "dead_source_urls".to_string();
+        keys = vec_of_strings!["id", "dead_url"];
+        vals = vec_of_strings!["INTEGER PRIMARY KEY", "TEXT NOT NULL"];
+        self.table_create(&name, &keys, &vals);
 
         self.transaction_flush();
     }
@@ -909,6 +941,8 @@ impl Main {
                 self.db_update_three_to_four();
             } else if db_vers + 1 == 5 {
                 self.db_update_four_to_five();
+            } else if db_vers + 1 == 6 {
+                self.db_update_five_to_six();
             }
             logging::info_log(&format!("Finished upgrade to V{}.", db_vers));
             self.transaction_flush();
@@ -2277,7 +2311,6 @@ pub(crate) mod test_database {
             0,
             "".to_string(),
             vec![],
-            sharedtypes::CommitType::StopOnNothing,
             BTreeMap::new(),
             BTreeMap::new(),
             sharedtypes::DbJobsManager {
@@ -2293,7 +2326,6 @@ pub(crate) mod test_database {
             0,
             "yeet".to_string(),
             vec![],
-            sharedtypes::CommitType::StopOnNothing,
             BTreeMap::new(),
             BTreeMap::new(),
             sharedtypes::DbJobsManager {
@@ -2305,5 +2337,16 @@ pub(crate) mod test_database {
         dbg!(main.jobs_get_all());
         assert_eq!(main.jobs_get_max(), &2);
         assert!(main.jobs_get(&1).is_some());
+    }
+
+    #[test]
+    fn db_dead_jobs() {
+        let mut main = Main::new(Some("test1.db".to_string()), VERS);
+        main.add_dead_url(&"test".to_string());
+
+        assert!(main.check_dead_url(&"test".to_string()));
+        assert!(!main.check_dead_url(&"Null".to_string()));
+
+        std::fs::remove_file("test1.db").unwrap();
     }
 }

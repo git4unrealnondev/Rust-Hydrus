@@ -7,7 +7,6 @@ use regex::Regex;
 
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashSet};
-use std::fmt;
 #[cfg(feature = "clap")]
 use strum::IntoEnumIterator;
 #[cfg(feature = "clap")]

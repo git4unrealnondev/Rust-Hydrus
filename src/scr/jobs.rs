@@ -307,7 +307,6 @@ mod tests {
                 jobtype: crate::sharedtypes::DbJobType::Scraper,
                 recreation: None,
             },
-            committype: None,
             isrunning: false,
             system_data: BTreeMap::new(),
             user_data: BTreeMap::new(),
