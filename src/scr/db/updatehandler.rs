@@ -1,6 +1,7 @@
 use crate::database::Main;
 use crate::logging;
 use crate::sharedtypes;
+use crate::sharedtypes::{DEFAULT_CACHECHECK, DEFAULT_CACHETIME, DEFAULT_PRIORITY};
 use crate::vec_of_strings;
 use chrono::Utc;
 use eta::{Eta, TimeAcc};
@@ -586,6 +587,86 @@ impl Main {
                 &vec_of_strings!("INTEGER PRIMARY KEY", "TEXT NOT NULL"),
             );
         }
+
+        if self.check_table_exists("Jobs_Old".to_string()) {
+            self.db_drop_table(&"Jobs_Old".to_string());
+        }
+
+        if self.check_table_exists("Jobs".to_string()) {
+            self.alter_table(&"Jobs".to_string(), &"Jobs_Old".to_string());
+
+            let keys = &vec_of_strings!(
+                "id",
+                "time",
+                "reptime",
+                "priority",
+                "cachetime",
+                "cachechecktype",
+                "Manager",
+                "site",
+                "param",
+                "SystemData",
+                "UserData"
+            );
+            let vals = &vec_of_strings!(
+                "INTEGER PRIMARY KEY",
+                "INTEGER NOT NULL",
+                "INTEGER NOT NULL",
+                "INTEGER NOT NULL",
+                "INTEGER",
+                "INTEGER NOT NULL",
+                "TEXT NOT NULL",
+                "TEXT NOT NULL",
+                "TEXT NOT NULL",
+                "TEXT NOT NULL",
+                "TEXT NOT NULL"
+            );
+
+            self.table_create(&"Jobs".to_string(), keys, vals);
+
+            let conn = self._conn.lock().unwrap();
+
+            // Loads the Files into memory
+            // Creates storage id's for them
+            // Creates extension id's aswell
+            //
+            logging::info_log(&"Starting to process Jobs for DB V6 Upgrade".to_string());
+
+            let tag_sqlite_inp = "INSERT INTO Jobs VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+            let mut stmt = conn.prepare("SELECT * FROM Jobs_Old").unwrap();
+            let mut rows = stmt.query([]).unwrap();
+            while let Some(row) = rows.next().unwrap() {
+                let id: usize = row.get(0).unwrap();
+                let time: usize = row.get(1).unwrap();
+                let reptime: usize = row.get(2).unwrap();
+                let manager: String = row.get(3).unwrap();
+                let site: String = row.get(4).unwrap();
+                let param: String = row.get(5).unwrap();
+                let systemdata: String = row.get(7).unwrap();
+                let userdata: String = row.get(8).unwrap();
+
+                logging::info_log(&format!("Adding JobId: {}", &id));
+                conn.execute(
+                    tag_sqlite_inp,
+                    params![
+                        id,
+                        time,
+                        reptime,
+                        DEFAULT_PRIORITY,
+                        serde_json::to_string(&DEFAULT_CACHETIME).unwrap(),
+                        serde_json::to_string(&DEFAULT_CACHECHECK).unwrap(),
+                        manager,
+                        site,
+                        param,
+                        systemdata,
+                        userdata
+                    ],
+                )
+                .unwrap();
+            }
+        }
+
+        self.db_drop_table(&"Jobs_Old".to_string());
         self.db_version_set(6);
     }
 }

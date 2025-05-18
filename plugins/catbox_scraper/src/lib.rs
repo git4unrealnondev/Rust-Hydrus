@@ -17,6 +17,9 @@ use crate::sharedtypes::DEFAULT_PRIORITY;
 pub const REGEX_COLLECTIONS: &str =
     "(http(s)?://www.|((www.|http(s)?://)))catbox.moe/c/[a-z0-9]{6}";
 
+// Time in seconds to cache the result
+pub const DEFAULT_CACHE: Option<usize> = Some(600);
+
 #[macro_export]
 macro_rules! vec_of_strings {
     ($($x:expr),*) => (vec![$($x.to_string()),*]);
@@ -413,20 +416,16 @@ pub fn on_start(parserscraper: &sharedtypes::GlobalPluginScraper) {
                     }
                 }
             }
-
-            client::job_add(
-                None,
-                0,
-                0,
-                "Catbox Collection".into(),
-                vec![sharedtypes::ScraperParam::Url(item.to_string())],
-                BTreeMap::new(),
-                BTreeMap::new(),
-                sharedtypes::DbJobsManager {
-                    jobtype: sharedtypes::DbJobType::Scraper,
-                    recreation: None,
-                },
-            );
+            let mut job = sharedtypes::return_default_jobsobj();
+            job.site = "Catbox Collection".into();
+            job.jobmanager = sharedtypes::DbJobsManager {
+                jobtype: sharedtypes::DbJobType::Scraper,
+                recreation: None,
+            };
+            job.param = vec![sharedtypes::ScraperParam::Url(item.to_string())];
+            job.cachetime = DEFAULT_CACHE;
+            job.cachechecktype = sharedtypes::JobCacheType::Param;
+            client::job_add(job);
         }
         client::log(
             "Finished running scrape catbox collection job. Telling DB to not run this again."
@@ -449,6 +448,16 @@ pub fn on_regex_match(
         return out;
     }
 
+    let mut job = sharedtypes::return_default_jobsobj();
+    job.site = "catbox album".to_string();
+    job.param = vec![sharedtypes::ScraperParam::Url(regex_match.to_string())];
+    job.jobmanager = sharedtypes::DbJobsManager {
+        jobtype: sharedtypes::DbJobType::Scraper,
+        recreation: None,
+    };
+    job.cachetime = DEFAULT_CACHE;
+    job.cachechecktype = sharedtypes::JobCacheType::Param;
+
     out.push(sharedtypes::DBPluginOutputEnum::Add(vec![
         sharedtypes::DBPluginOutput {
             tag: Some(vec![sharedtypes::DBPluginTagOut {
@@ -463,21 +472,7 @@ pub fn on_regex_match(
             setting: None,
             relationship: None,
             parents: None,
-            jobs: Some(vec![sharedtypes::DbJobsObj {
-                id: 0,
-                time: 0,
-                reptime: Some(0),
-
-                site: "catbox album".to_string(),
-                param: vec![sharedtypes::ScraperParam::Url(regex_match.to_string())],
-                jobmanager: sharedtypes::DbJobsManager {
-                    jobtype: sharedtypes::DbJobType::Scraper,
-                    recreation: None,
-                },
-                isrunning: false,
-                system_data: BTreeMap::new(),
-                user_data: BTreeMap::new(),
-            }]),
+            jobs: Some(vec![job]),
             namespace: None,
             file: None,
         },

@@ -1,4 +1,5 @@
 use crate::database;
+use crate::database::Main;
 use crate::globalload::GlobalLoad;
 use crate::logging;
 use crate::sharedtypes;
@@ -36,19 +37,18 @@ impl Jobs {
     pub fn debug(&self) {
         dbg!(&self.site_job, &self.previously_seen);
     }
+
     ///
-    /// Adds job into the storage
+    /// Actual job adding logic. Only way to get around Mutex lock of the DB when regex gets
+    /// called.
     ///
-    pub fn jobs_add(
+    fn jobs_add_internal(
         &mut self,
         scraper: sharedtypes::GlobalPluginScraper,
-        id: Option<usize>,
         dbjobsobj: sharedtypes::DbJobsObj,
+        db: &mut Main,
     ) {
         let mut dbjobsobj = dbjobsobj;
-        if let Some(id) = id {
-            dbjobsobj.id = id;
-        }
 
         let obj = PreviouslySeenObj {
             site: dbjobsobj.site.clone(),
@@ -58,27 +58,33 @@ impl Jobs {
         };
 
         if let Some(list) = self.previously_seen.get(&scraper) {
+            // If we match directly then we should be good
             if list.contains(&obj) {
                 return;
+            }
+
+            for job_to_check in list {
+                match dbjobsobj.cachechecktype {
+                    sharedtypes::JobCacheType::TimeReptimeParam => {}
+                    sharedtypes::JobCacheType::Param => {
+                        dbg!(&job_to_check.params, &dbjobsobj.param);
+                        if job_to_check.params == dbjobsobj.param {
+                            dbg!("SKIPPING");
+                            return;
+                        }
+                    }
+                }
             }
         }
 
         if time_func::time_secs() >= dbjobsobj.time + dbjobsobj.reptime.unwrap() {
-            if id.is_none() {
-                let mut unwrappy = self.db.lock().unwrap();
-                let id = unwrappy.jobs_add(
-                    None,
-                    dbjobsobj.time,
-                    dbjobsobj.reptime.unwrap(),
-                    dbjobsobj.site.clone(),
-                    dbjobsobj.param.clone(),
-                    dbjobsobj.system_data.clone(),
-                    dbjobsobj.user_data.clone(),
-                    dbjobsobj.jobmanager.clone(),
-                );
+            if dbjobsobj.id.is_none() {
+                let mut temp = dbjobsobj.clone();
+                temp.id = None;
+                let id = db.jobs_add_new(temp);
 
                 // Updates the ID field with something from the db
-                dbjobsobj.id = id;
+                dbjobsobj.id = Some(id);
                 crate::logging::info_log(&format!("Adding job: {:?}", &dbjobsobj));
             }
 
@@ -103,6 +109,26 @@ impl Jobs {
                 }
             }
         }
+    }
+
+    pub fn jobs_add_nolock(
+        &mut self,
+        scraper: sharedtypes::GlobalPluginScraper,
+        dbjobsobj: sharedtypes::DbJobsObj,
+        db: &mut Main,
+    ) {
+        self.jobs_add_internal(scraper, dbjobsobj, db);
+    }
+
+    ///
+    /// Adds job into the storage
+    ///
+    pub fn jobs_add(
+        &mut self,
+        scraper: sharedtypes::GlobalPluginScraper,
+        dbjobsobj: sharedtypes::DbJobsObj,
+    ) {
+        self.jobs_add_internal(scraper, dbjobsobj, &mut self.db.clone().lock().unwrap());
     }
 
     ///
@@ -138,7 +164,7 @@ impl Jobs {
             for job in job_list_static {
                 if job.id == data.id && job_list.remove(&job) {
                     let mut db = self.db.lock().unwrap();
-                    db.del_from_jobs_byid(&job.id);
+                    db.del_from_jobs_byid(job.id.as_ref());
                 }
             }
         }
@@ -258,7 +284,7 @@ impl Jobs {
         for (scraper, id, job) in jobs_vec {
             hashjobs.remove(&id);
 
-            self.jobs_add(scraper.clone(), Some(job.id), job.clone());
+            self.jobs_add(scraper.clone(), job.clone());
         }
     }
 }
@@ -298,9 +324,12 @@ mod tests {
     ///
     fn return_dbjobsobj() -> DbJobsObj {
         crate::sharedtypes::DbJobsObj {
-            id: 0,
+            id: Some(0),
             time: 0,
             reptime: Some(1),
+            priority: sharedtypes::DEFAULT_PRIORITY,
+            cachetime: sharedtypes::DEFAULT_CACHETIME,
+            cachechecktype: sharedtypes::DEFAULT_CACHECHECK,
             site: "test".to_string(),
             param: vec![],
             jobmanager: crate::sharedtypes::DbJobsManager {
@@ -322,8 +351,8 @@ mod tests {
         let scraper = sharedtypes::return_default_globalpluginparser();
 
         let dbjobsobj = return_dbjobsobj();
-        job.jobs_add(scraper.clone(), Some(0), dbjobsobj.clone());
-        job.jobs_add(scraper.clone(), Some(0), dbjobsobj);
+        job.jobs_add(scraper.clone(), dbjobsobj.clone());
+        job.jobs_add(scraper.clone(), dbjobsobj);
         assert_eq!(job.site_job.get(&scraper).unwrap().len(), 1);
         assert_eq!(job.previously_seen.get(&scraper).unwrap().len(), 1);
 
@@ -340,13 +369,13 @@ mod tests {
         let scraper = sharedtypes::return_default_globalpluginparser();
 
         let dbjobsobj = return_dbjobsobj();
-        job.jobs_add(scraper.clone(), Some(0), dbjobsobj.clone());
+        job.jobs_add(scraper.clone(), dbjobsobj.clone());
         assert_eq!(job.site_job.get(&scraper).unwrap().len(), 1);
         assert_eq!(job.previously_seen.get(&scraper).unwrap().len(), 1);
         job.jobs_remove_dbjob(&scraper, &dbjobsobj);
 
         let unwrappy = job.db.lock().unwrap();
-
+        dbg!(unwrappy.jobs_get_all(), &dbjobsobj);
         assert_eq!(unwrappy.jobs_get_all().keys().len(), 0);
         assert_eq!(job.site_job.get(&scraper).unwrap().len(), 0);
     }

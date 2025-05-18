@@ -345,26 +345,27 @@ impl Main {
     /// Adds a dead url into the db
     ///
     pub fn add_dead_url(&mut self, url: &String) {
-        let conn = self._conn.lock().unwrap();
-        let _ = conn
-            .execute(
-                "INSERT INTO dead_source_urls(dead_url) VALUES (?)",
-                params![url],
-            )
-            .unwrap();
+        self.add_dead_url_sql(url);
+        self.add_dead_url_internal(url.to_string());
+    }
+
+    fn add_dead_url_internal(&mut self, url: String) {
+        self._inmemdb.add_dead_source_url(url);
     }
 
     ///
     ///Checks if a url is dead
     ///
     pub fn check_dead_url(&self, url: &String) -> bool {
-        let conn = self._conn.lock().unwrap();
+        self._inmemdb.does_dead_source_exist(url)
+
+        /*let conn = self._conn.lock().unwrap();
         conn.query_row(
             "SELECT id from dead_source_urls WHERE dead_url = ?",
             params![url],
             |row| Ok(row.get(0).unwrap_or(false)),
         )
-        .unwrap_or(false)
+        .unwrap_or(false)*/
     }
 
     /// Adds the job to the inmemdb
@@ -601,20 +602,33 @@ impl Main {
 
         // Making Jobs Table
         name = "Jobs".to_string();
-        keys = vec_of_strings![
+        keys = vec_of_strings!(
             "id",
             "time",
             "reptime",
+            "priority",
+            "cachetime",
+            "cachechecktype",
             "Manager",
             "site",
             "param",
-            "CommitType",
             "SystemData",
             "UserData"
-        ];
-        vals = vec_of_strings![
-            "INTEGER", "INTEGER", "INTEGER", "TEXT", "TEXT", "TEXT", "TEXT", "TEXT", "TEXT"
-        ];
+        );
+        vals = vec_of_strings!(
+            "INTEGER PRIMARY KEY",
+            "INTEGER NOT NULL",
+            "INTEGER NOT NULL",
+            "INTEGER NOT NULL",
+            "INTEGER",
+            "INTEGER NOT NULL",
+            "TEXT NOT NULL",
+            "TEXT NOT NULL",
+            "TEXT NOT NULL",
+            "TEXT NOT NULL",
+            "TEXT NOT NULL"
+        );
+
         self.table_create(&name, &keys, &vals);
 
         self.enclave_create_database_v5();
@@ -991,6 +1005,9 @@ impl Main {
                 sharedtypes::LoadDBTable::Tags => {
                     self.load_tags();
                 }
+                sharedtypes::LoadDBTable::DeadSourceUrls => {
+                    self.load_dead_urls();
+                }
                 sharedtypes::LoadDBTable::All => {
                     self.load_table(&sharedtypes::LoadDBTable::Tags);
                     self.load_table(&sharedtypes::LoadDBTable::Files);
@@ -1154,20 +1171,29 @@ impl Main {
         if let Ok(mut con) = temp {
             let jobs = con
                 .query_map([], |row| {
-                    let manager: String = row.get(3).unwrap();
+                    let id = row.get(0).unwrap();
+                    let time = row.get(1).unwrap();
+                    let reptime = row.get(2).unwrap();
+                    let priority = row.get(3).unwrap();
+                    let cachetime = row.get(4).unwrap_or_default();
+                    let cachechecktype: String = row.get(5).unwrap();
+                    let manager: String = row.get(6).unwrap();
                     let man = serde_json::from_str(&manager).unwrap();
-                    let system_data_string: String = row.get(7).unwrap();
-                    let user_data_string: String = row.get(8).unwrap();
-                    let param_string: String = row.get(5).unwrap();
+                    let site = row.get(7).unwrap();
+                    let param: String = row.get(8).unwrap();
+                    let system_data_string: String = row.get(9).unwrap();
+                    let user_data_string: String = row.get(10).unwrap();
                     let system_data = serde_json::from_str(&system_data_string).unwrap();
                     let user_data = serde_json::from_str(&user_data_string).unwrap();
-                    let commitstr: String = row.get(6).unwrap();
                     Ok(sharedtypes::DbJobsObj {
-                        id: row.get(0).unwrap(),
-                        time: row.get(1).unwrap(),
-                        reptime: row.get(2).unwrap(),
-                        site: row.get(4).unwrap(),
-                        param: serde_json::from_str(&param_string).unwrap(),
+                        id,
+                        time,
+                        reptime,
+                        priority,
+                        cachetime,
+                        cachechecktype: serde_json::from_str(&cachechecktype).unwrap(),
+                        site,
+                        param: serde_json::from_str(&param).unwrap(),
                         jobmanager: man,
                         isrunning: false,
                         user_data,
@@ -1500,41 +1526,50 @@ impl Main {
 
     /// Adds a job to sql
     fn jobs_add_sql(&mut self, data: &sharedtypes::DbJobsObj) {
-        let inp = "INSERT INTO Jobs VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)";
-        let _out = self._conn.borrow_mut().lock().unwrap().execute(
-            inp,
-            params![
-                data.id.to_string(),
-                data.time.to_string(),
-                data.reptime.unwrap().to_string(),
-                serde_json::to_string(&data.jobmanager).unwrap(),
-                data.site,
-                serde_json::to_string(&data.param).unwrap(),
-                "",
-                serde_json::to_string(&data.system_data).unwrap(),
-                serde_json::to_string(&data.user_data).unwrap()
-            ],
-        );
+        let inp = "INSERT INTO Jobs VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        self._conn
+            .borrow_mut()
+            .lock()
+            .unwrap()
+            .execute(
+                inp,
+                params![
+                    data.id.unwrap().to_string(),
+                    data.time.to_string(),
+                    data.reptime.unwrap().to_string(),
+                    data.priority.to_string(),
+                    serde_json::to_string(&data.cachetime).unwrap(),
+                    serde_json::to_string(&data.cachechecktype).unwrap(),
+                    serde_json::to_string(&data.jobmanager).unwrap(),
+                    data.site,
+                    serde_json::to_string(&data.param).unwrap(),
+                    serde_json::to_string(&data.system_data).unwrap(),
+                    serde_json::to_string(&data.user_data).unwrap(),
+                ],
+            )
+            .unwrap();
         self.db_commit_man();
     }
 
     /// Updates job by id
     fn jobs_update_by_id(&mut self, data: &sharedtypes::DbJobsObj) {
         let inp =
-            "UPDATE Jobs SET id=?, time=?, reptime=?, Manager=?, site=?, param=?, CommitType=?, SystemData=?, UserData=? WHERE id = ?";
+            "UPDATE Jobs SET id=?, time=?, reptime=?, Manager=?, priority=?,cachetime=?,cachechecktype=?, site=?, param=?, SystemData=?, UserData=? WHERE id = ?";
         let _out = self._conn.borrow_mut().lock().unwrap().execute(
             inp,
             params![
-                data.id.to_string(),
+                data.id.unwrap().to_string(),
                 data.time.to_string(),
                 data.reptime.unwrap().to_string(),
+                data.priority.to_string(),
+                serde_json::to_string(&data.cachetime).unwrap(),
+                serde_json::to_string(&data.cachechecktype).unwrap(),
                 serde_json::to_string(&data.jobmanager).unwrap(),
                 data.site,
                 serde_json::to_string(&data.param).unwrap(),
-                "",
                 serde_json::to_string(&data.system_data).unwrap(),
                 serde_json::to_string(&data.user_data).unwrap(),
-                data.id.to_string()
+                data.id.unwrap().to_string()
             ],
         );
         self.db_commit_man();
@@ -1549,6 +1584,9 @@ impl Main {
         id: Option<usize>,
         time: usize,
         reptime: usize,
+        priority: usize,
+        cachetime: Option<usize>,
+        cachechecktype: sharedtypes::JobCacheType,
         site: String,
         param: Vec<ScraperParam>,
         system_data: BTreeMap<String, String>,
@@ -1571,9 +1609,12 @@ impl Main {
         }
 
         let jobs_obj: sharedtypes::DbJobsObj = sharedtypes::DbJobsObj {
-            id,
+            id: Some(id),
             time,
             reptime: Some(reptime),
+            priority,
+            cachetime,
+            cachechecktype,
             site: site.clone(),
             param: param.clone(),
             jobmanager: jobsmanager.clone(),
@@ -1589,7 +1630,27 @@ impl Main {
     }
 
     pub fn jobs_add_new(&mut self, dbjobsobj: sharedtypes::DbJobsObj) -> usize {
-        todo!()
+        let mut dbjobsobj = dbjobsobj.clone();
+        let id = match dbjobsobj.id {
+            None => *self.jobs_get_max(),
+            Some(id) => id,
+        };
+
+        for each in self.jobs_get_all() {
+            if dbjobsobj.time == each.1.time
+                && dbjobsobj.reptime == each.1.reptime
+                && dbjobsobj.site == each.1.site
+                && dbjobsobj.param == each.1.param
+            {
+                return id;
+            }
+        }
+
+        dbjobsobj.id = Some(id);
+
+        self.jobs_update_db(dbjobsobj);
+
+        id
     }
 
     /// Wrapper for inmemdb insert.
@@ -1799,9 +1860,11 @@ impl Main {
     }*/
 
     /// Removes a job from the database by id. Removes from both memdb and sql.
-    pub fn del_from_jobs_byid(&mut self, id: &usize) {
-        self.del_from_jobs_inmemdb(id);
-        self.del_from_jobs_table_sql_better(id);
+    pub fn del_from_jobs_byid(&mut self, id: Option<&usize>) {
+        if let Some(id) = id {
+            self.del_from_jobs_inmemdb(id);
+            self.del_from_jobs_table_sql_better(id);
+        }
     }
 
     /// Removes job from inmemdb Removes by id
@@ -2309,6 +2372,9 @@ pub(crate) mod test_database {
             None,
             0,
             0,
+            sharedtypes::DEFAULT_PRIORITY,
+            sharedtypes::DEFAULT_CACHETIME,
+            sharedtypes::DEFAULT_CACHECHECK,
             "".to_string(),
             vec![],
             BTreeMap::new(),
@@ -2324,6 +2390,9 @@ pub(crate) mod test_database {
             None,
             0,
             0,
+            sharedtypes::DEFAULT_PRIORITY,
+            sharedtypes::DEFAULT_CACHETIME,
+            sharedtypes::DEFAULT_CACHECHECK,
             "yeet".to_string(),
             vec![],
             BTreeMap::new(),

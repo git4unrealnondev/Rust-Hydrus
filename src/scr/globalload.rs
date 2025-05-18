@@ -5,10 +5,10 @@ use crate::{
     sharedtypes::{self, GlobalPluginScraper},
 };
 use libloading::Library;
+use std::sync::RwLock;
 use std::sync::{Arc, Mutex};
 use std::{collections::HashMap, path::Path, thread};
 use std::{path::PathBuf, thread::JoinHandle};
-
 ///
 /// Runs the on_start callback
 ///
@@ -46,7 +46,8 @@ pub fn parser_call(
     scraper: &GlobalPluginScraper,
 ) -> Result<sharedtypes::ScraperObject, sharedtypes::ScraperReturn> {
     let scrapermanager = globalload.lock().unwrap();
-    if let Some(scraper_library) = scrapermanager.library_get(scraper) {
+    if let Some(scraper_library_rwlock) = scrapermanager.library_get(scraper) {
+        let scraper_library = scraper_library_rwlock.clone().read().unwrap();
         let temp: libloading::Symbol<
             unsafe extern "C" fn(
                 &String,
@@ -74,7 +75,6 @@ fn c_regex_match(
     scraper: &GlobalPluginScraper,
     jobmanager: Arc<Mutex<Jobs>>,
 ) {
-    dbg!(tag, tag_ns, regex_match);
     let output;
     unsafe {
         let plugindatafunc: libloading::Symbol<
@@ -127,12 +127,13 @@ pub fn url_dump(
     }
 
     for lib in libstorage {
+        let library = lib.clone().read().unwrap();
         let temp: libloading::Symbol<
             unsafe extern "C" fn(
                 &Vec<sharedtypes::ScraperParam>,
                 &sharedtypes::ScraperData,
             ) -> Vec<(String, sharedtypes::ScraperData)>,
-        > = unsafe { lib.get(b"url_dump\0")? };
+        > = unsafe { library.get(b"url_dump\0")? };
         for item in unsafe { temp(params, scraperdata) } {
             out.push(item);
         }
@@ -258,10 +259,11 @@ pub fn on_start(libloading: &libloading::Library, site_struct: &sharedtypes::Glo
 /// This function gets called after a DB upgrade
 ///
 pub fn db_upgrade_call(
-    libloading: &libloading::Library,
+    libloading: &RwLock<libloading::Library>,
     db_version: &usize,
     site_struct: &sharedtypes::GlobalPluginScraper,
 ) {
+    let libloading = libloading.clone().read().unwrap();
     let temp: libloading::Symbol<unsafe extern "C" fn(&usize, &sharedtypes::GlobalPluginScraper)> =
         match unsafe { libloading.get(b"db_upgrade_call\0") } {
             Err(err) => {
@@ -389,7 +391,6 @@ fn parse_plugin_output_andmain(
                     if let Some(temp) = names.namespace {
                         for namespace in temp {
                             // IF Valid ID && Name && Description info are valid then we have a valid namespace id to pull
-                            // dbg!(&namespace);
                             namespace_id =
                                 Some(db.namespace_add(namespace.name, namespace.description, true));
                         }
@@ -427,7 +428,6 @@ fn parse_plugin_output_andmain(
                         for tags in temp {
                             let namespace_id = db.namespace_get(&tags.namespace).cloned();
                             //match namespace_id {}
-                            //dbg!(&tags);
                             if tags.parents.is_none() && namespace_id.is_some() {
                                 db.tag_add(&tags.name, namespace_id.unwrap(), true, None);
                             //                                    println!("plugins323 making tag: {}", tags.name);
@@ -451,17 +451,10 @@ fn parse_plugin_output_andmain(
                     }
 
                     if let Some(temp) = names.jobs {
+                        let mut jobmanager = jobmanager.lock().unwrap();
                         for job in temp {
-                            db.jobs_add(
-                                None,
-                                job.time,
-                                job.reptime.unwrap_or(0),
-                                job.site,
-                                job.param,
-                                job.system_data,
-                                job.user_data,
-                                job.jobmanager,
-                            );
+                            jobmanager.jobs_add_nolock(scraper.clone(), job, db);
+                            //db.jobs_add_new(job);
                         }
                     }
                     if let Some(temp) = names.relationship {
@@ -496,7 +489,7 @@ pub struct GlobalLoad {
     callback_cross: HashMap<sharedtypes::GlobalPluginScraper, Vec<sharedtypes::CallbackInfo>>,
     sites: HashMap<sharedtypes::GlobalPluginScraper, Vec<String>>,
     library_path: HashMap<sharedtypes::GlobalPluginScraper, PathBuf>,
-    library_lib: HashMap<sharedtypes::GlobalPluginScraper, libloading::Library>,
+    library_lib: HashMap<sharedtypes::GlobalPluginScraper, RwLock<libloading::Library>>,
     default_load: LoadableType,
     thread: HashMap<sharedtypes::GlobalPluginScraper, JoinHandle<()>>,
     ipc_server: Option<JoinHandle<()>>,
@@ -690,7 +683,10 @@ impl GlobalLoad {
     ///
     /// Returns a Library if it exists
     ///
-    pub fn library_get(&self, global: &sharedtypes::GlobalPluginScraper) -> Option<&Library> {
+    pub fn library_get(
+        &self,
+        global: &sharedtypes::GlobalPluginScraper,
+    ) -> Option<&RwLock<Library>> {
         self.library_lib.get(global)
     }
 
@@ -704,7 +700,7 @@ impl GlobalLoad {
     ///
     /// Returns the libraries raw
     ///
-    pub fn library_get_raw(&self) -> &HashMap<GlobalPluginScraper, Library> {
+    pub fn library_get_raw(&self) -> &HashMap<GlobalPluginScraper, RwLock<Library>> {
         &self.library_lib
     }
 
@@ -955,7 +951,7 @@ impl GlobalLoad {
                 unsafe {
                     lib = libloading::Library::new(path).unwrap();
                 }
-                self.library_lib.insert(global, lib);
+                self.library_lib.insert(global, RwLock::new(lib));
             }
         }
     }
@@ -1029,7 +1025,7 @@ impl GlobalLoad {
         }
     }
 
-    pub fn filter_sites_return_lib(&self, site: &String) -> Option<&Library> {
+    pub fn filter_sites_return_lib(&self, site: &String) -> Option<&RwLock<Library>> {
         for scraper in self.scraper_get().iter() {
             if let Some(ref storage_type) = scraper.storage_type {
                 if let sharedtypes::ScraperOrPlugin::Scraper(ref scraperinfo) = storage_type {
@@ -1047,7 +1043,8 @@ impl GlobalLoad {
 /// Returns filehashes that have to be regenned.
 /// I don't think this gets used?
 ///
-pub fn scraper_file_regen(libloading: &libloading::Library) -> sharedtypes::ScraperFileRegen {
+pub fn scraper_file_regen(lib: &RwLock<libloading::Library>) -> sharedtypes::ScraperFileRegen {
+    let libloading = lib.clone().read().unwrap();
     let temp: libloading::Symbol<unsafe extern "C" fn() -> sharedtypes::ScraperFileRegen> =
         unsafe { libloading.get(b"scraper_file_regen\0").unwrap() };
     unsafe { temp() }
@@ -1056,9 +1053,10 @@ pub fn scraper_file_regen(libloading: &libloading::Library) -> sharedtypes::Scra
 /// Used to generate a download link given the input data
 ///
 pub fn scraper_file_return(
-    libloading: &libloading::Library,
+    lib: &RwLock<libloading::Library>,
     regen: &sharedtypes::ScraperFileInput,
 ) -> sharedtypes::SubTag {
+    let libloading = lib.clone().read().unwrap();
     let temp: libloading::Symbol<
         unsafe extern "C" fn(&sharedtypes::ScraperFileInput) -> sharedtypes::SubTag,
     > = unsafe { libloading.get(b"scraper_file_return\0").unwrap() };

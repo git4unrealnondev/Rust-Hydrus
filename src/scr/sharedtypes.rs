@@ -17,6 +17,29 @@ use strum_macros::{Display, EnumString};
 // Default priority for a scraper
 pub const DEFAULT_PRIORITY: usize = 5;
 
+// Default cache time for a job.
+// If its None then do not cache the job
+// If the cachetime is greq then zero we'll add the job to a local cache
+// If the cachetime is zero it will be only valid for the job run
+pub const DEFAULT_CACHETIME: Option<usize> = None;
+pub const DEFAULT_CACHECHECK: JobCacheType = JobCacheType::TimeReptimeParam;
+
+///
+/// Job cache chcekr type. When a job gets added into a DB this field will determine what needs to be done
+/// to check if we should add this into the DB.
+///
+/// Note a direct match is also performed and if the job is seen then we ignore it.
+///
+#[derive(
+    Debug, Hash, Eq, PartialEq, Clone, Serialize, bincode::Encode, bincode::Decode, Deserialize,
+)]
+pub enum JobCacheType {
+    // Checks the time, reptime and param fields. If these match other jobs then we don't add
+    TimeReptimeParam,
+    // Just checks the params field
+    Param,
+}
+
 ///
 /// Manages the conditions that determines which enclave should trigger
 ///
@@ -217,6 +240,26 @@ pub fn return_default_globalpluginparser() -> GlobalPluginScraper {
     }
 }
 
+pub fn return_default_jobsobj() -> DbJobsObj {
+    DbJobsObj {
+        id: None,
+        time: 0,
+        reptime: Some(0),
+        priority: DEFAULT_PRIORITY,
+        cachetime: DEFAULT_CACHETIME,
+        cachechecktype: DEFAULT_CACHECHECK,
+        site: "".to_string(),
+        param: Vec::new(),
+        jobmanager: DbJobsManager {
+            jobtype: DbJobType::NoScrape,
+            recreation: None,
+        },
+        isrunning: false,
+        system_data: BTreeMap::new(),
+        user_data: BTreeMap::new(),
+    }
+}
+
 /// Determines how to run a function
 #[derive(Debug, Clone, Eq, Hash, PartialEq)]
 #[cfg_attr(feature = "clap", derive(EnumIter, Display))]
@@ -259,6 +302,9 @@ pub enum LoadDBTable {
     Settings,
     // Tags storage table
     Tags,
+    // Dead source urls
+    DeadSourceUrls,
+
     // Loads all unloaded tables.
     All,
 }
@@ -460,11 +506,18 @@ pub struct DbNamespaceObj {
 )]
 pub struct DbJobsObj {
     /// id of the job. If exist then we are gravy baby
-    pub id: usize,
+    pub id: Option<usize>,
     /// time job was added into db
     pub time: usize,
     /// Time to run job
     pub reptime: Option<usize>,
+    // Determines which job we should run first. Higher values go first
+    pub priority: usize,
+    // How long should we keep a job in cache
+    pub cachetime: Option<usize>,
+    // How should we deduplicate jobs
+    pub cachechecktype: JobCacheType,
+
     /// Site we're processing
     pub site: String,
     /// any params that need to get passed into the scraper, plugin, scraper etc

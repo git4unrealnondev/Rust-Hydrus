@@ -50,6 +50,13 @@ impl Threads {
         scrapermanager: sharedtypes::GlobalPluginScraper,
         globalload: &mut Arc<Mutex<GlobalLoad>>,
     ) {
+        // Stupid prefilter because an item can be either a scraper or a plugin. Not sure how I
+        // didn't hit this issue sooner lol
+        if let Some(sharedtypes::ScraperOrPlugin::Scraper(_)) = scrapermanager.storage_type {
+        } else {
+            return;
+        }
+
         if !self.scraper_storage.contains_key(&scrapermanager) {
             let (flag, control) = make_pair();
             self.scraper_storage
@@ -161,7 +168,7 @@ impl Worker {
             let mut client = download::client_create();
             let mut should_remove_original_job = true;
             'bigloop: loop {
-                let jobsstorage;
+                let mut jobsstorage;
                 {
                     let temp = jobstorage.lock().unwrap();
                     jobsstorage = temp.jobs_get(&scraper).clone();
@@ -171,6 +178,7 @@ impl Worker {
                     break 'bigloop;
                 }
                 for mut job in jobsstorage {
+                    let jobid = job.id.unwrap();
                     should_remove_original_job = true;
                     let currentjob = job.clone();
                     {
@@ -329,9 +337,9 @@ impl Worker {
                                         "
 Worker: {id} JobId: {} -- While trying to parse parameters we got this error: {:?}
                                         ",
-                                        job.id, err
+                                        jobid, err
                                     ));
-                                    logging::error_log(&format!("Worker: {} JobId: {} -- Telling system to keep job due to previous error.", id, job.id));
+                                    logging::error_log(&format!("Worker: {} JobId: {} -- Telling system to keep job due to previous error.", id, jobid));
                                     let mut jobstorage = jobstorage.lock().unwrap();
                                     jobstorage.jobs_remove_job(&scraper, &job);
                                     should_remove_original_job = false;
@@ -394,7 +402,7 @@ Worker: {id} JobId: {} -- While trying to parse parameters we got this error: {:
                                     // job_params.lock().unwrap().remove(&scraper_data);
                                     logging::info_log(&format!(
                                         "Worker: {id} JobId: {} -- Exiting loop due to nothing.",
-                                        job.id
+                                        jobid
                                     ));
                                     break 'urlloop;
                                 }
@@ -413,17 +421,16 @@ Worker: {id} JobId: {} -- While trying to parse parameters we got this error: {:
                                     continue;
                                 }
                             };
-
                             // Parses tags from the tags field
                             for tag in out_st.tag.iter() {
                                 parse_jobs(
                                     tag,
                                     None,
-                                    &mut jobstorage,
+                                    jobstorage.clone(),
                                     &mut db,
                                     &scraper,
                                     &id,
-                                    &job.id,
+                                    &jobid,
                                 );
                             }
 
@@ -436,7 +443,7 @@ Worker: {id} JobId: {} -- While trying to parse parameters we got this error: {:
                                 let globalload = globalload.clone();
                                 let mut db = db.clone();
                                 let client = client.clone();
-                                let mut jobstorage = jobstorage.clone();
+                                let jobstorage = jobstorage.clone();
                                 let scraper = scraper.clone();
                                 pool.execute(move || {
                                     main_file_loop(
@@ -445,10 +452,10 @@ Worker: {id} JobId: {} -- While trying to parse parameters we got this error: {:
                                         ratelimiter_obj,
                                         globalload,
                                         &client,
-                                        &mut jobstorage,
+                                        jobstorage.clone(),
                                         &scraper,
                                         &id,
-                                        &job.id,
+                                        &jobid,
                                     );
                                 });
                                 // End of err catching loop. break 'errloop;
@@ -492,6 +499,11 @@ Worker: {id} JobId: {} -- While trying to parse parameters we got this error: {:
                         break 'bigloop;
                     }
                 }
+
+                {
+                    let temp = jobstorage.lock().unwrap();
+                    jobsstorage = temp.jobs_get(&scraper).clone();
+                }
             }
             threadflagcontrol.stop();
             let mut joblock = jobstorage.lock().unwrap();
@@ -515,7 +527,6 @@ fn parse_tags(
     let mut url_return: BTreeSet<sharedtypes::ScraperData> = BTreeSet::new();
     let unwrappy = &mut db.lock().unwrap();
 
-    // dbg!(&tag);
     match &tag.tag_type {
         sharedtypes::TagType::Normal => {
             // println!("Adding tag: {} {:?}", tag.tag, &file_id); We've recieved a normal
@@ -624,7 +635,6 @@ fn parse_tags(
                             Some(tag_id) => {
                                 let rel_hashset = unwrappy.relationship_get_fileid(tag_id);
                                 if rel_hashset.is_empty() {
-                                    dbg!(&tag_id);
                                     info_log(&format!(
                                         "Worker: {worker_id} JobId: {job_id} -- Will download from {} because tag name {} has no relationship.",
                                         jobscraped.job.site, taginfo.tag
@@ -726,7 +736,7 @@ fn download_add_to_db(
 fn parse_jobs(
     tag: &sharedtypes::TagObject,
     fileid: Option<usize>,
-    jobstorage: &mut Arc<Mutex<crate::jobs::Jobs>>,
+    jobstorage: Arc<Mutex<crate::jobs::Jobs>>,
     db: &mut Arc<Mutex<database::Main>>,
     scraper: &sharedtypes::GlobalPluginScraper,
 
@@ -739,9 +749,12 @@ fn parse_jobs(
         for data in urls_to_scrape {
             // Defualt job object
             let dbjob = sharedtypes::DbJobsObj {
-                id: 0,
+                id: None,
                 time: 0,
                 reptime: Some(0),
+                priority: sharedtypes::DEFAULT_PRIORITY,
+                cachetime: sharedtypes::DEFAULT_CACHETIME,
+                cachechecktype: sharedtypes::DEFAULT_CACHECHECK,
                 site: data.job.site,
                 param: data.job.param,
                 jobmanager: sharedtypes::DbJobsManager {
@@ -753,7 +766,7 @@ fn parse_jobs(
                 user_data: data.user_data,
             };
 
-            joblock.jobs_add(scraper.clone(), None, dbjob);
+            joblock.jobs_add(scraper.clone(), dbjob);
         }
     }
 }
@@ -823,7 +836,7 @@ pub fn main_file_loop(
     ratelimiter_obj: Arc<Mutex<Ratelimiter>>,
     globalload: Arc<Mutex<GlobalLoad>>,
     client: &Client,
-    jobstorage: &mut Arc<Mutex<crate::jobs::Jobs>>,
+    jobstorage: Arc<Mutex<crate::jobs::Jobs>>,
     scraper: &sharedtypes::GlobalPluginScraper,
     worker_id: &usize,
     job_id: &usize,
@@ -918,7 +931,7 @@ pub fn main_file_loop(
             parse_jobs(
                 tag,
                 Some(fileid),
-                jobstorage,
+                jobstorage.clone(),
                 db,
                 scraper,
                 worker_id,

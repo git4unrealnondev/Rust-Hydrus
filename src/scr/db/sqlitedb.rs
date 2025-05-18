@@ -214,6 +214,55 @@ impl Main {
         self.db_commit_man_set();
     }
 
+    pub(super) fn add_dead_url_sql(&mut self, url: &String) {
+        let conn = self._conn.lock().unwrap();
+        let _ = conn
+            .execute(
+                "INSERT INTO dead_source_urls(dead_url) VALUES (?)",
+                params![url],
+            )
+            .unwrap();
+    }
+
+    ///
+    /// Loads the DB into memory
+    ///
+    pub(super) fn load_dead_urls(&mut self) {
+        logging::info_log(&"Database is Loading: dead_source_urls".to_string());
+
+        let binding = self._conn.clone();
+        let temp_test = binding.lock().unwrap();
+        let temp = temp_test.prepare("SELECT * FROM dead_source_urls");
+
+        if let Ok(mut con) = temp {
+            let tag = con.query_map([], |row| {
+                let url: String = row.get(0).unwrap();
+                Ok(url)
+            });
+            match tag {
+                Ok(tags) => {
+                    for each in tags {
+                        if let Ok(res) = each {
+                            // if let Some(id) = self._inmemdb.tags_get_data(&res.id) {
+                            // logging::info_log(&format!( "Already have tag {:?} adding {} {} {}", id,
+                            // res.name, res.namespace, res.id )); continue;
+                            // delete_tags.insert((res.name.clone(), res.namespace.clone())); }
+                            self.add_dead_url_internal(res);
+                        } else {
+                            error!("Bad dead_source_url cant load {:?}", each);
+                        }
+                    }
+                }
+                Err(errer) => {
+                    error!(
+                        "WARNING COULD NOT LOAD dead_source_url: {:?} DUE TO ERROR",
+                        errer
+                    );
+                }
+            }
+        }
+    }
+
     /// Loads tags into db
     pub(super) fn load_tags(&mut self) {
         logging::info_log(&"Database is Loading: Tags".to_string());

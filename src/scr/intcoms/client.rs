@@ -300,27 +300,9 @@ pub fn namespace_get_tagids_all() -> Vec<usize> {
 }
 
 /// Adds job into db
-pub fn job_add(
-    id: Option<usize>,
-    time: usize,
-    reptime: usize,
-    site: String,
-    param: Vec<sharedtypes::ScraperParam>,
-    system_data: BTreeMap<String, String>,
-    user_data: BTreeMap<String, String>,
-    jobsmanager: sharedtypes::DbJobsManager,
-) -> bool {
+pub fn job_add(job: sharedtypes::DbJobsObj) -> bool {
     init_data_request(&types::SupportedRequests::Database(
-        types::SupportedDBRequests::PutJob((
-            id,
-            time,
-            reptime,
-            site,
-            param,
-            system_data,
-            user_data,
-            jobsmanager,
-        )),
+        types::SupportedDBRequests::PutJob(job),
     ))
 }
 

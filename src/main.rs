@@ -228,14 +228,6 @@ fn main() {
     loop {
         let brk;
         {
-            globalload_arc.lock().unwrap().thread_finish_closed();
-            brk = globalload_arc.lock().unwrap().return_thread();
-        }
-
-        if brk && threadhandler.check_empty() {
-            break;
-        }
-        {
             let mut jobmanager = arc_jobmanager.lock().unwrap();
             jobmanager.jobs_load(globalload_arc.clone());
         }
@@ -250,6 +242,14 @@ fn main() {
         }
         thread::sleep(one_sec);
         threadhandler.check_threads();
+        {
+            globalload_arc.lock().unwrap().thread_finish_closed();
+            brk = globalload_arc.lock().unwrap().return_thread();
+        }
+
+        if brk && threadhandler.check_empty() {
+            break;
+        }
     }
 
     // This wait is done for allowing any thread to "complete" Shouldn't be nessisary

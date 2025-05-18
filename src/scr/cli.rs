@@ -8,6 +8,7 @@ use strfmt::Format;
 
 // use std::str::pattern::Searcher;
 use crate::download;
+use crate::sharedtypes::{DEFAULT_CACHECHECK, DEFAULT_CACHETIME, DEFAULT_PRIORITY};
 use crate::{
     database,
     globalload::GlobalLoad,
@@ -132,6 +133,9 @@ pub fn main(data: Arc<Mutex<database::Main>>, scraper: Arc<Mutex<GlobalLoad>>) {
                         None,
                         crate::time_func::time_secs(),
                         crate::time_func::time_conv(&addstruct.time),
+                        DEFAULT_PRIORITY,
+                        DEFAULT_CACHETIME,
+                        DEFAULT_CACHECHECK,
                         addstruct.site.clone(),
                         parse_string_to_scraperparam(&addstruct.query),
                         system_data,
@@ -153,6 +157,9 @@ pub fn main(data: Arc<Mutex<database::Main>>, scraper: Arc<Mutex<GlobalLoad>>) {
                                 None,
                                 crate::time_func::time_secs(),
                                 crate::time_func::time_conv(&addstruct.time),
+                                DEFAULT_PRIORITY,
+                                DEFAULT_CACHETIME,
+                                DEFAULT_CACHECHECK,
                                 addstruct.site.clone(),
                                 parse_string_to_scraperparam(&ins),
                                 BTreeMap::new(),

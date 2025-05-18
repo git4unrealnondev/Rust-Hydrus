@@ -1137,7 +1137,19 @@ pub fn db_upgrade_call_3(site: &Site) {
                                 dbg!(&fid, tid);
                                 for tid_iter in tag_id.iter() {
                                     if pool_table.contains(tid_iter) {
-                                        client::job_add(
+                                        let mut job = sharedtypes::return_default_jobsobj();
+                                        job.site = site_to_string_prefix(site);
+                                        job.param = vec![sharedtypes::ScraperParam::Url(format!(
+                                            "https://{}.net/pools.json?search[id]={}",
+                                            site_to_string(site).to_lowercase(),
+                                            client::tag_get_id(*tid_iter).unwrap().name
+                                        ))];
+                                        job.jobmanager = sharedtypes::DbJobsManager {
+                                            jobtype: sharedtypes::DbJobType::Scraper,
+                                            recreation: None,
+                                        };
+                                        client::job_add(job);
+                                        /*client::job_add(
                                             None,
                                             0,
                                             0,
@@ -1153,7 +1165,7 @@ pub fn db_upgrade_call_3(site: &Site) {
                                                 jobtype: sharedtypes::DbJobType::Scraper,
                                                 recreation: None,
                                             },
-                                        );
+                                        );*/
                                     }
                                     client::parents_delete(sharedtypes::DbParentsObj {
                                         tag_id: *tid_iter,

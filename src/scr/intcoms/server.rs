@@ -267,7 +267,7 @@ impl DbInteract {
                 let ratelimiter_obj = threading::create_ratelimiter(ratelimit, &0, &0);
                 let manageeplugin = self.globalload.clone();
                 let client = download::client_create();
-                let mut jobstorage = self.jobmanager.clone();
+                let jobstorage = self.jobmanager.clone();
                 let mut database = self._database.clone();
                 let thread = thread::spawn(move || {
                     threading::main_file_loop(
@@ -276,7 +276,7 @@ impl DbInteract {
                         ratelimiter_obj,
                         manageeplugin,
                         &client.clone(),
-                        &mut jobstorage,
+                        jobstorage,
                         &global_pluginscraper,
                         &0,
                         &0,
@@ -301,7 +301,7 @@ impl DbInteract {
                 let ratelimiter_obj = threading::create_ratelimiter(ratelimit, &0, &0);
                 let manageeplugin = self.globalload.clone();
                 let client = &download::client_create();
-                let jobstorage = &mut self.jobmanager;
+                let jobstorage = self.jobmanager.clone();
                 threading::main_file_loop(
                     &mut file,
                     &mut self._database,
@@ -316,27 +316,9 @@ impl DbInteract {
 
                 Self::data_size_to_b(&true)
             }
-            types::SupportedDBRequests::PutJob((
-                id,
-                time,
-                reptime,
-                site,
-                param,
-                system_data,
-                user_data,
-                dbjobsmanager,
-            )) => {
+            types::SupportedDBRequests::PutJob(job) => {
                 let mut unwrappy = self._database.lock().unwrap();
-                let _ = &unwrappy.jobs_add(
-                    id,
-                    time,
-                    reptime,
-                    site,
-                    param,
-                    system_data,
-                    user_data,
-                    dbjobsmanager,
-                );
+                let _ = &unwrappy.jobs_add_new(job);
                 Self::data_size_to_b(&true)
             }
             types::SupportedDBRequests::GetNamespaceIDsAll => {

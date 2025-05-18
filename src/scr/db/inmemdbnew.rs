@@ -32,6 +32,7 @@ impl tes {
 pub struct NewinMemDB {
     _tag_nns_id_data: FnvHashMap<usize, sharedtypes::DbTagNNS>,
     _tag_nns_data_id: HashMap<sharedtypes::DbTagNNS, usize>,
+    dead_source_urls: HashSet<String>,
     _settings_id_data: HashMap<usize, sharedtypes::DbSettingObj>,
     _settings_name_id: HashMap<String, usize>,
     _parents_dual: HashSet<usize>,
@@ -81,6 +82,7 @@ impl NewinMemDB {
         NewinMemDB {
             _tag_nns_id_data: HashMap::default(),
             _tag_nns_data_id: HashMap::new(),
+            dead_source_urls: HashSet::new(),
             _jobs_id_data: HashMap::default(),
             _file_id_data: HashMap::default(),
             _file_location_usize: HashMap::default(),
@@ -121,6 +123,21 @@ impl NewinMemDB {
             _file_max: 0,
             _relationship_max: 0,
         }
+    }
+
+    ///
+    /// Adds a dead source URL into the cache
+    ///
+    pub fn add_dead_source_url(&mut self, url: String) {
+        self.dead_source_urls.insert(url);
+    }
+
+    ///
+    /// Checks if a dead source url exists.
+    /// If it does exist then we shouldnt check it
+    ///
+    pub fn does_dead_source_exist(&self, url: &String) -> bool {
+        self.dead_source_urls.contains(url)
     }
 
     /// Dumps db data
@@ -190,17 +207,18 @@ impl NewinMemDB {
 
     /// Adds jobs into internal db.
     pub fn jobref_new(&mut self, job: sharedtypes::DbJobsObj) -> bool {
-        if job.id > self._jobs_max {
-            self._jobs_max = job.id;
+        let id = job.id.unwrap();
+        if id > self._jobs_max {
+            self._jobs_max = id;
             self._jobs_max += 1;
         }
-        match self._jobs_id_data.get(&job.id) {
+        match self._jobs_id_data.get(&id) {
             Some(_) => {
-                self._jobs_id_data.insert(job.id, job);
+                self._jobs_id_data.insert(id, job);
                 true
             }
             None => {
-                self._jobs_id_data.insert(job.id, job);
+                self._jobs_id_data.insert(id, job);
                 self._jobs_max += 1;
                 false
             }
@@ -1105,7 +1123,7 @@ impl NewinMemDB {
 
     /// Adds job into internal db
     pub fn jobs_add(&mut self, job: DbJobsObj) {
-        self._jobs_id_data.insert(job.id, job);
+        self._jobs_id_data.insert(job.id.unwrap(), job);
         self._jobs_max += 1;
     }
 
@@ -1716,9 +1734,12 @@ mod inmemdb {
         let none = db.jobs_get(&0);
         assert_eq!(None, none);
         let jobobj = sharedtypes::DbJobsObj {
-            id: *db.jobs_get_max(),
+            id: Some(*db.jobs_get_max()),
             time: 0,
             reptime: None,
+            priority: sharedtypes::DEFAULT_PRIORITY,
+            cachechecktype: sharedtypes::DEFAULT_CACHECHECK,
+            cachetime: sharedtypes::DEFAULT_CACHETIME,
             site: "test".to_owned(),
             param: vec![],
             jobmanager: sharedtypes::DbJobsManager {
