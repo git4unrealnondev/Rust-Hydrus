@@ -19,6 +19,7 @@ pub fn get_global_info() -> Vec<sharedtypes::GlobalPluginScraper> {
         sharedtypes::PluginInfo2 {
             com_type: sharedtypes::PluginThreadType::SpawnInline,
             com_channel: true,
+            redirect: None,
         },
     ));
     main.callbacks = vec![

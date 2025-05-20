@@ -192,6 +192,10 @@ pub struct PluginInfo2 {
     /// Manages com settings between Plugin and host
     pub com_type: PluginThreadType,
     pub com_channel: bool,
+    // If this redirect tag exists as a site then we direct any processed data to the specified
+    // site scraper instead of the plugin. Useful if you have a scraper that handles download
+    // parsing and a plugin that can recursivly add jobs
+    pub redirect: Option<String>,
 }
 
 ///

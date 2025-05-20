@@ -175,6 +175,7 @@ impl Worker {
                 }
 
                 if jobsstorage.is_empty() {
+                    dbg!("Stopping loop because we have no jobs {}", &scraper);
                     break 'bigloop;
                 }
                 for mut job in jobsstorage {
@@ -482,28 +483,23 @@ Worker: {id} JobId: {} -- While trying to parse parameters we got this error: {:
                         }
                     }
                     {
-                        if should_remove_original_job {
+                        /* if should_remove_original_job {
                             let joblock = jobstorage.lock().unwrap();
                             if joblock.jobs_get(&scraper).is_empty() {
                                 let mut db = db.lock().unwrap();
                                 db.transaction_flush();
                                 break 'bigloop;
                             }
-                        }
+                        }*/
                     }
                 }
-                if should_remove_original_job {
+                /*if should_remove_original_job {
                     let joblock = jobstorage.lock().unwrap();
                     if joblock.jobs_get(&scraper).is_empty() {
                         threadflagcontrol.stop();
                         break 'bigloop;
                     }
-                }
-
-                {
-                    let temp = jobstorage.lock().unwrap();
-                    jobsstorage = temp.jobs_get(&scraper).clone();
-                }
+                }*/
             }
             threadflagcontrol.stop();
             let mut joblock = jobstorage.lock().unwrap();
@@ -526,7 +522,6 @@ fn parse_tags(
 ) -> BTreeSet<sharedtypes::ScraperData> {
     let mut url_return: BTreeSet<sharedtypes::ScraperData> = BTreeSet::new();
     let unwrappy = &mut db.lock().unwrap();
-
     match &tag.tag_type {
         sharedtypes::TagType::Normal => {
             // println!("Adding tag: {} {:?}", tag.tag, &file_id); We've recieved a normal

@@ -44,6 +44,7 @@ pub fn get_global_info() -> Vec<sharedtypes::GlobalPluginScraper> {
         sharedtypes::PluginInfo2 {
             com_type: sharedtypes::PluginThreadType::SpawnInline,
             com_channel: true,
+            redirect: Some("catbox scraper".into()),
         },
     ));
     plugin.callbacks = callbackvec;
@@ -58,6 +59,7 @@ pub fn get_global_info() -> Vec<sharedtypes::GlobalPluginScraper> {
                 "catbox album".into(),
                 "catbox.moe".into(),
                 "Catbox Collection".into(),
+                "catbox scraper".into(),
             ],
             priority: DEFAULT_PRIORITY,
         },

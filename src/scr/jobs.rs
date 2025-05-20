@@ -56,6 +56,14 @@ impl Jobs {
             time: dbjobsobj.time,
             reptime: dbjobsobj.reptime,
         };
+        // Stupid prefilter because an item can be either a scraper or a plugin. Not sure how I
+        // didn't hit this issue sooner lol
+        // Have to filter here because if a regex or something gets parsed as the "owner" of this
+        // call then the program can poop itself
+        if let Some(sharedtypes::ScraperOrPlugin::Scraper(_)) = scraper.storage_type {
+        } else {
+            return;
+        }
 
         if let Some(list) = self.previously_seen.get(&scraper) {
             // If we match directly then we should be good
@@ -67,7 +75,11 @@ impl Jobs {
                 match dbjobsobj.cachechecktype {
                     sharedtypes::JobCacheType::TimeReptimeParam => {}
                     sharedtypes::JobCacheType::Param => {
-                        dbg!(&job_to_check.params, &dbjobsobj.param);
+                        dbg!(
+                            &job_to_check.params,
+                            &dbjobsobj.param,
+                            job_to_check.params == dbjobsobj.param
+                        );
                         if job_to_check.params == dbjobsobj.param {
                             dbg!("SKIPPING");
                             return;
@@ -109,6 +121,8 @@ impl Jobs {
                 }
             }
         }
+
+        dbg!(&self.site_job, &self.previously_seen);
     }
 
     pub fn jobs_add_nolock(
@@ -271,7 +285,14 @@ impl Jobs {
         let mut jobs_vec = Vec::new();
         {
             let globalload = global_load.lock().unwrap();
-            for scraper in globalload.scraper_get() {
+            'mainloop: for scraper in globalload.scraper_get() {
+                // Stupid prefilter because an item can be either a scraper or a plugin. Not sure how I
+                // didn't hit this issue sooner lol
+                if let Some(sharedtypes::ScraperOrPlugin::Scraper(_)) = scraper.storage_type {
+                } else {
+                    continue 'mainloop;
+                }
+
                 for sites in globalload.sites_get(&scraper) {
                     for (id, job) in hashjobs.iter() {
                         if sites == job.site {

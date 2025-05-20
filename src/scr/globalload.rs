@@ -334,6 +334,18 @@ pub fn plugin_on_tag(
     }
 
     for (pluginscraper, regex, searchtype) in storagemap {
+        let mut pluginscraper = pluginscraper.clone();
+        if let Some(scraper_or_plugin) = &pluginscraper.storage_type {
+            if let sharedtypes::ScraperOrPlugin::Plugin(plugininfo) = scraper_or_plugin {
+                if let Some(redirect_site) = &plugininfo.redirect {
+                    let manager = manager_arc.lock().unwrap();
+                    if let Some(good_scraper) = manager.return_scraper_from_site(&redirect_site) {
+                        pluginscraper = good_scraper.clone();
+                    }
+                }
+            }
+        }
+
         let tag_ns;
         {
             match db.namespace_get_string(tag_nsid) {
@@ -351,7 +363,7 @@ pub fn plugin_on_tag(
         {
             let temp = manager_arc.lock().unwrap();
             jobmanager = temp.jobmanager.clone();
-            match temp.library_get_path(pluginscraper) {
+            match temp.library_get_path(&pluginscraper) {
                 None => {
                     liba = None;
                 }
@@ -368,7 +380,7 @@ pub fn plugin_on_tag(
                 &regex.to_string(),
                 &searchtype,
                 &liba,
-                pluginscraper,
+                &pluginscraper,
                 jobmanager,
             );
         }
@@ -529,6 +541,21 @@ impl GlobalLoad {
             regex_storage: HashMap::new(),
             jobmanager: jobs,
         }))
+    }
+
+    ///
+    /// Returns a scraper from a list of sites
+    ///
+    pub fn return_scraper_from_site(
+        &self,
+        site: &String,
+    ) -> Option<&sharedtypes::GlobalPluginScraper> {
+        for (scraper, sites) in self.sites.iter() {
+            if sites.contains(site) {
+                return Some(scraper);
+            }
+        }
+        None
     }
 
     pub fn setup_ipc(
