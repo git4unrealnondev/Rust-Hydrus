@@ -8,7 +8,6 @@ mod sharedtypes;
 #[path = "../../../src/scr/intcoms/client.rs"]
 mod client;
 static PLUGIN_NAME: &str = "File Hash";
-static PLUGIN_DESCRIPTION: &str = "Gets hash information from a file.";
 
 #[no_mangle]
 pub fn get_global_info() -> Vec<sharedtypes::GlobalPluginScraper> {
