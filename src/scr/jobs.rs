@@ -121,8 +121,6 @@ impl Jobs {
                 }
             }
         }
-
-        dbg!(&self.site_job, &self.previously_seen);
     }
 
     pub fn jobs_add_nolock(
