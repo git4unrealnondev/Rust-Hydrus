@@ -1174,7 +1174,7 @@ impl Main {
                     let id = row.get(0).unwrap();
                     let time = row.get(1).unwrap();
                     let reptime = row.get(2).unwrap();
-                    let priority = row.get(3).unwrap();
+                    let priority = row.get(3).unwrap_or(sharedtypes::DEFAULT_PRIORITY);
                     let cachetime = row.get(4).unwrap_or_default();
                     let cachechecktype: String = row.get(5).unwrap();
                     let manager: String = row.get(6).unwrap();
@@ -1561,10 +1561,10 @@ impl Main {
                 data.id.unwrap().to_string(),
                 data.time.to_string(),
                 data.reptime.unwrap().to_string(),
+                serde_json::to_string(&data.jobmanager).unwrap(),
                 data.priority.to_string(),
                 serde_json::to_string(&data.cachetime).unwrap(),
                 serde_json::to_string(&data.cachechecktype).unwrap(),
-                serde_json::to_string(&data.jobmanager).unwrap(),
                 data.site,
                 serde_json::to_string(&data.param).unwrap(),
                 serde_json::to_string(&data.system_data).unwrap(),
