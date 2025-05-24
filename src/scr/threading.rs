@@ -153,7 +153,7 @@ impl Worker {
         // info_log(&format!( "Creating Worker for id: {} Scraper Name: {} With a jobs
         // length of: {}", &id, &scraper._name, &jobstorage..len() ));
         let mut db = dba.clone();
-        let mut jobstorage = jobstorage.clone();
+        let jobstorage = jobstorage.clone();
         let globalload = globalload.clone();
         let ratelimiter_main;
         if let Some(sharedtypes::ScraperOrPlugin::Scraper(ref scraper_info)) = scraper.storage_type
@@ -168,7 +168,7 @@ impl Worker {
             let mut client = download::client_create();
             let mut should_remove_original_job = true;
             'bigloop: loop {
-                let mut jobsstorage;
+                let jobsstorage;
                 {
                     let temp = jobstorage.lock().unwrap();
                     jobsstorage = temp.jobs_get(&scraper).clone();

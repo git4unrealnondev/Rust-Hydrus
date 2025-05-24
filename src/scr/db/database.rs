@@ -357,15 +357,22 @@ impl Main {
     ///Checks if a url is dead
     ///
     pub fn check_dead_url(&self, url: &String) -> bool {
-        self._inmemdb.does_dead_source_exist(url)
+        match self._inmemdb.does_dead_source_exist(url) {
+            true => {
+                return true;
+            }
+            false => {
+                let conn = self._conn.lock().unwrap();
+                conn.query_row(
+                    "SELECT id from dead_source_urls WHERE dead_url = ?",
+                    params![url],
+                    |row| Ok(row.get(0).unwrap_or(false)),
+                )
+                .unwrap_or(false)
+            }
+        }
 
-        /*let conn = self._conn.lock().unwrap();
-        conn.query_row(
-            "SELECT id from dead_source_urls WHERE dead_url = ?",
-            params![url],
-            |row| Ok(row.get(0).unwrap_or(false)),
-        )
-        .unwrap_or(false)*/
+        /**/
     }
 
     /// Adds the job to the inmemdb

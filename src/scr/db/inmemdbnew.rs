@@ -1198,7 +1198,7 @@ impl NewinMemDB {
     }
 
     pub fn enclave_action_order_enclave_get_list_id(&self, enclave_id: &usize) -> Vec<usize> {
-        let mut out = Vec::new();
+        let out = Vec::new();
 
         out
     }

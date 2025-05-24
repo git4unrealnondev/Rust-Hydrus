@@ -47,7 +47,7 @@ pub fn parser_call(
 ) -> Result<sharedtypes::ScraperObject, sharedtypes::ScraperReturn> {
     let scrapermanager = globalload.lock().unwrap();
     if let Some(scraper_library_rwlock) = scrapermanager.library_get(scraper) {
-        let scraper_library = scraper_library_rwlock.clone().read().unwrap();
+        let scraper_library = scraper_library_rwlock.read().unwrap();
         let temp: libloading::Symbol<
             unsafe extern "C" fn(
                 &String,
@@ -127,7 +127,7 @@ pub fn url_dump(
     }
 
     for lib in libstorage {
-        let library = lib.clone().read().unwrap();
+        let library = lib.read().unwrap();
         let temp: libloading::Symbol<
             unsafe extern "C" fn(
                 &Vec<sharedtypes::ScraperParam>,
@@ -263,7 +263,7 @@ pub fn db_upgrade_call(
     db_version: &usize,
     site_struct: &sharedtypes::GlobalPluginScraper,
 ) {
-    let libloading = libloading.clone().read().unwrap();
+    let libloading = libloading.read().unwrap();
     let temp: libloading::Symbol<unsafe extern "C" fn(&usize, &sharedtypes::GlobalPluginScraper)> =
         match unsafe { libloading.get(b"db_upgrade_call\0") } {
             Err(err) => {
@@ -368,7 +368,7 @@ pub fn plugin_on_tag(
                     liba = None;
                 }
                 Some(libpath) => {
-                    liba = Some(unsafe { libloading::Library::new(libpath).unwrap() });
+                    liba = Some(libpath.clone());
                 }
             }
         }
@@ -379,7 +379,7 @@ pub fn plugin_on_tag(
                 &tag_ns,
                 &regex.to_string(),
                 &searchtype,
-                &liba,
+                &unsafe { libloading::Library::new(liba).unwrap() },
                 &pluginscraper,
                 jobmanager,
             );
@@ -1071,7 +1071,7 @@ impl GlobalLoad {
 /// I don't think this gets used?
 ///
 pub fn scraper_file_regen(lib: &RwLock<libloading::Library>) -> sharedtypes::ScraperFileRegen {
-    let libloading = lib.clone().read().unwrap();
+    let libloading = lib.read().unwrap();
     let temp: libloading::Symbol<unsafe extern "C" fn() -> sharedtypes::ScraperFileRegen> =
         unsafe { libloading.get(b"scraper_file_regen\0").unwrap() };
     unsafe { temp() }
@@ -1083,7 +1083,7 @@ pub fn scraper_file_return(
     lib: &RwLock<libloading::Library>,
     regen: &sharedtypes::ScraperFileInput,
 ) -> sharedtypes::SubTag {
-    let libloading = lib.clone().read().unwrap();
+    let libloading = lib.read().unwrap();
     let temp: libloading::Symbol<
         unsafe extern "C" fn(&sharedtypes::ScraperFileInput) -> sharedtypes::SubTag,
     > = unsafe { libloading.get(b"scraper_file_return\0").unwrap() };

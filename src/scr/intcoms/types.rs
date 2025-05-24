@@ -5,7 +5,6 @@ use crate::sharedtypes;
 use anyhow::Context;
 use interprocess::local_socket::prelude::LocalSocketStream;
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
 use std::collections::HashSet;
 use std::io::BufReader;
 use std::io::Read;

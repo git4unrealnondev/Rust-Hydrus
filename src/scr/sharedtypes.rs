@@ -8,8 +8,6 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashSet};
 #[cfg(feature = "clap")]
-use strum::IntoEnumIterator;
-#[cfg(feature = "clap")]
 use strum_macros::EnumIter;
 #[cfg(feature = "clap")]
 use strum_macros::{Display, EnumString};

@@ -1,6 +1,5 @@
 use crate::database::Main;
 use crate::globalload::GlobalLoad;
-use crate::logging::error_log;
 
 // extern crate urlparse;
 use super::sharedtypes;
