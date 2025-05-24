@@ -49,7 +49,7 @@ impl Threads {
         jobstorage: Arc<RwLock<crate::jobs::Jobs>>,
         db: &mut Arc<Mutex<database::Main>>,
         scrapermanager: sharedtypes::GlobalPluginScraper,
-        globalload: &mut Arc<Mutex<GlobalLoad>>,
+        globalload: Arc<RwLock<GlobalLoad>>,
     ) {
         // Stupid prefilter because an item can be either a scraper or a plugin. Not sure how I
         // didn't hit this issue sooner lol
@@ -148,7 +148,7 @@ impl Worker {
         jobstorage: Arc<RwLock<crate::jobs::Jobs>>,
         dba: &mut Arc<Mutex<database::Main>>,
         scraper: sharedtypes::GlobalPluginScraper,
-        globalload: &mut Arc<Mutex<GlobalLoad>>,
+        globalload: Arc<RwLock<GlobalLoad>>,
         threadflagcontrol: Control,
     ) -> Worker {
         // info_log(&format!( "Creating Worker for id: {} Scraper Name: {} With a jobs
@@ -271,6 +271,7 @@ impl Worker {
 
                     // Makes recursion possible
                     if let Some(recursion) = &job.jobmanager.recreation {
+                        should_remove_original_job = false;
                         if let sharedtypes::DbJobRecreation::AlwaysTime(timestamp, count) =
                             recursion
                         {
@@ -281,7 +282,6 @@ impl Worker {
                                 .write()
                                 .unwrap()
                                 .jobs_decrement_count(&data, &scraper);
-                            should_remove_original_job = false;
 
                             // Updates the database with the "new" object. Will have the same ID
                             // but time and reptime will be consistient to when we should run this
@@ -669,7 +669,7 @@ fn download_add_to_db(
     ratelimiter_obj: Arc<Mutex<Ratelimiter>>,
     source: &String,
     location: String,
-    globalload: Arc<Mutex<GlobalLoad>>,
+    globalload: Arc<RwLock<GlobalLoad>>,
     client: &Client,
     db: Arc<Mutex<database::Main>>,
     file: &mut sharedtypes::FileObject,
@@ -836,7 +836,7 @@ pub fn main_file_loop(
     file: &mut sharedtypes::FileObject,
     db: &mut Arc<Mutex<database::Main>>,
     ratelimiter_obj: Arc<Mutex<Ratelimiter>>,
-    globalload: Arc<Mutex<GlobalLoad>>,
+    globalload: Arc<RwLock<GlobalLoad>>,
     client: &Client,
     jobstorage: Arc<RwLock<crate::jobs::Jobs>>,
     scraper: &sharedtypes::GlobalPluginScraper,

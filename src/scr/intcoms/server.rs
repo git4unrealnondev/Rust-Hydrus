@@ -148,7 +148,7 @@ pub struct PluginIpcInteract {
 impl PluginIpcInteract {
     pub fn new(
         main_db: Arc<Mutex<database::Main>>,
-        globalload: Arc<Mutex<GlobalLoad>>,
+        globalload: Arc<RwLock<GlobalLoad>>,
         jobs: Arc<RwLock<Jobs>>,
     ) -> Self {
         PluginIpcInteract {
@@ -241,7 +241,7 @@ another process and try again.",
 
 struct DbInteract {
     _database: Arc<Mutex<database::Main>>,
-    globalload: Arc<Mutex<GlobalLoad>>,
+    globalload: Arc<RwLock<GlobalLoad>>,
     jobmanager: Arc<RwLock<Jobs>>,
     threads: Vec<thread::JoinHandle<()>>,
 }
@@ -377,7 +377,7 @@ impl DbInteract {
             }
             types::SupportedDBRequests::ReloadLoadedPlugins() => {
                 todo!("NOOP on linux ignoring");
-                let mut plugin = self.globalload.lock().unwrap();
+                let mut plugin = self.globalload.write().unwrap();
                 //plugin.reload_loaded_plugins();
                 Self::data_size_to_b(&true)
             }
@@ -387,7 +387,7 @@ impl DbInteract {
                 Self::data_size_to_b(&tmep)
             }
             types::SupportedDBRequests::PluginCallback(func_name, version, input_data) => {
-                let mut plugin = self.globalload.lock().unwrap();
+                let mut plugin = self.globalload.write().unwrap();
                 let out = plugin.external_plugin_call(&func_name, &version, &input_data);
                 Self::data_size_to_b(&out)
             }
@@ -532,9 +532,7 @@ impl DbInteract {
                     }
                 }
 
-                let mut global = globalload.lock().unwrap();
-
-                global.reload_regex();
+                globalload.write().unwrap().reload_regex();
 
                 Self::data_size_to_b(&true)
             }

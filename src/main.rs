@@ -127,8 +127,8 @@ fn main() {
             scraper_folder = arc.lock().unwrap().loaded_scraper_folder();
             plugin_folder = arc.lock().unwrap().loaded_plugin_folder();
         }
-        globalload_arc.lock().unwrap().load_folder(&scraper_folder);
-        globalload_arc.lock().unwrap().load_folder(&plugin_folder);
+        globalload_arc.write().unwrap().load_folder(&scraper_folder);
+        globalload_arc.write().unwrap().load_folder(&plugin_folder);
     }
 
     //let mut globalload_arc =
@@ -138,7 +138,7 @@ fn main() {
     // Things like callbacks and the like
     arc.lock().unwrap().setup_globalload(globalload_arc.clone());
 
-    globalload_arc.lock().unwrap().setup_ipc(
+    globalload_arc.write().unwrap().setup_ipc(
         globalload_arc.clone(),
         arc.clone(),
         jobmanager.clone(),
@@ -167,7 +167,7 @@ fn main() {
     // Actually upgrades the DB from scraper calls
     for db_version in upgradeversvec {
         for (internal_scraper, scraper_library) in
-            globalload_arc.lock().unwrap().library_get_raw().iter()
+            globalload_arc.read().unwrap().library_get_raw().iter()
         {
             logging::info_log(&format!(
                 "Starting scraper upgrade: {}",
@@ -181,12 +181,16 @@ fn main() {
     cli::main(arc.clone(), globalload_arc.clone());
 
     // Calls the on_start func for the plugins
-    globalload_arc.lock().unwrap().plugin_on_start();
+    globalload_arc.write().unwrap().plugin_on_start();
 
     // A way to get around a mutex lock but it works lol
     let one_sec = time::Duration::from_millis(100);
     loop {
-        if !globalload_arc.lock().unwrap().plugin_on_start_should_wait() {
+        if !globalload_arc
+            .write()
+            .unwrap()
+            .plugin_on_start_should_wait()
+        {
             break;
         } else {
             thread::sleep(one_sec);
@@ -223,7 +227,7 @@ fn main() {
                 jobmanager.clone(),
                 &mut arc,
                 scraper.clone(),
-                &mut globalload_arc,
+                globalload_arc.clone(),
             );
         }
     }
@@ -244,14 +248,14 @@ fn main() {
                 jobmanager.clone(),
                 &mut arc,
                 scraper.clone(),
-                &mut globalload_arc,
+                globalload_arc.clone(),
             );
         }
         thread::sleep(one_sec);
         threadhandler.check_threads();
         {
-            globalload_arc.lock().unwrap().thread_finish_closed();
-            brk = globalload_arc.lock().unwrap().return_thread();
+            globalload_arc.write().unwrap().thread_finish_closed();
+            brk = globalload_arc.read().unwrap().return_thread();
         }
 
         if brk && threadhandler.check_empty() {

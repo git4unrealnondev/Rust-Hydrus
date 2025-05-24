@@ -7,6 +7,7 @@ use crate::time_func;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::sync::Mutex;
+use std::sync::RwLock;
 
 ///
 /// Holds the previously seen jobs
@@ -267,7 +268,7 @@ impl Jobs {
     ///
     ///Loads jobs from DB into the internal Jobs structure
     ///
-    pub fn jobs_load(&mut self, global_load: Arc<Mutex<GlobalLoad>>) {
+    pub fn jobs_load(&mut self, global_load: Arc<RwLock<GlobalLoad>>) {
         // Loads table if this hasn't been loaded yet
         self.db
             .lock()
@@ -282,8 +283,7 @@ impl Jobs {
 
         let mut jobs_vec = Vec::new();
         {
-            let globalload = global_load.lock().unwrap();
-            'mainloop: for scraper in globalload.scraper_get() {
+            'mainloop: for scraper in global_load.read().unwrap().scraper_get() {
                 // Stupid prefilter because an item can be either a scraper or a plugin. Not sure how I
                 // didn't hit this issue sooner lol
                 if let Some(sharedtypes::ScraperOrPlugin::Scraper(_)) = scraper.storage_type {
@@ -291,7 +291,7 @@ impl Jobs {
                     continue 'mainloop;
                 }
 
-                for sites in globalload.sites_get(&scraper) {
+                for sites in global_load.read().unwrap().sites_get(&scraper) {
                     for (id, job) in hashjobs.iter() {
                         if sites == job.site {
                             jobs_vec.push((scraper.clone(), *id, job.clone()));

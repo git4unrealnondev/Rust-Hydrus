@@ -17,6 +17,7 @@ use std::error::Error;
 use std::io::BufReader;
 use std::io::Cursor;
 use std::io::Read;
+use std::sync::RwLock;
 use std::time::Duration;
 use url::Url;
 
@@ -217,7 +218,7 @@ pub fn dlfile_new(
     db: Arc<Mutex<Main>>,
     file: &mut sharedtypes::FileObject,
     location: &String,
-    globalload: Option<Arc<Mutex<GlobalLoad>>>,
+    globalload: Option<Arc<RwLock<GlobalLoad>>>,
     ratelimiter_obj: &Arc<Mutex<Ratelimiter>>,
     source_url: &String,
     workerid: &usize,

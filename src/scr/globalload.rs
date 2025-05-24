@@ -42,11 +42,10 @@ pub fn parser_call(
     url_output: &String,
     actual_params: &Vec<sharedtypes::ScraperParam>,
     scraperdata: &sharedtypes::ScraperData,
-    globalload: Arc<Mutex<GlobalLoad>>,
+    globalload: Arc<RwLock<GlobalLoad>>,
     scraper: &GlobalPluginScraper,
 ) -> Result<sharedtypes::ScraperObject, sharedtypes::ScraperReturn> {
-    let scrapermanager = globalload.lock().unwrap();
-    if let Some(scraper_library_rwlock) = scrapermanager.library_get(scraper) {
+    if let Some(scraper_library_rwlock) = globalload.read().unwrap().library_get(scraper) {
         let scraper_library = scraper_library_rwlock.read().unwrap();
         let temp: libloading::Symbol<
             unsafe extern "C" fn(
@@ -110,32 +109,31 @@ fn c_regex_match(
 pub fn url_dump(
     params: &Vec<sharedtypes::ScraperParam>,
     scraperdata: &sharedtypes::ScraperData,
-    arc_scrapermanager: Arc<Mutex<GlobalLoad>>,
+    arc_scrapermanager: Arc<RwLock<GlobalLoad>>,
     scraper: &sharedtypes::GlobalPluginScraper,
 ) -> Result<Vec<(String, sharedtypes::ScraperData)>, libloading::Error> {
     let mut out = Vec::new();
-    let mut libstorage = Vec::new();
 
     // Loads the valid libraries
-    let globalload = arc_scrapermanager.lock().unwrap();
-    for loaded_scraper in globalload.scraper_get().iter() {
+    for loaded_scraper in arc_scrapermanager.read().unwrap().scraper_get().iter() {
         if scraper == loaded_scraper {
-            if let Some(lib) = globalload.library_get(loaded_scraper) {
-                libstorage.push(lib);
+            if let Some(lib) = arc_scrapermanager
+                .read()
+                .unwrap()
+                .library_get(loaded_scraper)
+            {
+                let lib = lib.read().unwrap();
+                let temp: libloading::Symbol<
+                    unsafe extern "C" fn(
+                        &Vec<sharedtypes::ScraperParam>,
+                        &sharedtypes::ScraperData,
+                    )
+                        -> Vec<(String, sharedtypes::ScraperData)>,
+                > = unsafe { lib.get(b"url_dump\0")? };
+                for item in unsafe { temp(params, scraperdata) } {
+                    out.push(item);
+                }
             }
-        }
-    }
-
-    for lib in libstorage {
-        let library = lib.read().unwrap();
-        let temp: libloading::Symbol<
-            unsafe extern "C" fn(
-                &Vec<sharedtypes::ScraperParam>,
-                &sharedtypes::ScraperData,
-            ) -> Vec<(String, sharedtypes::ScraperData)>,
-        > = unsafe { library.get(b"url_dump\0")? };
-        for item in unsafe { temp(params, scraperdata) } {
-            out.push(item);
         }
     }
 
@@ -170,7 +168,7 @@ fn parse_plugin_output(
 /// Hopefully a thread-safe way to call plugins per thread avoiding a lock.
 ///
 pub fn plugin_on_download(
-    manager_arc: Arc<Mutex<GlobalLoad>>,
+    manager_arc: Arc<RwLock<GlobalLoad>>,
     db: Arc<Mutex<Main>>,
     cursorpass: &[u8],
     hash: &String,
@@ -178,7 +176,7 @@ pub fn plugin_on_download(
 ) {
     let (libpath, libscraper);
     {
-        let manager = manager_arc.lock().unwrap();
+        let manager = manager_arc.read().unwrap();
         (libpath, libscraper) = (
             manager.get_lib_path_from_callback(&sharedtypes::GlobalCallbacks::Download),
             manager.get_scrapers_from_callback(&sharedtypes::GlobalCallbacks::Download),
@@ -224,7 +222,7 @@ pub fn plugin_on_download(
 
         let jobmanager;
         {
-            let manager = manager_arc.lock().unwrap();
+            let manager = manager_arc.read().unwrap();
             jobmanager = manager.jobmanager.clone();
         }
         parse_plugin_output(output, db.clone(), libscraper.get(cnt).unwrap(), jobmanager);
@@ -283,14 +281,14 @@ pub fn db_upgrade_call(
 /// Threadsafe way to call callback on adding a tag into the db
 ///
 pub fn plugin_on_tag(
-    manager_arc: Arc<Mutex<GlobalLoad>>,
+    manager_arc: Arc<RwLock<GlobalLoad>>,
     db: &mut Main,
     tag: &String,
     tag_nsid: &usize,
 ) {
     let tagstorageregex;
     {
-        let temp = manager_arc.lock().unwrap();
+        let temp = manager_arc.read().unwrap();
         tagstorageregex = temp.regex_storage.clone();
     }
 
@@ -338,7 +336,7 @@ pub fn plugin_on_tag(
         if let Some(scraper_or_plugin) = &pluginscraper.storage_type {
             if let sharedtypes::ScraperOrPlugin::Plugin(plugininfo) = scraper_or_plugin {
                 if let Some(redirect_site) = &plugininfo.redirect {
-                    let manager = manager_arc.lock().unwrap();
+                    let manager = manager_arc.read().unwrap();
                     if let Some(good_scraper) = manager.return_scraper_from_site(&redirect_site) {
                         pluginscraper = good_scraper.clone();
                     }
@@ -361,7 +359,7 @@ pub fn plugin_on_tag(
         let jobmanager;
         let liba;
         {
-            let temp = manager_arc.lock().unwrap();
+            let temp = manager_arc.read().unwrap();
             jobmanager = temp.jobmanager.clone();
             match temp.library_get_path(&pluginscraper) {
                 None => {
@@ -527,10 +525,10 @@ enum LoadableType {
 }
 
 impl GlobalLoad {
-    pub fn new(db: Arc<Mutex<database::Main>>, jobs: Arc<RwLock<Jobs>>) -> Arc<Mutex<Self>> {
+    pub fn new(db: Arc<Mutex<database::Main>>, jobs: Arc<RwLock<Jobs>>) -> Arc<RwLock<Self>> {
         logging::log(&"Starting IPC Server.".to_string());
 
-        Arc::new(Mutex::new(GlobalLoad {
+        Arc::new(RwLock::new(GlobalLoad {
             db,
             callback: HashMap::new(),
             callback_cross: HashMap::new(),
@@ -562,7 +560,7 @@ impl GlobalLoad {
 
     pub fn setup_ipc(
         &mut self,
-        globalload: Arc<Mutex<GlobalLoad>>,
+        globalload: Arc<RwLock<GlobalLoad>>,
         db: Arc<Mutex<Main>>,
         jobs: Arc<RwLock<Jobs>>,
     ) {
@@ -1099,7 +1097,7 @@ pub(crate) mod test_globalload {
     pub fn emulate_loaded(
         db: Arc<Mutex<database::Main>>,
         jobs: Arc<Mutex<Jobs>>,
-    ) -> Arc<Mutex<GlobalLoad>> {
+    ) -> Arc<RwLock<GlobalLoad>> {
         GlobalLoad::new(db, jobs)
     }
 }

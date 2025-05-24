@@ -18,6 +18,7 @@ use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::Mutex;
+use std::sync::RwLock;
 use std::time::Duration;
 
 pub mod enclave;
@@ -62,7 +63,7 @@ pub struct Main {
     _tables_loaded: Vec<sharedtypes::LoadDBTable>,
     _tables_loading: Vec<sharedtypes::LoadDBTable>,
     _cache: CacheType,
-    pub globalload: Option<Arc<Mutex<GlobalLoad>>>,
+    pub globalload: Option<Arc<RwLock<GlobalLoad>>>,
 }
 
 /// Contains DB functions.
@@ -1442,7 +1443,7 @@ impl Main {
         self._inmemdb.dumpe_data();
     }
 
-    pub fn setup_globalload(&mut self, globalload: Arc<Mutex<GlobalLoad>>) {
+    pub fn setup_globalload(&mut self, globalload: Arc<RwLock<GlobalLoad>>) {
         self.globalload = Some(globalload);
     }
 

@@ -17,7 +17,7 @@ use crate::{
 };
 use clap::Parser;
 use file_format::FileFormat;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, RwLock};
 
 mod cli_structs;
 
@@ -105,7 +105,7 @@ fn parse_string_to_scraperparam(input: &String) -> Vec<sharedtypes::ScraperParam
 }
 
 /// Returns the main argument and parses data.
-pub fn main(data: Arc<Mutex<database::Main>>, scraper: Arc<Mutex<GlobalLoad>>) {
+pub fn main(data: Arc<Mutex<database::Main>>, scraper: Arc<RwLock<GlobalLoad>>) {
     let args = cli_structs::MainWrapper::parse();
     if args.a.is_none() {
         return;
@@ -321,15 +321,14 @@ pub fn main(data: Arc<Mutex<database::Main>>, scraper: Arc<Mutex<GlobalLoad>>) {
                         println!("Couldn't find location: {}", &loc.location);
                         return;
                     }
-                    let scraper = scraper.lock().unwrap();
-                    // Loads the scraper info for parsing.
-                    let scraperlibrary = scraper.filter_sites_return_lib(&loc.site);
+                    /* // Loads the scraper info for parsing.
+                    let scraperlibrary = scraper.read().unwrap().filter_sites_return_lib(&loc.site);
                     let libload = match scraperlibrary {
                         None => {
                             println!("Cannot find a loaded scraper. {}", &loc.site);
                             return;
                         }
-                        Some(load) => load,
+                        Some(load) => load.clone(),
                     };
                     data.load_table(&sharedtypes::LoadDBTable::All);
                     let failedtoparse: HashSet<String> = HashSet::new();
@@ -403,7 +402,7 @@ pub fn main(data: Arc<Mutex<database::Main>>, scraper: Arc<Mutex<GlobalLoad>>) {
                         for ke in failedtoparse.iter() {
                             println!("{}", ke);
                         }
-                    }
+                    }*/
                 }
             },
             cli_structs::TasksStruct::Database(db) => {
