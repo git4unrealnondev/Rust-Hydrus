@@ -15,6 +15,7 @@ use reqwest::blocking::Client;
 use std::collections::BTreeSet;
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::sync::RwLock;
 
 // use std::sync::Mutex;
 use rusty_pool::ThreadPool;
@@ -45,7 +46,7 @@ impl Threads {
     /// Adds a worker to the threadvec.
     pub fn startwork(
         &mut self,
-        jobstorage: &mut Arc<Mutex<crate::jobs::Jobs>>,
+        jobstorage: Arc<RwLock<crate::jobs::Jobs>>,
         db: &mut Arc<Mutex<database::Main>>,
         scrapermanager: sharedtypes::GlobalPluginScraper,
         globalload: &mut Arc<Mutex<GlobalLoad>>,
@@ -144,7 +145,7 @@ pub fn create_ratelimiter(
 impl Worker {
     fn new(
         id: usize,
-        jobstorage: &mut Arc<Mutex<crate::jobs::Jobs>>,
+        jobstorage: Arc<RwLock<crate::jobs::Jobs>>,
         dba: &mut Arc<Mutex<database::Main>>,
         scraper: sharedtypes::GlobalPluginScraper,
         globalload: &mut Arc<Mutex<GlobalLoad>>,
@@ -170,8 +171,7 @@ impl Worker {
             'bigloop: loop {
                 let jobsstorage;
                 {
-                    let temp = jobstorage.lock().unwrap();
-                    jobsstorage = temp.jobs_get(&scraper).clone();
+                    jobsstorage = jobstorage.read().unwrap().jobs_get(&scraper).clone();
                 }
 
                 if jobsstorage.is_empty() {
@@ -274,11 +274,13 @@ impl Worker {
                         if let sharedtypes::DbJobRecreation::AlwaysTime(timestamp, count) =
                             recursion
                         {
-                            let mut temp = jobstorage.lock().unwrap();
                             let mut data = job.clone();
                             data.time = crate::time_func::time_secs();
                             data.reptime = Some(*timestamp);
-                            temp.jobs_decrement_count(&data, &scraper);
+                            jobstorage
+                                .write()
+                                .unwrap()
+                                .jobs_decrement_count(&data, &scraper);
                             should_remove_original_job = false;
 
                             // Updates the database with the "new" object. Will have the same ID
@@ -341,8 +343,7 @@ Worker: {id} JobId: {} -- While trying to parse parameters we got this error: {:
                                         jobid, err
                                     ));
                                     logging::error_log(&format!("Worker: {} JobId: {} -- Telling system to keep job due to previous error.", id, jobid));
-                                    let mut jobstorage = jobstorage.lock().unwrap();
-                                    jobstorage.jobs_remove_job(&scraper, &job);
+                                    jobstorage.write().unwrap().jobs_remove_job(&scraper, &job);
                                     should_remove_original_job = false;
                                 }
                             }
@@ -472,14 +473,18 @@ Worker: {id} JobId: {} -- While trying to parse parameters we got this error: {:
                     }
                     {
                         if should_remove_original_job {
-                            let mut joblock = jobstorage.lock().unwrap();
-                            joblock.jobs_remove_dbjob(&scraper, &currentjob);
+                            jobstorage
+                                .write()
+                                .unwrap()
+                                .jobs_remove_dbjob(&scraper, &currentjob);
                             let mut db = db.lock().unwrap();
                             db.transaction_flush();
                         }
                         {
-                            let mut joblock = jobstorage.lock().unwrap();
-                            joblock.jobs_remove_job(&scraper, &currentjob);
+                            jobstorage
+                                .write()
+                                .unwrap()
+                                .jobs_remove_dbjob(&scraper, &currentjob);
                         }
                     }
                     {
@@ -502,8 +507,10 @@ Worker: {id} JobId: {} -- While trying to parse parameters we got this error: {:
                 }*/
             }
             threadflagcontrol.stop();
-            let mut joblock = jobstorage.lock().unwrap();
-            joblock.clear_previously_seen_cache(&scraper);
+            jobstorage
+                .write()
+                .unwrap()
+                .clear_previously_seen_cache(&scraper);
         });
         Worker {
             id,
@@ -731,7 +738,7 @@ fn download_add_to_db(
 fn parse_jobs(
     tag: &sharedtypes::TagObject,
     fileid: Option<usize>,
-    jobstorage: Arc<Mutex<crate::jobs::Jobs>>,
+    jobstorage: Arc<RwLock<crate::jobs::Jobs>>,
     db: &mut Arc<Mutex<database::Main>>,
     scraper: &sharedtypes::GlobalPluginScraper,
 
@@ -740,7 +747,7 @@ fn parse_jobs(
 ) {
     let urls_to_scrape = parse_tags(db, tag, fileid, worker_id, job_id);
     {
-        let mut joblock = jobstorage.lock().unwrap();
+        let mut joblock = jobstorage.write().unwrap();
         for data in urls_to_scrape {
             // Defualt job object
             let dbjob = sharedtypes::DbJobsObj {
@@ -831,7 +838,7 @@ pub fn main_file_loop(
     ratelimiter_obj: Arc<Mutex<Ratelimiter>>,
     globalload: Arc<Mutex<GlobalLoad>>,
     client: &Client,
-    jobstorage: Arc<Mutex<crate::jobs::Jobs>>,
+    jobstorage: Arc<RwLock<crate::jobs::Jobs>>,
     scraper: &sharedtypes::GlobalPluginScraper,
     worker_id: &usize,
     job_id: &usize,

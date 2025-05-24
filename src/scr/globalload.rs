@@ -73,7 +73,7 @@ fn c_regex_match(
     plugin_callback: &Option<sharedtypes::SearchType>,
     liba: &libloading::Library,
     scraper: &GlobalPluginScraper,
-    jobmanager: Arc<Mutex<Jobs>>,
+    jobmanager: Arc<RwLock<Jobs>>,
 ) {
     let output;
     unsafe {
@@ -159,7 +159,7 @@ fn parse_plugin_output(
     plugin_data: Vec<sharedtypes::DBPluginOutputEnum>,
     unwrappy_locked: Arc<Mutex<Main>>,
     scraper: &GlobalPluginScraper,
-    jobmanager: Arc<Mutex<Jobs>>,
+    jobmanager: Arc<RwLock<Jobs>>,
 ) {
     let mut unwrappy = unwrappy_locked.lock().unwrap();
     //let mut unwrappy = self._database.lock().unwrap();
@@ -390,7 +390,7 @@ fn parse_plugin_output_andmain(
     plugin_data: Vec<sharedtypes::DBPluginOutputEnum>,
     db: &mut Main,
     scraper: &GlobalPluginScraper,
-    jobmanager: Arc<Mutex<Jobs>>,
+    jobmanager: Arc<RwLock<Jobs>>,
 ) {
     for each in plugin_data {
         match each {
@@ -463,9 +463,11 @@ fn parse_plugin_output_andmain(
                     }
 
                     if let Some(temp) = names.jobs {
-                        let mut jobmanager = jobmanager.lock().unwrap();
                         for job in temp {
-                            jobmanager.jobs_add_nolock(scraper.clone(), job, db);
+                            jobmanager
+                                .write()
+                                .unwrap()
+                                .jobs_add_nolock(scraper.clone(), job, db);
                             //db.jobs_add_new(job);
                         }
                     }
@@ -513,7 +515,7 @@ pub struct GlobalLoad {
         ),
         Vec<sharedtypes::GlobalPluginScraper>,
     >,
-    jobmanager: Arc<Mutex<Jobs>>,
+    jobmanager: Arc<RwLock<Jobs>>,
 }
 
 ///
@@ -525,7 +527,7 @@ enum LoadableType {
 }
 
 impl GlobalLoad {
-    pub fn new(db: Arc<Mutex<database::Main>>, jobs: Arc<Mutex<Jobs>>) -> Arc<Mutex<Self>> {
+    pub fn new(db: Arc<Mutex<database::Main>>, jobs: Arc<RwLock<Jobs>>) -> Arc<Mutex<Self>> {
         logging::log(&"Starting IPC Server.".to_string());
 
         Arc::new(Mutex::new(GlobalLoad {
@@ -562,7 +564,7 @@ impl GlobalLoad {
         &mut self,
         globalload: Arc<Mutex<GlobalLoad>>,
         db: Arc<Mutex<Main>>,
-        jobs: Arc<Mutex<Jobs>>,
+        jobs: Arc<RwLock<Jobs>>,
     ) {
         let globalload = globalload.clone();
         let srv = std::thread::spawn(move || {

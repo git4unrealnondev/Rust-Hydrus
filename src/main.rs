@@ -6,6 +6,7 @@ use log::{error, warn};
 use std::sync::Arc;
 use std::sync::Mutex;
 
+use std::sync::RwLock;
 // use std::sync::{Arc, Mutex};
 use std::{thread, time};
 
@@ -116,7 +117,7 @@ fn main() {
 
     let mut arc = Arc::new(Mutex::new(data));
 
-    let jobmanager = Arc::new(Mutex::new(jobs::Jobs::new(arc.clone())));
+    let jobmanager = Arc::new(RwLock::new(jobs::Jobs::new(arc.clone())));
 
     let mut globalload_arc = globalload::GlobalLoad::new(arc.clone(), jobmanager.clone());
     {
@@ -193,7 +194,10 @@ fn main() {
     }
 
     // Checks if we need to load any jobs
-    jobmanager.lock().unwrap().jobs_load(globalload_arc.clone());
+    jobmanager
+        .write()
+        .unwrap()
+        .jobs_load(globalload_arc.clone());
 
     // One flush after all the on_start unless needed
     arc.lock().unwrap().transaction_flush();
@@ -202,8 +206,7 @@ fn main() {
     let mut threadhandler = threading::Threads::new();
 
     // just determines if we have any loaded jobs
-    jobmanager.lock().unwrap().jobs_run_new();
-    let arc_jobmanager = jobmanager;
+    jobmanager.write().unwrap().jobs_run_new();
 
     /* //
     // Loads the scrapers for their on_start function
@@ -214,13 +217,15 @@ fn main() {
         }
     }*/
 
-    for scraper in arc_jobmanager.lock().unwrap().job_scrapers_get() {
-        threadhandler.startwork(
-            &mut arc_jobmanager.clone(),
-            &mut arc,
-            scraper.clone(),
-            &mut globalload_arc,
-        );
+    {
+        for scraper in jobmanager.read().unwrap().job_scrapers_get() {
+            threadhandler.startwork(
+                jobmanager.clone(),
+                &mut arc,
+                scraper.clone(),
+                &mut globalload_arc,
+            );
+        }
     }
 
     // Anything below here will run automagically. Jobs run in OS threads Waits until
@@ -228,13 +233,15 @@ fn main() {
     loop {
         let brk;
         {
-            let mut jobmanager = arc_jobmanager.lock().unwrap();
-            jobmanager.jobs_load(globalload_arc.clone());
+            jobmanager
+                .write()
+                .unwrap()
+                .jobs_load(globalload_arc.clone());
         }
-        for scraper in arc_jobmanager.lock().unwrap().job_scrapers_get() {
+        for scraper in jobmanager.read().unwrap().job_scrapers_get() {
             // let scraper_library = scraper_manager._library.get(&scraper).unwrap();
             threadhandler.startwork(
-                &mut arc_jobmanager.clone(),
+                jobmanager.clone(),
                 &mut arc,
                 scraper.clone(),
                 &mut globalload_arc,

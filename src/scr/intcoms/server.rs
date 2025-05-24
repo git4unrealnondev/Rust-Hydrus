@@ -15,6 +15,7 @@ use interprocess::local_socket::{prelude::*, GenericNamespaced, ListenerOptions}
 use std::collections::HashSet;
 use std::sync::Arc;
 use std::sync::Mutex;
+use std::sync::RwLock;
 use std::thread;
 
 // use std::sync::{Arc, Mutex};
@@ -148,7 +149,7 @@ impl PluginIpcInteract {
     pub fn new(
         main_db: Arc<Mutex<database::Main>>,
         globalload: Arc<Mutex<GlobalLoad>>,
-        jobs: Arc<Mutex<Jobs>>,
+        jobs: Arc<RwLock<Jobs>>,
     ) -> Self {
         PluginIpcInteract {
             db_interface: DbInteract {
@@ -241,7 +242,7 @@ another process and try again.",
 struct DbInteract {
     _database: Arc<Mutex<database::Main>>,
     globalload: Arc<Mutex<GlobalLoad>>,
-    jobmanager: Arc<Mutex<Jobs>>,
+    jobmanager: Arc<RwLock<Jobs>>,
     threads: Vec<thread::JoinHandle<()>>,
 }
 
