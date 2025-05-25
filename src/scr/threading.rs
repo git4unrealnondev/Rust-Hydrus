@@ -437,7 +437,7 @@ Worker: {id} JobId: {} -- While trying to parse parameters we got this error: {:
                                     &scraper,
                                     &id,
                                     &jobid,
-                                    &mut globalload.write().unwrap(),
+                                    globalload.clone(),
                                 );
                             }
 
@@ -530,7 +530,7 @@ fn parse_tags(
     file_id: Option<usize>,
     worker_id: &usize,
     job_id: &usize,
-    manager: &mut GlobalLoad,
+    manager: Arc<RwLock<GlobalLoad>>,
 ) -> BTreeSet<sharedtypes::ScraperData> {
     let mut url_return: BTreeSet<sharedtypes::ScraperData> = BTreeSet::new();
     let mut unwrappy = &mut db.write().unwrap();
@@ -750,7 +750,7 @@ fn parse_jobs(
 
     worker_id: &usize,
     job_id: &usize,
-    manager: &mut GlobalLoad,
+    manager: Arc<RwLock<GlobalLoad>>,
 ) {
     let urls_to_scrape = parse_tags(db, tag, fileid, worker_id, job_id, manager);
     {
@@ -860,12 +860,12 @@ pub fn main_file_loop(
 
         // Gets the source url namespace id
         let source_url_id = {
-            let unwrappydb = &mut db.write().unwrap();
+            let mut unwrappydb = db.write().unwrap();
             unwrappydb.create_default_source_url_ns_id()
         };
 
         let location = {
-            let unwrappydb = &mut db.read().unwrap();
+            let unwrappydb = db.read().unwrap();
             unwrappydb.location_get()
         };
 
@@ -945,7 +945,7 @@ pub fn main_file_loop(
                 scraper,
                 worker_id,
                 job_id,
-                &mut globalload.write().unwrap(),
+                globalload.clone(),
             );
         }
     }

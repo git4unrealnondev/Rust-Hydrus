@@ -74,7 +74,7 @@ fn c_regex_match(
     liba: &libloading::Library,
     scraper: &GlobalPluginScraper,
     jobmanager: Arc<RwLock<Jobs>>,
-    manager: &mut GlobalLoad,
+    manager: Arc<RwLock<GlobalLoad>>,
 ) {
     let output;
     unsafe {
@@ -139,7 +139,7 @@ fn parse_plugin_output(
     unwrappy_locked: Arc<RwLock<Main>>,
     scraper: &GlobalPluginScraper,
     jobmanager: Arc<RwLock<Jobs>>,
-    manager: &mut GlobalLoad,
+    manager: Arc<RwLock<GlobalLoad>>,
 ) {
     let mut unwrappy = unwrappy_locked.write().unwrap();
     //let mut unwrappy = self._database.lock().unwrap();
@@ -207,13 +207,12 @@ pub fn plugin_on_download(
             let manager = manager_arc.read().unwrap();
             jobmanager = manager.jobmanager.clone();
         }
-        let mut manager = manager_arc.write().unwrap();
         parse_plugin_output(
             output,
             db.clone(),
             libscraper.get(cnt).unwrap(),
             jobmanager,
-            &mut manager,
+            manager_arc.clone(),
         );
         let _ = lib.close();
     }
@@ -269,13 +268,17 @@ pub fn db_upgrade_call(
 ///
 /// Threadsafe way to call callback on adding a tag into the db
 ///
-pub fn plugin_on_tag(manager: &mut GlobalLoad, db: &mut Main, tag: &String, tag_nsid: &usize) {
+pub fn plugin_on_tag(
+    manager: Arc<RwLock<GlobalLoad>>,
+    db: &mut Main,
+    tag: &String,
+    tag_nsid: &usize,
+) {
     let mut storagemap = Vec::new();
 
-    let jobmanager = manager.jobmanager.clone();
-
     {
-        let reg_store = manager.return_regex_storage();
+        let mread = manager.read().unwrap();
+        let reg_store = mread.return_regex_storage();
         'searchloop: for (((search_string, search_regex), ns, not_ns), pluginscraper_list) in
             reg_store.iter()
         {
@@ -319,7 +322,11 @@ pub fn plugin_on_tag(manager: &mut GlobalLoad, db: &mut Main, tag: &String, tag_
         if let Some(scraper_or_plugin) = &pluginscraper.storage_type {
             if let sharedtypes::ScraperOrPlugin::Plugin(plugininfo) = scraper_or_plugin {
                 if let Some(redirect_site) = &plugininfo.redirect {
-                    if let Some(good_scraper) = manager.return_scraper_from_site(&redirect_site) {
+                    if let Some(good_scraper) = manager
+                        .read()
+                        .unwrap()
+                        .return_scraper_from_site(&redirect_site)
+                    {
                         pluginscraper = good_scraper.clone();
                     }
                 }
@@ -340,7 +347,7 @@ pub fn plugin_on_tag(manager: &mut GlobalLoad, db: &mut Main, tag: &String, tag_
 
         let liba;
         {
-            match manager.library_get_path(&pluginscraper) {
+            match manager.read().unwrap().library_get_path(&pluginscraper) {
                 None => {
                     liba = None;
                 }
@@ -350,6 +357,7 @@ pub fn plugin_on_tag(manager: &mut GlobalLoad, db: &mut Main, tag: &String, tag_
             }
         }
         if let Some(liba) = liba {
+            let jobmanager = manager.read().unwrap().jobmanager.clone();
             c_regex_match(
                 db,
                 tag,
@@ -359,7 +367,7 @@ pub fn plugin_on_tag(manager: &mut GlobalLoad, db: &mut Main, tag: &String, tag_
                 &unsafe { libloading::Library::new(liba).unwrap() },
                 &pluginscraper,
                 jobmanager.clone(),
-                manager,
+                manager.clone(),
             );
         }
     }
@@ -369,7 +377,7 @@ fn parse_plugin_output_andmain(
     db: &mut Main,
     scraper: &GlobalPluginScraper,
     jobmanager: Arc<RwLock<Jobs>>,
-    manager: &mut GlobalLoad,
+    manager: Arc<RwLock<GlobalLoad>>,
 ) {
     for each in plugin_data {
         match each {
@@ -421,11 +429,21 @@ fn parse_plugin_output_andmain(
                             //match namespace_id {}
                             if tags.parents.is_none() && namespace_id.is_some() {
                                 db.tag_add(&tags.name, namespace_id.unwrap(), true, None);
-                                plugin_on_tag(manager, db, &tags.name, &namespace_id.unwrap());
+                                plugin_on_tag(
+                                    manager.clone(),
+                                    db,
+                                    &tags.name,
+                                    &namespace_id.unwrap(),
+                                );
                             } else {
                                 for _parents_obj in tags.parents.unwrap() {
                                     db.tag_add(&tags.name, namespace_id.unwrap(), true, None);
-                                    plugin_on_tag(manager, db, &tags.name, &namespace_id.unwrap());
+                                    plugin_on_tag(
+                                        manager.clone(),
+                                        db,
+                                        &tags.name,
+                                        &namespace_id.unwrap(),
+                                    );
                                 }
                             }
                         }

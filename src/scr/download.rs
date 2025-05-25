@@ -93,7 +93,8 @@ pub fn client_create() -> Client {
         .brotli(true)
         .deflate(true)
         .zstd(true)
-        .timeout(time::Duration::from_secs(1200))
+        .connect_timeout(time::Duration::from_secs(15))
+        .timeout(time::Duration::from_secs(120))
         .build()
         .unwrap()
 }
@@ -122,15 +123,14 @@ pub async fn dltext_new(
             }
         };
 
-        // let requestit = Request::new(Method::GET, url); fut.push();
+        // let futureresult = futures::executor::block_on(ratelimit_object.ready())
+        // .unwrap()
+        ratelimiter_wait(ratelimiter_obj);
         logging::info_log(&format!(
             "Worker: {} -- Spawned web reach to: {}",
             worker_id, &url_string
         ));
 
-        // let futureresult = futures::executor::block_on(ratelimit_object.ready())
-        // .unwrap()
-        ratelimiter_wait(ratelimiter_obj);
         let futureresult = client.get(url).send();
 
         // let test = reqwest::get(url).await.unwrap().text(); let futurez =
