@@ -22,13 +22,13 @@ struct PreviouslySeenObj {
 }
 
 pub struct Jobs {
-    db: Arc<Mutex<database::Main>>,
+    db: Arc<RwLock<database::Main>>,
     site_job: HashMap<sharedtypes::GlobalPluginScraper, HashSet<sharedtypes::DbJobsObj>>,
     previously_seen: HashMap<sharedtypes::GlobalPluginScraper, HashSet<PreviouslySeenObj>>,
 }
 
 impl Jobs {
-    pub fn new(db: Arc<Mutex<database::Main>>) -> Self {
+    pub fn new(db: Arc<RwLock<database::Main>>) -> Self {
         Jobs {
             db,
             site_job: HashMap::new(),
@@ -103,7 +103,6 @@ impl Jobs {
 
                 // Updates the ID field with something from the db
                 dbjobsobj.id = Some(id);
-                crate::logging::info_log(&format!("Adding job: {:?}", &dbjobsobj));
             }
 
             match self.previously_seen.get_mut(&scraper) {
@@ -116,6 +115,7 @@ impl Jobs {
                     self.previously_seen.insert(scraper.clone(), temp);
                 }
             }
+            crate::logging::info_log(&format!("Adding job: {:?}", &dbjobsobj));
             match self.site_job.get_mut(&scraper) {
                 Some(list) => {
                     list.insert(dbjobsobj);
@@ -146,7 +146,7 @@ impl Jobs {
         scraper: sharedtypes::GlobalPluginScraper,
         dbjobsobj: sharedtypes::DbJobsObj,
     ) {
-        self.jobs_add_internal(scraper, dbjobsobj, &mut self.db.clone().lock().unwrap());
+        self.jobs_add_internal(scraper, dbjobsobj, &mut self.db.clone().write().unwrap());
     }
 
     ///
@@ -176,15 +176,18 @@ impl Jobs {
         &mut self,
         scraper: &sharedtypes::GlobalPluginScraper,
         data: &sharedtypes::DbJobsObj,
+        worker_id: &usize,
     ) {
         if let Some(job_list) = self.site_job.get_mut(scraper) {
+            let mut db = self.db.write().unwrap();
             let job_list_static = job_list.clone();
             for job in job_list_static {
                 if job.id == data.id && job_list.remove(&job) {
-                    let mut db = self.db.lock().unwrap();
+                    logging::info_log(&format!("Worker: {worker_id} --Removing Job: {:?}", &job));
                     db.del_from_jobs_byid(job.id.as_ref());
                 }
             }
+            db.transaction_flush();
         }
     }
 
@@ -209,6 +212,7 @@ impl Jobs {
         &mut self,
         data: &sharedtypes::DbJobsObj,
         scraper: &sharedtypes::GlobalPluginScraper,
+        worker_id: &usize,
     ) {
         if let Some(job_list) = self.site_job.get_mut(scraper) {
             if let Some(job) = job_list.get(data) {
@@ -219,7 +223,7 @@ impl Jobs {
                         sharedtypes::DbJobRecreation::AlwaysTime(_, count) => {
                             if let Some(mut count) = count {
                                 if count == 0 {
-                                    self.jobs_remove_dbjob(scraper, data);
+                                    self.jobs_remove_dbjob(scraper, data, worker_id);
                                 } else {
                                     count -= 1;
                                 }
@@ -262,7 +266,7 @@ impl Jobs {
             }
 
             self.db
-                .lock()
+                .write()
                 .unwrap()
                 .load_table(&sharedtypes::LoadDBTable::All);
         }
@@ -273,20 +277,21 @@ impl Jobs {
     ///
     pub fn jobs_load(&mut self, global_load: Arc<RwLock<GlobalLoad>>) {
         // Loads table if this hasn't been loaded yet
-        self.db
-            .lock()
-            .unwrap()
-            .load_table(&sharedtypes::LoadDBTable::Jobs);
-
-        let mut hashjobs;
         {
-            let db = self.db.lock().unwrap();
+            self.db
+                .write()
+                .unwrap()
+                .load_table(&sharedtypes::LoadDBTable::Jobs);
+        }
+        let mut hashjobs;
+        let mut jobs_vec = Vec::new();
+        {
+            let db = self.db.read().unwrap();
             hashjobs = db.jobs_get_all().clone();
         }
 
-        let mut jobs_vec = Vec::new();
         {
-            'mainloop: for scraper in global_load.read().unwrap().scraper_get() {
+            'mainloop: for (scraper, sites) in global_load.read().unwrap().return_all_sites() {
                 // Stupid prefilter because an item can be either a scraper or a plugin. Not sure how I
                 // didn't hit this issue sooner lol
                 if let Some(sharedtypes::ScraperOrPlugin::Scraper(_)) = scraper.storage_type {
@@ -294,18 +299,16 @@ impl Jobs {
                     continue 'mainloop;
                 }
 
-                for sites in global_load.read().unwrap().sites_get(&scraper) {
-                    for (id, job) in hashjobs.iter() {
-                        if sites == job.site {
-                            jobs_vec.push((scraper.clone(), *id, job.clone()));
-                        }
+                //for sites in global_load.read().unwrap().sites_get(&scraper) {
+                for (_, job) in hashjobs.iter() {
+                    if sites == job.site {
+                        jobs_vec.push((scraper.clone(), job.clone()));
                     }
                 }
+                //}
             }
         }
-        for (scraper, id, job) in jobs_vec {
-            hashjobs.remove(&id);
-
+        for (scraper, job) in jobs_vec {
             self.jobs_add(scraper.clone(), job.clone());
         }
     }
@@ -313,8 +316,9 @@ impl Jobs {
 
 #[cfg(test)]
 mod tests {
+    use crate::RwLock;
     use std::collections::BTreeMap;
-    use std::sync::{Arc, Mutex, RwLock};
+    use std::sync::Arc;
     use std::time::Duration;
 
     use crate::database::test_database;
@@ -330,7 +334,7 @@ mod tests {
     ///
     pub fn create_default() -> Jobs {
         let dsb = test_database::setup_default_db();
-        let db = Arc::new(Mutex::new(dsb));
+        let db = Arc::new(RwLock::new(dsb));
 
         Jobs::new(db)
     }
@@ -338,7 +342,7 @@ mod tests {
     ///
     /// Sets up for globalloading
     ///
-    fn get_globalload(db: Arc<Mutex<Main>>, jobs: Arc<RwLock<Jobs>>) -> Arc<RwLock<GlobalLoad>> {
+    fn get_globalload(db: Arc<RwLock<Main>>, jobs: Arc<RwLock<Jobs>>) -> Arc<RwLock<GlobalLoad>> {
         test_globalload::emulate_loaded(db, jobs)
     }
 
@@ -386,7 +390,7 @@ mod tests {
         assert_eq!(job.site_job.get(&scraper).unwrap().len(), 1);
         assert_eq!(job.previously_seen.get(&scraper).unwrap().len(), 1);
 
-        let unwrappy = job.db.lock().unwrap();
+        let unwrappy = job.db.read().unwrap();
         assert_eq!(job.jobs_get(&scraper).len(), 1);
     }
     #[test]

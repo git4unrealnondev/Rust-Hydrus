@@ -74,6 +74,7 @@ fn c_regex_match(
     liba: &libloading::Library,
     scraper: &GlobalPluginScraper,
     jobmanager: Arc<RwLock<Jobs>>,
+    manager: &mut GlobalLoad,
 ) {
     let output;
     unsafe {
@@ -101,7 +102,7 @@ fn c_regex_match(
             .unwrap();
         output = plugindatafunc(tag, tag_ns, regex_match, plugin_callback);
     };
-    parse_plugin_output_andmain(output, db, scraper, jobmanager);
+    parse_plugin_output_andmain(output, db, scraper, jobmanager, manager);
 }
 
 ///
@@ -115,39 +116,18 @@ pub fn url_dump(
 ) -> Result<Vec<(String, sharedtypes::ScraperData)>, libloading::Error> {
     let mut out = Vec::new();
 
-    // Loads the valid libraries
-    for loaded_scraper in arc_scrapermanager.read().unwrap().scraper_get().iter() {
-        if scraper == loaded_scraper {
-            if let Some(lib) = arc_scrapermanager
-                .read()
-                .unwrap()
-                .library_get(loaded_scraper)
-            {
-                let lib = lib.read().unwrap();
-                let temp: libloading::Symbol<
-                    unsafe extern "C" fn(
-                        &Vec<sharedtypes::ScraperParam>,
-                        &sharedtypes::ScraperData,
-                    )
-                        -> Vec<(String, sharedtypes::ScraperData)>,
-                > = unsafe { lib.get(b"url_dump\0")? };
-                for item in unsafe { temp(params, scraperdata) } {
-                    out.push(item);
-                }
-            }
+    if let Some(lib) = arc_scrapermanager.read().unwrap().library_get(scraper) {
+        let lib = lib.read().unwrap();
+        let temp: libloading::Symbol<
+            unsafe extern "C" fn(
+                &Vec<sharedtypes::ScraperParam>,
+                &sharedtypes::ScraperData,
+            ) -> Vec<(String, sharedtypes::ScraperData)>,
+        > = unsafe { lib.get(b"url_dump\0")? };
+        for item in unsafe { temp(params, scraperdata) } {
+            out.push(item);
         }
     }
-
-    /*let scrapermanager = arc_scrapermanager.lock().unwrap();
-    let scraper_library = scrapermanager.library_get().get(scraper).unwrap();
-    let temp: libloading::Symbol<
-        unsafe extern "C" fn(
-            &Vec<sharedtypes::ScraperParam>,
-            &sharedtypes::ScraperData,
-        ) -> Vec<(String, sharedtypes::ScraperData)>,
-    > = unsafe { scraper_library.get(b"url_dump\0").unwrap() };
-    unsafe { temp(params, scraperdata) }*/
-
     Ok(out)
 }
 
@@ -156,13 +136,14 @@ pub fn url_dump(
 ///
 fn parse_plugin_output(
     plugin_data: Vec<sharedtypes::DBPluginOutputEnum>,
-    unwrappy_locked: Arc<Mutex<Main>>,
+    unwrappy_locked: Arc<RwLock<Main>>,
     scraper: &GlobalPluginScraper,
     jobmanager: Arc<RwLock<Jobs>>,
+    manager: &mut GlobalLoad,
 ) {
-    let mut unwrappy = unwrappy_locked.lock().unwrap();
+    let mut unwrappy = unwrappy_locked.write().unwrap();
     //let mut unwrappy = self._database.lock().unwrap();
-    parse_plugin_output_andmain(plugin_data, &mut unwrappy, scraper, jobmanager);
+    parse_plugin_output_andmain(plugin_data, &mut unwrappy, scraper, jobmanager, manager);
 }
 
 ///
@@ -170,7 +151,7 @@ fn parse_plugin_output(
 ///
 pub fn plugin_on_download(
     manager_arc: Arc<RwLock<GlobalLoad>>,
-    db: Arc<Mutex<Main>>,
+    db: Arc<RwLock<Main>>,
     cursorpass: &[u8],
     hash: &String,
     ext: &String,
@@ -206,7 +187,7 @@ pub fn plugin_on_download(
                     &String,
                     &String,
                 ) -> Vec<sharedtypes::DBPluginOutputEnum>,
-                //unsafe extern "C" fn(Cursor<Bytes>, &String, &String, Arc<Mutex<database::Main>>),
+                //unsafe extern "C" fn(Cursor<Bytes>, &String, &String, Arc<RwLock<database::Main>>),
             > = match lib.get(b"on_download") {
                 Ok(lib) => lib,
                 Err(_) => {
@@ -226,7 +207,14 @@ pub fn plugin_on_download(
             let manager = manager_arc.read().unwrap();
             jobmanager = manager.jobmanager.clone();
         }
-        parse_plugin_output(output, db.clone(), libscraper.get(cnt).unwrap(), jobmanager);
+        let mut manager = manager_arc.write().unwrap();
+        parse_plugin_output(
+            output,
+            db.clone(),
+            libscraper.get(cnt).unwrap(),
+            jobmanager,
+            &mut manager,
+        );
         let _ = lib.close();
     }
 }
@@ -281,63 +269,56 @@ pub fn db_upgrade_call(
 ///
 /// Threadsafe way to call callback on adding a tag into the db
 ///
-pub fn plugin_on_tag(
-    manager_arc: Arc<RwLock<GlobalLoad>>,
-    db: &mut Main,
-    tag: &String,
-    tag_nsid: &usize,
-) {
-    let tagstorageregex;
-    {
-        let temp = manager_arc.read().unwrap();
-        tagstorageregex = temp.regex_storage.clone();
-    }
-
+pub fn plugin_on_tag(manager: &mut GlobalLoad, db: &mut Main, tag: &String, tag_nsid: &usize) {
     let mut storagemap = Vec::new();
 
-    'searchloop: for (((search_string, search_regex), ns, not_ns), pluginscraper_list) in
-        tagstorageregex.iter()
+    let jobmanager = manager.jobmanager.clone();
+
     {
-        // Filtering for weather we should apply this to a tag of X namespace
-        for ns in ns {
-            if ns != tag_nsid {
-                continue 'searchloop;
-            }
-        }
-
-        for not_ns in not_ns {
-            if not_ns == tag_nsid {
-                continue 'searchloop;
-            }
-        }
-
-        // Actual matching going on here
-        if let Some(search) = search_string {
-            if tag.contains(search) {}
-        } else if let Some(regex) = search_regex {
-            let regex_iter: Vec<&str> = regex.0.find_iter(tag).map(|m| m.as_str()).collect();
-            for regexmatch in regex_iter {
-                for pluginscraper in pluginscraper_list {
-                    storagemap.push((
-                        pluginscraper,
-                        regexmatch,
-                        Some(sharedtypes::SearchType::Regex(regex.0.to_string())),
-                    ));
+        let reg_store = manager.return_regex_storage();
+        'searchloop: for (((search_string, search_regex), ns, not_ns), pluginscraper_list) in
+            reg_store.iter()
+        {
+            // Filtering for weather we should apply this to a tag of X namespace
+            for ns in ns {
+                if ns != tag_nsid {
+                    continue 'searchloop;
                 }
             }
-        } else {
-            for pluginscraper in pluginscraper_list {
-                storagemap.push((pluginscraper, "", None));
+
+            for not_ns in not_ns {
+                if not_ns == tag_nsid {
+                    continue 'searchloop;
+                }
+            }
+
+            // Actual matching going on here
+            if let Some(search) = search_string {
+                if tag.contains(search) {}
+            } else if let Some(regex) = search_regex {
+                let regex_iter: Vec<&str> = regex.0.find_iter(tag).map(|m| m.as_str()).collect();
+                for regexmatch in regex_iter {
+                    for pluginscraper in pluginscraper_list {
+                        storagemap.push((
+                            pluginscraper.clone(),
+                            regexmatch,
+                            Some(sharedtypes::SearchType::Regex(regex.0.to_string())),
+                        ));
+                    }
+                }
+            } else {
+                for pluginscraper in pluginscraper_list {
+                    storagemap.push((pluginscraper.clone(), "", None));
+                }
             }
         }
     }
 
-    for (pluginscraper, regex, searchtype) in storagemap {
+    for (pluginscraper, regex, searchtype) in storagemap.iter() {
         let mut pluginscraper = pluginscraper.clone();
         if let Some(scraper_or_plugin) = &pluginscraper.storage_type {
             if let sharedtypes::ScraperOrPlugin::Plugin(plugininfo) = scraper_or_plugin {
                 if let Some(redirect_site) = &plugininfo.redirect {
-                    let manager = manager_arc.read().unwrap();
                     if let Some(good_scraper) = manager.return_scraper_from_site(&redirect_site) {
                         pluginscraper = good_scraper.clone();
                     }
@@ -357,12 +338,9 @@ pub fn plugin_on_tag(
             }
         }
 
-        let jobmanager;
         let liba;
         {
-            let temp = manager_arc.read().unwrap();
-            jobmanager = temp.jobmanager.clone();
-            match temp.library_get_path(&pluginscraper) {
+            match manager.library_get_path(&pluginscraper) {
                 None => {
                     liba = None;
                 }
@@ -380,7 +358,8 @@ pub fn plugin_on_tag(
                 &searchtype,
                 &unsafe { libloading::Library::new(liba).unwrap() },
                 &pluginscraper,
-                jobmanager,
+                jobmanager.clone(),
+                manager,
             );
         }
     }
@@ -390,6 +369,7 @@ fn parse_plugin_output_andmain(
     db: &mut Main,
     scraper: &GlobalPluginScraper,
     jobmanager: Arc<RwLock<Jobs>>,
+    manager: &mut GlobalLoad,
 ) {
     for each in plugin_data {
         match each {
@@ -441,10 +421,11 @@ fn parse_plugin_output_andmain(
                             //match namespace_id {}
                             if tags.parents.is_none() && namespace_id.is_some() {
                                 db.tag_add(&tags.name, namespace_id.unwrap(), true, None);
-                            //                                    println!("plugins323 making tag: {}", tags.name);
+                                plugin_on_tag(manager, db, &tags.name, &namespace_id.unwrap());
                             } else {
                                 for _parents_obj in tags.parents.unwrap() {
                                     db.tag_add(&tags.name, namespace_id.unwrap(), true, None);
+                                    plugin_on_tag(manager, db, &tags.name, &namespace_id.unwrap());
                                 }
                             }
                         }
@@ -497,7 +478,7 @@ fn parse_plugin_output_andmain(
 }
 
 pub struct GlobalLoad {
-    db: Arc<Mutex<Main>>,
+    db: Arc<RwLock<Main>>,
     callback: HashMap<sharedtypes::GlobalCallbacks, Vec<sharedtypes::GlobalPluginScraper>>,
     callback_cross: HashMap<sharedtypes::GlobalPluginScraper, Vec<sharedtypes::CallbackInfo>>,
     sites: HashMap<sharedtypes::GlobalPluginScraper, Vec<String>>,
@@ -526,7 +507,7 @@ enum LoadableType {
 }
 
 impl GlobalLoad {
-    pub fn new(db: Arc<Mutex<database::Main>>, jobs: Arc<RwLock<Jobs>>) -> Arc<RwLock<Self>> {
+    pub fn new(db: Arc<RwLock<database::Main>>, jobs: Arc<RwLock<Jobs>>) -> Arc<RwLock<Self>> {
         logging::log(&"Starting IPC Server.".to_string());
 
         Arc::new(RwLock::new(GlobalLoad {
@@ -542,6 +523,19 @@ impl GlobalLoad {
             regex_storage: HashMap::new(),
             jobmanager: jobs,
         }))
+    }
+
+    pub fn return_regex_storage(
+        &self,
+    ) -> &HashMap<
+        (
+            (Option<String>, Option<sharedtypes::RegexStorage>),
+            Vec<usize>,
+            Vec<usize>,
+        ),
+        Vec<sharedtypes::GlobalPluginScraper>,
+    > {
+        &self.regex_storage
     }
 
     ///
@@ -562,7 +556,7 @@ impl GlobalLoad {
     pub fn setup_ipc(
         &mut self,
         globalload: Arc<RwLock<GlobalLoad>>,
-        db: Arc<Mutex<Main>>,
+        db: Arc<RwLock<Main>>,
         jobs: Arc<RwLock<Jobs>>,
     ) {
         let globalload = globalload.clone();
@@ -749,6 +743,16 @@ impl GlobalLoad {
         }
     }
 
+    pub fn return_all_sites(&self) -> Vec<(sharedtypes::GlobalPluginScraper, String)> {
+        let mut out = Vec::new();
+        for scraper in self.scraper_get().iter() {
+            for site in self.sites_get(scraper) {
+                out.push((scraper.clone(), site));
+            }
+        }
+        out
+    }
+
     ///
     /// Returns all loaded scrapers
     ///
@@ -851,15 +855,16 @@ impl GlobalLoad {
     pub fn reload_regex(&mut self) {
         self.clear_regex();
         {
+            let db = self.db.clone();
+            let mut unwrappy = db.write().unwrap();
             let scraper_folder;
             let plugin_folder;
             {
-                let mut unwrappy = self.db.lock().unwrap();
                 scraper_folder = unwrappy.loaded_scraper_folder();
                 plugin_folder = unwrappy.loaded_plugin_folder();
             }
-            self.load_folder(&scraper_folder);
-            self.load_folder(&plugin_folder);
+            self.load_folder(&scraper_folder, &mut unwrappy);
+            self.load_folder(&plugin_folder, &mut unwrappy);
         }
     }
 
@@ -867,7 +872,7 @@ impl GlobalLoad {
     /// Actually parses the Library
     /// TODO needs to make easy pulls for scraper and plugin info
     ///
-    fn parse_lib(&mut self, lib: Library, path: &Path) {
+    fn parse_lib(&mut self, lib: Library, path: &Path, unwrappy: &mut database::Main) {
         if let Some(items) = self.get_info(&lib, path) {
             if items.is_empty() {
                 logging::error_log(&format!(
@@ -920,7 +925,6 @@ impl GlobalLoad {
                     }
 
                     if let sharedtypes::GlobalCallbacks::Tag((searchtype, ns, not_ns)) = callbacks {
-                        let mut unwrappy = self.db.lock().unwrap();
                         unwrappy.load_table(&sharedtypes::LoadDBTable::Namespace);
                         let mut ns_u = Vec::new();
                         let mut ns_not_u = Vec::new();
@@ -1011,7 +1015,7 @@ impl GlobalLoad {
     ///
     /// Gets a valid folder path and tries to load it into the library
     ///
-    pub fn load_folder(&mut self, folder: &Path) {
+    pub fn load_folder(&mut self, folder: &Path, unwrappy: &mut database::Main) {
         if !folder.exists() {
             let path_check = std::fs::create_dir_all(folder);
             match path_check {
@@ -1046,7 +1050,7 @@ impl GlobalLoad {
                 // Going to try and load hopefully valid library
                 unsafe {
                     if let Ok(lib) = libloading::Library::new(entry.path()) {
-                        self.parse_lib(lib, entry.path());
+                        self.parse_lib(lib, entry.path(), unwrappy);
                     }
                 }
             }
@@ -1096,7 +1100,7 @@ pub(crate) mod test_globalload {
 
     use super::*;
     pub fn emulate_loaded(
-        db: Arc<Mutex<database::Main>>,
+        db: Arc<RwLock<database::Main>>,
         jobs: Arc<RwLock<Jobs>>,
     ) -> Arc<RwLock<GlobalLoad>> {
         GlobalLoad::new(db, jobs)

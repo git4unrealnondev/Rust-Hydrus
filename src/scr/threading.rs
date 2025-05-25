@@ -49,7 +49,7 @@ impl Threads {
     pub fn startwork(
         &mut self,
         jobstorage: Arc<RwLock<crate::jobs::Jobs>>,
-        db: &mut Arc<Mutex<database::Main>>,
+        db: &mut Arc<RwLock<database::Main>>,
         scrapermanager: sharedtypes::GlobalPluginScraper,
         globalload: Arc<RwLock<GlobalLoad>>,
     ) {
@@ -148,7 +148,7 @@ impl Worker {
     fn new(
         id: usize,
         jobstorage: Arc<RwLock<crate::jobs::Jobs>>,
-        dba: &mut Arc<Mutex<database::Main>>,
+        dba: &mut Arc<RwLock<database::Main>>,
         scraper: sharedtypes::GlobalPluginScraper,
         globalload: Arc<RwLock<GlobalLoad>>,
         threadflagcontrol: Control,
@@ -185,7 +185,6 @@ impl Worker {
                     should_remove_original_job = true;
                     let currentjob = job.clone();
                     {
-                        let unwrappydb = &mut db.lock().unwrap();
                         for (key, login, login_needed, help_text, overwrite_db_entry) in
                             scraper.login_type.iter()
                         {
@@ -198,6 +197,7 @@ impl Worker {
                                     api_namespace,
                                     api_body,
                                 ) => {
+                                    let unwrappydb = &mut db.write().unwrap();
                                     if *overwrite_db_entry && api_namespace.is_some() {
                                         unwrappydb.setting_add(
                                             format!("API_NAMESPACED_NAMESPACE_{}_{}", key, name),
@@ -283,12 +283,12 @@ impl Worker {
                             jobstorage
                                 .write()
                                 .unwrap()
-                                .jobs_decrement_count(&data, &scraper);
+                                .jobs_decrement_count(&data, &scraper, &id);
 
                             // Updates the database with the "new" object. Will have the same ID
                             // but time and reptime will be consistient to when we should run this
                             // job next
-                            let unwrappydb = &mut db.lock().unwrap();
+                            let unwrappydb = &mut db.write().unwrap();
                             unwrappydb.jobs_update_db(data);
                         }
                     }
@@ -356,8 +356,8 @@ Worker: {id} JobId: {} -- While trying to parse parameters we got this error: {:
                         }
                         sharedtypes::DbJobType::NoScrape => {
                             let mut out = Vec::new();
-                            for item in job.param {
-                                out.push((item, scraper_data_holder.clone()));
+                            for item in job.param.iter() {
+                                out.push((item.clone(), scraper_data_holder.clone()));
                             }
                             out
                         }
@@ -367,8 +367,8 @@ Worker: {id} JobId: {} -- While trying to parse parameters we got this error: {:
                         // .collect(), scraper_data_holder, ); parpms }
                         sharedtypes::DbJobType::Scraper => {
                             let mut out = Vec::new();
-                            for item in job.param {
-                                out.push((item, scraper_data_holder.clone()));
+                            for item in job.param.iter() {
+                                out.push((item.clone(), scraper_data_holder.clone()));
                             }
                             out
                         }
@@ -394,6 +394,7 @@ Worker: {id} JobId: {} -- While trying to parse parameters we got this error: {:
                                         &scraper,
                                     ),
                                     Err(_) => {
+                                        logging::error_log(&format!("Worker: {} -- While processing job {:?} was unable to download text.",&id, &job));
                                         break 'errloop;
                                     }
                                 };
@@ -436,6 +437,7 @@ Worker: {id} JobId: {} -- While trying to parse parameters we got this error: {:
                                     &scraper,
                                     &id,
                                     &jobid,
+                                    &mut globalload.write().unwrap(),
                                 );
                             }
 
@@ -476,12 +478,11 @@ Worker: {id} JobId: {} -- While trying to parse parameters we got this error: {:
                     }
                     {
                         if should_remove_original_job {
-                            jobstorage
-                                .write()
-                                .unwrap()
-                                .jobs_remove_dbjob(&scraper, &currentjob);
-                            let mut db = db.lock().unwrap();
-                            db.transaction_flush();
+                            jobstorage.write().unwrap().jobs_remove_dbjob(
+                                &scraper,
+                                &currentjob,
+                                &id,
+                            );
                         }
                         {
                             jobstorage
@@ -524,14 +525,15 @@ Worker: {id} JobId: {} -- While trying to parse parameters we got this error: {:
 
 /// Parses tags and adds the tags into the db.
 fn parse_tags(
-    db: &Arc<Mutex<database::Main>>,
+    db: &Arc<RwLock<database::Main>>,
     tag: &sharedtypes::TagObject,
     file_id: Option<usize>,
     worker_id: &usize,
     job_id: &usize,
+    manager: &mut GlobalLoad,
 ) -> BTreeSet<sharedtypes::ScraperData> {
     let mut url_return: BTreeSet<sharedtypes::ScraperData> = BTreeSet::new();
-    let unwrappy = &mut db.lock().unwrap();
+    let mut unwrappy = &mut db.write().unwrap();
     match &tag.tag_type {
         sharedtypes::TagType::Normal => {
             // println!("Adding tag: {} {:?}", tag.tag, &file_id); We've recieved a normal
@@ -542,6 +544,7 @@ fn parse_tags(
                 true,
             );
             let tag_id = unwrappy.tag_add(&tag.tag, namespace_id, true, None);
+            globalload::plugin_on_tag(manager, &mut unwrappy, &tag.tag, &namespace_id);
             match &tag.relates_to {
                 None => {
                     // let relate_ns_id = unwrappy.namespace_add( relate.namespace.name.clone(),
@@ -674,14 +677,14 @@ fn download_add_to_db(
     location: String,
     globalload: Arc<RwLock<GlobalLoad>>,
     client: &Client,
-    db: Arc<Mutex<database::Main>>,
+    db: Arc<RwLock<database::Main>>,
     file: &mut sharedtypes::FileObject,
     worker_id: &usize,
     job_id: &usize,
 ) -> Option<usize> {
     // Early exit for if the file is a dead url
     {
-        let unwrappydb = &mut db.lock().unwrap();
+        let unwrappydb = &mut db.read().unwrap();
         if unwrappydb.check_dead_url(source) {
             logging::info_log(&format!(
                 "Worker: {worker_id} JobID: {job_id} -- Skipping {} because it's a dead link.",
@@ -709,7 +712,7 @@ fn download_add_to_db(
 
     match blopt {
         download::FileReturnStatus::File((hash, file_ext)) => {
-            let unwrappydb = &mut db.lock().unwrap();
+            let unwrappydb = &mut db.write().unwrap();
 
             let ext_id = unwrappydb.extension_put_string(&file_ext);
 
@@ -728,7 +731,7 @@ fn download_add_to_db(
             return Some(fileid);
         }
         download::FileReturnStatus::DeadUrl(dead_url) => {
-            let unwrappydb = &mut db.lock().unwrap();
+            let unwrappydb = &mut db.write().unwrap();
             unwrappydb.add_dead_url(&dead_url);
         }
         _ => {}
@@ -742,13 +745,14 @@ fn parse_jobs(
     tag: &sharedtypes::TagObject,
     fileid: Option<usize>,
     jobstorage: Arc<RwLock<crate::jobs::Jobs>>,
-    db: &mut Arc<Mutex<database::Main>>,
+    db: &mut Arc<RwLock<database::Main>>,
     scraper: &sharedtypes::GlobalPluginScraper,
 
     worker_id: &usize,
     job_id: &usize,
+    manager: &mut GlobalLoad,
 ) {
-    let urls_to_scrape = parse_tags(db, tag, fileid, worker_id, job_id);
+    let urls_to_scrape = parse_tags(db, tag, fileid, worker_id, job_id, manager);
     {
         let mut joblock = jobstorage.write().unwrap();
         for data in urls_to_scrape {
@@ -780,13 +784,13 @@ fn parse_jobs(
 fn parse_skipif(
     file_tag: &sharedtypes::SkipIf,
     file_url_source: &String,
-    db: &mut Arc<Mutex<database::Main>>,
+    db: &mut Arc<RwLock<database::Main>>,
     worker_id: &usize,
     job_id: &usize,
 ) -> bool {
     match file_tag {
         sharedtypes::SkipIf::FileNamespaceNumber((unique_tag, namespace_filter, filter_number)) => {
-            let unwrappydb = db.lock().unwrap();
+            let unwrappydb = db.read().unwrap();
             let mut cnt = 0;
             if let Some(nidf) = unwrappydb.namespace_get(&namespace_filter.name) {
                 if let Some(nid) = unwrappydb.namespace_get(&unique_tag.namespace.name) {
@@ -816,7 +820,7 @@ fn parse_skipif(
             }
         }
         sharedtypes::SkipIf::FileTagRelationship(tag) => {
-            let unwrappydb = db.lock().unwrap();
+            let unwrappydb = db.read().unwrap();
             if let Some(nsid) = unwrappydb.namespace_get(&tag.namespace.name) {
                 if unwrappydb
                     .tag_get_name(tag.tag.to_string(), *nsid)
@@ -837,7 +841,7 @@ fn parse_skipif(
 /// Main file checking loop manages the downloads
 pub fn main_file_loop(
     file: &mut sharedtypes::FileObject,
-    db: &mut Arc<Mutex<database::Main>>,
+    db: &mut Arc<RwLock<database::Main>>,
     ratelimiter_obj: Arc<Mutex<Ratelimiter>>,
     globalload: Arc<RwLock<GlobalLoad>>,
     client: &Client,
@@ -856,18 +860,18 @@ pub fn main_file_loop(
 
         // Gets the source url namespace id
         let source_url_id = {
-            let unwrappydb = &mut db.lock().unwrap();
+            let unwrappydb = &mut db.write().unwrap();
             unwrappydb.create_default_source_url_ns_id()
         };
 
         let location = {
-            let unwrappydb = &mut db.lock().unwrap();
+            let unwrappydb = &mut db.read().unwrap();
             unwrappydb.location_get()
         };
 
         let url_tag;
         {
-            let unwrappydb = db.lock().unwrap();
+            let unwrappydb = db.read().unwrap();
             url_tag = unwrappydb
                 .tag_get_name(source.clone(), source_url_id)
                 .cloned();
@@ -880,7 +884,7 @@ pub fn main_file_loop(
                     ratelimiter_obj,
                     source,
                     location,
-                    globalload,
+                    globalload.clone(),
                     client,
                     db.clone(),
                     file,
@@ -895,7 +899,7 @@ pub fn main_file_loop(
                 let file_id;
                 {
                     // We've already got a valid relationship
-                    let unwrappydb = &mut db.lock().unwrap();
+                    let unwrappydb = &mut db.read().unwrap();
                     file_id = unwrappydb.relationship_get_one_fileid(&url_id).copied();
                     if let Some(fid) = file_id {
                         unwrappydb.file_get_id(&fid).unwrap();
@@ -916,7 +920,7 @@ pub fn main_file_loop(
                             ratelimiter_obj,
                             source,
                             location,
-                            globalload,
+                            globalload.clone(),
                             client,
                             db.clone(),
                             file,
@@ -941,6 +945,7 @@ pub fn main_file_loop(
                 scraper,
                 worker_id,
                 job_id,
+                &mut globalload.write().unwrap(),
             );
         }
     }

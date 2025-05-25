@@ -148,7 +148,7 @@ pub struct PluginIpcInteract {
 /// This is going to be the main way to talk to the plugin system and stuffins.
 impl PluginIpcInteract {
     pub fn new(
-        main_db: Arc<Mutex<database::Main>>,
+        main_db: Arc<RwLock<database::Main>>,
         globalload: Arc<RwLock<GlobalLoad>>,
         jobs: Arc<RwLock<Jobs>>,
     ) -> Self {
@@ -241,7 +241,7 @@ another process and try again.",
 }
 
 struct DbInteract {
-    _database: Arc<Mutex<database::Main>>,
+    _database: Arc<RwLock<database::Main>>,
     globalload: Arc<RwLock<GlobalLoad>>,
     jobmanager: Arc<RwLock<Jobs>>,
     threads: Vec<thread::JoinHandle<()>>,
@@ -319,25 +319,25 @@ impl DbInteract {
                 Self::data_size_to_b(&true)
             }
             types::SupportedDBRequests::PutJob(job) => {
-                let mut unwrappy = self._database.lock().unwrap();
+                let mut unwrappy = self._database.write().unwrap();
                 let _ = &unwrappy.jobs_add_new(job);
                 Self::data_size_to_b(&true)
             }
             types::SupportedDBRequests::GetNamespaceIDsAll => {
-                let unwrappy = self._database.lock().unwrap();
+                let unwrappy = self._database.read().unwrap();
                 Self::data_size_to_b(&unwrappy.namespace_keys())
             }
 
             types::SupportedDBRequests::GetFileExt(ext_id) => {
-                let unwrappy = self._database.lock().unwrap();
+                let unwrappy = self._database.read().unwrap();
                 Self::option_to_bytes(unwrappy.extension_get_string(&ext_id).as_ref())
             }
             types::SupportedDBRequests::GetJob(id) => {
-                let unwrappy = self._database.lock().unwrap();
+                let unwrappy = self._database.read().unwrap();
                 Self::option_to_bytes(unwrappy.jobs_get(&id))
             }
             types::SupportedDBRequests::ParentsPut(parent) => {
-                let mut unwrappy = self._database.lock().unwrap();
+                let mut unwrappy = self._database.write().unwrap();
                 Self::data_size_to_b(&unwrappy.parents_add(
                     parent.tag_id,
                     parent.relate_tag_id,
@@ -346,7 +346,7 @@ impl DbInteract {
                 ))
             }
             types::SupportedDBRequests::ParentsGet((parentswitch, id)) => {
-                let unwrappy = self._database.lock().unwrap();
+                let unwrappy = self._database.read().unwrap();
                 match parentswitch {
                     types::ParentsType::Tag => {
                         Self::option_to_bytes(unwrappy.parents_rel_get(&id).as_ref())
@@ -357,18 +357,18 @@ impl DbInteract {
                 }
             }
             types::SupportedDBRequests::ParentsDelete(parentobj) => {
-                let mut unwrappy = self._database.lock().unwrap();
+                let mut unwrappy = self._database.write().unwrap();
                 unwrappy.parents_selective_remove(&parentobj);
                 Self::data_size_to_b(&true)
             }
             types::SupportedDBRequests::GetFileLocation(id) => {
-                let unwrappy = self._database.lock().unwrap();
+                let unwrappy = self._database.read().unwrap();
                 let tmep = unwrappy.get_file(&id);
                 Self::option_to_bytes(tmep.as_ref())
             }
             types::SupportedDBRequests::FilterNamespaceById((ids, namespace_id)) => {
                 let mut out: HashSet<usize> = HashSet::new();
-                let unwrappy = self._database.lock().unwrap();
+                let unwrappy = self._database.read().unwrap();
                 for each in ids.iter() {
                     if unwrappy.namespace_contains_id(&namespace_id, each) {
                         out.insert(*each);
@@ -383,7 +383,7 @@ impl DbInteract {
                 Self::data_size_to_b(&true)
             }
             types::SupportedDBRequests::NamespaceContainsId(namespaceid, tagid) => {
-                let unwrappy = self._database.lock().unwrap();
+                let unwrappy = self._database.read().unwrap();
                 let tmep = unwrappy.namespace_contains_id(&namespaceid, &tagid);
                 Self::data_size_to_b(&tmep)
             }
@@ -393,17 +393,17 @@ impl DbInteract {
                 Self::data_size_to_b(&out)
             }
             types::SupportedDBRequests::GetFileByte(id) => {
-                let unwrappy = self._database.lock().unwrap();
+                let unwrappy = self._database.read().unwrap();
                 let tmep = unwrappy.get_file_bytes(&id);
                 Self::option_to_bytes(tmep.as_ref())
             }
             types::SupportedDBRequests::Search((search, limit, offset)) => {
-                let unwrappy = self._database.lock().unwrap();
+                let unwrappy = self._database.read().unwrap();
                 let tmep = unwrappy.search_db_files(search, limit, offset);
                 Self::data_size_to_b(&tmep)
             }
             types::SupportedDBRequests::GetTagId(id) => {
-                let unwrappy = self._database.lock().unwrap();
+                let unwrappy = self._database.read().unwrap();
                 let tmep = unwrappy.tag_id_get(&id);
                 Self::option_to_bytes(tmep)
             }
@@ -416,12 +416,12 @@ impl DbInteract {
                 Self::data_size_to_b(&true)
             }
             types::SupportedDBRequests::RelationshipAdd(file, tag, addtodb) => {
-                let mut unwrappy = self._database.lock().unwrap();
+                let mut unwrappy = self._database.write().unwrap();
                 unwrappy.relationship_add(file, tag, addtodb);
                 Self::data_size_to_b(&true)
             }
             types::SupportedDBRequests::PutTag(tags, namespace_id, addtodb, id) => {
-                let mut unwrappy = self._database.lock().unwrap();
+                let mut unwrappy = self._database.write().unwrap();
                 let tmep = unwrappy.tag_add(&tags, namespace_id, addtodb, id);
                 Self::data_size_to_b(&tmep)
             }
@@ -432,58 +432,58 @@ impl DbInteract {
                 addtodb,
                 id,
             ) => {
-                let mut unwrappy = self._database.lock().unwrap();
+                let mut unwrappy = self._database.write().unwrap();
                 let tmep = unwrappy.tag_add(&tags, namespace_id, addtodb, id);
                 unwrappy.relationship_add(fid, tmep, addtodb);
                 Self::data_size_to_b(&true)
             }
             types::SupportedDBRequests::GetDBLocation() => {
-                let unwrappy = self._database.lock().unwrap();
+                let unwrappy = self._database.read().unwrap();
                 let tmep = unwrappy.location_get();
                 Self::data_size_to_b(&tmep)
             }
             types::SupportedDBRequests::SettingsSet(name, pretty, num, param, addtodb) => {
-                let mut unwrappy = self._database.lock().unwrap();
+                let mut unwrappy = self._database.write().unwrap();
                 unwrappy.setting_add(name, pretty, num, param, addtodb);
                 Self::data_size_to_b(&true)
             }
             types::SupportedDBRequests::RelationshipGetTagid(id) => {
-                let unwrappy = self._database.lock().unwrap();
+                let unwrappy = self._database.read().unwrap();
                 let tmep = unwrappy.relationship_get_tagid(&id);
                 Self::data_size_to_b(&tmep)
             }
             types::SupportedDBRequests::GetFile(id) => {
-                let unwrappy = self._database.lock().unwrap();
+                let unwrappy = self._database.read().unwrap();
                 let tmep = unwrappy.file_get_id(&id);
                 Self::option_to_bytes(tmep.as_ref())
             }
             types::SupportedDBRequests::RelationshipGetFileid(id) => {
-                let unwrappy = self._database.lock().unwrap();
+                let unwrappy = self._database.read().unwrap();
                 let tmep = unwrappy.relationship_get_fileid(&id);
                 Self::data_size_to_b(&tmep)
             }
             types::SupportedDBRequests::SettingsGetName(id) => {
-                let unwrappy = self._database.lock().unwrap();
+                let unwrappy = self._database.read().unwrap();
                 let tmep = unwrappy.settings_get_name(&id);
                 Self::option_to_bytes(tmep)
             }
             types::SupportedDBRequests::GetTagName((name, namespace)) => {
-                let unwrappy = self._database.lock().unwrap();
+                let unwrappy = self._database.read().unwrap();
                 let tmep = unwrappy.tag_get_name(name, namespace);
                 Self::option_to_bytes(tmep)
             }
             types::SupportedDBRequests::GetFileHash(name) => {
-                let unwrappy = self._database.lock().unwrap();
+                let unwrappy = self._database.read().unwrap();
                 let tmep = unwrappy.file_get_hash(&name);
                 Self::option_to_bytes(tmep)
             }
             types::SupportedDBRequests::CreateNamespace(name, description, addtodb) => {
-                let mut unwrappy = self._database.lock().unwrap();
+                let mut unwrappy = self._database.write().unwrap();
                 let out = unwrappy.namespace_add(name, description, addtodb);
                 Self::data_size_to_b(&out)
             }
             types::SupportedDBRequests::GetNamespace(name) => {
-                let unwrappy = self._database.lock().unwrap();
+                let unwrappy = self._database.read().unwrap();
                 let tmep = unwrappy.namespace_get(&name);
                 Self::option_to_bytes(tmep)
             }
@@ -492,32 +492,32 @@ impl DbInteract {
                 Self::data_size_to_b(&test)
             }
             types::SupportedDBRequests::GetNamespaceString(id) => {
-                let unwrappy = self._database.lock().unwrap();
+                let unwrappy = self._database.read().unwrap();
                 let tmep = unwrappy.namespace_get_string(&id);
                 Self::option_to_bytes(tmep)
             }
             types::SupportedDBRequests::LoadTable(table) => {
-                let mut unwrappy = self._database.lock().unwrap();
+                let mut unwrappy = self._database.write().unwrap();
                 unwrappy.load_table(&table);
                 Self::data_size_to_b(&true)
             }
             types::SupportedDBRequests::TransactionFlush() => {
-                let mut unwrappy = self._database.lock().unwrap();
+                let mut unwrappy = self._database.write().unwrap();
                 unwrappy.transaction_flush();
                 Self::data_size_to_b(&true)
             }
             types::SupportedDBRequests::GetNamespaceTagIDs(id) => {
-                let unwrappy = self._database.lock().unwrap();
+                let unwrappy = self._database.read().unwrap();
                 let tmep = unwrappy.namespace_get_tagids(&id);
                 Self::data_size_to_b(&tmep)
             }
             types::SupportedDBRequests::GetFileListId() => {
-                let unwrappy = self._database.lock().unwrap();
+                let unwrappy = self._database.read().unwrap();
                 let tmep = unwrappy.file_get_list_id();
                 Self::data_size_to_b(&tmep)
             }
             types::SupportedDBRequests::GetFileListAll() => {
-                let unwrappy = self._database.lock().unwrap();
+                let unwrappy = self._database.read().unwrap();
                 let tmep = unwrappy.file_get_list_all();
                 Self::data_size_to_b(tmep)
                 //bincode::serialize(&tmep).unwrap()
@@ -525,7 +525,7 @@ impl DbInteract {
             types::SupportedDBRequests::ReloadRegex => {
                 let globalload;
                 {
-                    let unwrappy = self._database.lock().unwrap();
+                    let unwrappy = self._database.write().unwrap();
                     if let Some(globalload_arc) = unwrappy.globalload.clone() {
                         globalload = globalload_arc.clone();
                     } else {

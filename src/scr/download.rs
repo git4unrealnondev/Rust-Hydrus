@@ -140,14 +140,21 @@ pub async fn dltext_new(
         }
         cnt += 1;
         match futureresult {
-            Ok(res) => match res.text() {
-                Ok(text) => {
-                    return Ok(text);
+            Ok(res) => {
+                // Exit for error codes 400
+                if let Err(err) = res.error_for_status_ref() {
+                    return Err(Box::new(err));
+                } else {
+                    match res.text() {
+                        Ok(text) => {
+                            return Ok(text);
+                        }
+                        Err(_) => {
+                            continue;
+                        }
+                    }
                 }
-                Err(_) => {
-                    continue;
-                }
-            },
+            }
             Err(_) => {
                 return Err(Box::new(futureresult.err().unwrap()));
             }
@@ -216,7 +223,7 @@ pub enum FileReturnStatus {
 /// Downloads file to position
 pub fn dlfile_new(
     client: &Client,
-    db: Arc<Mutex<Main>>,
+    db: Arc<RwLock<Main>>,
     file: &mut sharedtypes::FileObject,
     location: &String,
     globalload: Option<Arc<RwLock<GlobalLoad>>>,
@@ -346,7 +353,7 @@ pub fn dlfile_new(
         }
     }
     {
-        let mut unwrappydb = db.lock().unwrap();
+        let mut unwrappydb = db.write().unwrap();
         let source_url_ns_id = unwrappydb.create_default_source_url_ns_id();
         unwrappydb.enclave_determine_processing(file, bytes, &hash, source_url);
     }

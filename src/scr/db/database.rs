@@ -1105,7 +1105,8 @@ impl Main {
                 conn.execute(
                     "insert or ignore into FileExtensions(extension) VALUES (?)",
                     params![ext],
-                );
+                )
+                .unwrap();
                 let out: usize = conn
                     .query_row(
                         "select id from FileExtensions where extension = ?",
@@ -1460,7 +1461,13 @@ impl Main {
         match id {
             None => {
                 if let Some(globalload) = &self.globalload {
-                    globalload::plugin_on_tag(globalload.clone(), self, tags, &namespace);
+                    let globalload = globalload.clone();
+                    /*globalload::plugin_on_tag(
+                        &mut globalload.write().unwrap(),
+                        self,
+                        tags,
+                        &namespace,
+                    );*/
                 }
 
                 // Do we have an ID coming in to add manually?
