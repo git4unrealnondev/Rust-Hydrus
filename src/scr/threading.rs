@@ -371,6 +371,7 @@ Worker: {id} JobId: {} -- While trying to parse parameters we got this error: {:
                             out
                         }
                     };
+
                     'urlloop: for (scraperparam, scraperdata) in urlload {
                         'errloop: loop {
                             let resp;
@@ -479,12 +480,6 @@ Worker: {id} JobId: {} -- While trying to parse parameters we got this error: {:
                                 .jobs_remove_dbjob(&scraper, &currentjob);
                             let mut db = db.lock().unwrap();
                             db.transaction_flush();
-                        }
-                        {
-                            jobstorage
-                                .write()
-                                .unwrap()
-                                .jobs_remove_dbjob(&scraper, &currentjob);
                         }
                     }
                     {

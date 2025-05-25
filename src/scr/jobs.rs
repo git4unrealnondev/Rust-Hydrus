@@ -69,6 +69,10 @@ impl Jobs {
         if let Some(list) = self.previously_seen.get(&scraper) {
             // If we match directly then we should be good
             if list.contains(&obj) {
+                /*logging::info_log(&format!(
+                    "Skipping obj because I've seen it already: {:?}",
+                    &obj
+                ));*/
                 return;
             }
 
