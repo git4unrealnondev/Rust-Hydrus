@@ -6,8 +6,9 @@ use crate::sharedtypes;
 use crate::time_func;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
-use std::sync::Mutex;
-use std::sync::RwLock;
+//use std::sync::Mutex;
+use crate::Mutex;
+use crate::RwLock;
 
 ///
 /// Holds the previously seen jobs

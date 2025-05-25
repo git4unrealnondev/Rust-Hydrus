@@ -83,11 +83,23 @@ fn parse_post(
     };
 
     for attachments in input_post["attachments"].members() {
+        let attachmentname = sharedtypes::TagObject {
+            namespace: get_genericnamespaceobj(Returntype::PostAttachmentName, sitetype),
+            tag: attachments["name"].to_string(),
+            tag_type: sharedtypes::TagType::Normal,
+            relates_to: post_subtag.clone(),
+        };
+
         let url = format!("https://{site}/data{}", attachments["path"]);
         object.file.insert(sharedtypes::FileObject {
             source_url: Some(url),
             hash: sharedtypes::HashesSupported::None,
-            tag_list: vec![post_id.clone(), title.clone(), content.clone()],
+            tag_list: vec![
+                post_id.clone(),
+                title.clone(),
+                content.clone(),
+                attachmentname,
+            ],
             skip_if: vec![],
         });
     }

@@ -15,11 +15,13 @@ use reqwest::blocking::Client;
 use std::collections::BTreeSet;
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::sync::RwLock;
+//use std::sync::RwLock;
 
 // use std::sync::Mutex;
 use rusty_pool::ThreadPool;
-use std::sync::Mutex;
+//use std::sync::Mutex;
+use crate::Mutex;
+use crate::RwLock;
 use std::thread;
 use std::time::Duration;
 use thread_control::*;

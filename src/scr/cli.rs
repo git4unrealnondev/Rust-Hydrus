@@ -9,6 +9,8 @@ use strfmt::Format;
 // use std::str::pattern::Searcher;
 use crate::download;
 use crate::sharedtypes::{DEFAULT_CACHECHECK, DEFAULT_CACHETIME, DEFAULT_PRIORITY};
+use crate::Mutex;
+use crate::RwLock;
 use crate::{
     database,
     globalload::GlobalLoad,
@@ -17,7 +19,7 @@ use crate::{
 };
 use clap::Parser;
 use file_format::FileFormat;
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::Arc;
 
 mod cli_structs;
 

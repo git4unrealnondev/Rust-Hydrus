@@ -1,3 +1,5 @@
+use crate::Mutex;
+use crate::RwLock;
 use crate::{
     database::{self, Main},
     jobs::Jobs,
@@ -5,8 +7,7 @@ use crate::{
     sharedtypes::{self, GlobalPluginScraper},
 };
 use libloading::Library;
-use std::sync::RwLock;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::{collections::HashMap, path::Path, thread};
 use std::{path::PathBuf, thread::JoinHandle};
 ///

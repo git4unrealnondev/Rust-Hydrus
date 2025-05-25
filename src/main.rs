@@ -4,9 +4,10 @@ use log::{error, warn};
 //use scraper::db_upgrade_call;
 //use scraper::on_start;
 use std::sync::Arc;
-use std::sync::Mutex;
+//use std::sync::Mutex;
+use tracing_mutex::stdsync::Mutex;
+use tracing_mutex::stdsync::RwLock;
 
-use std::sync::RwLock;
 // use std::sync::{Arc, Mutex};
 use std::{thread, time};
 

@@ -17,7 +17,6 @@ use std::error::Error;
 use std::io::BufReader;
 use std::io::Cursor;
 use std::io::Read;
-use std::sync::RwLock;
 use std::time::Duration;
 use url::Url;
 
@@ -28,7 +27,9 @@ use std::fs::File;
 
 // use std::sync::{Arc, Mutex};
 use std::sync::Arc;
-use std::sync::Mutex;
+//use std::sync::Mutex;
+use crate::Mutex;
+use crate::RwLock;
 use std::thread;
 
 /// Makes ratelimiter and example

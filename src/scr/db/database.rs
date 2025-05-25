@@ -4,6 +4,8 @@ use crate::globalload::GlobalLoad;
 use crate::logging;
 use crate::sharedtypes;
 use crate::sharedtypes::ScraperParam;
+use crate::Mutex;
+use crate::RwLock;
 use eta::{Eta, TimeAcc};
 use log::{error, info};
 use rayon::prelude::*;
@@ -17,8 +19,6 @@ use std::panic;
 use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::sync::Mutex;
-use std::sync::RwLock;
 use std::time::Duration;
 
 pub mod enclave;
