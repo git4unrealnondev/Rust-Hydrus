@@ -220,7 +220,7 @@ fn main() {
         for scraper in jobmanager.read().unwrap().job_scrapers_get() {
             threadhandler.startwork(
                 jobmanager.clone(),
-                &mut arc,
+                arc.clone(),
                 scraper.clone(),
                 globalload_arc.clone(),
             );
@@ -248,7 +248,7 @@ fn main() {
             // let scraper_library = scraper_manager._library.get(&scraper).unwrap();
             threadhandler.startwork(
                 jobmanager.clone(),
-                &mut arc,
+                arc.clone(),
                 scraper.clone(),
                 globalload_arc.clone(),
             );

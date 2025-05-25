@@ -7,6 +7,7 @@ use crate::{
     sharedtypes::{self, GlobalPluginScraper},
 };
 use libloading::Library;
+use std::panic::UnwindSafe;
 use std::sync::Arc;
 use std::{collections::HashMap, path::Path, thread};
 use std::{path::PathBuf, thread::JoinHandle};
@@ -66,7 +67,7 @@ pub fn parser_call(
 /// Calls a regex function
 ///
 fn c_regex_match(
-    db: &mut Main,
+    db: Arc<RwLock<Main>>,
     tag: &String,
     tag_ns: &String,
     regex_match: &String,
@@ -136,14 +137,13 @@ pub fn url_dump(
 ///
 fn parse_plugin_output(
     plugin_data: Vec<sharedtypes::DBPluginOutputEnum>,
-    unwrappy_locked: Arc<RwLock<Main>>,
+    unwrappy: Arc<RwLock<Main>>,
     scraper: &GlobalPluginScraper,
     jobmanager: Arc<RwLock<Jobs>>,
     manager: Arc<RwLock<GlobalLoad>>,
 ) {
-    let mut unwrappy = unwrappy_locked.write().unwrap();
     //let mut unwrappy = self._database.lock().unwrap();
-    parse_plugin_output_andmain(plugin_data, &mut unwrappy, scraper, jobmanager, manager);
+    parse_plugin_output_andmain(plugin_data, unwrappy, scraper, jobmanager, manager);
 }
 
 ///
@@ -270,7 +270,7 @@ pub fn db_upgrade_call(
 ///
 pub fn plugin_on_tag(
     manager: Arc<RwLock<GlobalLoad>>,
-    db: &mut Main,
+    db: Arc<RwLock<Main>>,
     tag: &String,
     tag_nsid: &usize,
 ) {
@@ -335,7 +335,9 @@ pub fn plugin_on_tag(
 
         let tag_ns;
         {
-            match db.namespace_get_string(tag_nsid) {
+            let db = db.clone();
+            let unwrappy = db.read().unwrap();
+            match unwrappy.namespace_get_string(tag_nsid) {
                 None => {
                     continue;
                 }
@@ -359,7 +361,7 @@ pub fn plugin_on_tag(
         if let Some(liba) = liba {
             let jobmanager = manager.read().unwrap().jobmanager.clone();
             c_regex_match(
-                db,
+                db.clone(),
                 tag,
                 &tag_ns,
                 &regex.to_string(),
@@ -374,7 +376,7 @@ pub fn plugin_on_tag(
 }
 fn parse_plugin_output_andmain(
     plugin_data: Vec<sharedtypes::DBPluginOutputEnum>,
-    db: &mut Main,
+    db: Arc<RwLock<Main>>,
     scraper: &GlobalPluginScraper,
     jobmanager: Arc<RwLock<Jobs>>,
     manager: Arc<RwLock<GlobalLoad>>,
@@ -390,25 +392,30 @@ fn parse_plugin_output_andmain(
                     if let Some(temp) = names.namespace {
                         for namespace in temp {
                             // IF Valid ID && Name && Description info are valid then we have a valid namespace id to pull
-                            namespace_id =
-                                Some(db.namespace_add(namespace.name, namespace.description, true));
+                            let mut unwrappy = db.write().unwrap();
+                            namespace_id = Some(unwrappy.namespace_add(
+                                namespace.name,
+                                namespace.description,
+                                true,
+                            ));
                         }
                     }
                     if let Some(temp) = names.file {
                         for files in temp {
                             if files.id.is_none() && files.hash.is_some() && files.ext.is_some() {
                                 // Gets the extension id
-                                let ext_id = db.extension_put_string(&files.ext.unwrap());
+                                let mut unwrappy = db.write().unwrap();
+                                let ext_id = unwrappy.extension_put_string(&files.ext.unwrap());
 
                                 let storage_id = match files.location {
                                     Some(exists) => {
-                                        db.storage_put(&exists);
-                                        db.storage_get_id(&exists).unwrap()
+                                        unwrappy.storage_put(&exists);
+                                        unwrappy.storage_get_id(&exists).unwrap()
                                     }
                                     None => {
-                                        let exists = db.location_get();
-                                        db.storage_put(&exists);
-                                        db.storage_get_id(&exists).unwrap()
+                                        let exists = unwrappy.location_get();
+                                        unwrappy.storage_put(&exists);
+                                        unwrappy.storage_get_id(&exists).unwrap()
                                     }
                                 };
 
@@ -419,28 +426,43 @@ fn parse_plugin_output_andmain(
                                         storage_id,
                                     },
                                 );
-                                db.file_add(file, true);
+                                unwrappy.file_add(file, true);
                             }
                         }
                     }
                     if let Some(temp) = names.tag {
                         for tags in temp {
-                            let namespace_id = db.namespace_get(&tags.namespace).cloned();
+                            let namespace_id;
+                            {
+                                let unwrappy = db.read().unwrap();
+                                namespace_id = unwrappy.namespace_get(&tags.namespace).cloned();
+                            }
                             //match namespace_id {}
                             if tags.parents.is_none() && namespace_id.is_some() {
-                                db.tag_add(&tags.name, namespace_id.unwrap(), true, None);
+                                {
+                                    let mut unwrappy = db.write().unwrap();
+                                    unwrappy.tag_add(&tags.name, namespace_id.unwrap(), true, None);
+                                }
                                 plugin_on_tag(
                                     manager.clone(),
-                                    db,
+                                    db.clone(),
                                     &tags.name,
                                     &namespace_id.unwrap(),
                                 );
                             } else {
                                 for _parents_obj in tags.parents.unwrap() {
-                                    db.tag_add(&tags.name, namespace_id.unwrap(), true, None);
+                                    {
+                                        let mut unwrappy = db.write().unwrap();
+                                        unwrappy.tag_add(
+                                            &tags.name,
+                                            namespace_id.unwrap(),
+                                            true,
+                                            None,
+                                        );
+                                    }
                                     plugin_on_tag(
                                         manager.clone(),
-                                        db,
+                                        db.clone(),
                                         &tags.name,
                                         &namespace_id.unwrap(),
                                     );
@@ -449,8 +471,9 @@ fn parse_plugin_output_andmain(
                         }
                     }
                     if let Some(temp) = names.setting {
+                        let mut unwrappy = db.write().unwrap();
                         for settings in temp {
-                            db.setting_add(
+                            unwrappy.setting_add(
                                 settings.name,
                                 settings.pretty,
                                 settings.num,
@@ -462,26 +485,38 @@ fn parse_plugin_output_andmain(
 
                     if let Some(temp) = names.jobs {
                         for job in temp {
-                            jobmanager
-                                .write()
-                                .unwrap()
-                                .jobs_add_nolock(scraper.clone(), job, db);
+                            jobmanager.write().unwrap().jobs_add_nolock(
+                                scraper.clone(),
+                                job,
+                                db.clone(),
+                            );
                             //db.jobs_add_new(job);
                         }
                     }
                     if let Some(temp) = names.relationship {
-                        for relations in temp {
-                            let file_id = db.file_get_hash(&relations.file_hash).cloned();
-                            let namespace_id = db.namespace_get(&relations.tag_namespace);
-                            let tag_id = db
-                                .tag_get_name(relations.tag_name.clone(), *namespace_id.unwrap())
-                                .cloned();
-                            /*println!(
-                                "plugins356 relating: file id {:?} to {:?}",
-                                file_id, relations.tag_name
-                            );*/
-                            db.relationship_add(file_id.unwrap(), tag_id.unwrap(), true);
-                            //unwrappy.relationship_add(file, tag, addtodb)
+                        let mut temp_vec: Vec<(Option<usize>, Option<usize>)> = Vec::new();
+                        {
+                            let unwrappy = db.read().unwrap();
+                            for relations in temp {
+                                let file_id = unwrappy.file_get_hash(&relations.file_hash).cloned();
+                                let namespace_id = unwrappy.namespace_get(&relations.tag_namespace);
+                                let tag_id = unwrappy
+                                    .tag_get_name(
+                                        relations.tag_name.clone(),
+                                        *namespace_id.unwrap(),
+                                    )
+                                    .cloned();
+                                temp_vec.push((file_id, tag_id));
+                                /*println!(
+                                    "plugins356 relating: file id {:?} to {:?}",
+                                    file_id, relations.tag_name
+                                );*/
+                                //unwrappy.relationship_add(file, tag, addtodb)
+                            }
+                        }
+                        for (file_id, tag_id) in temp_vec {
+                            let mut unwrappy = db.write().unwrap();
+                            unwrappy.relationship_add(file_id.unwrap(), tag_id.unwrap(), true);
                         }
                     }
                     if let Some(temp) = names.parents {

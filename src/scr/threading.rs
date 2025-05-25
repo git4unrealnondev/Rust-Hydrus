@@ -49,7 +49,7 @@ impl Threads {
     pub fn startwork(
         &mut self,
         jobstorage: Arc<RwLock<crate::jobs::Jobs>>,
-        db: &mut Arc<RwLock<database::Main>>,
+        db: Arc<RwLock<database::Main>>,
         scrapermanager: sharedtypes::GlobalPluginScraper,
         globalload: Arc<RwLock<GlobalLoad>>,
     ) {
@@ -148,7 +148,7 @@ impl Worker {
     fn new(
         id: usize,
         jobstorage: Arc<RwLock<crate::jobs::Jobs>>,
-        dba: &mut Arc<RwLock<database::Main>>,
+        dba: Arc<RwLock<database::Main>>,
         scraper: sharedtypes::GlobalPluginScraper,
         globalload: Arc<RwLock<GlobalLoad>>,
         threadflagcontrol: Control,
@@ -433,7 +433,7 @@ Worker: {id} JobId: {} -- While trying to parse parameters we got this error: {:
                                     tag,
                                     None,
                                     jobstorage.clone(),
-                                    &mut db,
+                                    db.clone(),
                                     &scraper,
                                     &id,
                                     &jobid,
@@ -455,7 +455,7 @@ Worker: {id} JobId: {} -- While trying to parse parameters we got this error: {:
                                 pool.execute(move || {
                                     main_file_loop(
                                         &mut file,
-                                        &mut db,
+                                        db,
                                         ratelimiter_obj,
                                         globalload,
                                         &client,
@@ -525,7 +525,7 @@ Worker: {id} JobId: {} -- While trying to parse parameters we got this error: {:
 
 /// Parses tags and adds the tags into the db.
 fn parse_tags(
-    db: &Arc<RwLock<database::Main>>,
+    db: Arc<RwLock<database::Main>>,
     tag: &sharedtypes::TagObject,
     file_id: Option<usize>,
     worker_id: &usize,
@@ -533,24 +533,29 @@ fn parse_tags(
     manager: Arc<RwLock<GlobalLoad>>,
 ) -> BTreeSet<sharedtypes::ScraperData> {
     let mut url_return: BTreeSet<sharedtypes::ScraperData> = BTreeSet::new();
-    let mut unwrappy = &mut db.write().unwrap();
     match &tag.tag_type {
         sharedtypes::TagType::Normal => {
             // println!("Adding tag: {} {:?}", tag.tag, &file_id); We've recieved a normal
             // tag. Will parse.
-            let namespace_id = unwrappy.namespace_add(
-                tag.namespace.name.clone(),
-                tag.namespace.description.clone(),
-                true,
-            );
-            let tag_id = unwrappy.tag_add(&tag.tag, namespace_id, true, None);
-            globalload::plugin_on_tag(manager, &mut unwrappy, &tag.tag, &namespace_id);
+            let namespace_id;
+            let tag_id;
+            {
+                let mut unwrappy = db.write().unwrap();
+                namespace_id = unwrappy.namespace_add(
+                    tag.namespace.name.clone(),
+                    tag.namespace.description.clone(),
+                    true,
+                );
+                tag_id = unwrappy.tag_add(&tag.tag, namespace_id, true, None);
+            }
+            globalload::plugin_on_tag(manager, db.clone(), &tag.tag, &namespace_id);
             match &tag.relates_to {
                 None => {
                     // let relate_ns_id = unwrappy.namespace_add( relate.namespace.name.clone(),
                     // relate.namespace.description, true, );
                 }
                 Some(relate) => {
+                    let mut unwrappy = db.write().unwrap();
                     let relate_ns_id = unwrappy.namespace_add(
                         relate.namespace.name.clone(),
                         relate.namespace.description.clone(),
@@ -575,6 +580,7 @@ fn parse_tags(
             match file_id {
                 None => {}
                 Some(id) => {
+                    let mut unwrappy = db.write().unwrap();
                     unwrappy.relationship_add(id, tag_id, true);
                 }
             }
@@ -592,6 +598,7 @@ fn parse_tags(
                         filter_number,
                     )) => {
                         let mut cnt = 0;
+                        let unwrappy = db.read().unwrap();
                         if let Some(nidf) = unwrappy.namespace_get(&namespace_filter.name) {
                             if let Some(nid) = unwrappy.namespace_get(&unique_tag.namespace.name) {
                                 if let Some(tid) =
@@ -626,6 +633,7 @@ fn parse_tags(
                         }
                     }
                     sharedtypes::SkipIf::FileTagRelationship(taginfo) => 'tag: {
+                        let unwrappy = db.read().unwrap();
                         let nid = unwrappy.namespace_get(&taginfo.namespace.name);
                         let id = match nid {
                             None => {
@@ -745,7 +753,7 @@ fn parse_jobs(
     tag: &sharedtypes::TagObject,
     fileid: Option<usize>,
     jobstorage: Arc<RwLock<crate::jobs::Jobs>>,
-    db: &mut Arc<RwLock<database::Main>>,
+    db: Arc<RwLock<database::Main>>,
     scraper: &sharedtypes::GlobalPluginScraper,
 
     worker_id: &usize,
@@ -784,7 +792,7 @@ fn parse_jobs(
 fn parse_skipif(
     file_tag: &sharedtypes::SkipIf,
     file_url_source: &String,
-    db: &mut Arc<RwLock<database::Main>>,
+    db: Arc<RwLock<database::Main>>,
     worker_id: &usize,
     job_id: &usize,
 ) -> bool {
@@ -841,7 +849,7 @@ fn parse_skipif(
 /// Main file checking loop manages the downloads
 pub fn main_file_loop(
     file: &mut sharedtypes::FileObject,
-    db: &mut Arc<RwLock<database::Main>>,
+    db: Arc<RwLock<database::Main>>,
     ratelimiter_obj: Arc<Mutex<Ratelimiter>>,
     globalload: Arc<RwLock<GlobalLoad>>,
     client: &Client,
@@ -853,7 +861,7 @@ pub fn main_file_loop(
     if let Some(source) = &file.source_url.clone() {
         // If url exists in db then don't download thread::sleep(Duration::from_secs(10));
         for file_tag in file.skip_if.iter() {
-            if parse_skipif(file_tag, source, db, worker_id, job_id) {
+            if parse_skipif(file_tag, source, db.clone(), worker_id, job_id) {
                 return;
             }
         }
@@ -941,7 +949,7 @@ pub fn main_file_loop(
                 tag,
                 Some(fileid),
                 jobstorage.clone(),
-                db,
+                db.clone(),
                 scraper,
                 worker_id,
                 job_id,

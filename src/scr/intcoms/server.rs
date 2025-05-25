@@ -274,7 +274,7 @@ impl DbInteract {
                 let thread = thread::spawn(move || {
                     threading::main_file_loop(
                         &mut file,
-                        &mut database,
+                        database,
                         ratelimiter_obj,
                         manageeplugin,
                         &client.clone(),
@@ -306,7 +306,7 @@ impl DbInteract {
                 let jobstorage = self.jobmanager.clone();
                 threading::main_file_loop(
                     &mut file,
-                    &mut self._database,
+                    self._database.clone(),
                     ratelimiter_obj,
                     manageeplugin,
                     client,

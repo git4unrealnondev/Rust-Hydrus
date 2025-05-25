@@ -133,9 +133,9 @@ impl Jobs {
         &mut self,
         scraper: sharedtypes::GlobalPluginScraper,
         dbjobsobj: sharedtypes::DbJobsObj,
-        db: &mut Main,
+        db: Arc<RwLock<Main>>,
     ) {
-        self.jobs_add_internal(scraper, dbjobsobj, db);
+        self.jobs_add_internal(scraper, dbjobsobj, &mut db.write().unwrap());
     }
 
     ///
