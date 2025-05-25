@@ -1096,7 +1096,7 @@ pub(crate) mod test_globalload {
     use super::*;
     pub fn emulate_loaded(
         db: Arc<Mutex<database::Main>>,
-        jobs: Arc<Mutex<Jobs>>,
+        jobs: Arc<RwLock<Jobs>>,
     ) -> Arc<RwLock<GlobalLoad>> {
         GlobalLoad::new(db, jobs)
     }

@@ -481,6 +481,12 @@ Worker: {id} JobId: {} -- While trying to parse parameters we got this error: {:
                             let mut db = db.lock().unwrap();
                             db.transaction_flush();
                         }
+                        {
+                            jobstorage
+                                .write()
+                                .unwrap()
+                                .jobs_remove_job(&scraper, &currentjob);
+                        }
                     }
                     {
                         /* if should_remove_original_job {

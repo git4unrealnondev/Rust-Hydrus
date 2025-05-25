@@ -1534,6 +1534,7 @@ impl Main {
 
     /// Adds a job to sql
     fn jobs_add_sql(&mut self, data: &sharedtypes::DbJobsObj) {
+        dbg!(data);
         let inp = "INSERT INTO Jobs VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
         self._conn
             .borrow_mut()
@@ -1561,6 +1562,7 @@ impl Main {
 
     /// Updates job by id
     fn jobs_update_by_id(&mut self, data: &sharedtypes::DbJobsObj) {
+        dbg!(data);
         let inp =
             "UPDATE Jobs SET id=?, time=?, reptime=?, Manager=?, priority=?,cachetime=?,cachechecktype=?, site=?, param=?, SystemData=?, UserData=? WHERE id = ?";
         let _out = self._conn.borrow_mut().lock().unwrap().execute(
