@@ -404,31 +404,35 @@ pub fn write_to_disk(
     local_location.set_file_name(sha512hash);
     //local_location.set_extension(file_ext);
 
-    let file_path_res = std::fs::File::create(&local_location);
-
-    while file_path_res.is_err() {
-        logging::info_log(&format!(
-            "Cannot create file at path: {} Err: {:?}",
-            &local_location.to_string_lossy(),
-            file_path_res
-        ));
-        thread::sleep(Duration::from_secs(1));
-    }
-
-    if let Ok(mut file_path) = file_path_res {
-        // Creates a content wrapper for bytes object
-        let mut content = Cursor::new(bytes);
-
-        // Copies file from memory to disk
-        while let Err(err) = std::io::copy(&mut content, &mut file_path) {
+    // Proper error handleing for if we have an error while downloading
+    let mut file_path;
+    loop {
+        let file_path_res = std::fs::File::create(&local_location);
+        if let Ok(file_path_fin) = file_path_res {
+            file_path = file_path_fin;
+            break;
+        } else {
             logging::info_log(&format!(
-                "Cannot copy file at path: {} Err: {:?}",
-                &location.to_string_lossy(),
-                err
+                "Cannot create file at path: {} Err: {:?}",
+                &local_location.to_string_lossy(),
+                file_path_res
             ));
-
             thread::sleep(Duration::from_secs(1));
         }
-        logging::info_log(&format!("Downloaded hash: {}", &sha512hash));
     }
+
+    // Creates a content wrapper for bytes object
+    let mut content = Cursor::new(bytes);
+
+    // Copies file from memory to disk
+    while let Err(err) = std::io::copy(&mut content, &mut file_path) {
+        logging::info_log(&format!(
+            "Cannot copy file at path: {} Err: {:?}",
+            &location.to_string_lossy(),
+            err
+        ));
+
+        thread::sleep(Duration::from_secs(1));
+    }
+    logging::info_log(&format!("Downloaded hash: {}", &sha512hash));
 }

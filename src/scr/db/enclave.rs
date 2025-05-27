@@ -205,7 +205,7 @@ impl Main {
     pub fn enclave_file_mapping_get(&self, file_id: &usize, enclave_id: &usize) -> Option<usize> {
         let conn = self._conn.lock().unwrap();
         conn.query_row(
-            "SELECT file_id from FileEnclaveMapping where file_id = ? AND enclave_id = ?",
+            "SELECT file_id from FileEnclaveMapping where file_id = ? AND enclave_id = ? LIMIT 1",
             params![file_id, enclave_id],
             |row| row.get(0),
         )

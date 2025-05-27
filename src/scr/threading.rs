@@ -177,7 +177,10 @@ impl Worker {
                 }
 
                 if jobsstorage.is_empty() {
-                    dbg!("Stopping loop because we have no jobs {}", &scraper);
+                    logging::info_log(&format!(
+                        "Worker {} -- Stopping loop because we have no jobs.",
+                        &id
+                    ));
                     break 'bigloop;
                 }
                 for mut job in jobsstorage {
