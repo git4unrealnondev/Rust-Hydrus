@@ -1113,7 +1113,7 @@ impl GlobalLoad {
     pub fn filter_sites_return_lib(&self, site: &String) -> Option<&RwLock<Library>> {
         for scraper in self.scraper_get().iter() {
             if let Some(ref storage_type) = scraper.storage_type {
-                if let sharedtypes::ScraperOrPlugin::Scraper(ref scraperinfo) = storage_type {
+                if let sharedtypes::ScraperOrPlugin::Scraper(scraperinfo) = &storage_type {
                     if scraperinfo.sites.contains(site) {
                         return self.library_get(scraper);
                     }

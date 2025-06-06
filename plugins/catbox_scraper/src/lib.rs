@@ -62,6 +62,7 @@ pub fn get_global_info() -> Vec<sharedtypes::GlobalPluginScraper> {
                 "catbox scraper".into(),
             ],
             priority: DEFAULT_PRIORITY,
+            num_threads: None,
         },
     ));
     vec![plugin, scraper]

@@ -180,6 +180,8 @@ pub struct ScraperInfo {
     pub ratelimit: (u64, std::time::Duration),
     pub sites: Vec<String>,
     pub priority: usize,
+    // How many threads should we use to scrape a page. If none then use as many threads as on cpu
+    pub num_threads: Option<usize>,
 }
 
 ///
@@ -858,7 +860,7 @@ pub struct JobScraper {
 #[derive(Debug, Clone, Deserialize, Serialize, bincode::Encode, bincode::Decode)]
 #[allow(dead_code)]
 #[derive(Eq, Hash, PartialEq)]
-#[cfg_attr(feature = "clap", derive(Display))]
+//#[cfg_attr(feature = "clap", derive(Display))]
 pub enum HashesSupported {
     Md5(String),
     Sha1(String),

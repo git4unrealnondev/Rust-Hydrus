@@ -323,7 +323,7 @@ pub fn dlfile_new(
                 // Logging
                 if !status.1 {
                     error!(
-                        "Worker: {workerid} JobID: {jobid} -- Parser file: {} FAILED HASHCHECK: {} {}",
+                        "Worker: {workerid} JobID: {jobid} -- Parser file: {:?} FAILED HASHCHECK: {} {}",
                         &file.hash, status.0, status.1
                     );
                     cnt += 1;

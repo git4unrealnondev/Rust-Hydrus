@@ -15,6 +15,7 @@ pub fn get_global_info() -> Vec<sharedtypes::GlobalPluginScraper> {
             ratelimit: (2, Duration::from_secs(5)),
             sites: vec!["kemono.su".into()],
             priority: DEFAULT_PRIORITY,
+            num_threads: None,
         },
     ));
 

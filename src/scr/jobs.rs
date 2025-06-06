@@ -221,7 +221,7 @@ impl Jobs {
                         sharedtypes::DbJobRecreation::OnTag(_, _, _) => {}
                         sharedtypes::DbJobRecreation::OnTagId(_, _) => {}
                         sharedtypes::DbJobRecreation::AlwaysTime(_, count) => {
-                            if let Some(mut count) = count {
+                            if let &Some(mut count) = count {
                                 if count == 0 {
                                     self.jobs_remove_dbjob(scraper, data, worker_id);
                                 } else {
@@ -381,6 +381,7 @@ mod tests {
                 ratelimit: (1, Duration::from_secs(1)),
                 sites: vec!["Nah".to_string()],
                 priority: DEFAULT_PRIORITY,
+                num_threads: None,
             },
         ));
 
@@ -405,6 +406,7 @@ mod tests {
                 ratelimit: (1, Duration::from_secs(1)),
                 sites: vec!["Nah".to_string()],
                 priority: DEFAULT_PRIORITY,
+                num_threads: None,
             },
         ));
 
@@ -413,9 +415,9 @@ mod tests {
         job.debug();
         assert_eq!(job.site_job.get(&scraper).unwrap().len(), 1);
         assert_eq!(job.previously_seen.get(&scraper).unwrap().len(), 1);
-        job.jobs_remove_dbjob(&scraper, &dbjobsobj);
+        job.jobs_remove_dbjob(&scraper, &dbjobsobj, &0);
 
-        let unwrappy = job.db.lock().unwrap();
+        let unwrappy = job.db.read().unwrap();
         assert_eq!(unwrappy.jobs_get_all().keys().len(), 0);
         assert_eq!(job.site_job.get(&scraper).unwrap().len(), 0);
     }

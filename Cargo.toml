@@ -1,7 +1,7 @@
 [package]
 name = "rusthydrus"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -10,7 +10,7 @@ reqwest = { version = "0.12.4", features = ["cookies", "gzip", "brotli", "defaul
 url = "2.3.1"
 ratelimit = "0.10.0"
 async-std = { version = "1", features = ["attributes", "tokio1"] }
-rusqlite = {version = "0.34.0", features=["modern_sqlite", "bundled", "column_decltype"] }
+rusqlite = {version = "^0.36.0", features=["modern_sqlite", "bundled", "column_decltype"] }
 fast_log = "1.7.6"
 bytes = { default-features = false, version = "1.4.0" }
 sha2 = { default-features = false, version = "0.10.6" }
@@ -19,7 +19,7 @@ log = {version="0.4.2" }
 strum_macros = "0.27.1"
 strum = { default-features = false, version = "0.26.2" }
 csv = "1.2.2"
-file-format = { version = "0.26.0", features = ["reader"] }
+file-format = { version = "0.27.0", features = ["reader"] }
 serde = {version = "1.0.171", features = ["derive"], default-features = false }
 md5 = { default-features = false, version = "0.7.0" }
 sha1 = { default-features = false, features=["std"],version = "0.10.5" }
@@ -40,7 +40,7 @@ eta = "0.2.2"
 ahash = "0.8.11"
 libloading = "0.8.5"
 thread-control = "0.1.2"
-regex = "1.11.1"
+regex = {version="1.11.1", features=["std"]}
 tracing-mutex = {version="0.3.1", features=["backtraces"]}
 
 [features]
@@ -54,7 +54,7 @@ clap = []
 opt-level = 3
 lto=true
 codegenunits=1
-#strip = true
+strip = true
 panic = "abort"
 debug = false
 
@@ -66,3 +66,11 @@ walkdir = "2.4.0"
 inherits = "release"
 debug = true
 strip = false
+
+[dev-dependencies]
+criterion = { version = "0.6", features = ["html_reports"] }
+
+[[bench]]
+name = "inmemdb"
+harness = false
+

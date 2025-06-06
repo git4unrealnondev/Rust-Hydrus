@@ -17,47 +17,47 @@ pub const DEFAULT_LOC_SCRAPER: &str = "scrapers";
 extern crate ratelimit;
 
 #[path = "./scr/cli.rs"]
-mod cli;
+pub mod cli;
 #[path = "./scr/db/database.rs"]
-mod database;
+pub mod database;
 #[path = "./scr/download.rs"]
-mod download;
+pub mod download;
 #[path = "./scr/file.rs"]
-mod file;
+pub mod file;
 #[path = "./scr/globalload.rs"]
-mod globalload;
+pub mod globalload;
 #[path = "./scr/jobs.rs"]
-mod jobs;
+pub mod jobs;
 #[path = "./scr/logging.rs"]
-mod logging;
+pub mod logging;
 //#[path = "./scr/plugins.rs"]
-//mod plugins;
+//pub mod plugins;
 #[path = "./scr/reimport.rs"]
-mod reimport;
+pub mod reimport;
 //#[path = "./scr/scraper.rs"]
-//mod scraper;
+//pub mod scraper;
 #[path = "./scr/sharedtypes.rs"]
-mod sharedtypes;
+pub mod sharedtypes;
 #[path = "./scr/tasks.rs"]
-mod tasks;
+pub mod tasks;
 #[path = "./scr/threading.rs"]
-mod threading;
+pub mod threading;
 #[path = "./scr/time_func.rs"]
-mod time_func;
+pub mod time_func;
 
 // Needed for the plugin coms system.
 #[path = "./scr/intcoms/client.rs"]
-mod client;
+pub mod client;
 #[path = "./scr/db/helpers.rs"]
-mod helpers;
+pub mod helpers;
 #[path = "./scr/os.rs"]
-mod os;
+pub mod os;
 #[path = "./scr/intcoms/server.rs"]
-mod server;
+pub mod server;
 
-// mod scr { pub mod cli; pub mod database; pub mod download; pub mod file; pub
-// mod jobs; pub mod logging; pub mod plugins; pub mod scraper; pub mod
-// sharedtypes; pub mod tasks; pub mod threading; pub mod time; }
+// pub mod scr { pub mod cli; pub mod database; pub mod download; pub mod file; pub
+// pub mod jobs; pub mod logging; pub mod plugins; pub mod scraper; pub mod
+// sharedtypes; pub pub mod tasks; pub mod threading; pub mod time; }
 /// This code is trash. lmao. Has threading and plugins soon tm Will probably work
 /// :D
 fn pause() {

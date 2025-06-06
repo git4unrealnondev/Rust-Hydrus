@@ -101,6 +101,7 @@ pub fn get_global_info() -> Vec<sharedtypes::GlobalPluginScraper> {
             ratelimit: (1, Duration::from_secs(2)),
             sites: vec!["4ch".into(), "4chan".into(), "4chan.net".into()],
             priority: DEFAULT_PRIORITY,
+            num_threads: None,
         },
     ));
 
@@ -111,6 +112,7 @@ pub fn get_global_info() -> Vec<sharedtypes::GlobalPluginScraper> {
             ratelimit: (1, Duration::from_secs(2)),
             sites: vec!["lulz".into(), "lulz.net".into()],
             priority: DEFAULT_PRIORITY,
+            num_threads: None,
         },
     ));
 

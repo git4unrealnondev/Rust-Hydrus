@@ -384,7 +384,7 @@ Worker: {id} JobId: {} -- While trying to parse parameters we got this error: {:
                             if let sharedtypes::ScraperParam::Url(ref url_string) = scraperparam {
                                 resp = task::block_on(download::dltext_new(
                                     url_string,
-                                    &mut client,
+                                    &client,
                                     &ratelimiter_obj,
                                     &id,
                                 ));
@@ -451,7 +451,7 @@ Worker: {id} JobId: {} -- While trying to parse parameters we got this error: {:
                             for mut file in out_st.file {
                                 let ratelimiter_obj = ratelimiter_main.clone();
                                 let globalload = globalload.clone();
-                                let mut db = db.clone();
+                                let db = db.clone();
                                 let client = client.clone();
                                 let jobstorage = jobstorage.clone();
                                 let scraper = scraper.clone();
@@ -462,7 +462,7 @@ Worker: {id} JobId: {} -- While trying to parse parameters we got this error: {:
                                         ratelimiter_obj,
                                         globalload,
                                         &client,
-                                        jobstorage.clone(),
+                                        jobstorage,
                                         &scraper,
                                         &id,
                                         &jobid,
@@ -473,11 +473,6 @@ Worker: {id} JobId: {} -- While trying to parse parameters we got this error: {:
                             pool.join();
                             break 'errloop;
                         }
-                        // { let mut joblock = jobstorage.lock().unwrap();
-                        // joblock.jobs_remove_dbjob(&scraper, &currentjob);
-                        //
-                        // let mut db = db.lock().unwrap(); db.transaction_flush(); } let unwrappydb =
-                        // &mut db.lock().unwrap(); unwrappydb.del_from_jobs_byid(&job.id);
                     }
                     {
                         if should_remove_original_job {
@@ -494,24 +489,7 @@ Worker: {id} JobId: {} -- While trying to parse parameters we got this error: {:
                                 .jobs_remove_job(&scraper, &currentjob);
                         }
                     }
-                    {
-                        /* if should_remove_original_job {
-                            let joblock = jobstorage.lock().unwrap();
-                            if joblock.jobs_get(&scraper).is_empty() {
-                                let mut db = db.lock().unwrap();
-                                db.transaction_flush();
-                                break 'bigloop;
-                            }
-                        }*/
-                    }
                 }
-                /*if should_remove_original_job {
-                    let joblock = jobstorage.lock().unwrap();
-                    if joblock.jobs_get(&scraper).is_empty() {
-                        threadflagcontrol.stop();
-                        break 'bigloop;
-                    }
-                }*/
             }
             threadflagcontrol.stop();
             jobstorage
