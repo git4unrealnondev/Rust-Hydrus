@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 // use crate::scr::sharedtypes::jobs_add; use
 // crate::scr::sharedtypes::AllFields::EJobsAdd; use crate::scr::tasks;
 use log::{error, warn};
@@ -13,7 +15,6 @@ use std::{thread, time};
 pub const VERS: usize = 6;
 pub const DEFAULT_LOC_PLUGIN: &str = "plugins";
 pub const DEFAULT_LOC_SCRAPER: &str = "scrapers";
-
 extern crate ratelimit;
 
 #[path = "./scr/cli.rs"]
@@ -115,11 +116,11 @@ fn main() {
     let mut data = makedb(dbloc);
     data.load_table(&sharedtypes::LoadDBTable::Settings);
 
-    let mut arc = Arc::new(RwLock::new(data));
+    let arc = Arc::new(RwLock::new(data));
 
     let jobmanager = Arc::new(RwLock::new(jobs::Jobs::new(arc.clone())));
 
-    let mut globalload_arc = globalload::GlobalLoad::new(arc.clone(), jobmanager.clone());
+    let globalload_arc = globalload::GlobalLoad::new(arc.clone(), jobmanager.clone());
     {
         globalload_arc.write().unwrap().reload_regex();
     }
@@ -173,7 +174,8 @@ fn main() {
     }
 
     // Processes any CLI input here
-    cli::main(arc.clone(), globalload_arc.clone());
+    //cli::main(arc.clone(), globalload_arc.clone());
+    cli::main(arc.clone());
 
     // Calls the on_start func for the plugins
     globalload_arc.write().unwrap().plugin_on_start();

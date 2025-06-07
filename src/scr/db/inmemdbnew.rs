@@ -3,7 +3,6 @@ use crate::sharedtypes;
 use crate::sharedtypes::DbJobsObj;
 use fnv::{FnvHashMap, FnvHashSet};
 use std::collections::{HashMap, HashSet};
-use std::hash::Hash;
 
 pub enum TagRelateConjoin {
     Tag,
@@ -12,21 +11,6 @@ pub enum TagRelateConjoin {
     Conjoin,
     TagAndRelate,
     None,
-}
-
-pub struct tes {
-    test: HashSet<usize>,
-}
-
-impl tes {
-    pub fn new() -> tes {
-        let te = HashSet::default();
-        tes { test: te }
-    }
-
-    pub fn inc(&mut self, i: usize) {
-        self.test.insert(i);
-    }
 }
 
 pub struct NewinMemDB {
@@ -698,8 +682,8 @@ impl NewinMemDB {
                     return Some(temp);
                 }
                 Some(limitto) => {
-                    for each in temp.iter() {
-                        let cantor = self.cantor_pair(each, relate_tag_id);
+                    for _each in temp.iter() {
+                        //let cantor = self.cantor_pair(each, relate_tag_id);
                         if let Some(cantorlist) = self._parents_limitto_cantor.get(&limitto) {
                             let re = temp.intersection(cantorlist);
                             let te = re.cloned().collect();
@@ -728,7 +712,7 @@ impl NewinMemDB {
                     return Some(temp);
                 }
                 Some(limitto) => {
-                    for each in temp.iter() {
+                    for _each in temp.iter() {
                         if let Some(cantorlist) = self._parents_limitto_cantor.get(&limitto) {
                             let re = temp.intersection(cantorlist);
                             let te = re.cloned().collect();
@@ -972,7 +956,7 @@ impl NewinMemDB {
     /// Puts a parent into db NOTE: If limit_to is set and their was a previous parent
     /// that didn't have a limit_to it will be overwritten.
     pub fn parents_put(&mut self, parent: sharedtypes::DbParentsObj) -> usize {
-        let mut increment_parents = false;
+        let mut increment_parents;
 
         // Catch to prevent further processing.
         match self.parents_get(&parent) {
@@ -1195,12 +1179,6 @@ impl NewinMemDB {
         self.file_enclave_action_reverse
             .insert(name.clone(), self.file_enclave_action_max);
         self.file_enclave_action_max += 1;
-    }
-
-    pub fn enclave_action_order_enclave_get_list_id(&self, enclave_id: &usize) -> Vec<usize> {
-        let out = Vec::new();
-
-        out
     }
 }
 

@@ -7,7 +7,6 @@ use crate::time_func;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 //use std::sync::Mutex;
-use crate::Mutex;
 use crate::RwLock;
 
 ///
@@ -221,11 +220,11 @@ impl Jobs {
                         sharedtypes::DbJobRecreation::OnTag(_, _, _) => {}
                         sharedtypes::DbJobRecreation::OnTagId(_, _) => {}
                         sharedtypes::DbJobRecreation::AlwaysTime(_, count) => {
-                            if let &Some(mut count) = count {
+                            if let &Some(count) = count {
                                 if count == 0 {
                                     self.jobs_remove_dbjob(scraper, data, worker_id);
                                 } else {
-                                    count -= 1;
+                                    //count -= 1;
                                 }
                             }
                         }
@@ -283,7 +282,7 @@ impl Jobs {
                 .unwrap()
                 .load_table(&sharedtypes::LoadDBTable::Jobs);
         }
-        let mut hashjobs;
+        let hashjobs;
         let mut jobs_vec = Vec::new();
         {
             let db = self.db.read().unwrap();
@@ -391,7 +390,6 @@ mod tests {
         assert_eq!(job.site_job.get(&scraper).unwrap().len(), 1);
         assert_eq!(job.previously_seen.get(&scraper).unwrap().len(), 1);
 
-        let unwrappy = job.db.read().unwrap();
         assert_eq!(job.jobs_get(&scraper).len(), 1);
     }
     #[test]

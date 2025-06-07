@@ -12,9 +12,7 @@ use crate::sharedtypes::{DEFAULT_CACHECHECK, DEFAULT_CACHETIME, DEFAULT_PRIORITY
 use crate::Mutex;
 use crate::RwLock;
 use crate::{
-    database,
-    globalload::GlobalLoad,
-    logging, pause,
+    database, logging, pause,
     sharedtypes::{self},
 };
 use clap::Parser;
@@ -95,7 +93,7 @@ fn return_jobtypemanager_old(
 ///
 /// Parses strings into NORMAL inputs as scraperparam
 ///
-fn parse_string_to_scraperparam(input: &String) -> Vec<sharedtypes::ScraperParam> {
+fn parse_string_to_scraperparam(input: &str) -> Vec<sharedtypes::ScraperParam> {
     let mut out = Vec::new();
 
     for item in input.split(' ') {
@@ -106,7 +104,8 @@ fn parse_string_to_scraperparam(input: &String) -> Vec<sharedtypes::ScraperParam
 }
 
 /// Returns the main argument and parses data.
-pub fn main(data: Arc<RwLock<database::Main>>, scraper: Arc<RwLock<GlobalLoad>>) {
+pub fn main(data: Arc<RwLock<database::Main>>) {
+    //pub fn main(data: Arc<RwLock<database::Main>>, scraper: Arc<RwLock<GlobalLoad>>) {
     let args = cli_structs::MainWrapper::parse();
     if args.a.is_none() {
         return;
@@ -118,7 +117,7 @@ pub fn main(data: Arc<RwLock<database::Main>>, scraper: Arc<RwLock<GlobalLoad>>)
         data.load_table(&sharedtypes::LoadDBTable::Settings);
     }
     match &args.a.as_ref().unwrap() {
-        cli_structs::test::Job(jobstruct) => {
+        cli_structs::Test::Job(jobstruct) => {
             match jobstruct {
                 cli_structs::JobStruct::Add(addstruct) => {
                     dbg!(&addstruct);
@@ -126,7 +125,7 @@ pub fn main(data: Arc<RwLock<database::Main>>, scraper: Arc<RwLock<GlobalLoad>>)
                     for each in addstruct.system_data.chunks(2) {
                         system_data.insert(each[0].clone(), each[1].clone());
                     }
-                    let (jobtype, jobsmanager) =
+                    let (_jobtype, jobsmanager) =
                         return_jobtypemanager(addstruct.jobtype, addstruct.recursion.as_ref());
                     let mut data = data.write().unwrap();
                     data.load_table(&sharedtypes::LoadDBTable::Jobs);
@@ -145,7 +144,7 @@ pub fn main(data: Arc<RwLock<database::Main>>, scraper: Arc<RwLock<GlobalLoad>>)
                     );
                 }
                 cli_structs::JobStruct::AddBulk(addstruct) => {
-                    let (jobtype, jobsmanager) =
+                    let (_jobtype, jobsmanager) =
                         return_jobtypemanager(addstruct.jobtype, addstruct.recursion.as_ref());
                     let mut data = data.write().unwrap();
                     data.load_table(&sharedtypes::LoadDBTable::Jobs);
@@ -177,7 +176,7 @@ pub fn main(data: Arc<RwLock<database::Main>>, scraper: Arc<RwLock<GlobalLoad>>)
                 }
             }
         }
-        cli_structs::test::Search(searchstruct) => match searchstruct {
+        cli_structs::Test::Search(searchstruct) => match searchstruct {
             cli_structs::SearchStruct::Parent(parent) => {
                 let mut data = data.write().unwrap();
                 data.load_table(&sharedtypes::LoadDBTable::Parents);
@@ -283,7 +282,7 @@ pub fn main(data: Arc<RwLock<database::Main>>, scraper: Arc<RwLock<GlobalLoad>>)
                         } else {
                             let mut tvec = Vec::new();
                             for tid in hstags.iter() {
-                                if let Some(tag) = data.tag_id_get(tid) {
+                                if let Some(_) = data.tag_id_get(tid) {
                                     tvec.push(tid)
                                 }
                             }
@@ -309,7 +308,7 @@ pub fn main(data: Arc<RwLock<database::Main>>, scraper: Arc<RwLock<GlobalLoad>>)
                 }
             }
         },
-        cli_structs::test::Tasks(taskstruct) => match taskstruct {
+        cli_structs::Test::Tasks(taskstruct) => match taskstruct {
             cli_structs::TasksStruct::Scraper(action) => match action {
                 cli_structs::ScraperAction::Test(inp) => {
                     dbg!(&inp);
@@ -317,7 +316,7 @@ pub fn main(data: Arc<RwLock<database::Main>>, scraper: Arc<RwLock<GlobalLoad>>)
             },
             cli_structs::TasksStruct::Reimport(reimp) => match reimp {
                 cli_structs::Reimport::DirectoryLocation(loc) => {
-                    let mut data = data.read().unwrap();
+                    //let data = data.read().unwrap();
                     if !Path::new(&loc.location).exists() {
                         println!("Couldn't find location: {}", &loc.location);
                         return;

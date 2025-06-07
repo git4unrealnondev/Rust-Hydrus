@@ -110,7 +110,8 @@ impl Main {
                 let download_loc = std::path::Path::new(&loc).canonicalize().unwrap();
                 //dbg!(&download_loc, &download_loc.file_name());
 
-                download::write_to_disk(download_loc, file, bytes, sha512hash);
+                download::write_to_disk(download_loc, bytes, sha512hash);
+                //download::write_to_disk(download_loc, file, bytes, sha512hash);
 
                 let storage_id = self.storage_get_id(&loc).unwrap();
 
@@ -126,7 +127,7 @@ impl Main {
                 self.transaction_flush();
                 Some(fileid)
             }
-            sharedtypes::EnclaveAction::DownloadToLocation(location_id) => None,
+            sharedtypes::EnclaveAction::DownloadToLocation(_) => None,
         }
     }
 
@@ -383,7 +384,7 @@ impl Main {
             .unwrap();
         let _ = prep.insert(params![name, enclave_priority]);
     }
-    pub fn enclave_name_edit(&mut self, id: &usize, name: String) {}
+    //  pub fn enclave_name_edit(&mut self, id: &usize, name: String) {}
 
     ///
     /// Gets the enclave name from the enclave id

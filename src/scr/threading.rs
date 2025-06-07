@@ -155,7 +155,7 @@ impl Worker {
     ) -> Worker {
         // info_log(&format!( "Creating Worker for id: {} Scraper Name: {} With a jobs
         // length of: {}", &id, &scraper._name, &jobstorage..len() ));
-        let mut db = dba.clone();
+        let db = dba.clone();
         let jobstorage = jobstorage.clone();
         let globalload = globalload.clone();
         let ratelimiter_main;
@@ -168,8 +168,8 @@ impl Worker {
         let thread = thread::spawn(move || {
             let ratelimiter_obj = ratelimiter_main.clone();
 
-            let mut client = download::client_create();
-            let mut should_remove_original_job = true;
+            let client = download::client_create();
+            let mut should_remove_original_job;
             'bigloop: loop {
                 let jobsstorage;
                 {
@@ -188,11 +188,11 @@ impl Worker {
                     should_remove_original_job = true;
                     let currentjob = job.clone();
                     {
-                        for (key, login, login_needed, help_text, overwrite_db_entry) in
+                        for (key, login, login_needed, _help_text, overwrite_db_entry) in
                             scraper.login_type.iter()
                         {
                             match login {
-                                sharedtypes::LoginType::Api(name, api_key) => {
+                                sharedtypes::LoginType::Api(_name, _api_key) => {
                                     todo!();
                                 }
                                 sharedtypes::LoginType::ApiNamespaced(
@@ -261,13 +261,13 @@ impl Worker {
                                         job.param.push(sharedtypes::ScraperParam::Login(apins));
                                     }
                                 }
-                                sharedtypes::LoginType::Cookie(name, cookie) => {
+                                sharedtypes::LoginType::Cookie(_name, _cookie) => {
                                     todo!();
                                 }
-                                sharedtypes::LoginType::Other(name, other) => {
+                                sharedtypes::LoginType::Other(_name, _other) => {
                                     todo!();
                                 }
-                                sharedtypes::LoginType::Login(name, login_info) => {
+                                sharedtypes::LoginType::Login(_name, _login_info) => {
                                     todo!();
                                 }
                             }
@@ -277,7 +277,7 @@ impl Worker {
                     // Makes recursion possible
                     if let Some(recursion) = &job.jobmanager.recreation {
                         should_remove_original_job = false;
-                        if let sharedtypes::DbJobRecreation::AlwaysTime(timestamp, count) =
+                        if let sharedtypes::DbJobRecreation::AlwaysTime(timestamp, _count) =
                             recursion
                         {
                             let mut data = job.clone();
@@ -591,6 +591,7 @@ fn parse_tags(
                                         for tidtofilter in
                                             unwrappy.relationship_get_tagid(fid).iter()
                                         {
+                                            //if unwrappy.namespace_contains_id(nidf) {
                                             if unwrappy.namespace_contains_id(nidf, tidtofilter) {
                                                 cnt += 1;
                                             }
@@ -789,6 +790,7 @@ fn parse_skipif(
                             let fid = fids.iter().next().unwrap();
                             for tidtofilter in unwrappydb.relationship_get_tagid(fid).iter() {
                                 if unwrappydb.namespace_contains_id(nidf, tidtofilter) {
+                                    //if unwrappydb.namespace_contains_id(nidf, tidtofilter) {
                                     cnt += 1;
                                 }
                             }

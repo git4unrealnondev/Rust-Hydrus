@@ -383,19 +383,13 @@ fn parse_plugin_output_andmain(
         match each {
             sharedtypes::DBPluginOutputEnum::Add(name) => {
                 for names in name {
-                    let mut namespace_id: Option<usize> = Some(0); // holder of namespace
-
                     // Loops through the namespace objects and selects the last one that's valid.
                     // IF ONE IS NOT VALID THEN THEIR WILL NOT BE ONE ADDED INTO THE DB
                     if let Some(temp) = names.namespace {
                         for namespace in temp {
                             // IF Valid ID && Name && Description info are valid then we have a valid namespace id to pull
                             let mut unwrappy = db.write().unwrap();
-                            namespace_id = Some(unwrappy.namespace_add(
-                                namespace.name,
-                                namespace.description,
-                                true,
-                            ));
+                            unwrappy.namespace_add(namespace.name, namespace.description, true);
                         }
                     }
                     if let Some(temp) = names.file {
@@ -517,8 +511,8 @@ fn parse_plugin_output_andmain(
                             unwrappy.relationship_add(file_id.unwrap(), tag_id.unwrap(), true);
                         }
                     }
-                    if let Some(temp) = names.parents {
-                        for parent in temp {}
+                    if let Some(_temp) = names.parents {
+                        //for parent in temp {}
                     }
                 }
             }
@@ -619,6 +613,7 @@ impl GlobalLoad {
             match ipc_coms.spawn_listener() {
                 Ok(out) => out,
                 Err(err) => {
+                    logging::error_log(&format!("ERROR: {:?}", err));
                     logging::panic_log(&"Failed to spawn IPC Server".to_string());
                 }
             }
@@ -719,9 +714,9 @@ impl GlobalLoad {
     ///
     pub fn external_plugin_call(
         &mut self,
-        func_name: &String,
-        vers: &usize,
-        input_data: &sharedtypes::CallbackInfoInput,
+        _func_name: &String,
+        _vers: &usize,
+        _input_data: &sharedtypes::CallbackInfoInput,
     ) -> Option<HashMap<String, sharedtypes::CallbackCustomDataReturning>> {
         /*if let Some(valid_func) = self.callbackstorage.get_mut(func_name) {
             for each in valid_func.iter() {
@@ -742,8 +737,8 @@ impl GlobalLoad {
                 }
             }
         }*/
+        // None
         todo!();
-        None
     }
 
     ///
@@ -947,7 +942,7 @@ impl GlobalLoad {
                         sharedtypes::ScraperOrPlugin::Scraper(scraperinfo) => {
                             self.sites.insert(global.clone(), scraperinfo.sites.clone());
                         }
-                        sharedtypes::ScraperOrPlugin::Plugin(plugininfo) => {}
+                        sharedtypes::ScraperOrPlugin::Plugin(_plugininfo) => {}
                     },
                 }
 

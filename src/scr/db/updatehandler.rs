@@ -377,7 +377,6 @@ impl Main {
         // Creating storage location in db
         let mut location_storage = std::collections::HashMap::new();
         {
-            let location_cnt = 0;
             let conn = self._conn.lock().unwrap();
 
             let mut stmt = conn.prepare("SELECT location FROM File_Old").unwrap();

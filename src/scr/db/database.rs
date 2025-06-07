@@ -444,8 +444,8 @@ impl Main {
     pub fn search_db_files(
         &self,
         search: sharedtypes::SearchObj,
-        limit: Option<usize>,
-        offset: Option<usize>,
+        //limit: Option<usize>,
+        //offset: Option<usize>,
     ) -> Option<HashSet<usize>> {
         let mut stor: Vec<sharedtypes::SearchHolder> = Vec::with_capacity(search.searches.len());
         let mut fin: HashSet<usize> = HashSet::new();
@@ -1303,19 +1303,19 @@ impl Main {
             }
             sharedtypes::DbFileStorage::NoExist(_) => {
                 panic!();
-                let id = self.file_add_db(file.clone());
+                /*let id = self.file_add_db(file.clone());
                 if addtodb {
                     self.file_add_sql(&None, &None, &None, &id);
                 }
-                id
+                id*/
             }
             sharedtypes::DbFileStorage::NoExistUnknown => {
                 panic!();
-                let id = self.file_add_db(file.clone());
+                /*let id = self.file_add_db(file.clone());
                 if addtodb {
                     self.file_add_sql(&None, &None, &None, &id);
                 }
-                id
+                id*/
             }
         }
     }
@@ -1431,7 +1431,7 @@ impl Main {
                     name: tag.to_string(),
                     namespace: *namespace,
                 };
-                self._inmemdb.tags_put(&tag_info, id)
+                self._inmemdb.tags_put(&tag_info, Some(out))
             }
         };
 
@@ -1459,15 +1459,15 @@ impl Main {
 
         match id {
             None => {
-                if let Some(globalload) = &self.globalload {
-                    let globalload = globalload.clone();
-                    /*globalload::plugin_on_tag(
-                        &mut globalload.write().unwrap(),
-                        self,
-                        tags,
-                        &namespace,
-                    );*/
-                }
+                //if let Some(globalload) = &self.globalload {
+                //let globalload = globalload.clone();
+                /*globalload::plugin_on_tag(
+                    &mut globalload.write().unwrap(),
+                    self,
+                    tags,
+                    &namespace,
+                );*/
+                //}
 
                 // Do we have an ID coming in to add manually?
                 let tagnns = sharedtypes::DbTagNNS {
@@ -1486,7 +1486,7 @@ impl Main {
                     Some(tag_id) => tag_id,
                 }
             }
-            Some(id_some) => {
+            Some(_) => {
                 // We've got an ID coming in will check if it exists.
                 let tag_id = self.tag_add_db(tags, &namespace, id);
                 if addtodb {
@@ -1991,7 +1991,7 @@ impl Main {
 
         // Gets list of fileids from internal db.
 
-        for fileids in relationships.iter() {
+        for _fileids in relationships.iter() {
             logging::log(&format!(
                 "Found {} relationships's effected for tagid: {}.",
                 relationships.len(),
@@ -2281,8 +2281,9 @@ impl Main {
     }
 
     /// Checks if a tag exists in a namespace
+    //pub fn namespace_contains_id(&self, namespace_id: &usize) -> bool {
     pub fn namespace_contains_id(&self, namespace_id: &usize, tag_id: &usize) -> bool {
-        !self.namespace_get_tagids(namespace_id).is_empty()
+        self.namespace_get_tagids(namespace_id).contains(tag_id)
     }
 
     /// Recreates the db with only one ns in it.
@@ -2301,15 +2302,13 @@ impl Main {
         // let tag_max = self._inmemdb.tags_max_return().clone();
         self._inmemdb.tags_max_reset();
         let tida = self.namespace_get_tagids(id);
-        let mut cnt: usize = 0;
-        for tid in tida.clone() {
-            let file_listop = self._inmemdb.relationship_get_fileid(&tid).clone();
-            let tag = self._inmemdb.tags_get_data(&tid).unwrap().clone();
+        for (cnt, tid) in tida.iter().enumerate() {
+            let file_listop = self._inmemdb.relationship_get_fileid(tid).clone();
+            let tag = self._inmemdb.tags_get_data(tid).unwrap().clone();
             self.tag_add_sql(&cnt, &tag.name, &tag.namespace);
             for file in file_listop {
                 self.relationship_add_sql(file, cnt);
             }
-            cnt += 1;
         }
         self._inmemdb.tags_clear();
         self._inmemdb.parents_clear();

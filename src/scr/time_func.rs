@@ -11,7 +11,7 @@ pub fn time_secs() -> usize {
 }
 
 /// Converts hour & day & minute repeatability.
-pub fn time_conv(inp: &String) -> usize {
+pub fn time_conv(inp: &str) -> usize {
     if inp.to_lowercase() == *"now" {
         return 0;
     }
@@ -32,20 +32,17 @@ pub fn time_conv(inp: &String) -> usize {
         "s".to_string(),
     ];
     let nums = [year, month, week, day, hour, minute, second];
-    let combine: usize = 0;
-    let mut st = inp.clone();
-    let mut cnt = 0;
+    let mut st = inp;
     let mut ttl = 0;
-    for time in strings.iter() {
+    for (cnt, time) in strings.iter().enumerate() {
         if st.contains(time) {
             let tmp: Vec<&str> = st.split(time).collect();
             if tmp[0].is_empty() {
                 break;
             }
             ttl += nums[cnt] * tmp[0].parse::<usize>().unwrap();
-            st = tmp[1].to_string();
+            st = tmp[1];
         }
-        cnt += 1;
     }
 
     // for each in 0..strings.len() { dbg!(&each); if !st.contains(&strings[each]) {

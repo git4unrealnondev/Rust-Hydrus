@@ -6,11 +6,11 @@ use clap::{arg, Parser, Subcommand, ValueEnum};
 #[clap(author, version, about)]
 pub struct MainWrapper {
     #[command(subcommand)]
-    pub a: Option<test>,
+    pub a: Option<Test>,
 }
 
 #[derive(Debug, Parser)]
-pub enum test {
+pub enum Test {
     /// Manages jobs in db.
     #[clap(subcommand)]
     Job(JobStruct),
@@ -176,14 +176,14 @@ pub struct DbJobsManagerClap {
 
 #[derive(Debug, Hash, Eq, PartialEq, Clone, Subcommand)]
 pub enum DbJobRecreationClap {
-    OnTagId(Id_Timestamp),
+    OnTagId(IdTimestamp),
     OnTagExist(TagClap),
     /// Spawns the job after processing
     AlwaysTime(Timestamp),
 }
 
 #[derive(Debug, Parser, Clone, Eq, PartialEq, Hash)]
-pub struct Id_Timestamp {
+pub struct IdTimestamp {
     #[arg(required = true, exclusive = true)]
     pub id: usize,
     #[arg(exclusive = false, required = true)]

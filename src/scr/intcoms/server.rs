@@ -15,7 +15,6 @@ use interprocess::local_socket::{prelude::*, GenericNamespaced, ListenerOptions}
 use std::collections::HashSet;
 use std::sync::Arc;
 //use std::sync::Mutex;
-use crate::Mutex;
 use crate::RwLock;
 use std::thread;
 
@@ -270,7 +269,7 @@ impl DbInteract {
                 let manageeplugin = self.globalload.clone();
                 let client = download::client_create();
                 let jobstorage = self.jobmanager.clone();
-                let mut database = self._database.clone();
+                let database = self._database.clone();
                 let thread = thread::spawn(move || {
                     threading::main_file_loop(
                         &mut file,
@@ -377,8 +376,7 @@ impl DbInteract {
                 Self::data_size_to_b(&out)
             }
             types::SupportedDBRequests::ReloadLoadedPlugins() => {
-                todo!("NOOP on linux ignoring");
-                let mut plugin = self.globalload.write().unwrap();
+                //let mut plugin = self.globalload.write().unwrap();
                 //plugin.reload_loaded_plugins();
                 Self::data_size_to_b(&true)
             }
@@ -399,7 +397,8 @@ impl DbInteract {
             }
             types::SupportedDBRequests::Search((search, limit, offset)) => {
                 let unwrappy = self._database.read().unwrap();
-                let tmep = unwrappy.search_db_files(search, limit, offset);
+                let tmep = unwrappy.search_db_files(search);
+                //let tmep = unwrappy.search_db_files(search, limit, offset);
                 Self::data_size_to_b(&tmep)
             }
             types::SupportedDBRequests::GetTagId(id) => {

@@ -354,7 +354,8 @@ pub fn dlfile_new(
     }
     {
         let mut unwrappydb = db.write().unwrap();
-        let source_url_ns_id = unwrappydb.create_default_source_url_ns_id();
+        unwrappydb.create_default_source_url_ns_id();
+        //let source_url_ns_id = unwrappydb.create_default_source_url_ns_id();
         unwrappydb.enclave_determine_processing(file, bytes, &hash, source_url);
     }
     FileReturnStatus::File((hash, file_ext))
@@ -376,7 +377,7 @@ pub fn hash_file(
 
 pub fn write_to_disk(
     location: std::path::PathBuf,
-    file: &sharedtypes::FileObject,
+    //file: &sharedtypes::FileObject,
     bytes: &Bytes,
     sha512hash: &String,
 ) {
