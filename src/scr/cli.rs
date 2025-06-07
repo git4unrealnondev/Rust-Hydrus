@@ -18,7 +18,6 @@ use crate::{
     sharedtypes::{self},
 };
 use clap::Parser;
-use file_format::FileFormat;
 use std::sync::Arc;
 
 mod cli_structs;

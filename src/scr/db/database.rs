@@ -1,5 +1,4 @@
 #![forbid(unsafe_code)]
-use crate::globalload;
 use crate::globalload::GlobalLoad;
 use crate::logging;
 use crate::sharedtypes;
