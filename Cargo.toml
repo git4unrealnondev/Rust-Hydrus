@@ -41,6 +41,7 @@ ahash = "0.8.11"
 libloading = "0.8.5"
 thread-control = "0.1.2"
 regex = {version="1.11.1", features=["std"]}
+tracing-mutex = "0.3.1"
 
 [features]
 default = ["exe_build"]

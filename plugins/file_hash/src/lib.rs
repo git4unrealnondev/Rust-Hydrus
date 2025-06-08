@@ -16,13 +16,12 @@ pub fn get_global_info() -> Vec<sharedtypes::GlobalPluginScraper> {
     main.version = 0;
     main.storage_type = Some(sharedtypes::ScraperOrPlugin::Plugin(
         sharedtypes::PluginInfo2 {
-            com_type: sharedtypes::PluginThreadType::SpawnInline,
             com_channel: true,
             redirect: None,
         },
     ));
     main.callbacks = vec![
-        sharedtypes::GlobalCallbacks::Start,
+        sharedtypes::GlobalCallbacks::Start(sharedtypes::StartupThreadType::SpawnInline),
         sharedtypes::GlobalCallbacks::Download,
     ];
     let out = vec![main];

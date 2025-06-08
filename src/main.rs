@@ -6,8 +6,8 @@ use log::{error, warn};
 //use scraper::db_upgrade_call;
 //use scraper::on_start;
 use std::sync::Arc;
-use std::sync::{Mutex, RwLock};
-//use tracing_mutex::stdsync::{Mutex, RwLock};
+//use std::sync::{Mutex, RwLock};
+use tracing_mutex::stdsync::{Mutex, RwLock};
 
 // use std::sync::{Arc, Mutex};
 use std::{thread, time};
@@ -121,9 +121,6 @@ fn main() {
     let jobmanager = Arc::new(RwLock::new(jobs::Jobs::new(arc.clone())));
 
     let globalload_arc = globalload::GlobalLoad::new(arc.clone(), jobmanager.clone());
-    {
-        globalload_arc.write().unwrap().reload_regex();
-    }
 
     //let mut globalload_arc =
     //    plugins::globalload_arc::new(plugin_loc.to_string(), arc.clone(), jobmanager.clone());
@@ -172,13 +169,14 @@ fn main() {
             globalload::db_upgrade_call(scraper_library, &db_version, internal_scraper);
         }
     }
+    globalload_arc.write().unwrap().reload_regex();
 
     // Processes any CLI input here
     //cli::main(arc.clone(), globalload_arc.clone());
     cli::main(arc.clone());
 
     // Calls the on_start func for the plugins
-    globalload_arc.write().unwrap().plugin_on_start();
+    globalload_arc.write().unwrap().pluginscraper_on_start();
 
     // A way to get around a mutex lock but it works lol
     let one_sec = time::Duration::from_millis(100);

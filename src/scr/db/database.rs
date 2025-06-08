@@ -952,17 +952,17 @@ impl Main {
             self.clear_cache();
             self.load_table(&sharedtypes::LoadDBTable::Settings);
 
-            if db_vers == 1 && self._vers == 2 {
+            if db_vers == 1 {
                 panic!("How did you get here vers is 1 did you do something dumb??")
-            } else if db_vers + 1 == 3 {
+            } else if db_vers == 2 {
                 dbg!(self._vers, self._active_vers);
                 self.db_update_two_to_three();
                 db_vers += 1;
-            } else if db_vers + 1 == 4 {
+            } else if db_vers == 3 {
                 self.db_update_three_to_four();
-            } else if db_vers + 1 == 5 {
+            } else if db_vers == 4 {
                 self.db_update_four_to_five();
-            } else if db_vers + 1 == 6 {
+            } else if db_vers == 5 {
                 self.db_update_five_to_six();
             }
             logging::info_log(&format!("Finished upgrade to V{}.", db_vers));
@@ -1162,7 +1162,7 @@ impl Main {
                 .unwrap();
             for each in namespaces {
                 if let Ok(res) = each {
-                    self.namespace_add_db(res);
+                    self.namespace_add(res.name, res.description, false);
                 } else {
                     error!("Bad Namespace cant load {:?}", each);
                 }
@@ -1938,6 +1938,11 @@ impl Main {
 
     /// Sqlite wrapper for deleteing a relationship from table.
     fn delete_relationship_sql(&mut self, file_id: &usize, tag_id: &usize) {
+        logging::info_log(&format!(
+            "Removing Relationship where fileid = {} and tagid = {}",
+            file_id, tag_id
+        ));
+
         let inp = "DELETE FROM Relationship WHERE fileid = ? AND tagid = ?";
         self._conn
             .borrow_mut()

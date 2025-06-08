@@ -161,7 +161,7 @@ fn nsobjplg(name: &NsIdent, site: &Site) -> sharedtypes::GenericNamespaceObj {
                     "Person's id for {} who made a pool.",
                     site_to_string(site)
                 )),
-            }
+       }
         }
         NsIdent::PoolName => {
             sharedtypes::GenericNamespaceObj {
@@ -387,7 +387,9 @@ pub fn get_global_info() -> Vec<sharedtypes::GlobalPluginScraper> {
                     num_threads: None,
                 },
             )),
-            callbacks: vec![sharedtypes::GlobalCallbacks::Start],
+            callbacks: vec![sharedtypes::GlobalCallbacks::Start(
+                sharedtypes::StartupThreadType::SpawnInline,
+            )],
         },
         sharedtypes::GlobalPluginScraper {
             name: "E6AI.net".to_string(),
@@ -413,7 +415,9 @@ pub fn get_global_info() -> Vec<sharedtypes::GlobalPluginScraper> {
                     num_threads: None,
                 },
             )),
-            callbacks: vec![sharedtypes::GlobalCallbacks::Start],
+            callbacks: vec![sharedtypes::GlobalCallbacks::Start(
+                sharedtypes::StartupThreadType::SpawnInline,
+            )],
         },
     ];
     out
@@ -718,7 +722,7 @@ fn parse_pools(
 #[no_mangle]
 pub fn parser(
     html_input: &String,
-    params: &Vec<sharedtypes::ScraperParam>,
+    _: &Vec<sharedtypes::ScraperParam>,
     scraperdata: &sharedtypes::ScraperData,
 ) -> Result<sharedtypes::ScraperObject, sharedtypes::ScraperReturn> {
     //let vecvecstr: AHashMap<String, AHashMap<String, Vec<String>>> = AHashMap::new();
@@ -1223,6 +1227,29 @@ pub fn db_upgrade_call(db_version: &usize, site_struct: &sharedtypes::GlobalPlug
     }
 }
 
+fn determine_site_type(
+    file_id: &usize,
+    source_url_nsid: &usize,
+) -> Option<(Site, sharedtypes::DbTagNNS)> {
+    for tagid in
+        client::filter_namespaces_by_id(client::relationship_get_tagid(*file_id), *source_url_nsid)
+    {
+        if let Some(tag) = client::tag_get_id(tagid) {
+            if tag.name.contains("e621.net") {
+                return Some((Site::E6, tag));
+            }
+            if tag.name.contains("e6ai.net") {
+                return Some((Site::E6AI, tag));
+            }
+        }
+        dbg!(tagid);
+    }
+
+    dbg!(*file_id, client::relationship_get_tagid(*file_id));
+
+    None
+}
+
 ///
 /// Runs on startup of the software before any jobs run
 ///
@@ -1238,6 +1265,9 @@ pub fn on_start(site_struct: &sharedtypes::GlobalPluginScraper) {
                         match string_to_site(val) {
                             None => {}
                             Some(site) => {
+                                if val.contains("E6AI") {
+                                    return;
+                                }
                                 site_op = Some(site);
                             }
                         }
@@ -1246,51 +1276,75 @@ pub fn on_start(site_struct: &sharedtypes::GlobalPluginScraper) {
             }
         }
     }
-    if let Some(_site) = site_op {
-        client::load_table(sharedtypes::LoadDBTable::Namespace);
+    if let Some(site) = site_op {
+        client::load_table(sharedtypes::LoadDBTable::Tags);
+        client::load_table(sharedtypes::LoadDBTable::All);
 
-        let source_url_nsid = client::namespace_get("source_url".to_string());
+        let source_url_nsid = match client::namespace_get("source_url".to_string()) {
+            Some(out) => out,
+            None => {
+                return;
+            }
+        };
 
-        let legacy_ns = [
-            "Pool_Updated_At",
-            "Pool_Created_At",
-            "Pool_Id",
-            "Pool_Creator",
-            "Pool_Creator_Id",
-            "Pool_Name",
-            "Pool_Description",
-            "Pool_Position",
-            "General",
-            "Species",
-            "Character",
-            "Contributor",
-            "Copyright",
-            "Artist",
-            "Lore",
-            "Meta",
-            "Sources",
-            "Children",
-            "Parent_id",
-            "Description",
-            "Rating",
-            "Id",
-            "franchise",
-            "Director",
+        let mut legacy_ns = [
+            ("Pool_Updated_At", NsIdent::PoolUpdatedAt, None),
+            ("Pool_Created_At", NsIdent::PoolCreatedAt, None),
+            ("Pool_Id", NsIdent::PoolId, None),
+            ("Pool_Creator", NsIdent::PoolCreator, None),
+            ("Pool_Creator_Id", NsIdent::PoolCreatorId, None),
+            ("Pool_Name", NsIdent::PoolName, None),
+            ("Pool_Description", NsIdent::PoolDescription, None),
+            ("Pool_Position", NsIdent::PoolPosition, None),
+            ("General", NsIdent::General, None),
+            ("Species", NsIdent::Species, None),
+            ("Character", NsIdent::Character, None),
+            ("Contributor", NsIdent::Contributor, None),
+            ("Copyright", NsIdent::Copyright, None),
+            ("Artist", NsIdent::Artist, None),
+            ("Lore", NsIdent::Lore, None),
+            ("Meta", NsIdent::Meta, None),
+            ("Sources", NsIdent::Sources, None),
+            ("Children", NsIdent::Children, None),
+            ("Parent_id", NsIdent::Parent, None),
+            ("Description", NsIdent::Description, None),
+            ("Rating", NsIdent::Rating, None),
+            ("Id", NsIdent::FileId, None),
+            ("franchise", NsIdent::Franchise, None),
+            ("Director", NsIdent::Director, None),
         ];
 
-        /*let mut nsids = Vec::new();
-        for ns in legacy_ns {
+        for (nsname, ref nsident, ref mut id) in legacy_ns.iter_mut() {
+            let nso = nsobjplg(&nsident, &site);
+            if client::namespace_get(nsname.to_string()).is_some() {
+                *id = Some(client::namespace_put(nso.name, nso.description, true));
+            }
+        }
+
+        let mut nsids = Vec::new();
+        for (ns, nsident, main_nsid) in legacy_ns.iter() {
+            if main_nsid.is_none() {
+                continue;
+            }
             if let Some(nsid) = client::namespace_get(ns.to_string()) {
-                client::load_table(sharedtypes::LoadDBTable::Tags);
-                if let Some(tagids) = client::namespace_get_tagids(nsid) {
-                    for tagid in tagids {
-                        let fileids = client::relationship_get_fileid(tagid);
-                        for fileid in fileids {}
+                for tagid in client::namespace_get_tagids(nsid) {
+                    let fileids = client::relationship_get_fileid(tagid);
+                    for fileid in fileids.iter() {
+                        if let Some((site, og_tag)) = determine_site_type(fileid, &source_url_nsid)
+                        {
+                            let old_tag = client::tag_get_id(tagid).unwrap();
+                            let new_tag_id =
+                                client::tag_add(old_tag.name, main_nsid.unwrap(), true, None);
+                            client::relationship_add(*fileid, new_tag_id);
+                            client::relationship_remove(*fileid, tagid);
+                        } else {
+                            //dbg!(fileid, tagid, nsid);
+                        }
                     }
                 }
                 nsids.push(nsid);
-                dbg!(ns, nsid);
             }
-        }*/
+        }
+        client::transaction_flush();
     }
 }

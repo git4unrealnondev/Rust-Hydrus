@@ -4,3 +4,6 @@
 [submodule "Plugins/File_Thumbnail/thumbnailer"]
 	path = Plugins/File_Thumbnail/thumbnailer
 	url = https://github.com/git4unrealnondev/thumbnailer
+[submodule "plugins/File_Thumbnail/plugins/File_Thumbnail/thumbnailer"]
+	path = plugins/File_Thumbnail/plugins/File_Thumbnail/thumbnailer
+	url = https://github.com/git4unrealnondev/thumbnailer

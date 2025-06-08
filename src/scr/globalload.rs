@@ -12,14 +12,15 @@ use std::{path::PathBuf, thread::JoinHandle};
 ///
 /// Runs the on_start callback
 ///
-fn c_run_onstart(path: &Path) {
+fn c_run_onstart(path: &Path, global: &sharedtypes::GlobalPluginScraper) {
     let liba;
     unsafe {
         liba = Library::new(path).unwrap();
     }
     unsafe {
-        let plugindatafunc: libloading::Symbol<unsafe extern "C" fn()> = match liba.get(b"on_start")
-        {
+        let plugindatafunc: libloading::Symbol<
+            unsafe extern "C" fn(&sharedtypes::GlobalPluginScraper),
+        > = match liba.get(b"on_start") {
             Ok(good) => good,
             Err(_) => {
                 logging::log(&format!(
@@ -29,9 +30,11 @@ fn c_run_onstart(path: &Path) {
                 return;
             }
         };
-        liba.get::<libloading::Symbol<unsafe extern "C" fn()>>(b"on_start")
-            .unwrap();
-        plugindatafunc();
+        liba.get::<libloading::Symbol<unsafe extern "C" fn(&sharedtypes::GlobalPluginScraper)>>(
+            b"on_start",
+        )
+        .unwrap();
+        plugindatafunc(global);
     };
 }
 
@@ -823,46 +826,81 @@ impl GlobalLoad {
     ///
     /// Triggers the on_start for the plugins
     ///
-    pub fn plugin_on_start(&mut self) {
-        if let Some(plugin_list) = self.callback.get(&sharedtypes::GlobalCallbacks::Start) {
-            for plugin in plugin_list {
-                logging::log(&format!("Starting to run: {}", plugin.name));
-                if !self.library_path.contains_key(plugin) {
+    pub fn pluginscraper_on_start(&mut self) {
+        for (callback, list) in self.callback.iter() {
+            match callback {
+                sharedtypes::GlobalCallbacks::Start(thread_type) => {
+                    for to_run in list {
+                        logging::log(&format!("Starting Call Start for: {}", &to_run.name));
+                        let file = self.library_path.get(to_run).unwrap().clone();
+                        match thread_type {
+                            sharedtypes::StartupThreadType::Spawn => {
+                                let run = to_run.clone();
+                                let to_run = to_run.clone();
+                                let thread = thread::spawn(move || {
+                                    c_run_onstart(&file, &to_run.clone());
+                                });
+                                self.thread.insert(run.clone(), thread);
+                            }
+                            sharedtypes::StartupThreadType::SpawnInline => {
+                                let run = to_run.clone();
+                                let to_run = to_run.clone();
+                                let thread = thread::spawn(move || {
+                                    c_run_onstart(&file, &to_run);
+                                });
+                                self.thread.insert(run.clone(), thread);
+                            }
+                            sharedtypes::StartupThreadType::Inline => {
+                                c_run_onstart(&file, &to_run);
+                            }
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        /* if let Some(pluginscraper_list) = self.callback.get(&sharedtypes::GlobalCallbacks::Start(_))
+        {
+            for to_run in pluginscraper_list {
+                if !self.library_path.contains_key(to_run) {
                     logging::error_log(&format!(
                         "Skipping plugin: {} due to library reference not having it loaded?",
-                        plugin.name
+                        to_run.name
                     ));
                     continue;
                 }
-                if let Some(stored_info) = &plugin.storage_type {
+                if let Some(stored_info) = &to_run.storage_type {
+                    logging::log(&format!("Starting to run: {}", to_run.name));
+
                     match stored_info {
                         sharedtypes::ScraperOrPlugin::Plugin(plugin_info) => {
                             // Runs the onstart
 
-                            let file = self.library_path.get(plugin).unwrap().clone();
-                            match plugin_info.com_type {
+                            let file = self.library_path.get(to_run).unwrap().clone();
+                            /*match plugin_info.com_type {
                                 sharedtypes::PluginThreadType::Spawn => {
                                     let thread = thread::spawn(move || {
                                         c_run_onstart(&file);
                                     });
-                                    self.thread.insert(plugin.clone(), thread);
+                                    self.thread.insert(to_run.clone(), thread);
                                 }
                                 sharedtypes::PluginThreadType::SpawnInline => {
                                     let thread = thread::spawn(move || {
                                         c_run_onstart(&file);
                                     });
-                                    self.thread.insert(plugin.clone(), thread);
+                                    self.thread.insert(to_run.clone(), thread);
                                 }
                                 sharedtypes::PluginThreadType::Inline => {
                                     c_run_onstart(&file);
                                 }
-                            }
+                            }*/
                         }
                         sharedtypes::ScraperOrPlugin::Scraper(_) => {}
                     }
                 }
             }
-        }
+        }*/
     }
 
     ///
@@ -870,7 +908,21 @@ impl GlobalLoad {
     ///
     pub fn plugin_on_start_should_wait(&mut self) -> bool {
         self.thread_finish_closed();
-        if let Some(plugin_list) = self.callback.get(&sharedtypes::GlobalCallbacks::Start) {
+        for (check, list) in self.callback.iter() {
+            match check {
+                sharedtypes::GlobalCallbacks::Start(thread) => {
+                    for item in list {
+                        if &sharedtypes::StartupThreadType::SpawnInline == thread
+                            && self.thread.contains_key(item)
+                        {
+                            return true;
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        /*if let Some(plugin_list) = self.callback.get(&sharedtypes::GlobalCallbacks::Start) {
             for plugin in plugin_list {
                 if let Some(stored_info) = &plugin.storage_type {
                     if let sharedtypes::ScraperOrPlugin::Plugin(plugin_info) = stored_info {
@@ -882,7 +934,7 @@ impl GlobalLoad {
                     }
                 }
             }
-        }
+        }*/
         false
     }
 

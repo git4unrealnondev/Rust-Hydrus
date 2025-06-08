@@ -35,14 +35,13 @@ pub fn get_global_info() -> Vec<sharedtypes::GlobalPluginScraper> {
 
     let callbackvec = vec![
         sharedtypes::GlobalCallbacks::Tag(tag_vec),
-        sharedtypes::GlobalCallbacks::Start,
+        sharedtypes::GlobalCallbacks::Start(sharedtypes::StartupThreadType::SpawnInline),
     ];
 
     let mut plugin = sharedtypes::return_default_globalpluginparser();
     plugin.name = "Catbox Regex Parser".to_string();
     plugin.storage_type = Some(sharedtypes::ScraperOrPlugin::Plugin(
         sharedtypes::PluginInfo2 {
-            com_type: sharedtypes::PluginThreadType::SpawnInline,
             com_channel: true,
             redirect: Some("catbox scraper".into()),
         },

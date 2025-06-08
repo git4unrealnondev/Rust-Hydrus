@@ -189,8 +189,6 @@ pub struct ScraperInfo {
 ///
 #[derive(Debug, Clone, Eq, Hash, PartialEq)]
 pub struct PluginInfo2 {
-    /// Manages com settings between Plugin and host
-    pub com_type: PluginThreadType,
     pub com_channel: bool,
     // If this redirect tag exists as a site then we direct any processed data to the specified
     // site scraper instead of the plugin. Useful if you have a scraper that handles download
@@ -267,12 +265,12 @@ pub fn return_default_jobsobj() -> DbJobsObj {
 /// Determines how to run a function
 #[derive(Debug, Clone, Eq, Hash, PartialEq)]
 #[cfg_attr(feature = "clap", derive(EnumIter, Display))]
-pub enum PluginThreadType {
-    // DEFAULT - Runs plugin and waits until it finished
+pub enum StartupThreadType {
+    // Runs plugin and waits until it finished
     Inline,
     // Spawns a new thread, Runs concurrently to the calling function.
     Spawn,
-    // Waits for the on_start to finish. Runs cocurently to other on_start functions
+    // DEFAULT - Waits for the on_start to finish. Runs cocurently to other on_start functions
     SpawnInline,
 }
 
@@ -900,7 +898,7 @@ pub enum PluginCallback {
     // Ran when a file is downloaded
     Download,
     // Starts when the software start
-    Start,
+    Start(StartupThreadType),
     // Used for when we need to get / register a login
     LoginNeeded,
     // Custom callback to be used for cross communication
@@ -916,7 +914,7 @@ pub enum GlobalCallbacks {
     // Ran when a file is downloaded
     Download,
     // Starts when the software start
-    Start,
+    Start(StartupThreadType),
     // Used for when we need to get / register a login
     LoginNeeded,
     // Custom callback to be used for cross communication
@@ -992,7 +990,7 @@ pub struct PluginInfo {
 
 #[derive(Debug)]
 pub struct PluginSharedData {
-    pub thread: PluginThreadType,
+    pub thread: StartupThreadType,
     pub com_channel: Option<PluginCommunicationChannel>,
 }
 

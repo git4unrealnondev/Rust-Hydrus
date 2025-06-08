@@ -21,7 +21,7 @@ SafeFiles
 files/
 # Added by cargo
 test*/
-File*
+./File*
 /target
 thumbnails
 e6poolsgen

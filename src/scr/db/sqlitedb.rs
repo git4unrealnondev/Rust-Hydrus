@@ -274,9 +274,18 @@ impl Main {
             let temp = temp_test.prepare("SELECT * FROM Tags");
             if let Ok(mut con) = temp {
                 let tag = con.query_map([], |row| {
+                    let name: String = match row.get(1) {
+                        Ok(out) => out,
+                        Err(err) => {
+                            let temp: u64 = row.get(1).unwrap();
+                            dbg!(err, temp);
+                            panic!();
+                        }
+                    };
+
                     Ok(sharedtypes::DbTagObjCompatability {
                         id: row.get(0).unwrap(),
-                        name: row.get(1).unwrap(),
+                        name,
                         namespace: row.get(2).unwrap(),
                     })
                 });

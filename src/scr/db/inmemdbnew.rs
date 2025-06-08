@@ -128,23 +128,13 @@ impl NewinMemDB {
     pub fn dumpe_data(&self) {
         use crate::pause;
 
-        dbg!(
-            &self._parents_max,
-            &self._parents_dual,
-            &self._parents_rel_tag,
-            &self._parents_tag_rel,
-            &self._parents_cantor_limitto,
-            &self._parents_limitto_cantor
-        );
-
-        dbg!(&self._tag_nns_id_data, &self._tag_nns_data_id);
-        dbg!();
+        //dbg!(&self._tag_nns_id_data, &self._tag_nns_data_id);
+        //dbg!();
         // &self. , &self. , &self. , &self. , &self. , &self.
-        dbg!(&self._file_name_id, &self._file_id_data);
-        pause();
-        dbg!(&self._relationship_tag_file);
-        pause();
-        dbg!(&self._namespace_id_data);
+        //dbg!(&self._file_name_id, &self._file_id_data);
+        //pause();
+        dbg!(&self._relationship_file_tag);
+
         pause();
     }
 
@@ -299,6 +289,10 @@ impl NewinMemDB {
 
     /// Returns a list of tag id's based on a file id
     pub fn relationship_get_tagid(&self, file: &usize) -> HashSet<usize> {
+        if self._relationship_file_tag.get(file).is_none() {
+            dbg!(&self._relationship_file_tag);
+        }
+
         match self._relationship_file_tag.get(file) {
             None => HashSet::new(),
             Some(relref) => {
@@ -411,8 +405,22 @@ impl NewinMemDB {
     pub fn relationship_remove(&mut self, file_id: &usize, tag_id: &usize) {
         let cantor = &self.cantor_pair(file_id, tag_id);
         self._relationship_dual.remove(cantor);
-        self._relationship_file_tag.remove(file_id);
-        self._relationship_tag_file.remove(tag_id);
+
+        if let Some(val) = self._relationship_file_tag.get_mut(file_id) {
+            val.remove(tag_id);
+
+            if val.is_empty() {
+                self._relationship_file_tag.remove(file_id);
+            }
+        }
+
+        if let Some(val) = self._relationship_tag_file.get_mut(tag_id) {
+            val.remove(file_id);
+
+            if val.is_empty() {
+                self._relationship_tag_file.remove(tag_id);
+            }
+        }
     }
 
     /// Returns the max id in db
@@ -1803,5 +1811,30 @@ mod inmemdb {
         dbg!(&db._file_id_data, &db._file_name_id, &db._file_max);
         let init = db.file_put(sharedtypes::DbFileStorage::NoIdExist(file));
         assert_eq!(init, 14);
+    }
+
+    #[test]
+    fn relationship_add() {
+        let mut db = setup_db();
+
+        db.relationship_add(1, 2);
+
+        assert!(!db.relationship_get_fileid(&2).is_empty());
+        assert!(!db.relationship_get_tagid(&1).is_empty());
+        assert!(db.relationship_get_fileid(&1).is_empty());
+        assert!(db.relationship_get_tagid(&2).is_empty());
+    }
+    #[test]
+    fn relationship_remove() {
+        let mut db = setup_db();
+
+        db.relationship_add(1, 2);
+        db.relationship_add(2, 2);
+
+        db.relationship_remove(&1, &2);
+        assert!(db.relationship_get_fileid(&1).is_empty());
+        assert!(!db.relationship_get_fileid(&2).is_empty());
+        assert!(!db.relationship_get_tagid(&2).is_empty());
+        assert!(db.relationship_get_tagid(&1).is_empty());
     }
 }

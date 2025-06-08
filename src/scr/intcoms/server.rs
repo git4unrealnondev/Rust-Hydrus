@@ -414,11 +414,17 @@ impl DbInteract {
                 logging::log(&log);
                 Self::data_size_to_b(&true)
             }
-            types::SupportedDBRequests::RelationshipAdd(file, tag, addtodb) => {
+            types::SupportedDBRequests::RelationshipAdd(file, tag) => {
                 let mut unwrappy = self._database.write().unwrap();
-                unwrappy.relationship_add(file, tag, addtodb);
+                unwrappy.relationship_add(file, tag, true);
                 Self::data_size_to_b(&true)
             }
+            types::SupportedDBRequests::RelationshipRemove(file, tag) => {
+                let mut unwrappy = self._database.write().unwrap();
+                unwrappy.relationship_remove(&file, &tag);
+                Self::data_size_to_b(&true)
+            }
+
             types::SupportedDBRequests::PutTag(tags, namespace_id, addtodb, id) => {
                 let mut unwrappy = self._database.write().unwrap();
                 let tmep = unwrappy.tag_add(&tags, namespace_id, addtodb, id);
