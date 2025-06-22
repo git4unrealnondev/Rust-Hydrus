@@ -82,21 +82,7 @@ pub struct Directory {
     /// Location to search
     pub location: String,
     #[clap(default_value = "copy")]
-    pub file_action: FileAction,
-}
-
-///
-/// Defines actions we can do on import
-///
-#[derive(Debug, Parser, Clone, Copy, ValueEnum)]
-#[clap(rename_all = "kebab_case")]
-pub enum FileAction {
-    ///Copies the file
-    Copy,
-    /// Moves the file into the db.
-    Move,
-    /// Hardlinks the file into the db
-    HardLink,
+    pub file_action: sharedtypes::FileAction,
 }
 
 #[derive(Debug, Subcommand)]

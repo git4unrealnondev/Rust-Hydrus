@@ -64,6 +64,9 @@ pub enum EnclaveAction {
     DownloadToLocation(usize),
     AddTagAndNamespace((String, GenericNamespaceObj, TagType, Option<SubTag>)),
     DownloadToDefault,
+    //Functionally similar to DownloadToLocation however this is used for just putting an item in a
+    //location and does not download it. Really just for nice logging :D
+    PutAtDefault,
 }
 
 /// Database Tags Object
@@ -706,6 +709,20 @@ pub struct DbPluginParentsObj {
 pub struct DbPluginNamespace {
     pub name: String,
     pub description: Option<String>,
+}
+///
+/// Defines actions we can do on import
+///
+#[cfg(feature = "clap")]
+#[derive(Debug, clap::Parser, Clone, Copy, ValueEnum)]
+#[clap(rename_all = "kebab_case")]
+pub enum FileAction {
+    ///Copies the file
+    Copy,
+    /// Moves the file into the db.
+    Move,
+    /// Hardlinks the file into the db
+    HardLink,
 }
 
 /// Plugin output for the passed object

@@ -377,6 +377,8 @@ pub fn dlfile_new(
         };
     }
 
+    logging::info_log(&format!("Downloaded hash: {}", &hash));
+
     let file_ext = FileFormat::from_bytes(&bytes).extension().to_string();
     // If the plugin manager is None then don't do anything plugin wise. Useful for if
     // doing something that we CANNOT allow plugins to run.
@@ -413,6 +415,9 @@ pub fn hash_file(
     Ok((hash_self.0, b))
 }
 
+///
+/// Writes a file to disk
+///
 pub fn write_to_disk(
     location: std::path::PathBuf,
     //file: &sharedtypes::FileObject,
@@ -473,5 +478,4 @@ pub fn write_to_disk(
 
         thread::sleep(Duration::from_secs(1));
     }
-    logging::info_log(&format!("Downloaded hash: {}", &sha512hash));
 }

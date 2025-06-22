@@ -318,6 +318,7 @@ pub fn main(data: Arc<RwLock<database::Main>>) {
                     unwrappy.load_table(&sharedtypes::LoadDBTable::Relationship);
                     unwrappy.load_table(&sharedtypes::LoadDBTable::Tags);
                     unwrappy.load_table(&sharedtypes::LoadDBTable::Namespace);
+                    unwrappy.enclave_create_default_file_import();
                 }
                 let mut files = HashSet::new();
                 let mut sidecar_files = HashSet::new();

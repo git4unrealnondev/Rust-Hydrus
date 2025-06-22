@@ -1277,8 +1277,7 @@ pub fn on_start(site_struct: &sharedtypes::GlobalPluginScraper) {
         }
     }
     if let Some(site) = site_op {
-        client::load_table(sharedtypes::LoadDBTable::Tags);
-        client::load_table(sharedtypes::LoadDBTable::All);
+        client::load_table(sharedtypes::LoadDBTable::Namespace);
 
         let source_url_nsid = match client::namespace_get("source_url".to_string()) {
             Some(out) => out,
@@ -1327,6 +1326,9 @@ pub fn on_start(site_struct: &sharedtypes::GlobalPluginScraper) {
                 continue;
             }
             if let Some(nsid) = client::namespace_get(ns.to_string()) {
+                client::log(format!("Parsing legacy NS: {ns}"));
+                client::load_table(sharedtypes::LoadDBTable::Tags);
+                client::load_table(sharedtypes::LoadDBTable::All);
                 for tagid in client::namespace_get_tagids(nsid) {
                     let fileids = client::relationship_get_fileid(tagid);
                     for fileid in fileids.iter() {

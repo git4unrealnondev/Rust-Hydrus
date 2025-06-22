@@ -9,7 +9,18 @@ use core::panic;
 use file_format::FileFormat;
 use rusqlite::params;
 use rusqlite::OptionalExtension;
+
+const DEFAULT_PRIORITY_DOWNLOAD: usize = 10;
+const DEFAULT_PRIORITY_PUT: usize = 5;
+const DEFAULT_DOWNLOAD_DEFAULT: &str = "DownloadToDiskDefault";
+const DEFAULT_DOWNLOAD_DISK: &str = "DownloadToDisk";
+const DEFAULT_PUT_DISK: &str = "PutAtDefault";
+const DEFAULT_PRIORITY_LOWEST: usize = 0;
+
 impl Main {
+    ///
+    /// Determines the default enclave(s) to run on a file
+    ///
     pub fn enclave_determine_processing(
         &mut self,
         file: &mut sharedtypes::FileObject,
@@ -33,8 +44,6 @@ impl Main {
                     for (enclave_action_id, failed_enclave_action_id, condition_id) in
                         self.enclave_condition_list_get(condition_list_id).iter()
                     {
-                        //     dbg!(enclave_action_id, failed_enclave_action_id, condition_id);
-
                         let (action_bool, action_name) =
                             self.enclave_condition_evaluate(condition_id, file, &bytes);
 
@@ -72,7 +81,7 @@ impl Main {
     ///
     /// Runs an action as it's valid
     ///
-    pub fn enclave_run_action(
+    fn enclave_run_action(
         &mut self,
         action: &sharedtypes::EnclaveAction,
         file: &mut sharedtypes::FileObject,
@@ -83,6 +92,19 @@ impl Main {
         enclave_id: &usize,
     ) -> Option<usize> {
         match action {
+            sharedtypes::EnclaveAction::PutAtDefault => {
+                let download_location = self.location_get();
+                let fileid = self.download_and_do_parsing(
+                    bytes,
+                    sha512hash,
+                    source_url,
+                    source_url_ns_id,
+                    enclave_id,
+                    &download_location,
+                    file,
+                );
+                Some(fileid)
+            }
             sharedtypes::EnclaveAction::AddTagAndNamespace((
                 tag,
                 namespace,
@@ -98,52 +120,76 @@ impl Main {
                 None
             }
             sharedtypes::EnclaveAction::DownloadToDefault => {
-                let loc = self.location_get();
-
-                self.storage_put(&loc);
-
-                // Gives file extension
-                let file_ext = FileFormat::from_bytes(bytes).extension().to_string();
-
-                let ext_id = self.extension_put_string(&file_ext);
-
-                let download_loc = std::path::Path::new(&loc).canonicalize().unwrap();
-                //dbg!(&download_loc, &download_loc.file_name());
-
-                download::write_to_disk(download_loc, bytes, sha512hash);
-                //download::write_to_disk(download_loc, file, bytes, sha512hash);
-
-                let storage_id = self.storage_get_id(&loc).unwrap();
-
-                let filestorage =
-                    sharedtypes::DbFileStorage::NoIdExist(sharedtypes::DbFileObjNoId {
-                        hash: sha512hash.to_string(),
-                        ext_id,
-                        storage_id,
-                    });
-                let fileid = self.file_add(filestorage, true);
-                if let Some(source_url) = source_url {
-                    let tagid = self.tag_add(source_url, source_url_ns_id, true, None);
-                    self.relationship_add(fileid, tagid, true);
-                }
-
-                // Adds tags into the DB.
-                for tag in file.tag_list.iter() {
-                    let tid = self.tag_add_tagobject(tag);
-                    self.relationship_add(fileid, tid, true);
-                }
-
-                self.enclave_file_mapping_add(&fileid, enclave_id);
+                let download_location = self.location_get();
+                let fileid = self.download_and_do_parsing(
+                    bytes,
+                    sha512hash,
+                    source_url,
+                    source_url_ns_id,
+                    enclave_id,
+                    &download_location,
+                    file,
+                );
                 Some(fileid)
             }
             sharedtypes::EnclaveAction::DownloadToLocation(_) => None,
         }
     }
 
+    fn download_and_do_parsing(
+        &mut self,
+        bytes: &Bytes,
+        sha512hash: &String,
+        source_url: Option<&String>,
+        source_url_ns_id: usize,
+        enclave_id: &usize,
+        download_location: &String,
+        file: &mut sharedtypes::FileObject,
+    ) -> usize {
+        //let loc = self.location_get();
+
+        self.storage_put(&download_location);
+
+        // Gives file extension
+        let file_ext = FileFormat::from_bytes(bytes).extension().to_string();
+
+        let ext_id = self.extension_put_string(&file_ext);
+
+        let download_loc = std::path::Path::new(&download_location)
+            .canonicalize()
+            .unwrap();
+        //dbg!(&download_loc, &download_loc.file_name());
+
+        download::write_to_disk(download_loc, bytes, sha512hash);
+        //download::write_to_disk(download_loc, file, bytes, sha512hash);
+
+        let storage_id = self.storage_get_id(&download_location).unwrap();
+
+        let filestorage = sharedtypes::DbFileStorage::NoIdExist(sharedtypes::DbFileObjNoId {
+            hash: sha512hash.to_string(),
+            ext_id,
+            storage_id,
+        });
+        let fileid = self.file_add(filestorage, true);
+        if let Some(source_url) = source_url {
+            let tagid = self.tag_add(source_url, source_url_ns_id, true, None);
+            self.relationship_add(fileid, tagid, true);
+        }
+
+        // Adds tags into the DB.
+        for tag in file.tag_list.iter() {
+            let tid = self.tag_add_tagobject(tag);
+            self.relationship_add(fileid, tid, true);
+        }
+
+        self.enclave_file_mapping_add(&fileid, enclave_id);
+        fileid
+    }
+
     ///
     /// Checks if a condition is true
     ///
-    pub fn enclave_condition_evaluate(
+    fn enclave_condition_evaluate(
         &self,
         condition_id: &usize,
         file: &sharedtypes::FileObject,
@@ -183,7 +229,7 @@ impl Main {
     ///
     /// Adds a filemapping if it doesn't exist
     ///
-    pub fn enclave_file_mapping_add(&mut self, file_id: &usize, enclave_id: &usize) {
+    fn enclave_file_mapping_add(&mut self, file_id: &usize, enclave_id: &usize) {
         let utc = Utc::now();
         let timestamp = utc.timestamp_millis();
 
@@ -315,6 +361,26 @@ impl Main {
         }
     }
 
+    pub fn enclave_create_default_file_import(&mut self) {
+        self.enclave_action_put(
+            &DEFAULT_PUT_DISK.into(),
+            sharedtypes::EnclaveAction::PutAtDefault,
+        );
+        self.enclave_condition_put(
+            &sharedtypes::EnclaveAction::PutAtDefault,
+            &sharedtypes::EnclaveCondition::Any,
+        );
+        self.enclave_name_put(DEFAULT_PUT_DISK.into(), &DEFAULT_PRIORITY_PUT);
+
+        let enclave_id = self.enclave_name_get_id(DEFAULT_PUT_DISK);
+        let condition_id = self
+            .enclave_condition_get_id(&sharedtypes::EnclaveAction::PutAtDefault)
+            .unwrap();
+        let action_id = self
+            .enclave_action_get_id(&DEFAULT_PUT_DISK.clone().into())
+            .unwrap();
+    }
+
     ///
     /// Creates a enclave that is for downloading files
     /// Default behaviour is to download to the specified folder unless the input is false
@@ -323,12 +389,16 @@ impl Main {
         let is_default_location = location == self.location_get();
 
         let default_or_alternative_location = if is_default_location {
-            "DownloadToDiskDefault"
+            DEFAULT_DOWNLOAD_DEFAULT
         } else {
-            "DownloadToDisk"
+            DEFAULT_DOWNLOAD_DISK
         };
 
-        let default_or_alternative_priority = if is_default_location { 5 } else { 0 };
+        let default_or_alternative_priority = if is_default_location {
+            DEFAULT_PRIORITY_DOWNLOAD
+        } else {
+            DEFAULT_PRIORITY_LOWEST
+        };
 
         // By default we should download a file to the default file location
         // However if we have an old file location then we shouldn't download to it.
@@ -382,7 +452,7 @@ impl Main {
     /// Inserts the enclave's name into the database
     /// Kinda a dumb way but hey it works
     ///
-    pub fn enclave_name_put(&mut self, name: String, enclave_priority: &usize) {
+    fn enclave_name_put(&mut self, name: String, enclave_priority: &usize) {
         if self.enclave_name_get_id(&name).is_some() {
             return;
         }
@@ -398,7 +468,7 @@ impl Main {
     ///
     /// Gets the enclave name from the enclave id
     ///
-    pub fn enclave_name_get_name(&self, id: &usize) -> Option<String> {
+    fn enclave_name_get_name(&self, id: &usize) -> Option<String> {
         let conn = self._conn.lock().unwrap();
         conn.query_row(
             "SELECT enclave_name from Enclave where id = ?",
@@ -426,7 +496,7 @@ impl Main {
     ///
     /// Gets prioritys from Enclaves
     ///
-    pub fn enclave_get_id_from_priority(&self, priority_id: &usize) -> Vec<usize> {
+    fn enclave_get_id_from_priority(&self, priority_id: &usize) -> Vec<usize> {
         let mut out: Vec<usize> = Vec::new();
         let conn = self._conn.lock().unwrap();
         let mut stmt = conn
@@ -458,7 +528,7 @@ impl Main {
     ///
     /// Gets prioritys from Enclaves
     ///
-    pub fn enclave_priority_get(&self) -> Vec<usize> {
+    fn enclave_priority_get(&self) -> Vec<usize> {
         let mut out: Vec<usize> = Vec::new();
         let conn = self._conn.lock().unwrap();
         let mut stmt = conn.prepare("SELECT priority from Enclave").unwrap();
@@ -488,7 +558,7 @@ impl Main {
     ///
     /// Adds a condition to the database
     ///
-    pub fn enclave_condition_put(
+    fn enclave_condition_put(
         &mut self,
         action: &sharedtypes::EnclaveAction,
         condition: &sharedtypes::EnclaveCondition,
@@ -520,7 +590,7 @@ impl Main {
     ///
     /// Gets conditional action and condition from id
     ///
-    pub fn enclave_condition_get_data(
+    fn enclave_condition_get_data(
         &self,
         condition_id: &usize,
     ) -> Option<(sharedtypes::EnclaveAction, sharedtypes::EnclaveCondition)> {
@@ -549,7 +619,7 @@ impl Main {
     ///
     /// Adds a conditional action to the list of enclave actions
     ///
-    pub fn enclave_action_order_link_put(
+    fn enclave_action_order_link_put(
         &mut self,
         enclave_id: &usize,
         enclave_conditional_list_id: &usize,
@@ -575,7 +645,7 @@ impl Main {
     ///
     /// Gives id from conditional linked list
     ///
-    pub fn enclave_action_order_link_get_id(
+    fn enclave_action_order_link_get_id(
         &self,
         enclave_id: &usize,
         enclave_conditional_list_id: &usize,
@@ -593,7 +663,7 @@ impl Main {
     ///
     /// Gets enclave conditional jump by enclave_id
     ///
-    pub fn enclave_action_order_enclave_get_list_id(&self, enclave_id: &usize) -> Vec<usize> {
+    fn enclave_action_order_enclave_get_list_id(&self, enclave_id: &usize) -> Vec<usize> {
         let mut out: Vec<usize> = Vec::new();
         let conn = self._conn.lock().unwrap();
         let mut stmt = conn
@@ -623,7 +693,7 @@ impl Main {
     ///
     /// Adds the conditional link between for a condition and it's priority in the enclave list
     ///
-    pub fn enclave_condition_link_put(
+    fn enclave_condition_link_put(
         &mut self,
         condition_id: &usize,
         action_id: &usize,
@@ -646,7 +716,7 @@ impl Main {
     ///
     /// Gives id from conditional linked list
     ///
-    pub fn enclave_condition_link_get_id(
+    fn enclave_condition_link_get_id(
         &self,
         condition_id: &usize,
         action_id: &usize,
@@ -664,7 +734,7 @@ impl Main {
     ///
     /// Gets conditional jumps for conditonlist id
     ///
-    pub fn enclave_condition_list_get(
+    fn enclave_condition_list_get(
         &mut self,
         condition_list_id: &usize,
     ) -> Option<(usize, Option<usize>, usize)> {
@@ -687,7 +757,7 @@ impl Main {
     ///
     /// Inserts the name and action into the database
     ///
-    pub fn enclave_action_put(&mut self, name: &String, action: sharedtypes::EnclaveAction) {
+    fn enclave_action_put(&mut self, name: &String, action: sharedtypes::EnclaveAction) {
         // Quick out if we already have this inserted
         if self.enclave_action_get_id(name).is_some() {
             return;
@@ -705,7 +775,7 @@ impl Main {
     ///
     /// Gets an action's ID based on name
     ///
-    pub fn enclave_action_get_id(&self, name: &String) -> Option<usize> {
+    fn enclave_action_get_id(&self, name: &String) -> Option<usize> {
         let conn = self._conn.lock().unwrap();
         conn.query_row(
             "SELECT id from EnclaveAction where action_name = ?",
