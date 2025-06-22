@@ -19,6 +19,7 @@ use std::io::Cursor;
 use std::io::Read;
 use std::time::Duration;
 use url::Url;
+use zip::ZipArchive;
 
 extern crate reqwest;
 
@@ -209,6 +210,44 @@ pub fn hash_bytes(bytes: &Bytes, hash: &sharedtypes::HashesSupported) -> (String
 }
 
 ///
+/// Processes archive files
+///
+pub fn process_archive_files(
+    inp_bytes: &Cursor<Bytes>,
+    filetype: Option<FileFormat>,
+    db: Arc<RwLock<Main>>,
+) {
+    if let Some(filetype) = filetype {}
+}
+
+///
+/// Processes a zip file
+///
+fn process_archive_zip(inp_bytes: Cursor<Bytes>) {
+    if let Ok(mut zip) = zip::ZipArchive::new(inp_bytes) {
+        for item in 0..zip.len() {
+            if let Ok(file) = zip.by_index(item) {
+                let file_path = match file.enclosed_name() {
+                    None => continue,
+                    Some(path) => path,
+                };
+
+                let file_comment = file.comment();
+                if !file_comment.is_empty() {
+                    dbg!(&file_comment);
+                }
+
+                if file.is_dir() {
+                    dbg!("dir: ", { file_path });
+                } else if file.is_file() {
+                    dbg!(&file_path, &file.size());
+                }
+            }
+        }
+    }
+}
+
+///
 /// Determines the file return status
 ///
 pub enum FileReturnStatus {
@@ -355,8 +394,7 @@ pub fn dlfile_new(
     {
         let mut unwrappydb = db.write().unwrap();
         unwrappydb.create_default_source_url_ns_id();
-        //let source_url_ns_id = unwrappydb.create_default_source_url_ns_id();
-        unwrappydb.enclave_determine_processing(file, bytes, &hash, source_url);
+        unwrappydb.enclave_determine_processing(file, bytes, &hash, Some(source_url));
     }
     FileReturnStatus::File((hash, file_ext))
 }

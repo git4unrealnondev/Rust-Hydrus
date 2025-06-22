@@ -15,7 +15,7 @@ impl Main {
         file: &mut sharedtypes::FileObject,
         bytes: Bytes,
         sha512hash: &String,
-        source_url: &String,
+        source_url: Option<&String>,
     ) {
         logging::info_log(&format!("Starting to process: {}", &sha512hash));
 
@@ -78,7 +78,7 @@ impl Main {
         file: &mut sharedtypes::FileObject,
         bytes: &Bytes,
         sha512hash: &String,
-        source_url: &String,
+        source_url: Option<&String>,
         source_url_ns_id: usize,
         enclave_id: &usize,
     ) -> Option<usize> {
@@ -115,16 +115,25 @@ impl Main {
 
                 let storage_id = self.storage_get_id(&loc).unwrap();
 
-                let file = sharedtypes::DbFileStorage::NoIdExist(sharedtypes::DbFileObjNoId {
-                    hash: sha512hash.to_string(),
-                    ext_id,
-                    storage_id,
-                });
-                let fileid = self.file_add(file, true);
-                let tagid = self.tag_add(source_url, source_url_ns_id, true, None);
-                self.relationship_add(fileid, tagid, true);
+                let filestorage =
+                    sharedtypes::DbFileStorage::NoIdExist(sharedtypes::DbFileObjNoId {
+                        hash: sha512hash.to_string(),
+                        ext_id,
+                        storage_id,
+                    });
+                let fileid = self.file_add(filestorage, true);
+                if let Some(source_url) = source_url {
+                    let tagid = self.tag_add(source_url, source_url_ns_id, true, None);
+                    self.relationship_add(fileid, tagid, true);
+                }
+
+                // Adds tags into the DB.
+                for tag in file.tag_list.iter() {
+                    let tid = self.tag_add_tagobject(tag);
+                    self.relationship_add(fileid, tid, true);
+                }
+
                 self.enclave_file_mapping_add(&fileid, enclave_id);
-                self.transaction_flush();
                 Some(fileid)
             }
             sharedtypes::EnclaveAction::DownloadToLocation(_) => None,

@@ -36,6 +36,9 @@ pub enum TasksStruct {
     /// Scraper related actions
     #[clap(subcommand)]
     Scraper(ScraperAction),
+
+    /// Imports a file into the db.
+    Import(Directory),
 }
 
 /// Type of job in db. Will be used to confirm what the scraping logic should work.
@@ -72,6 +75,28 @@ pub struct ScraperTest {
 pub struct DirectoryLocation {
     pub location: String,
     pub site: String,
+}
+#[derive(Debug, Parser)]
+#[clap(rename_all = "kebab_case")]
+pub struct Directory {
+    /// Location to search
+    pub location: String,
+    #[clap(default_value = "copy")]
+    pub file_action: FileAction,
+}
+
+///
+/// Defines actions we can do on import
+///
+#[derive(Debug, Parser, Clone, Copy, ValueEnum)]
+#[clap(rename_all = "kebab_case")]
+pub enum FileAction {
+    ///Copies the file
+    Copy,
+    /// Moves the file into the db.
+    Move,
+    /// Hardlinks the file into the db
+    HardLink,
 }
 
 #[derive(Debug, Subcommand)]

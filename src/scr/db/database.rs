@@ -1,4 +1,5 @@
 #![forbid(unsafe_code)]
+use crate::download::process_archive_files;
 use crate::globalload::GlobalLoad;
 use crate::logging;
 use crate::sharedtypes;
@@ -1136,8 +1137,11 @@ impl Main {
                 while let Ok(Some(row)) = rows.next() {
                     let id: Option<usize> = row.get(0).unwrap();
                     let extension: Option<String> = row.get(1).unwrap();
-                    if id.is_some() && extension.is_some() {
-                        self.extension_load(id.unwrap(), extension.unwrap());
+
+                    if let Some(ext) = extension {
+                        if let Some(id) = id {
+                            self.extension_load(id, ext);
+                        }
                     }
                 }
             }
@@ -1445,6 +1449,18 @@ impl Main {
 
     pub fn setup_globalload(&mut self, globalload: Arc<RwLock<GlobalLoad>>) {
         self.globalload = Some(globalload);
+    }
+
+    pub fn namespace_add_namespaceobject(
+        &mut self,
+        namespace_obj: sharedtypes::GenericNamespaceObj,
+    ) -> usize {
+        self.namespace_add(namespace_obj.name, namespace_obj.description, true)
+    }
+
+    pub fn tag_add_tagobject(&mut self, tag: &sharedtypes::TagObject) -> usize {
+        let nsid = self.namespace_add_namespaceobject(tag.namespace.clone());
+        self.tag_add(&tag.tag, nsid, true, None)
     }
 
     /// Adds tag into DB if it doesn't exist in the memdb.
@@ -1950,6 +1966,7 @@ impl Main {
             .unwrap()
             .execute(inp, params![file_id.to_string(), tag_id.to_string()])
             .unwrap();
+        self.db_commit_man();
     }
 
     /// Sqlite wrapper for deleteing a parent from table.
@@ -1961,6 +1978,7 @@ impl Main {
             .lock()
             .unwrap()
             .execute(inp, params![tag_id.to_string(), relate_tag_id.to_string()]);
+        self.db_commit_man();
     }
 
     /// Sqlite wrapper for deleteing a tag from table.
@@ -1972,6 +1990,7 @@ impl Main {
             .lock()
             .unwrap()
             .execute(inp, params![tag_id.to_string()]);
+        self.db_commit_man();
     }
 
     /// Sqlite wrapper for deleteing a tag from table.
@@ -1987,6 +2006,7 @@ impl Main {
             .lock()
             .unwrap()
             .execute(inp, params![namespace_id.to_string()]);
+        self.db_commit_man();
     }
 
     /// Removes tag & relationship from db.
@@ -2018,6 +2038,7 @@ impl Main {
             // self._conn.lock().unwrap().execute_batch(&sql).unwrap();
             logging::log(&"Relationship Loop".to_string());
             // self.transaction_flush();
+            self.db_commit_man();
         }
     }
 

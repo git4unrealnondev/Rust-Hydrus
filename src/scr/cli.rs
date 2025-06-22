@@ -5,9 +5,11 @@ use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
 use std::{collections::HashSet, io::Write};
 use strfmt::Format;
+use walkdir::WalkDir;
 
 // use std::str::pattern::Searcher;
 use crate::download;
+use crate::file::{find_sidecar, parse_sidecar};
 use crate::sharedtypes::{DEFAULT_CACHECHECK, DEFAULT_CACHETIME, DEFAULT_PRIORITY};
 use crate::Mutex;
 use crate::RwLock;
@@ -309,6 +311,56 @@ pub fn main(data: Arc<RwLock<database::Main>>) {
             }
         },
         cli_structs::Test::Tasks(taskstruct) => match taskstruct {
+            cli_structs::TasksStruct::Import(directory) => {
+                {
+                    let mut unwrappy = data.write().unwrap();
+                    unwrappy.load_table(&sharedtypes::LoadDBTable::Files);
+                    unwrappy.load_table(&sharedtypes::LoadDBTable::Relationship);
+                    unwrappy.load_table(&sharedtypes::LoadDBTable::Tags);
+                    unwrappy.load_table(&sharedtypes::LoadDBTable::Namespace);
+                }
+                let mut files = HashSet::new();
+                let mut sidecar_files = HashSet::new();
+
+                let search_path = Path::new(&directory.location);
+                if !search_path.exists() {
+                    logging::info_log(&format!(
+                        "Cannot find file or path at: {}",
+                        directory.location
+                    ));
+                    return;
+                }
+
+                if search_path.is_file() {
+                    files.insert(search_path.to_path_buf());
+                }
+
+                if search_path.is_dir() {
+                    for item in WalkDir::new(search_path).into_iter().filter_map(|a| a.ok()) {
+                        if !item.path().is_file() {
+                            continue;
+                        }
+                        logging::info_log(&format!("Found item: {}", item.path().display()));
+                        files.insert(item.path().to_path_buf());
+                    }
+                }
+                // Removes any sidecar files from files
+                for file in files.iter() {
+                    for sidecar in find_sidecar(file) {
+                        logging::info_log(&format!("Found Sidecar: {}", sidecar.display()));
+                        sidecar_files.insert((sidecar, file.to_path_buf()));
+                    }
+                }
+
+                for (sidecar, file) in sidecar_files.iter() {
+                    parse_sidecar(file, sidecar, data.clone());
+                }
+
+                for (sidecar_file, _) in sidecar_files.iter() {
+                    files.remove(sidecar_file);
+                }
+            }
+
             cli_structs::TasksStruct::Scraper(action) => match action {
                 cli_structs::ScraperAction::Test(inp) => {
                     dbg!(&inp);

@@ -573,6 +573,12 @@ fn parse_tags(
                     url_return.insert(jobscraped.clone());
                 }
                 Some(skip_if) => match skip_if {
+                    sharedtypes::SkipIf::FileHash(sha512hash) => {
+                        let unwrappy = db.read().unwrap();
+                        if unwrappy.file_get_hash(sha512hash).is_none() {
+                            url_return.insert(jobscraped.clone());
+                        }
+                    }
                     sharedtypes::SkipIf::FileNamespaceNumber((
                         unique_tag,
                         namespace_filter,
@@ -779,6 +785,10 @@ fn parse_skipif(
     job_id: &usize,
 ) -> bool {
     match file_tag {
+        sharedtypes::SkipIf::FileHash(sha512hash) => {
+            let unwrappy = db.read().unwrap();
+            return unwrappy.file_get_hash(&sha512hash).is_some();
+        }
         sharedtypes::SkipIf::FileNamespaceNumber((unique_tag, namespace_filter, filter_number)) => {
             let unwrappydb = db.read().unwrap();
             let mut cnt = 0;

@@ -833,6 +833,8 @@ pub enum SkipIf {
     // The tag is qnique and if their are X number or more of GenericNamespaceObj
     // associated with the file Then we'll skip it
     FileNamespaceNumber((Tag, GenericNamespaceObj, usize)),
+    // Skips a file if the hash X exists
+    FileHash(String),
 }
 
 #[derive(
