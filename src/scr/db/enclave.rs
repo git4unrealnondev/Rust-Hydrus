@@ -1,5 +1,6 @@
 use crate::database::Main;
 use crate::download;
+use crate::file::folder_make;
 use crate::logging;
 use crate::sharedtypes;
 use crate::vec_of_strings;
@@ -14,10 +15,85 @@ const DEFAULT_PRIORITY_DOWNLOAD: usize = 10;
 const DEFAULT_PRIORITY_PUT: usize = 5;
 const DEFAULT_DOWNLOAD_DEFAULT: &str = "DownloadToDiskDefault";
 const DEFAULT_DOWNLOAD_DISK: &str = "DownloadToDisk";
-const DEFAULT_PUT_DISK: &str = "PutAtDefault";
+pub const DEFAULT_PUT_DISK: &str = "PutAtDefault";
 const DEFAULT_PRIORITY_LOWEST: usize = 0;
 
 impl Main {
+    pub fn enclave_run_process(
+        &mut self,
+        file: &mut sharedtypes::FileObject,
+        bytes: &Bytes,
+        sha512hash: &String,
+        source_url: Option<&String>,
+        enclave_name: &str,
+    ) -> bool {
+        if let Some(enclave_id) = self.enclave_name_get_id(enclave_name) {
+            return self.enclave_run_logic(file, bytes, sha512hash, source_url, &enclave_id);
+        }
+        false
+    }
+
+    ///
+    /// Actually runs the enclave processing logic
+    ///
+    fn enclave_run_logic(
+        &mut self,
+        file: &mut sharedtypes::FileObject,
+        bytes: &Bytes,
+        sha512hash: &String,
+        source_url: Option<&String>,
+        enclave_id: &usize,
+    ) -> bool {
+        for condition_list_id in self
+            .enclave_action_order_enclave_get_list_id(enclave_id)
+            .iter()
+        {
+            logging::log(&format!(
+                "Enclave FileHash {}: Pulled condition list id for {}, enclave_id: {}",
+                &sha512hash, condition_list_id, enclave_id
+            ));
+
+            for (enclave_action_id, failed_enclave_action_id, condition_id) in
+                self.enclave_condition_list_get(condition_list_id).iter()
+            {
+                let (action_bool, action_name) =
+                    self.enclave_condition_evaluate(condition_id, file, bytes);
+
+                let run_option_action_id = if action_bool {
+                    Some(enclave_action_id)
+                } else {
+                    failed_enclave_action_id.as_ref()
+                };
+
+                if let Some(run_action_id) = run_option_action_id {
+                    logging::log(&format!(
+                        "Enclave FileHash {}: Running action id: {}",
+                        &sha512hash, run_action_id
+                    ));
+                    if let Some(action_name) = action_name {
+                        logging::log(&format!(
+                            "Enclave FileHash {}: Running action name: {:?}",
+                            &sha512hash, action_name
+                        ));
+                        let source_url_ns_id = self.create_default_source_url_ns_id();
+                        if !self.enclave_run_action(
+                            &action_name,
+                            file,
+                            bytes,
+                            sha512hash,
+                            source_url,
+                            source_url_ns_id,
+                            run_action_id,
+                        ) {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+        false
+    }
+
     ///
     /// Determines the default enclave(s) to run on a file
     ///
@@ -28,51 +104,15 @@ impl Main {
         sha512hash: &String,
         source_url: Option<&String>,
     ) {
-        logging::info_log(&format!("Starting to process: {}", &sha512hash));
+        logging::info_log(&format!(
+            "Enclave FileHash {}: Starting to process",
+            &sha512hash
+        ));
 
-        for priority_id in self.enclave_priority_get().iter() {
+        'priorityloop: for priority_id in self.enclave_priority_get().iter() {
             for enclave_id in self.enclave_get_id_from_priority(priority_id).iter() {
-                for condition_list_id in self
-                    .enclave_action_order_enclave_get_list_id(enclave_id)
-                    .iter()
-                {
-                    logging::info_log(&format!(
-                        "Pulled condition list id for {}, enclave_id: {}",
-                        condition_list_id, enclave_id
-                    ));
-
-                    for (enclave_action_id, failed_enclave_action_id, condition_id) in
-                        self.enclave_condition_list_get(condition_list_id).iter()
-                    {
-                        let (action_bool, action_name) =
-                            self.enclave_condition_evaluate(condition_id, file, &bytes);
-
-                        let run_option_action_id = if action_bool {
-                            Some(enclave_action_id)
-                        } else {
-                            failed_enclave_action_id.as_ref()
-                        };
-
-                        if let Some(run_action_id) = run_option_action_id {
-                            logging::info_log(&format!("Running action id: {}", run_action_id));
-                            if let Some(action_name) = action_name {
-                                logging::info_log(&format!(
-                                    "Running action name: {:?}",
-                                    action_name
-                                ));
-                                let source_url_ns_id = self.create_default_source_url_ns_id();
-                                self.enclave_run_action(
-                                    &action_name,
-                                    file,
-                                    &bytes,
-                                    sha512hash,
-                                    source_url,
-                                    source_url_ns_id,
-                                    run_action_id,
-                                );
-                            }
-                        }
-                    }
+                if self.enclave_run_logic(file, &bytes, sha512hash, source_url, enclave_id) {
+                    break 'priorityloop;
                 }
             }
         }
@@ -80,6 +120,7 @@ impl Main {
 
     ///
     /// Runs an action as it's valid
+    /// Returns weather we should stop on this action
     ///
     fn enclave_run_action(
         &mut self,
@@ -90,10 +131,15 @@ impl Main {
         source_url: Option<&String>,
         source_url_ns_id: usize,
         enclave_id: &usize,
-    ) -> Option<usize> {
+    ) -> bool {
         match action {
             sharedtypes::EnclaveAction::PutAtDefault => {
                 let download_location = self.location_get();
+                logging::log(&format!(
+                    "Enclave FileHash {}: {}",
+                    &sha512hash,
+                    format!("Putting at Default location {}", &download_location)
+                ));
                 let fileid = self.download_and_do_parsing(
                     bytes,
                     sha512hash,
@@ -103,7 +149,8 @@ impl Main {
                     &download_location,
                     file,
                 );
-                Some(fileid)
+                return false;
+                //Some(fileid)
             }
             sharedtypes::EnclaveAction::AddTagAndNamespace((
                 tag,
@@ -117,10 +164,15 @@ impl Main {
                     tag_type: tag_type.clone(),
                     relates_to: relates_to.clone(),
                 });
-                None
+                //None
             }
             sharedtypes::EnclaveAction::DownloadToDefault => {
                 let download_location = self.location_get();
+                logging::log(&format!(
+                    "Enclave FileHash {}: {}",
+                    &sha512hash,
+                    format!("Downloading to Default location {}", &download_location)
+                ));
                 let fileid = self.download_and_do_parsing(
                     bytes,
                     sha512hash,
@@ -130,10 +182,12 @@ impl Main {
                     &download_location,
                     file,
                 );
-                Some(fileid)
+                return false;
+                //Some(fileid)
             }
-            sharedtypes::EnclaveAction::DownloadToLocation(_) => None,
+            sharedtypes::EnclaveAction::DownloadToLocation(_) => {} //None,
         }
+        true
     }
 
     fn download_and_do_parsing(
@@ -148,7 +202,7 @@ impl Main {
     ) -> usize {
         //let loc = self.location_get();
 
-        self.storage_put(&download_location);
+        self.storage_put(download_location);
 
         // Gives file extension
         let file_ext = FileFormat::from_bytes(bytes).extension().to_string();
@@ -163,7 +217,7 @@ impl Main {
         download::write_to_disk(download_loc, bytes, sha512hash);
         //download::write_to_disk(download_loc, file, bytes, sha512hash);
 
-        let storage_id = self.storage_get_id(&download_location).unwrap();
+        let storage_id = self.storage_get_id(download_location).unwrap();
 
         let filestorage = sharedtypes::DbFileStorage::NoIdExist(sharedtypes::DbFileObjNoId {
             hash: sha512hash.to_string(),
@@ -235,7 +289,6 @@ impl Main {
 
         if self.enclave_file_mapping_get(file_id, enclave_id).is_some() {
             let conn = self._conn.lock().unwrap();
-            dbg!(file_id, enclave_id);
             let mut prep = conn
             .prepare(
                 "UPDATE FileEnclaveMapping SET timestamp = ? WHERE file_id = ? AND enclave_id = ?",
@@ -258,7 +311,7 @@ impl Main {
     ///
     /// Checks if a file mapping pair exists
     ///
-    pub fn enclave_file_mapping_get(&self, file_id: &usize, enclave_id: &usize) -> Option<usize> {
+    fn enclave_file_mapping_get(&self, file_id: &usize, enclave_id: &usize) -> Option<usize> {
         let conn = self._conn.lock().unwrap();
         conn.query_row(
             "SELECT file_id from FileEnclaveMapping where file_id = ? AND enclave_id = ? LIMIT 1",
@@ -372,13 +425,19 @@ impl Main {
         );
         self.enclave_name_put(DEFAULT_PUT_DISK.into(), &DEFAULT_PRIORITY_PUT);
 
-        let enclave_id = self.enclave_name_get_id(DEFAULT_PUT_DISK);
+        let enclave_id = self.enclave_name_get_id(DEFAULT_PUT_DISK).unwrap();
         let condition_id = self
             .enclave_condition_get_id(&sharedtypes::EnclaveAction::PutAtDefault)
             .unwrap();
         let action_id = self
             .enclave_action_get_id(&DEFAULT_PUT_DISK.clone().into())
             .unwrap();
+        self.enclave_condition_link_put(&condition_id, &action_id, None);
+        let condition_link_id = self
+            .enclave_condition_link_get_id(&condition_id, &action_id)
+            .unwrap();
+
+        self.enclave_action_order_link_put(&enclave_id, &condition_link_id, &0);
     }
 
     ///
@@ -386,6 +445,11 @@ impl Main {
     /// Default behaviour is to download to the specified folder unless the input is false
     ///
     pub fn enclave_create_default_file_download(&mut self, location: String) {
+        // Makes the default file download location
+        {
+            folder_make(&location);
+        }
+
         let is_default_location = location == self.location_get();
 
         let default_or_alternative_location = if is_default_location {
@@ -512,11 +576,9 @@ impl Main {
                 }
             })
             .unwrap();
-        for ids in row {
-            if let Ok(ids) = ids {
-                if !out.contains(&ids) {
-                    out.push(ids);
-                }
+        for ids in row.flatten() {
+            if !out.contains(&ids) {
+                out.push(ids);
             }
         }
 
@@ -531,7 +593,9 @@ impl Main {
     fn enclave_priority_get(&self) -> Vec<usize> {
         let mut out: Vec<usize> = Vec::new();
         let conn = self._conn.lock().unwrap();
-        let mut stmt = conn.prepare("SELECT priority from Enclave").unwrap();
+        let mut stmt = conn
+            .prepare("SELECT priority from Enclave ORDER BY priority DESC")
+            .unwrap();
         let row = stmt
             .query_map([], |row| {
                 let id: Option<usize> = row.get(0).unwrap();
@@ -542,15 +606,11 @@ impl Main {
                 }
             })
             .unwrap();
-        for ids in row {
-            if let Ok(ids) = ids {
-                if !out.contains(&ids) {
-                    out.push(ids);
-                }
+        for ids in row.flatten() {
+            if !out.contains(&ids) {
+                out.push(ids);
             }
         }
-
-        out.sort();
 
         out
     }

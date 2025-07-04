@@ -1,10 +1,10 @@
-use std::fs;
 use std::io::Error;
 use std::path::{Path, PathBuf};
+use std::{fs, path};
 
 use crate::database::{enclave, Main};
 use crate::download::hash_file;
-use crate::{logging, sharedtypes, Arc, RwLock};
+use crate::{helpers, logging, sharedtypes, Arc, RwLock};
 use std::fs::File;
 use std::io::{self, BufRead};
 
@@ -52,6 +52,39 @@ pub fn find_sidecar(location: &Path) -> Vec<PathBuf> {
     out
 }
 
+pub fn parse_file(file_location: &Path, db: Arc<RwLock<Main>>) {
+    let sha512hash = hash_file(
+        &file_location.display().to_string(),
+        &sharedtypes::HashesSupported::Sha512("Null".into()),
+    );
+    match sha512hash {
+        Err(err) => {
+            logging::error_log(&format!(
+                "Cannot parse file: {} due to error: {:?}",
+                file_location.display(),
+                err
+            ));
+        }
+
+        Ok((sha512hash, bytes)) => {
+            let tag_list = vec![];
+            let mut unwrappy = db.write().unwrap();
+            unwrappy.enclave_run_process(
+                &mut sharedtypes::FileObject {
+                    source_url: None,
+                    hash: sharedtypes::HashesSupported::Sha512(sha512hash.clone()),
+                    tag_list,
+                    skip_if: vec![sharedtypes::SkipIf::FileHash(sha512hash.clone())],
+                },
+                &bytes,
+                &sha512hash,
+                None,
+                enclave::DEFAULT_PUT_DISK,
+            );
+        }
+    }
+}
+
 ///
 /// Parses a sidecar file into a valid data for the db
 ///
@@ -80,16 +113,17 @@ pub fn parse_sidecar(file_location: &Path, sidecar_location: &Path, db: Arc<RwLo
                     return;
                 }
                 let mut unwrappy = db.write().unwrap();
-                unwrappy.enclave_determine_processing(
+                unwrappy.enclave_run_process(
                     &mut sharedtypes::FileObject {
                         source_url: None,
                         hash: sharedtypes::HashesSupported::Sha512(sha512hash.clone()),
                         tag_list,
                         skip_if: vec![sharedtypes::SkipIf::FileHash(sha512hash.clone())],
                     },
-                    bytes,
+                    &bytes,
                     &sha512hash,
                     None,
+                    enclave::DEFAULT_PUT_DISK,
                 );
             }
         }

@@ -2,14 +2,14 @@ extern crate clap;
 
 use rayon::prelude::*;
 use std::collections::{BTreeMap, HashMap};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::{collections::HashSet, io::Write};
 use strfmt::Format;
 use walkdir::WalkDir;
 
 // use std::str::pattern::Searcher;
 use crate::download;
-use crate::file::{find_sidecar, parse_sidecar};
+use crate::file::{find_sidecar, parse_file, parse_sidecar};
 use crate::sharedtypes::{DEFAULT_CACHECHECK, DEFAULT_CACHETIME, DEFAULT_PRIORITY};
 use crate::Mutex;
 use crate::RwLock;
@@ -320,8 +320,8 @@ pub fn main(data: Arc<RwLock<database::Main>>) {
                     unwrappy.load_table(&sharedtypes::LoadDBTable::Namespace);
                     unwrappy.enclave_create_default_file_import();
                 }
-                let mut files = HashSet::new();
-                let mut sidecar_files = HashSet::new();
+                let mut files = HashMap::new();
+                let mut sidecars = HashSet::new();
 
                 let search_path = Path::new(&directory.location);
                 if !search_path.exists() {
@@ -333,7 +333,10 @@ pub fn main(data: Arc<RwLock<database::Main>>) {
                 }
 
                 if search_path.is_file() {
-                    files.insert(search_path.to_path_buf());
+                    files.insert(search_path.to_path_buf(), find_sidecar(search_path));
+                    for sidecar in find_sidecar(search_path) {
+                        sidecars.insert(sidecar);
+                    }
                 }
 
                 if search_path.is_dir() {
@@ -342,24 +345,23 @@ pub fn main(data: Arc<RwLock<database::Main>>) {
                             continue;
                         }
                         logging::info_log(&format!("Found item: {}", item.path().display()));
-                        files.insert(item.path().to_path_buf());
+                        files.insert(item.path().to_path_buf(), find_sidecar(item.path()));
+                        for sidecar in find_sidecar(item.path()) {
+                            sidecars.insert(sidecar);
+                        }
                     }
+                }
+                for sidecar in sidecars.iter() {
+                    files.remove(sidecar);
                 }
                 // Removes any sidecar files from files
-                for file in files.iter() {
-                    for sidecar in find_sidecar(file) {
+                files.par_iter().for_each(|(file, sidecars)| {
+                    parse_file(file, data.clone());
+                    for sidecar in sidecars {
                         logging::info_log(&format!("Found Sidecar: {}", sidecar.display()));
-                        sidecar_files.insert((sidecar, file.to_path_buf()));
+                        parse_sidecar(file, sidecar, data.clone());
                     }
-                }
-
-                for (sidecar, file) in sidecar_files.iter() {
-                    parse_sidecar(file, sidecar, data.clone());
-                }
-
-                for (sidecar_file, _) in sidecar_files.iter() {
-                    files.remove(sidecar_file);
-                }
+                });
             }
 
             cli_structs::TasksStruct::Scraper(action) => match action {
