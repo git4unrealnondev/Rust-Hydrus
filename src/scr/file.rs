@@ -1,4 +1,3 @@
-use crate::pause;
 use std::fs;
 use std::io::{Cursor, Error};
 use std::path::{Path, PathBuf};
@@ -90,6 +89,17 @@ pub fn parse_file(
                 }
             }
 
+            // Inserts a tag thats just the location where the item was imported from
+            tag_list.push(sharedtypes::TagObject {
+                namespace: sharedtypes::GenericNamespaceObj {
+                    name: "SYSTEM_File_Import_Path".into(),
+                    description: Some("Where a file was imported from. Local to the system".into()),
+                },
+                tag: file_location.to_string_lossy().to_string(),
+                tag_type: sharedtypes::TagType::Normal,
+                relates_to: None,
+            });
+
             let mut unwrappy = db.write().unwrap();
             unwrappy.enclave_run_process(
                 &mut sharedtypes::FileObject {
@@ -104,15 +114,11 @@ pub fn parse_file(
                 enclave::DEFAULT_PUT_DISK,
             );
             let fileid = unwrappy.file_get_hash(&sha512hash).copied();
-            if let Some(fid) = fileid {
-                if let Ok(filetype) = file_format::FileFormat::from_file(file_location) {
-                    inside_files.append(&mut process_archive_files(
-                        &sha512hash,
-                        Cursor::new(bytes),
-                        Some(filetype),
-                        db.clone(),
-                    ));
-                }
+            if let Ok(filetype) = file_format::FileFormat::from_file(file_location) {
+                inside_files.append(&mut process_archive_files(
+                    Cursor::new(bytes),
+                    Some(filetype),
+                ));
             }
 
             // Loop that handles archive extration
@@ -122,7 +128,7 @@ pub fn parse_file(
                 }
                 let (file, tags) = inside_files.pop().unwrap();
                 let file_bytes = bytes::Bytes::from(file);
-                let (sub_sha512hash, ukg) = crate::download::hash_bytes(
+                let (sub_sha512hash, _) = crate::download::hash_bytes(
                     &file_bytes,
                     &sharedtypes::HashesSupported::Sha512("".to_string()),
                 );

@@ -274,7 +274,7 @@ fn check_existing_db() {
                     ));
                     let tid =
                         client::tag_add(hash, *utable_storage.get(&hashtype).unwrap(), true, None);
-                    client::relationship_add(modern.0.id, tid, true);
+                    client::relationship_add(modern.0.id, tid);
                     let mut hashed_lock = hashed_id.lock().unwrap();
 
                     if let Some(hashed_number) = hashed_lock.get_mut(hashtype) {

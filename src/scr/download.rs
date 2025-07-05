@@ -209,17 +209,17 @@ pub fn hash_bytes(bytes: &Bytes, hash: &sharedtypes::HashesSupported) -> (String
 
 ///
 /// Processes archive files
+/// Returns a list of files and tags associated with the files
+/// does not search for sidecars
 ///
 pub fn process_archive_files(
-    sha512hash: &String,
     inp_bytes: Cursor<Bytes>,
     filetype: Option<FileFormat>,
-    db: Arc<RwLock<Main>>,
 ) -> Vec<(Vec<u8>, Vec<sharedtypes::TagObject>)> {
     if let Some(filetype) = filetype {
         match filetype {
             FileFormat::Zip => {
-                return process_archive_zip(inp_bytes, db, sha512hash);
+                return process_archive_zip(inp_bytes);
             }
             _ => {}
         }
@@ -230,11 +230,7 @@ pub fn process_archive_files(
 ///
 /// Processes a zip file
 ///
-fn process_archive_zip(
-    inp_bytes: Cursor<Bytes>,
-    db: Arc<RwLock<Main>>,
-    sha512hash: &String,
-) -> Vec<(Vec<u8>, Vec<sharedtypes::TagObject>)> {
+fn process_archive_zip(inp_bytes: Cursor<Bytes>) -> Vec<(Vec<u8>, Vec<sharedtypes::TagObject>)> {
     let mut out = Vec::new();
     if let Ok(mut zip) = zip::ZipArchive::new(inp_bytes) {
         for item in 0..zip.len() {
@@ -249,7 +245,7 @@ fn process_archive_zip(
                     if !file_comment.is_empty() {
                         tags.push(sharedtypes::TagObject {
                             namespace: sharedtypes::GenericNamespaceObj {
-                                name: "SYSTEMARCHIVE_ZIP_FILE_COMMENT".to_string(),
+                                name: "SYSTEM_ARCHIVE_ZIP_FILE_COMMENT".to_string(),
                                 description: Some(
                                     "A comment for a file inside of a zip archive.".to_string(),
                                 ),
@@ -261,7 +257,7 @@ fn process_archive_zip(
                     }
                     tags.push(sharedtypes::TagObject {
                             namespace: sharedtypes::GenericNamespaceObj {
-                                name: "SYSTEMARCHIVE_ZIP_FILE_PATH".to_string(),
+                                name: "SYSTEM_ARCHIVE_ZIP_FILE_PATH".to_string(),
                                 description: Some(
                                     "A full filepath, includes name for a file inside of a zip archive.".to_string(),
                                 ),

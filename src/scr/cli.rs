@@ -9,7 +9,7 @@ use walkdir::WalkDir;
 
 // use std::str::pattern::Searcher;
 use crate::download;
-use crate::file::{find_sidecar, parse_file, parse_sidecar};
+use crate::file::{find_sidecar, parse_file};
 use crate::sharedtypes::{DEFAULT_CACHECHECK, DEFAULT_CACHETIME, DEFAULT_PRIORITY};
 use crate::Mutex;
 use crate::RwLock;
@@ -321,66 +321,66 @@ pub fn main(data: Arc<RwLock<database::Main>>) {
                     unwrappy.load_table(&sharedtypes::LoadDBTable::Parents);
                     unwrappy.enclave_create_default_file_import();
                 }
-                let mut files = HashMap::new();
-                let mut sidecars = HashSet::new();
 
-                let search_path = Path::new(&directory.location);
-                if !search_path.exists() {
-                    logging::info_log(&format!(
-                        "Cannot find file or path at: {}",
-                        directory.location
-                    ));
-                    return;
-                }
+                for local_file in directory.location.iter() {
+                    let mut files = HashMap::new();
+                    let mut sidecars = HashSet::new();
 
-                if search_path.is_file() {
-                    files.insert(search_path.to_path_buf(), find_sidecar(search_path));
-                    for sidecar in find_sidecar(search_path) {
-                        sidecars.insert(sidecar);
+                    let search_path = Path::new(&local_file);
+                    if !search_path.exists() {
+                        logging::info_log(&format!("Cannot find file or path at: {}", &local_file));
+                        return;
                     }
-                }
 
-                if search_path.is_dir() {
-                    for item in WalkDir::new(search_path).into_iter().filter_map(|a| a.ok()) {
-                        if !item.path().is_file() {
-                            continue;
-                        }
-                        logging::info_log(&format!("Found item: {}", item.path().display()));
-                        files.insert(item.path().to_path_buf(), find_sidecar(item.path()));
-                        for sidecar in find_sidecar(item.path()) {
+                    if search_path.is_file() {
+                        files.insert(search_path.to_path_buf(), find_sidecar(search_path));
+                        for sidecar in find_sidecar(search_path) {
                             sidecars.insert(sidecar);
                         }
                     }
-                }
-                for sidecar in sidecars.iter() {
-                    files.remove(sidecar);
-                }
-                // Removes any sidecar files from files
-                files.par_iter().for_each(|(file, sidecars)| {
-                    let file_id = parse_file(file, sidecars, data.clone());
-                    match directory.file_action {
-                        // Don't need to do anything as the default is to copy
-                        sharedtypes::FileAction::Copy => {}
-                        // Will remove source as we've already added it into the db
-                        sharedtypes::FileAction::Move => {
-                            std::fs::remove_file(file).unwrap();
-                            for sidecar in sidecars {
-                                std::fs::remove_file(sidecar).unwrap();
+
+                    if search_path.is_dir() {
+                        for item in WalkDir::new(search_path).into_iter().filter_map(|a| a.ok()) {
+                            if !item.path().is_file() {
+                                continue;
                             }
-                        }
-                        // Will hardlink the file
-                        sharedtypes::FileAction::HardLink => {
-                            if let Some(fid) = file_id {
-                                let db = data.read().unwrap();
-                                let location = db.get_file(&fid);
-                                if let Some(dbfile_location) = location {
-                                    std::fs::remove_file(file).unwrap();
-                                    std::fs::hard_link(dbfile_location, file).unwrap();
-                                }
+                            logging::info_log(&format!("Found item: {}", item.path().display()));
+                            files.insert(item.path().to_path_buf(), find_sidecar(item.path()));
+                            for sidecar in find_sidecar(item.path()) {
+                                sidecars.insert(sidecar);
                             }
                         }
                     }
-                });
+                    for sidecar in sidecars.iter() {
+                        files.remove(sidecar);
+                    }
+                    // Removes any sidecar files from files
+                    files.par_iter().for_each(|(file, sidecars)| {
+                        let file_id = parse_file(file, sidecars, data.clone());
+                        match directory.file_action {
+                            // Don't need to do anything as the default is to copy
+                            sharedtypes::FileAction::Copy => {}
+                            // Will remove source as we've already added it into the db
+                            sharedtypes::FileAction::Move => {
+                                std::fs::remove_file(file).unwrap();
+                                for sidecar in sidecars {
+                                    std::fs::remove_file(sidecar).unwrap();
+                                }
+                            }
+                            // Will hardlink the file
+                            sharedtypes::FileAction::HardLink => {
+                                if let Some(fid) = file_id {
+                                    let db = data.read().unwrap();
+                                    let location = db.get_file(&fid);
+                                    if let Some(dbfile_location) = location {
+                                        std::fs::remove_file(file).unwrap();
+                                        std::fs::hard_link(dbfile_location, file).unwrap();
+                                    }
+                                }
+                            }
+                        }
+                    });
+                }
             }
 
             cli_structs::TasksStruct::Scraper(action) => match action {

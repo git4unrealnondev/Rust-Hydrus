@@ -79,10 +79,11 @@ pub struct DirectoryLocation {
 #[derive(Debug, Parser)]
 #[clap(rename_all = "kebab_case")]
 pub struct Directory {
-    /// Location to search
-    pub location: String,
-    #[clap(default_value = "copy")]
+    #[clap(default_value = "copy", required = false, long)]
     pub file_action: sharedtypes::FileAction,
+    #[clap(num_args = 1..)]
+    /// Location to search
+    pub location: Vec<String>,
 }
 
 #[derive(Debug, Subcommand)]
