@@ -6,22 +6,22 @@ edition = "2024"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-reqwest = { version = "0.12.4", features = ["cookies", "gzip", "brotli", "default-tls", "deflate", "default", "zstd", "blocking"] }
+reqwest = { version = "0.12.22", features = ["cookies", "gzip", "brotli", "default-tls", "deflate", "default", "zstd", "blocking"] }
 url = "2.3.1"
 ratelimit = "0.10.0"
 async-std = { version = "1", features = ["attributes", "tokio1"] }
 rusqlite = {version = "^0.36.0", features=["modern_sqlite", "bundled", "column_decltype"] }
 fast_log = "1.7.6"
 bytes = { default-features = false, version = "1.4.0" }
-sha2 = { default-features = false, version = "0.10.6" }
+sha2 = { version = "0.10.6"}
 futures = { features = ["executor"], default-features = false, version = "0.3.31" }
 log = {version="0.4.2" }
 strum_macros = "0.27.1"
-strum = { default-features = false, version = "0.26.2" }
+strum = { default-features = false, version = "0.27.1" }
 csv = "1.2.2"
 file-format = { version = "0.27.0", features = ["reader"] }
 serde = {version = "1.0.171", features = ["derive"], default-features = false }
-md5 = { default-features = false, version = "0.7.0" }
+md5 = { default-features = false, version = "0.8.0" }
 sha1 = { default-features = false, features=["std"],version = "0.10.5" }
 chrono = { features = [], version = "0.4.26" }
 os_pipe = "1.1.4"
@@ -42,7 +42,7 @@ libloading = "0.8.5"
 thread-control = "0.1.2"
 regex = {version="1.11.1", features=["std"]}
 tracing-mutex = "0.3.1"
-zip = "4.1.0"
+zip = {version="4.1.0", features = ["chrono"]}
 
 [features]
 default = ["exe_build"]

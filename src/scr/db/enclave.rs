@@ -140,7 +140,7 @@ impl Main {
                     &sha512hash,
                     format!("Putting at Default location {}", &download_location)
                 ));
-                let fileid = self.download_and_do_parsing(
+                let _ = self.download_and_do_parsing(
                     bytes,
                     sha512hash,
                     source_url,
@@ -173,7 +173,7 @@ impl Main {
                     &sha512hash,
                     format!("Downloading to Default location {}", &download_location)
                 ));
-                let fileid = self.download_and_do_parsing(
+                let _ = self.download_and_do_parsing(
                     bytes,
                     sha512hash,
                     source_url,
@@ -203,6 +203,9 @@ impl Main {
         //let loc = self.location_get();
 
         self.storage_put(download_location);
+
+        // error checking. We should have all dirs needed but hey if we're missing
+        std::fs::create_dir_all(download_location).unwrap();
 
         // Gives file extension
         let file_ext = FileFormat::from_bytes(bytes).extension().to_string();
@@ -430,7 +433,7 @@ impl Main {
             .enclave_condition_get_id(&sharedtypes::EnclaveAction::PutAtDefault)
             .unwrap();
         let action_id = self
-            .enclave_action_get_id(&DEFAULT_PUT_DISK.clone().into())
+            .enclave_action_get_id(&DEFAULT_PUT_DISK.into())
             .unwrap();
         self.enclave_condition_link_put(&condition_id, &action_id, None);
         let condition_link_id = self

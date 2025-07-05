@@ -19,7 +19,6 @@ use std::io::Cursor;
 use std::io::Read;
 use std::time::Duration;
 use url::Url;
-use zip::ZipArchive;
 
 extern crate reqwest;
 
@@ -196,9 +195,8 @@ pub fn hash_bytes(bytes: &Bytes, hash: &sharedtypes::HashesSupported) -> (String
             (hastring, dune)
         }
         sharedtypes::HashesSupported::Sha512(hash) => {
-            let mut hasher = Sha512::new();
-            hasher.update(bytes);
-            let hastring = format!("{:X}", hasher.finalize());
+            let hasher = Sha512::digest(bytes);
+            let hastring = format!("{:X}", hasher);
             let dune = &hastring == hash;
             if !dune {
                 info!("Parser returned: {} Got: {}", &hash, &hastring);
@@ -213,38 +211,75 @@ pub fn hash_bytes(bytes: &Bytes, hash: &sharedtypes::HashesSupported) -> (String
 /// Processes archive files
 ///
 pub fn process_archive_files(
-    inp_bytes: &Cursor<Bytes>,
+    sha512hash: &String,
+    inp_bytes: Cursor<Bytes>,
     filetype: Option<FileFormat>,
     db: Arc<RwLock<Main>>,
-) {
-    if let Some(filetype) = filetype {}
+) -> Vec<(Vec<u8>, Vec<sharedtypes::TagObject>)> {
+    if let Some(filetype) = filetype {
+        match filetype {
+            FileFormat::Zip => {
+                return process_archive_zip(inp_bytes, db, sha512hash);
+            }
+            _ => {}
+        }
+    }
+    Vec::new()
 }
 
 ///
 /// Processes a zip file
 ///
-fn process_archive_zip(inp_bytes: Cursor<Bytes>) {
+fn process_archive_zip(
+    inp_bytes: Cursor<Bytes>,
+    db: Arc<RwLock<Main>>,
+    sha512hash: &String,
+) -> Vec<(Vec<u8>, Vec<sharedtypes::TagObject>)> {
+    let mut out = Vec::new();
     if let Ok(mut zip) = zip::ZipArchive::new(inp_bytes) {
         for item in 0..zip.len() {
-            if let Ok(file) = zip.by_index(item) {
-                let file_path = match file.enclosed_name() {
-                    None => continue,
-                    Some(path) => path,
-                };
-
+            if let Ok(mut file) = zip.by_index(item) {
                 let file_comment = file.comment();
                 if !file_comment.is_empty() {
                     dbg!(&file_comment);
                 }
+                if file.is_file() {
+                    let mut tags = Vec::new();
 
-                if file.is_dir() {
-                    dbg!("dir: ", { file_path });
-                } else if file.is_file() {
-                    dbg!(&file_path, &file.size());
+                    if !file_comment.is_empty() {
+                        tags.push(sharedtypes::TagObject {
+                            namespace: sharedtypes::GenericNamespaceObj {
+                                name: "SYSTEMARCHIVE_ZIP_FILE_COMMENT".to_string(),
+                                description: Some(
+                                    "A comment for a file inside of a zip archive.".to_string(),
+                                ),
+                            },
+                            tag: file_comment.to_string(),
+                            tag_type: sharedtypes::TagType::Normal,
+                            relates_to: None,
+                        });
+                    }
+                    tags.push(sharedtypes::TagObject {
+                            namespace: sharedtypes::GenericNamespaceObj {
+                                name: "SYSTEMARCHIVE_ZIP_FILE_PATH".to_string(),
+                                description: Some(
+                                    "A full filepath, includes name for a file inside of a zip archive.".to_string(),
+                                ),
+                            },
+                            tag: file.name().to_string(),
+                            tag_type: sharedtypes::TagType::Normal,
+                            relates_to: None,
+                        });
+
+                    let mut filetemp = Vec::new();
+                    if std::io::copy(&mut file, &mut filetemp).is_ok() {
+                        out.push((filetemp, tags));
+                    }
                 }
             }
         }
     }
+    out
 }
 
 ///

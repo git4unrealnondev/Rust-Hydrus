@@ -2,7 +2,7 @@ extern crate clap;
 
 use rayon::prelude::*;
 use std::collections::{BTreeMap, HashMap};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::{collections::HashSet, io::Write};
 use strfmt::Format;
 use walkdir::WalkDir;
@@ -318,6 +318,7 @@ pub fn main(data: Arc<RwLock<database::Main>>) {
                     unwrappy.load_table(&sharedtypes::LoadDBTable::Relationship);
                     unwrappy.load_table(&sharedtypes::LoadDBTable::Tags);
                     unwrappy.load_table(&sharedtypes::LoadDBTable::Namespace);
+                    unwrappy.load_table(&sharedtypes::LoadDBTable::Parents);
                     unwrappy.enclave_create_default_file_import();
                 }
                 let mut files = HashMap::new();
@@ -356,10 +357,28 @@ pub fn main(data: Arc<RwLock<database::Main>>) {
                 }
                 // Removes any sidecar files from files
                 files.par_iter().for_each(|(file, sidecars)| {
-                    parse_file(file, data.clone());
-                    for sidecar in sidecars {
-                        logging::info_log(&format!("Found Sidecar: {}", sidecar.display()));
-                        parse_sidecar(file, sidecar, data.clone());
+                    let file_id = parse_file(file, sidecars, data.clone());
+                    match directory.file_action {
+                        // Don't need to do anything as the default is to copy
+                        sharedtypes::FileAction::Copy => {}
+                        // Will remove source as we've already added it into the db
+                        sharedtypes::FileAction::Move => {
+                            std::fs::remove_file(file).unwrap();
+                            for sidecar in sidecars {
+                                std::fs::remove_file(sidecar).unwrap();
+                            }
+                        }
+                        // Will hardlink the file
+                        sharedtypes::FileAction::HardLink => {
+                            if let Some(fid) = file_id {
+                                let db = data.read().unwrap();
+                                let location = db.get_file(&fid);
+                                if let Some(dbfile_location) = location {
+                                    std::fs::remove_file(file).unwrap();
+                                    std::fs::hard_link(dbfile_location, file).unwrap();
+                                }
+                            }
+                        }
                     }
                 });
             }
