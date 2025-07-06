@@ -173,7 +173,7 @@ fn main() {
 
     // Processes any CLI input here
     //cli::main(arc.clone(), globalload_arc.clone());
-    cli::main(arc.clone());
+    cli::main(arc.clone(), globalload_arc.clone());
 
     // Calls the on_start func for the plugins
     globalload_arc.write().unwrap().pluginscraper_on_start();

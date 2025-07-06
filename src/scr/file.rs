@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 
 use crate::database::{enclave, Main};
 use crate::download::{hash_file, process_archive_files};
+use crate::globalload::{callback_on_import, GlobalLoad};
 use crate::{logging, sharedtypes, Arc, RwLock};
 use std::fs::File;
 use std::io::{self, BufRead};
@@ -60,6 +61,7 @@ pub fn parse_file(
     file_location: &Path,
     sidecars: &Vec<PathBuf>,
     db: Arc<RwLock<Main>>,
+    manager_arc: Arc<RwLock<GlobalLoad>>,
 ) -> Option<usize> {
     let mut inside_files = Vec::new();
 
@@ -99,21 +101,25 @@ pub fn parse_file(
                 tag_type: sharedtypes::TagType::Normal,
                 relates_to: None,
             });
+            let fileid;
+            {
+                let mut unwrappy = db.write().unwrap();
+                unwrappy.enclave_run_process(
+                    &mut sharedtypes::FileObject {
+                        source_url: None,
+                        hash: sharedtypes::HashesSupported::Sha512(sha512hash.clone()),
+                        tag_list,
+                        skip_if: vec![sharedtypes::SkipIf::FileHash(sha512hash.clone())],
+                    },
+                    &bytes,
+                    &sha512hash,
+                    None,
+                    enclave::DEFAULT_PUT_DISK,
+                );
+                fileid = unwrappy.file_get_hash(&sha512hash).copied();
+            }
+            callback_on_import(manager_arc.clone(), db.clone(), &bytes, &sha512hash);
 
-            let mut unwrappy = db.write().unwrap();
-            unwrappy.enclave_run_process(
-                &mut sharedtypes::FileObject {
-                    source_url: None,
-                    hash: sharedtypes::HashesSupported::Sha512(sha512hash.clone()),
-                    tag_list,
-                    skip_if: vec![sharedtypes::SkipIf::FileHash(sha512hash.clone())],
-                },
-                &bytes,
-                &sha512hash,
-                None,
-                enclave::DEFAULT_PUT_DISK,
-            );
-            let fileid = unwrappy.file_get_hash(&sha512hash).copied();
             if let Ok(filetype) = file_format::FileFormat::from_file(file_location) {
                 inside_files.append(&mut process_archive_files(
                     Cursor::new(bytes),
@@ -132,18 +138,26 @@ pub fn parse_file(
                     &file_bytes,
                     &sharedtypes::HashesSupported::Sha512("".to_string()),
                 );
-
-                unwrappy.enclave_run_process(
-                    &mut sharedtypes::FileObject {
-                        source_url: None,
-                        hash: sharedtypes::HashesSupported::Sha512(sub_sha512hash.clone()),
-                        tag_list: tags,
-                        skip_if: vec![sharedtypes::SkipIf::FileHash(sub_sha512hash.clone())],
-                    },
+                {
+                    let mut unwrappy = db.write().unwrap();
+                    unwrappy.enclave_run_process(
+                        &mut sharedtypes::FileObject {
+                            source_url: None,
+                            hash: sharedtypes::HashesSupported::Sha512(sub_sha512hash.clone()),
+                            tag_list: tags,
+                            skip_if: vec![sharedtypes::SkipIf::FileHash(sub_sha512hash.clone())],
+                        },
+                        &file_bytes,
+                        &sub_sha512hash,
+                        None,
+                        enclave::DEFAULT_PUT_DISK,
+                    );
+                }
+                callback_on_import(
+                    manager_arc.clone(),
+                    db.clone(),
                     &file_bytes,
                     &sub_sha512hash,
-                    None,
-                    enclave::DEFAULT_PUT_DISK,
                 );
             }
             if let Some(fid) = fileid {

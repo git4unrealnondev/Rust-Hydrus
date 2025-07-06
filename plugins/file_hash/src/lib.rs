@@ -23,10 +23,49 @@ pub fn get_global_info() -> Vec<sharedtypes::GlobalPluginScraper> {
     main.callbacks = vec![
         sharedtypes::GlobalCallbacks::Start(sharedtypes::StartupThreadType::SpawnInline),
         sharedtypes::GlobalCallbacks::Download,
+        sharedtypes::GlobalCallbacks::Import,
     ];
     let out = vec![main];
 
     out
+}
+
+#[no_mangle]
+pub fn on_import(byte_c: &[u8], hash_in: &String) -> Vec<sharedtypes::DBPluginOutputEnum> {
+    let mut output = Vec::new();
+    for hash in Supset::iter() {
+        let hastring = hash_file(hash, byte_c);
+        if let Some(st) = hastring {
+            let tag_output = sharedtypes::DBPluginOutput {
+                file: Some(vec![sharedtypes::PluginFileObj {
+                    id: None,
+                    hash: Some(hash_in.to_owned()),
+                    ext: None,
+                    location: None,
+                }]),
+                jobs: None,
+                namespace: Some(vec![sharedtypes::DbPluginNamespace {
+                    name: get_set(hash).name,
+                    description: get_set(hash).description,
+                }]),
+                parents: None,
+                setting: None,
+                tag: Some(vec![sharedtypes::DBPluginTagOut {
+                    name: st.to_string(),
+                    namespace: get_set(hash).name,
+                    parents: None,
+                }]),
+                relationship: Some(vec![sharedtypes::DbPluginRelationshipObj {
+                    file_hash: hash_in.to_owned(),
+                    tag_name: st,
+                    tag_namespace: get_set(hash.to_owned()).name,
+                }]),
+            };
+            output.push(sharedtypes::DBPluginOutputEnum::Add(vec![tag_output]));
+        }
+    }
+
+    output
 }
 
 #[no_mangle]

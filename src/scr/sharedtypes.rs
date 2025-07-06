@@ -932,6 +932,8 @@ pub enum PluginCallback {
 pub enum GlobalCallbacks {
     // Ran when a file is downloaded
     Download,
+    // Runs when a file is imported manually
+    Import,
     // Starts when the software start
     Start(StartupThreadType),
     // Used for when we need to get / register a login

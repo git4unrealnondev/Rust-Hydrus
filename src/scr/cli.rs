@@ -7,8 +7,8 @@ use std::{collections::HashSet, io::Write};
 use strfmt::Format;
 use walkdir::WalkDir;
 
+use crate::globalload::GlobalLoad;
 // use std::str::pattern::Searcher;
-use crate::download;
 use crate::file::{find_sidecar, parse_file};
 use crate::sharedtypes::{DEFAULT_CACHECHECK, DEFAULT_CACHETIME, DEFAULT_PRIORITY};
 use crate::Mutex;
@@ -17,6 +17,7 @@ use crate::{
     database, logging, pause,
     sharedtypes::{self},
 };
+use crate::{download, globalload};
 use clap::Parser;
 use std::sync::Arc;
 
@@ -106,7 +107,7 @@ fn parse_string_to_scraperparam(input: &str) -> Vec<sharedtypes::ScraperParam> {
 }
 
 /// Returns the main argument and parses data.
-pub fn main(data: Arc<RwLock<database::Main>>) {
+pub fn main(data: Arc<RwLock<database::Main>>, globalload: Arc<RwLock<GlobalLoad>>) {
     //pub fn main(data: Arc<RwLock<database::Main>>, scraper: Arc<RwLock<GlobalLoad>>) {
     let args = cli_structs::MainWrapper::parse();
     if args.a.is_none() {
@@ -356,7 +357,7 @@ pub fn main(data: Arc<RwLock<database::Main>>) {
                     }
                     // Removes any sidecar files from files
                     files.par_iter().for_each(|(file, sidecars)| {
-                        let file_id = parse_file(file, sidecars, data.clone());
+                        let file_id = parse_file(file, sidecars, data.clone(), globalload.clone());
                         match directory.file_action {
                             // Don't need to do anything as the default is to copy
                             sharedtypes::FileAction::Copy => {}
