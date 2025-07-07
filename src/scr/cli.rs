@@ -9,6 +9,7 @@ use walkdir::WalkDir;
 
 use crate::globalload::GlobalLoad;
 // use std::str::pattern::Searcher;
+use crate::download;
 use crate::file::{find_sidecar, parse_file};
 use crate::sharedtypes::{DEFAULT_CACHECHECK, DEFAULT_CACHETIME, DEFAULT_PRIORITY};
 use crate::Mutex;
@@ -17,7 +18,6 @@ use crate::{
     database, logging, pause,
     sharedtypes::{self},
 };
-use crate::{download, globalload};
 use clap::Parser;
 use std::sync::Arc;
 

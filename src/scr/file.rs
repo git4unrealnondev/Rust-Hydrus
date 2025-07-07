@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use crate::database::{enclave, Main};
 use crate::download::{hash_file, process_archive_files};
 use crate::globalload::{callback_on_import, GlobalLoad};
+use crate::threading::parse_tags;
 use crate::{logging, sharedtypes, Arc, RwLock};
 use std::fs::File;
 use std::io::{self, BufRead};
@@ -91,6 +92,31 @@ pub fn parse_file(
                 }
             }
 
+            let filenametag = sharedtypes::Tag {
+                tag: file_location
+                    .file_name()
+                    .unwrap()
+                    .to_string_lossy()
+                    .to_string(),
+                namespace: sharedtypes::GenericNamespaceObj {
+                    name: "SYSTEM_File_Name".into(),
+                    description: Some("Original filename that was imported".into()),
+                },
+            };
+            tag_list.push(sharedtypes::TagObject {
+                namespace: sharedtypes::GenericNamespaceObj {
+                    name: "SYSTEM_File_Name".into(),
+                    description: Some("Original filename that was imported".into()),
+                },
+                tag: file_location
+                    .file_name()
+                    .unwrap()
+                    .to_string_lossy()
+                    .to_string(),
+                tag_type: sharedtypes::TagType::Normal,
+                relates_to: None,
+            });
+
             // Inserts a tag thats just the location where the item was imported from
             tag_list.push(sharedtypes::TagObject {
                 namespace: sharedtypes::GenericNamespaceObj {
@@ -101,6 +127,21 @@ pub fn parse_file(
                 tag_type: sharedtypes::TagType::Normal,
                 relates_to: None,
             });
+
+            let link_subtag = sharedtypes::SubTag {
+                namespace: sharedtypes::GenericNamespaceObj {
+                    name: "SYSTEM_File_Name".into(),
+                    description: Some("Original filename that was imported".into()),
+                },
+                tag: file_location
+                    .file_name()
+                    .unwrap()
+                    .to_string_lossy()
+                    .to_string(),
+                tag_type: sharedtypes::TagType::Normal,
+                limit_to: Some(filenametag),
+            };
+
             let fileid;
             {
                 let mut unwrappy = db.write().unwrap();
@@ -108,7 +149,7 @@ pub fn parse_file(
                     &mut sharedtypes::FileObject {
                         source_url: None,
                         hash: sharedtypes::HashesSupported::Sha512(sha512hash.clone()),
-                        tag_list,
+                        tag_list: tag_list.clone(),
                         skip_if: vec![sharedtypes::SkipIf::FileHash(sha512hash.clone())],
                     },
                     &bytes,
@@ -118,12 +159,19 @@ pub fn parse_file(
                 );
                 fileid = unwrappy.file_get_hash(&sha512hash).copied();
             }
+
+            // imports all tags onto the file that we dl'ed
+            for tag in tag_list.iter() {
+                parse_tags(db.clone(), tag, fileid, &0, &0, manager_arc.clone());
+            }
+
             callback_on_import(manager_arc.clone(), db.clone(), &bytes, &sha512hash);
 
             if let Ok(filetype) = file_format::FileFormat::from_file(file_location) {
                 inside_files.append(&mut process_archive_files(
                     Cursor::new(bytes),
                     Some(filetype),
+                    link_subtag,
                 ));
             }
 
@@ -138,13 +186,14 @@ pub fn parse_file(
                     &file_bytes,
                     &sharedtypes::HashesSupported::Sha512("".to_string()),
                 );
+                let subfileid;
                 {
                     let mut unwrappy = db.write().unwrap();
                     unwrappy.enclave_run_process(
                         &mut sharedtypes::FileObject {
                             source_url: None,
                             hash: sharedtypes::HashesSupported::Sha512(sub_sha512hash.clone()),
-                            tag_list: tags,
+                            tag_list: tags.clone(),
                             skip_if: vec![sharedtypes::SkipIf::FileHash(sub_sha512hash.clone())],
                         },
                         &file_bytes,
@@ -152,6 +201,11 @@ pub fn parse_file(
                         None,
                         enclave::DEFAULT_PUT_DISK,
                     );
+                    subfileid = unwrappy.file_get_hash(&sha512hash).copied();
+                }
+                // imports all tags onto the file that we dl'ed
+                for tag in tags.iter() {
+                    parse_tags(db.clone(), tag, subfileid, &0, &0, manager_arc.clone());
                 }
                 callback_on_import(
                     manager_arc.clone(),

@@ -215,11 +215,12 @@ pub fn hash_bytes(bytes: &Bytes, hash: &sharedtypes::HashesSupported) -> (String
 pub fn process_archive_files(
     inp_bytes: Cursor<Bytes>,
     filetype: Option<FileFormat>,
+    linkto: sharedtypes::SubTag,
 ) -> Vec<(Vec<u8>, Vec<sharedtypes::TagObject>)> {
     if let Some(filetype) = filetype {
         match filetype {
             FileFormat::Zip => {
-                return process_archive_zip(inp_bytes);
+                return process_archive_zip(inp_bytes, linkto);
             }
             _ => {}
         }
@@ -230,7 +231,10 @@ pub fn process_archive_files(
 ///
 /// Processes a zip file
 ///
-fn process_archive_zip(inp_bytes: Cursor<Bytes>) -> Vec<(Vec<u8>, Vec<sharedtypes::TagObject>)> {
+fn process_archive_zip(
+    inp_bytes: Cursor<Bytes>,
+    linkto: sharedtypes::SubTag,
+) -> Vec<(Vec<u8>, Vec<sharedtypes::TagObject>)> {
     let mut out = Vec::new();
     if let Ok(mut zip) = zip::ZipArchive::new(inp_bytes) {
         for item in 0..zip.len() {
@@ -264,7 +268,7 @@ fn process_archive_zip(inp_bytes: Cursor<Bytes>) -> Vec<(Vec<u8>, Vec<sharedtype
                             },
                             tag: file.name().to_string(),
                             tag_type: sharedtypes::TagType::Normal,
-                            relates_to: None,
+                            relates_to: Some(linkto.clone()),
                         });
 
                     let mut filetemp = Vec::new();

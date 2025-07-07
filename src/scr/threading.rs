@@ -505,7 +505,7 @@ Worker: {id} JobId: {} -- While trying to parse parameters we got this error: {:
 }
 
 /// Parses tags and adds the tags into the db.
-fn parse_tags(
+pub fn parse_tags(
     db: Arc<RwLock<database::Main>>,
     tag: &sharedtypes::TagObject,
     file_id: Option<usize>,
