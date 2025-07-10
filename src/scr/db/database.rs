@@ -12,6 +12,7 @@ pub use rusqlite::types::ToSql;
 pub use rusqlite::{params, types::Null, Connection, Result, Transaction};
 use std::borrow::BorrowMut;
 use std::collections::BTreeMap;
+use std::collections::BTreeSet;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::panic;
@@ -63,6 +64,7 @@ pub struct Main {
     _tables_loading: Vec<sharedtypes::LoadDBTable>,
     _cache: CacheType,
     pub globalload: Option<Arc<RwLock<GlobalLoad>>>,
+    localref: Option<Arc<RwLock<Main>>>,
 }
 
 /// Contains DB functions.
@@ -90,6 +92,7 @@ impl Main {
                     _tables_loading: vec![],
                     _cache: CacheType::Bare(file_path.to_string()),
                     globalload: None,
+                    localref: None,
                 };
                 let mut main = Main {
                     _dbpath: path,
@@ -103,6 +106,7 @@ impl Main {
                     _tables_loading: vec![],
                     _cache: CacheType::InMemdb,
                     globalload: None,
+                    localref: None,
                 };
                 main._conn = Arc::new(Mutex::new(connection));
                 main
@@ -121,6 +125,7 @@ impl Main {
                     _tables_loading: vec![],
                     _cache: CacheType::InMemory,
                     globalload: None,
+                    localref: None,
                 };
                 let mut main = Main {
                     _dbpath: None,
@@ -134,6 +139,7 @@ impl Main {
                     _tables_loading: vec![],
                     _cache: CacheType::InMemdb,
                     globalload: None,
+                    localref: None,
                 };
                 main._conn = Arc::new(Mutex::new(Connection::open_in_memory().unwrap()));
                 main
@@ -1448,6 +1454,10 @@ impl Main {
 
     pub fn setup_globalload(&mut self, globalload: Arc<RwLock<GlobalLoad>>) {
         self.globalload = Some(globalload);
+    }
+
+    pub fn setup_localref(&mut self, localref: Arc<RwLock<Main>>) {
+        self.localref = Some(localref);
     }
 
     pub fn namespace_add_namespaceobject(

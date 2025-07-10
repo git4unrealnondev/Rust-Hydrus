@@ -3,13 +3,16 @@ use crate::download;
 use crate::file::folder_make;
 use crate::logging;
 use crate::sharedtypes;
+use crate::threading::parse_tags;
 use crate::vec_of_strings;
+use crate::RwLock;
 use bytes::Bytes;
 use chrono::Utc;
 use core::panic;
 use file_format::FileFormat;
 use rusqlite::params;
 use rusqlite::OptionalExtension;
+use std::sync::Arc;
 
 const DEFAULT_PRIORITY_DOWNLOAD: usize = 10;
 const DEFAULT_PRIORITY_PUT: usize = 5;
@@ -190,6 +193,9 @@ impl Main {
         true
     }
 
+    ///
+    /// Adds info relating to the file and storage. Please add / parse tags sperately
+    ///
     fn download_and_do_parsing(
         &mut self,
         bytes: &Bytes,
@@ -231,12 +237,6 @@ impl Main {
         if let Some(source_url) = source_url {
             let tagid = self.tag_add(source_url, source_url_ns_id, true, None);
             self.relationship_add(fileid, tagid, true);
-        }
-
-        // Adds tags into the DB.
-        for tag in file.tag_list.iter() {
-            let tid = self.tag_add_tagobject(tag);
-            self.relationship_add(fileid, tid, true);
         }
 
         self.enclave_file_mapping_add(&fileid, enclave_id);

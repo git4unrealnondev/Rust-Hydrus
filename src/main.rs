@@ -130,6 +130,7 @@ fn main() {
     arc.write()
         .unwrap()
         .setup_globalload(globalload_arc.clone());
+    arc.write().unwrap().setup_localref(arc.clone());
 
     globalload_arc.write().unwrap().setup_ipc(
         globalload_arc.clone(),

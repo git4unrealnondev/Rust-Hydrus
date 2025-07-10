@@ -162,6 +162,7 @@ pub fn parse_file(
 
             // imports all tags onto the file that we dl'ed
             for tag in tag_list.iter() {
+                dbg!(tag);
                 parse_tags(db.clone(), tag, fileid, &0, &0, manager_arc.clone());
             }
 
@@ -201,10 +202,11 @@ pub fn parse_file(
                         None,
                         enclave::DEFAULT_PUT_DISK,
                     );
-                    subfileid = unwrappy.file_get_hash(&sha512hash).copied();
+                    subfileid = unwrappy.file_get_hash(&sub_sha512hash).copied();
                 }
                 // imports all tags onto the file that we dl'ed
                 for tag in tags.iter() {
+                    dbg!(tag);
                     parse_tags(db.clone(), tag, subfileid, &0, &0, manager_arc.clone());
                 }
                 callback_on_import(
