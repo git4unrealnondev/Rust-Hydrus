@@ -27,3 +27,6 @@ strum = "0.25.0"
 strum_macros = "0.25.1"
 bincode = { version = "2.0.1", features = ["serde","alloc"] }
 regex = "1.11.1"
+chrono = "0.4.41"
+anyhow = "1.0.98"
+interprocess = "2.2.3"

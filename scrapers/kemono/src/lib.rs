@@ -1,9 +1,13 @@
+use chrono::{DateTime, Utc};
 use json::JsonValue;
 use regex::Regex;
 use std::{collections::HashSet, time::Duration};
 
+#[path = "../../../src/scr/intcoms/client.rs"]
+mod client;
 #[path = "../../../src/scr/sharedtypes.rs"]
 mod sharedtypes;
+
 use crate::sharedtypes::DEFAULT_PRIORITY;
 #[unsafe(no_mangle)]
 pub fn get_global_info() -> Vec<sharedtypes::GlobalPluginScraper> {
@@ -12,7 +16,7 @@ pub fn get_global_info() -> Vec<sharedtypes::GlobalPluginScraper> {
     defaultscraper.name = "Kemono".into();
     defaultscraper.storage_type = Some(sharedtypes::ScraperOrPlugin::Scraper(
         sharedtypes::ScraperInfo {
-            ratelimit: (2, Duration::from_secs(5)),
+            ratelimit: (5, Duration::from_secs(10)),
             sites: vec!["kemono.su".into()],
             priority: DEFAULT_PRIORITY,
             num_threads: None,
@@ -37,6 +41,17 @@ pub fn url_dump(
 }
 
 ///
+/// Converts a string into unix epoch ms if it parses
+///
+fn string_to_unixms(inp: &str) -> Option<i64> {
+    let inp = format!("{}Z", inp);
+    if let Ok(temp) = &inp.parse::<DateTime<Utc>>() {
+        return Some(temp.timestamp_millis());
+    }
+    None
+}
+
+///
 /// Parses a post from kemono or coomer into a scraperobject
 ///
 fn parse_post(
@@ -45,28 +60,43 @@ fn parse_post(
     sitetype: &Sitetype,
     object: &mut sharedtypes::ScraperObject,
 ) {
+    let real_time;
+
+    if let Some(time) = input_post["added"].as_str() {
+        if let Some(temp_time) = string_to_unixms(time) {
+            real_time = temp_time;
+        } else {
+            client::log(format!("Kemono Cannot parse time: {}", time));
+            return;
+        }
+    } else {
+        client::log("Kemono Cannot parse time".to_string());
+        return;
+    }
+
     let post_id = sharedtypes::TagObject {
-        namespace: get_genericnamespaceobj(Returntype::PostId, sitetype),
-        tag: input_post["id"].to_string(),
+        namespace: get_genericnamespaceobj(Returntype::PostAdded, sitetype),
+        tag: real_time.to_string(),
         tag_type: sharedtypes::TagType::Normal,
         relates_to: Some(sharedtypes::SubTag {
-            namespace: get_genericnamespaceobj(Returntype::UserId, sitetype),
-            tag: input_post["user"].to_string(),
+            namespace: get_genericnamespaceobj(Returntype::PostId, sitetype),
+            tag: input_post["id"].to_string(),
+            tag_type: sharedtypes::TagType::Normal,
             limit_to: Some(sharedtypes::Tag {
                 namespace: get_genericnamespaceobj(Returntype::Service, sitetype),
                 tag: format!("{}_{}", site_to_string(sitetype), input_post["service"]),
             }),
-            tag_type: sharedtypes::TagType::Normal,
         }),
     };
 
     let post_subtag = Some(sharedtypes::SubTag {
-        namespace: get_genericnamespaceobj(Returntype::PostId, sitetype),
-        tag: input_post["id"].to_string(),
+        namespace: get_genericnamespaceobj(Returntype::PostAdded, sitetype),
+        tag: real_time.to_string(),
         limit_to: Some(sharedtypes::Tag {
-            namespace: get_genericnamespaceobj(Returntype::Service, sitetype),
-            tag: format!("{}_{}", site_to_string(sitetype), input_post["service"]),
+            namespace: get_genericnamespaceobj(Returntype::PostId, sitetype),
+            tag: input_post["id"].to_string(),
         }),
+
         tag_type: sharedtypes::TagType::Normal,
     });
 
@@ -82,9 +112,26 @@ fn parse_post(
         tag_type: sharedtypes::TagType::Normal,
         relates_to: post_subtag.clone(),
     };
+    let userid = sharedtypes::TagObject {
+        namespace: get_genericnamespaceobj(Returntype::UserId, sitetype),
+        tag: input_post["user"].to_string(),
+        tag_type: sharedtypes::TagType::Normal,
+        relates_to: post_subtag.clone(),
+    };
 
-    for attachments in input_post["attachments"].members() {
-        let attachmentname = sharedtypes::TagObject {
+    object.tag.insert(post_id);
+    object.tag.insert(title);
+    object.tag.insert(content);
+    object.tag.insert(userid);
+
+    for (cnt, attachments) in input_post["attachments"].members().enumerate() {
+        let file_position = sharedtypes::TagObject {
+            namespace: get_genericnamespaceobj(Returntype::PostAttachments, sitetype),
+            tag: cnt.to_string(),
+            tag_type: sharedtypes::TagType::Normal,
+            relates_to: post_subtag.clone(),
+        };
+        let file_name = sharedtypes::TagObject {
             namespace: get_genericnamespaceobj(Returntype::PostAttachmentName, sitetype),
             tag: attachments["name"].to_string(),
             tag_type: sharedtypes::TagType::Normal,
@@ -95,12 +142,7 @@ fn parse_post(
         object.file.insert(sharedtypes::FileObject {
             source_url: Some(url),
             hash: sharedtypes::HashesSupported::None,
-            tag_list: vec![
-                post_id.clone(),
-                title.clone(),
-                content.clone(),
-                attachmentname,
-            ],
+            tag_list: vec![file_name, file_position],
             skip_if: vec![],
         });
     }
@@ -156,9 +198,7 @@ pub fn parser(
                         for offset in (0..=2147483647).step_by(50) {
                             let url = format!(
                                 "https://kemono.su/api/v1/{}/user/{}?o={}",
-                                item["service"].to_string(),
-                                item["id"].to_string(),
-                                offset
+                                item["service"], item["id"], offset
                             );
 
                             scraperdata.job = sharedtypes::JobScraper {
@@ -203,6 +243,7 @@ enum Returntype {
     PostEditiedTime,
     PostAttachments,
     PostAttachmentName,
+    PostAdded,
 }
 
 enum Sitetype {
@@ -251,13 +292,17 @@ fn get_genericnamespaceobj(inp: Returntype, site: &Sitetype) -> sharedtypes::Gen
         },
         Returntype::PostAttachments => sharedtypes::GenericNamespaceObj {
             name: format!("{site}_Post_Attachments",),
-            description: Some(format!("Any attachments added to a post on {site}")),
+            description: Some(format!("Any attachments added to a post on {site}. Records their position relative to a post")),
         },
         Returntype::PostAttachmentName => sharedtypes::GenericNamespaceObj {
             name: format!("{site}_Post_Attachment_Name"),
             description: Some(format!(
                 "A file's unique name as originally recorded by {site}"
             )),
+        },
+        Returntype::PostAdded => sharedtypes::GenericNamespaceObj {
+            name: format!("{site}_Post_Added",),
+            description: Some(format!("Time when post was added to {site}")),
         },
     }
 }

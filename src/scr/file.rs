@@ -162,7 +162,6 @@ pub fn parse_file(
 
             // imports all tags onto the file that we dl'ed
             for tag in tag_list.iter() {
-                dbg!(tag);
                 parse_tags(db.clone(), tag, fileid, &0, &0, manager_arc.clone());
             }
 
@@ -206,7 +205,6 @@ pub fn parse_file(
                 }
                 // imports all tags onto the file that we dl'ed
                 for tag in tags.iter() {
-                    dbg!(tag);
                     parse_tags(db.clone(), tag, subfileid, &0, &0, manager_arc.clone());
                 }
                 callback_on_import(
