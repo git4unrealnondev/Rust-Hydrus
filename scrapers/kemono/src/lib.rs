@@ -106,12 +106,18 @@ fn parse_post(
         tag_type: sharedtypes::TagType::Normal,
         relates_to: post_subtag.clone(),
     };
-    let content = sharedtypes::TagObject {
-        namespace: get_genericnamespaceobj(Returntype::PostContent, sitetype),
-        tag: input_post["content"].to_string(),
-        tag_type: sharedtypes::TagType::Normal,
-        relates_to: post_subtag.clone(),
-    };
+    if let Some(str_comment) = input_post["content"].as_str() {
+        if !str_comment.is_empty() {
+            let content = sharedtypes::TagObject {
+                namespace: get_genericnamespaceobj(Returntype::PostContent, sitetype),
+                tag: input_post["content"].to_string(),
+                tag_type: sharedtypes::TagType::Normal,
+                relates_to: post_subtag.clone(),
+            };
+
+            object.tag.insert(content);
+        }
+    }
     let userid = sharedtypes::TagObject {
         namespace: get_genericnamespaceobj(Returntype::UserId, sitetype),
         tag: input_post["user"].to_string(),
@@ -121,7 +127,6 @@ fn parse_post(
 
     object.tag.insert(post_id);
     object.tag.insert(title);
-    object.tag.insert(content);
     object.tag.insert(userid);
 
     for (cnt, attachments) in input_post["attachments"].members().enumerate() {

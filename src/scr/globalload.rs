@@ -133,6 +133,47 @@ pub fn url_dump(
     Ok(out)
 }
 
+pub fn download_from(
+    file: &sharedtypes::FileObject,
+    arc_scrapermanager: Arc<RwLock<GlobalLoad>>,
+    scraper: &sharedtypes::GlobalPluginScraper,
+) -> Option<Vec<u8>> {
+    if let Some(lib) = arc_scrapermanager.read().unwrap().library_get(scraper) {
+        let lib = lib.read().unwrap();
+        let temp: libloading::Symbol<
+            unsafe extern "C" fn(&sharedtypes::FileObject) -> Option<Vec<u8>>,
+        > = unsafe { lib.get(b"download_from\0").unwrap() };
+        return unsafe { temp(file) };
+    }
+    None
+}
+
+///
+/// Tells a scraper that it should handle the "text" downloading
+///
+pub fn text_scraping(
+    url_output: &String,
+    actual_params: &Vec<sharedtypes::ScraperParam>,
+    scraperdata: &sharedtypes::ScraperData,
+    globalload: Arc<RwLock<GlobalLoad>>,
+    scraper: &GlobalPluginScraper,
+) -> Result<sharedtypes::ScraperObject, sharedtypes::ScraperReturn> {
+    if let Some(lib) = globalload.read().unwrap().library_get(scraper) {
+        let lib = lib.read().unwrap();
+        let temp: libloading::Symbol<
+            unsafe extern "C" fn(
+                &String,
+                &Vec<sharedtypes::ScraperParam>,
+                &sharedtypes::ScraperData,
+            )
+                -> Result<sharedtypes::ScraperObject, sharedtypes::ScraperReturn>,
+        > = unsafe { lib.get(b"text_scraping\0").unwrap() };
+        unsafe { temp(url_output, actual_params, scraperdata) }
+    } else {
+        Err(sharedtypes::ScraperReturn::Nothing)
+    }
+}
+
 ///
 /// Parses output from plugin.
 ///

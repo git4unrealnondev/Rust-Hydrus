@@ -219,6 +219,8 @@ pub struct GlobalPluginScraper {
     pub should_handle_file_download: bool,
     /// Weather this item needs to handle text scraping
     pub should_handle_text_scraping: bool,
+    /// If we should send files back when we're scraping
+    pub should_send_files_on_scrape: bool,
     /// Any data thats needed to access restricted content
     pub login_type: Vec<(String, LoginType, LoginNeed, Option<String>, bool)>,
     /// Storage for the item, Will be loaded into the user_data slot for scrapers
@@ -238,6 +240,7 @@ pub fn return_default_globalpluginparser() -> GlobalPluginScraper {
         version: 0,
         should_handle_file_download: false,
         should_handle_text_scraping: false,
+        should_send_files_on_scrape: false,
         login_type: vec![],
         stored_info: None,
         callbacks: vec![],
@@ -753,6 +756,12 @@ pub struct FileObject {
     pub tag_list: Vec<TagObject>,
     // Skips downloading the file if a tag matches this.
     pub skip_if: Vec<SkipIf>,
+}
+
+#[derive(Debug, Eq, Hash, PartialEq, Deserialize, Serialize, bincode::Encode, bincode::Decode)]
+pub enum SourceOrUrl {
+    Url(String),
+    File(Vec<u8>),
 }
 
 ///

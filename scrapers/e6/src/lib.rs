@@ -362,65 +362,60 @@ fn build_url(params: &Vec<sharedtypes::ScraperParam>, pagenum: u64, site: &Site)
 ///
 #[no_mangle]
 pub fn get_global_info() -> Vec<sharedtypes::GlobalPluginScraper> {
-    let out: Vec<sharedtypes::GlobalPluginScraper> = vec![
-        sharedtypes::GlobalPluginScraper {
-            name: "E621.net".to_string(),
-            version: 0,
-            should_handle_file_download: false,
-            should_handle_text_scraping: false,
-            login_type: vec![(
-                "E621".to_string(),
-                sharedtypes::LoginType::ApiNamespaced("User_Api_Login".to_string(), None, None),
-                sharedtypes::LoginNeed::Optional,
-                Some("Username and API key goes in here.".to_string()),
-                false,
-            )],
-            stored_info: Some(sharedtypes::StoredInfo::Storage(vec![(
-                "loaded_site".to_string(),
-                "E621".to_string(),
-            )])),
-            storage_type: Some(sharedtypes::ScraperOrPlugin::Scraper(
-                sharedtypes::ScraperInfo {
-                    ratelimit: (1, Duration::from_secs(1)),
-                    sites: vec_of_strings!("e6", "e621", "e621.net"),
-                    priority: DEFAULT_PRIORITY,
-                    num_threads: None,
-                },
-            )),
-            callbacks: vec![sharedtypes::GlobalCallbacks::Start(
-                sharedtypes::StartupThreadType::SpawnInline,
-            )],
+    let mut e6 = sharedtypes::return_default_globalpluginparser();
+
+    e6.name = "E621.net".to_string();
+    e6.version = 0;
+    e6.login_type = vec![(
+        "E621".to_string(),
+        sharedtypes::LoginType::ApiNamespaced("User_Api_Login".to_string(), None, None),
+        sharedtypes::LoginNeed::Optional,
+        Some("Username and API key goes in here.".to_string()),
+        false,
+    )];
+    e6.stored_info = Some(sharedtypes::StoredInfo::Storage(vec![(
+        "loaded_site".to_string(),
+        "E621".to_string(),
+    )]));
+    e6.storage_type = Some(sharedtypes::ScraperOrPlugin::Scraper(
+        sharedtypes::ScraperInfo {
+            ratelimit: (1, Duration::from_secs(1)),
+            sites: vec_of_strings!("e6", "e621", "e621.net"),
+            priority: DEFAULT_PRIORITY,
+            num_threads: None,
         },
-        sharedtypes::GlobalPluginScraper {
-            name: "E6AI.net".to_string(),
-            version: 0,
-            should_handle_file_download: false,
-            should_handle_text_scraping: false,
-            login_type: vec![(
-                "E6AI".to_string(),
-                sharedtypes::LoginType::ApiNamespaced("User_Api_Login".to_string(), None, None),
-                sharedtypes::LoginNeed::Optional,
-                Some("Username and API key goes in here.".to_string()),
-                false,
-            )],
-            stored_info: Some(sharedtypes::StoredInfo::Storage(vec![(
-                "loaded_site".to_string(),
-                "E6AI".to_string(),
-            )])),
-            storage_type: Some(sharedtypes::ScraperOrPlugin::Scraper(
-                sharedtypes::ScraperInfo {
-                    ratelimit: (1, Duration::from_secs(1)),
-                    sites: vec_of_strings!("e6ai", "e6ai.net"),
-                    priority: DEFAULT_PRIORITY,
-                    num_threads: None,
-                },
-            )),
-            callbacks: vec![sharedtypes::GlobalCallbacks::Start(
-                sharedtypes::StartupThreadType::SpawnInline,
-            )],
+    ));
+    e6.callbacks = vec![sharedtypes::GlobalCallbacks::Start(
+        sharedtypes::StartupThreadType::SpawnInline,
+    )];
+
+    let mut e6ai = sharedtypes::return_default_globalpluginparser();
+    e6ai.name = "E6AI.net".to_string();
+    e6ai.version = 0;
+    e6ai.login_type = vec![(
+        "E6AI".to_string(),
+        sharedtypes::LoginType::ApiNamespaced("User_Api_Login".to_string(), None, None),
+        sharedtypes::LoginNeed::Optional,
+        Some("Username and API key goes in here.".to_string()),
+        false,
+    )];
+    e6ai.stored_info = Some(sharedtypes::StoredInfo::Storage(vec![(
+        "loaded_site".to_string(),
+        "E6AI".to_string(),
+    )]));
+    e6ai.storage_type = Some(sharedtypes::ScraperOrPlugin::Scraper(
+        sharedtypes::ScraperInfo {
+            ratelimit: (1, Duration::from_secs(1)),
+            sites: vec_of_strings!("e6ai", "e6ai.net"),
+            priority: DEFAULT_PRIORITY,
+            num_threads: None,
         },
-    ];
-    out
+    ));
+    e6ai.callbacks = vec![sharedtypes::GlobalCallbacks::Start(
+        sharedtypes::StartupThreadType::SpawnInline,
+    )];
+
+    vec![e6, e6ai]
 }
 
 #[no_mangle]

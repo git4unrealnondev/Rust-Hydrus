@@ -326,6 +326,7 @@ impl Worker {
                     let urlload = match job.jobmanager.jobtype {
                         sharedtypes::DbJobType::Params => {
                             let mut out = Vec::new();
+
                             match globalload::url_dump(
                                 &job.param,
                                 &scraper_data_holder,
@@ -380,57 +381,74 @@ Worker: {id} JobId: {} -- While trying to parse parameters we got this error: {:
                     'urlloop: for (scraperparam, scraperdata) in urlload {
                         'errloop: loop {
                             let resp;
-                            let st;
+                            let out_st;
                             if let sharedtypes::ScraperParam::Url(ref url_string) = scraperparam {
-                                resp = task::block_on(download::dltext_new(
-                                    url_string,
-                                    &client,
-                                    &ratelimiter_obj,
-                                    &id,
-                                ));
-                                st = match resp {
-                                    Ok(respstring) => globalload::parser_call(
-                                        &respstring,
+                                if !scraper.should_handle_text_scraping {
+                                    resp = task::block_on(download::dltext_new(
+                                        url_string,
+                                        &client,
+                                        &ratelimiter_obj,
+                                        &id,
+                                    ));
+                                    let st = match resp {
+                                        Ok(respstring) => globalload::parser_call(
+                                            &respstring,
+                                            &scraperdata.job.param,
+                                            &scraperdata,
+                                            globalload.clone(),
+                                            &scraper,
+                                        ),
+                                        Err(_) => {
+                                            logging::error_log(&format!("Worker: {} -- While processing job {:?} was unable to download text.",&id, &job));
+                                            break 'errloop;
+                                        }
+                                    };
+                                    out_st = match st {
+                                        Ok(objectscraper) => objectscraper,
+                                        Err(ScraperReturn::Nothing) => {
+                                            // job_params.lock().unwrap().remove(&scraper_data);
+                                            logging::info_log(&format!(
+                                        "Worker: {id} JobId: {} -- Exiting loop due to nothing.",
+                                        jobid
+                                    ));
+                                            break 'urlloop;
+                                        }
+                                        Err(ScraperReturn::EMCStop(emc)) => {
+                                            panic!("EMC STOP DUE TO: {}", emc);
+                                        }
+                                        Err(ScraperReturn::Stop(stop)) => {
+                                            // let temp = scraper_data.clone().job;
+                                            // job_params.lock().unwrap().remove(&scraper_data);
+                                            logging::error_log(&format!(
+                                                "Stopping job: {:?}",
+                                                stop
+                                            ));
+                                            continue;
+                                        }
+                                        Err(ScraperReturn::Timeout(time)) => {
+                                            let time_dur = Duration::from_secs(time);
+                                            thread::sleep(time_dur);
+                                            continue;
+                                        }
+                                    };
+                                } else {
+                                    if let Ok(scraperobj) = globalload::text_scraping(
+                                        url_string,
                                         &scraperdata.job.param,
                                         &scraperdata,
                                         globalload.clone(),
                                         &scraper,
-                                    ),
-                                    Err(_) => {
+                                    ) {
+                                        out_st = scraperobj;
+                                    } else {
                                         logging::error_log(&format!("Worker: {} -- While processing job {:?} was unable to download text.",&id, &job));
                                         break 'errloop;
                                     }
-                                };
+                                }
                             } else {
                                 // Finished checking everything for URLs and other stuff.
                                 break 'errloop;
                             }
-                            let out_st = match st {
-                                Ok(objectscraper) => objectscraper,
-                                Err(ScraperReturn::Nothing) => {
-                                    // job_params.lock().unwrap().remove(&scraper_data);
-                                    logging::info_log(&format!(
-                                        "Worker: {id} JobId: {} -- Exiting loop due to nothing.",
-                                        jobid
-                                    ));
-                                    break 'urlloop;
-                                }
-                                Err(ScraperReturn::EMCStop(emc)) => {
-                                    panic!("EMC STOP DUE TO: {}", emc);
-                                }
-                                Err(ScraperReturn::Stop(stop)) => {
-                                    // let temp = scraper_data.clone().job;
-                                    // job_params.lock().unwrap().remove(&scraper_data);
-                                    logging::error_log(&format!("Stopping job: {:?}", stop));
-                                    continue;
-                                }
-                                Err(ScraperReturn::Timeout(time)) => {
-                                    let time_dur = Duration::from_secs(time);
-                                    thread::sleep(time_dur);
-                                    continue;
-                                }
-                            };
-                            // Parses tags from the tags field
                             for tag in out_st.tag.iter() {
                                 parse_jobs(
                                     tag,
@@ -851,103 +869,110 @@ pub fn main_file_loop(
     worker_id: &usize,
     job_id: &usize,
 ) {
-    if let Some(source) = &file.source_url.clone() {
-        // If url exists in db then don't download thread::sleep(Duration::from_secs(10));
-        for file_tag in file.skip_if.iter() {
-            if parse_skipif(file_tag, source, db.clone(), worker_id, job_id) {
-                return;
+    let source;
+    match &file.source_url {
+        Some(temp) => {
+            source = temp.clone();
+        }
+        None => {
+            source = "".into();
+        }
+    };
+    // If url exists in db then don't download thread::sleep(Duration::from_secs(10));
+    for file_tag in file.skip_if.iter() {
+        if parse_skipif(file_tag, &source, db.clone(), worker_id, job_id) {
+            return;
+        }
+    }
+
+    // Gets the source url namespace id
+    let source_url_id = {
+        let mut unwrappydb = db.write().unwrap();
+        unwrappydb.create_default_source_url_ns_id()
+    };
+
+    let location = {
+        let unwrappydb = db.read().unwrap();
+        unwrappydb.location_get()
+    };
+
+    let url_tag;
+    {
+        let unwrappydb = db.read().unwrap();
+        url_tag = unwrappydb
+            .tag_get_name(source.clone(), source_url_id)
+            .cloned();
+    };
+
+    // Get's the hash & file ext for the file.
+    let fileid = match url_tag {
+        None => {
+            match download_add_to_db(
+                ratelimiter_obj,
+                &source,
+                location,
+                globalload.clone(),
+                client,
+                db.clone(),
+                file,
+                worker_id,
+                job_id,
+            ) {
+                None => return,
+                Some(id) => id,
             }
         }
-
-        // Gets the source url namespace id
-        let source_url_id = {
-            let mut unwrappydb = db.write().unwrap();
-            unwrappydb.create_default_source_url_ns_id()
-        };
-
-        let location = {
-            let unwrappydb = db.read().unwrap();
-            unwrappydb.location_get()
-        };
-
-        let url_tag;
-        {
-            let unwrappydb = db.read().unwrap();
-            url_tag = unwrappydb
-                .tag_get_name(source.clone(), source_url_id)
-                .cloned();
-        };
-
-        // Get's the hash & file ext for the file.
-        let fileid = match url_tag {
-            None => {
-                match download_add_to_db(
-                    ratelimiter_obj,
-                    source,
-                    location,
-                    globalload.clone(),
-                    client,
-                    db.clone(),
-                    file,
-                    worker_id,
-                    job_id,
-                ) {
-                    None => return,
-                    Some(id) => id,
+        Some(url_id) => {
+            let file_id;
+            {
+                // We've already got a valid relationship
+                let unwrappydb = &mut db.read().unwrap();
+                file_id = unwrappydb.relationship_get_one_fileid(&url_id).copied();
+                if let Some(fid) = file_id {
+                    unwrappydb.file_get_id(&fid).unwrap();
                 }
             }
-            Some(url_id) => {
-                let file_id;
-                {
-                    // We've already got a valid relationship
-                    let unwrappydb = &mut db.read().unwrap();
-                    file_id = unwrappydb.relationship_get_one_fileid(&url_id).copied();
-                    if let Some(fid) = file_id {
-                        unwrappydb.file_get_id(&fid).unwrap();
-                    }
-                }
 
-                // fixes busted links.
-                match file_id {
-                    Some(file_id) => {
-                        info_log(&format!(
+            // fixes busted links.
+            match file_id {
+                Some(file_id) => {
+                    info_log(&format!(
                             "Worker: {worker_id} JobId: {job_id} -- Skipping file: {} Due to already existing in Tags Table.",
                             &source
                         ));
-                        file_id
-                    }
-                    None => {
-                        match download_add_to_db(
-                            ratelimiter_obj,
-                            source,
-                            location,
-                            globalload.clone(),
-                            client,
-                            db.clone(),
-                            file,
-                            worker_id,
-                            job_id,
-                        ) {
-                            None => return,
-                            Some(id) => id,
-                        }
+                    file_id
+                }
+                None => {
+                    match download_add_to_db(
+                        ratelimiter_obj,
+                        &source,
+                        location,
+                        globalload.clone(),
+                        client,
+                        db.clone(),
+                        file,
+                        worker_id,
+                        job_id,
+                    ) {
+                        None => return,
+                        Some(id) => id,
                     }
                 }
             }
-        };
-
-        // We've got valid fileid for reference.
-        for tag in file.tag_list.iter() {
-            parse_jobs(
-                tag,
-                Some(fileid),
-                jobstorage.clone(),
-                db.clone(),
-                scraper,
-                worker_id,
-                job_id,
-                globalload.clone(),
-            );
         }
+    };
+
+    // We've got valid fileid for reference.
+    for tag in file.tag_list.iter() {
+        parse_jobs(
+            tag,
+            Some(fileid),
+            jobstorage.clone(),
+            db.clone(),
+            scraper,
+            worker_id,
+            job_id,
+            globalload.clone(),
+        );
     }
 }
