@@ -1,4 +1,7 @@
+use crate::bypasses;
+use crate::bypasses::ddos_guard_bypass;
 use crate::database::Main;
+use crate::globalload;
 use crate::globalload::GlobalLoad;
 
 // extern crate urlparse;
@@ -80,15 +83,17 @@ pub fn ratelimiter_wait(ratelimit_object: &Arc<Mutex<Ratelimiter>>) {
 
 /// Creates Client that the downloader will use.
 pub fn client_create() -> Client {
-    let useragent = "RustHydrusV1 0".to_string();
-    let jar = cookie::Jar::default();
+    //let useragent = "RustHydrusV1 0".to_string();
+    let useragent =
+        "User-Agent Mozilla/5.0 (X11; Linux x86_64; rv:141.0) Gecko/20100101 Firefox/141.0"
+            .to_string();
 
+    let jar = cookie::Jar::default();
     // The client that does the downloading
     reqwest::blocking::ClientBuilder::new()
+        //.cookie_provider(jar.into())
+        .cookie_store(false)
         .user_agent(useragent)
-        .cookie_provider(jar.into())
-        //. brotli(true)
-        //. deflate(true)
         .gzip(true)
         .brotli(true)
         .deflate(true)
@@ -103,7 +108,7 @@ pub fn client_create() -> Client {
 /// their's anything wrong with request.
 pub async fn dltext_new(
     url_string: &String,
-    client: &Client,
+    client: Arc<RwLock<Client>>,
     ratelimiter_obj: &Arc<Mutex<Ratelimiter>>,
     worker_id: &usize,
 ) -> Result<String, Box<dyn Error>> {
@@ -131,7 +136,7 @@ pub async fn dltext_new(
             worker_id, &url_string
         ));
 
-        let futureresult = client.get(url).send();
+        let futureresult = client.read().unwrap().get(url).send();
 
         // let test = reqwest::get(url).await.unwrap().text(); let futurez =
         // futures::executor::block_on(futureresult); dbg!(&futureresult);
@@ -296,144 +301,186 @@ pub enum FileReturnStatus {
 
 /// Downloads file to position
 pub fn dlfile_new(
-    client: &Client,
+    client: &mut Client,
     db: Arc<RwLock<Main>>,
     file: &mut sharedtypes::FileObject,
-    location: &String,
     globalload: Option<Arc<RwLock<GlobalLoad>>>,
     ratelimiter_obj: &Arc<Mutex<Ratelimiter>>,
     source_url: &String,
     workerid: &usize,
     jobid: &usize,
+    scraper: Option<&sharedtypes::GlobalPluginScraper>,
 ) -> FileReturnStatus {
     let mut boolloop = true;
     let mut hash = String::new();
-    let mut bytes: bytes::Bytes = Bytes::from(&b""[..]);
+    //let mut bytes: bytes::Bytes = Bytes::from(&b""[..]);
+    let mut bytes: Option<bytes::Bytes> = None;
     let mut cnt = 0;
-    while boolloop {
-        let mut hasher = Sha512::new();
-        loop {
-            let fileurlmatch = match &file.source_url {
-                None => {
-                    panic!(
-                        "Tried to call dlfilenew when their was no file :C info: {:?}",
-                        file
-                    );
+
+    let should_scraper_download = match scraper {
+        Some(scraper) => scraper.should_handle_file_download,
+        None => false,
+    };
+
+    dbg!(
+        &should_scraper_download,
+        globalload.is_some(),
+        scraper.is_some()
+    );
+
+    if should_scraper_download {
+        if let Some(ref globalload) = globalload {
+            if let Some(scraper) = scraper {
+                match globalload::download_from(file, globalload.clone(), scraper) {
+                    None => {
+                        logging::log(&format!("Could not pull info for file {:?}", &file));
+                    }
+                    Some(filebytes) => {
+                        bytes = Some(Bytes::from(filebytes));
+                    }
                 }
-                Some(fileurl) => fileurl,
-            };
-            let url = Url::parse(fileurlmatch).unwrap();
-            ratelimiter_wait(ratelimiter_obj);
-            logging::info_log(&format!("Downloading: {} to: {}", &fileurlmatch, &location));
-            let mut futureresult = client.get(url.as_ref()).send();
+            }
+        }
+        //return FileReturnStatus::TryLater;
+    } else {
+        while boolloop {
+            let mut hasher = Sha512::new();
             loop {
-                match &futureresult {
-                    Ok(result) => {
-                        if let Err(err) = result.error_for_status_ref() {
-                            if let Some(err_status) = err.status() {
-                                if err_status.is_client_error() {
-                                    logging::error_log(&format!(
+                let fileurlmatch = match &file.source_url {
+                    None => {
+                        panic!(
+                            "Tried to call dlfilenew when their was no file :C info: {:?}",
+                            file
+                        );
+                    }
+                    Some(fileurl) => fileurl,
+                };
+                let url = Url::parse(fileurlmatch).unwrap();
+                ratelimiter_wait(ratelimiter_obj);
+                //logging::info_log(&format!("Downloading: {} to: {}", &fileurlmatch, &location));
+                let mut futureresult = client.get(url.as_ref()).send();
+                loop {
+                    match &futureresult {
+                        Ok(result) => {
+                            if let Err(err) = result.error_for_status_ref() {
+                                match ddos_guard_bypass(result, client, source_url) {
+                                    Some(bypass_response) => futureresult = Ok(bypass_response),
+                                    None => {
+                                        if let Some(err_status) = err.status() {
+                                            if err_status.is_client_error() {
+                                                logging::error_log(&format!(
                                         "Worker: {workerid} JobID: {jobid} -- Stopping file download due to: {:?}",
                                         err
                                     ));
-                                    return FileReturnStatus::DeadUrl(source_url.clone());
+                                                return FileReturnStatus::DeadUrl(
+                                                    source_url.clone(),
+                                                );
+                                            }
+                                        }
+                                    }
                                 }
                             }
+                            break;
                         }
+                        Err(_) => {
+                            error!("Worker: {workerid} JobID: {jobid} -- Repeating: {}", &url);
+                            dbg!("Worker: {workerid} JobID: {jobid} -- Repeating: {}", &url);
+                            let time_dur = Duration::from_secs(10);
+                            thread::sleep(time_dur);
+                            futureresult = client.get(url.as_ref()).send();
+                        }
+                    }
+                }
+
+                // Downloads file into byte memory buffer
+                let byte = futureresult.unwrap().bytes();
+                // Error handling for dling a file. Waits 10 secs to retry
+                match byte {
+                    Ok(out) => {
+                        bytes = Some(out);
+
                         break;
                     }
                     Err(_) => {
-                        error!("Worker: {workerid} JobID: {jobid} -- Repeating: {}", &url);
-                        dbg!("Worker: {workerid} JobID: {jobid} -- Repeating: {}", &url);
+                        error!(
+                            "Worker: {workerid} JobID: {jobid} -- Repeating: {} , Due to: {:?}",
+                            &url,
+                            &byte.as_ref().err()
+                        );
+                        dbg!(
+                            "Worker: {workerid} JobID: {jobid} -- Repeating: {} , Due to: {:?}",
+                            &url,
+                            &byte.as_ref().err()
+                        );
                         let time_dur = Duration::from_secs(10);
                         thread::sleep(time_dur);
-                        futureresult = client.get(url.as_ref()).send();
                     }
-                }
-            }
-
-            // Downloads file into byte memory buffer
-            let byte = futureresult.unwrap().bytes();
-            // Error handling for dling a file. Waits 10 secs to retry
-            match byte {
-                Ok(out) => {
-                    bytes = out;
-
-                    break;
-                }
-                Err(_) => {
-                    error!(
-                        "Worker: {workerid} JobID: {jobid} -- Repeating: {} , Due to: {:?}",
-                        &url,
-                        &byte.as_ref().err()
-                    );
-                    dbg!(
-                        "Worker: {workerid} JobID: {jobid} -- Repeating: {} , Due to: {:?}",
-                        &url,
-                        &byte.as_ref().err()
-                    );
-                    let time_dur = Duration::from_secs(10);
-                    thread::sleep(time_dur);
-                }
-            }
-            if cnt >= 3 {
-                return FileReturnStatus::TryLater;
-            }
-            cnt += 1;
-        }
-        hasher.update(bytes.as_ref());
-
-        // Final Hash
-        hash = format!("{:X}", hasher.finalize());
-        match &file.hash {
-            sharedtypes::HashesSupported::None => {
-                boolloop = false;
-                // panic!("DlFileNew: Cannot parse hash info : {:?}", &file);
-            }
-            _ => {
-                // Check and compare  to what the scraper wants
-                let status = hash_bytes(&bytes, &file.hash);
-
-                // Logging
-                if !status.1 {
-                    error!(
-                        "Worker: {workerid} JobID: {jobid} -- Parser file: {:?} FAILED HASHCHECK: {} {}",
-                        &file.hash, status.0, status.1
-                    );
-                    cnt += 1;
-                } else {
-                    // dbg!("Parser returned: {} Got: {}", &file.hash, status.0);
                 }
                 if cnt >= 3 {
                     return FileReturnStatus::TryLater;
                 }
-                boolloop = !status.1;
+                cnt += 1;
             }
-        };
-    }
 
-    logging::info_log(&format!("Downloaded hash: {}", &hash));
+            hasher.update(bytes.as_ref().unwrap().as_ref());
 
-    let file_ext = FileFormat::from_bytes(&bytes).extension().to_string();
-    // If the plugin manager is None then don't do anything plugin wise. Useful for if
-    // doing something that we CANNOT allow plugins to run.
-    {
-        if let Some(globalload) = globalload {
-            crate::globalload::plugin_on_download(
-                globalload,
-                db.clone(),
-                bytes.as_ref(),
-                &hash,
-                &file_ext,
-            );
+            // Final Hash
+            hash = format!("{:X}", hasher.finalize());
+            match &file.hash {
+                sharedtypes::HashesSupported::None => {
+                    boolloop = false;
+                    // panic!("DlFileNew: Cannot parse hash info : {:?}", &file);
+                }
+                _ => {
+                    // Check and compare  to what the scraper wants
+                    let status = hash_bytes(bytes.as_ref().unwrap(), &file.hash);
+
+                    // Logging
+                    if !status.1 {
+                        error!(
+                        "Worker: {workerid} JobID: {jobid} -- Parser file: {:?} FAILED HASHCHECK: {} {}",
+                        &file.hash, status.0, status.1
+                    );
+                        cnt += 1;
+                    } else {
+                        // dbg!("Parser returned: {} Got: {}", &file.hash, status.0);
+                    }
+                    if cnt >= 3 {
+                        return FileReturnStatus::TryLater;
+                    }
+                    boolloop = !status.1;
+                }
+            };
         }
     }
-    {
-        let mut unwrappydb = db.write().unwrap();
-        unwrappydb.create_default_source_url_ns_id();
-        unwrappydb.enclave_determine_processing(file, bytes, &hash, Some(source_url));
+    logging::info_log(&format!("Downloaded hash: {}", &hash));
+
+    if let Some(bytes) = bytes {
+        let file_ext = FileFormat::from_bytes(&bytes).extension().to_string();
+        // If the plugin manager is None then don't do anything plugin wise. Useful for if
+        // doing something that we CANNOT allow plugins to run.
+        {
+            if let Some(globalload) = globalload {
+                crate::globalload::plugin_on_download(
+                    globalload,
+                    db.clone(),
+                    bytes.as_ref(),
+                    &hash,
+                    &file_ext,
+                );
+            }
+        }
+        //
+        {
+            let mut unwrappydb = db.write().unwrap();
+            unwrappydb.create_default_source_url_ns_id();
+            unwrappydb.enclave_determine_processing(file, bytes, &hash, Some(source_url));
+        }
+        return FileReturnStatus::File((hash, file_ext));
     }
-    FileReturnStatus::File((hash, file_ext))
+
+    // If we don't donwload anything the default to try again later
+    FileReturnStatus::TryLater
 }
 
 /// Hashes file from location string with specified hash into the hash of the file.

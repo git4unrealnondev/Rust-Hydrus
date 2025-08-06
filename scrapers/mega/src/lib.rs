@@ -46,6 +46,7 @@ pub fn get_global_info() -> Vec<sharedtypes::GlobalPluginScraper> {
     scraper.name = "Mega Scraper".into();
     scraper.should_handle_text_scraping = true;
     scraper.should_send_files_on_scrape = true;
+    scraper.should_handle_file_download = true;
     scraper.storage_type = Some(sharedtypes::ScraperOrPlugin::Scraper(
         sharedtypes::ScraperInfo {
             ratelimit: (1, Duration::from_secs(1)),
@@ -77,6 +78,7 @@ pub fn url_dump(
     for param in params {
         if let sharedtypes::ScraperParam::Normal(temp) = param {
             for item_match in regex.find_iter(temp).map(|c| c.as_str()) {
+                dbg!(item_match);
                 let mut sc = scraperdata.clone();
                 sc.job
                     .param
@@ -138,6 +140,8 @@ pub fn text_scraping(
 ) -> Result<sharedtypes::ScraperObject, sharedtypes::ScraperReturn> {
     use async_std::task;
 
+    let mut file = HashSet::new();
+
     let mut fileordir = Vec::new();
 
     let http_client = reqwest::Client::new();
@@ -176,13 +180,25 @@ pub fn text_scraping(
                     file_path: format!("/{}", root.name()),
                     file_handle: root.handle().into(),
                 };
+
+                file.insert(
+                    sharedtypes::FileObject {
+                        source_url: Some(url_input.to_string()),
+                        hash: sharedtypes::HashesSupported::None,
+                        tag_list: vec![],
+                        skip_if: vec![]
+                    }
+
+                );
                 fileordir.push(MegaDirOrFile::File(megafile));
             }
         }
     }
 
+    dbg!(&fileordir);
+
     return Ok(sharedtypes::ScraperObject {
-        file: HashSet::new(),
+        file,
         tag: HashSet::new(),
     });
 }

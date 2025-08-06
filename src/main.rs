@@ -47,6 +47,8 @@ pub mod threading;
 pub mod time_func;
 
 // Needed for the plugin coms system.
+#[path = "./scr/bypasses.rs"]
+pub mod bypasses;
 #[path = "./scr/intcoms/client.rs"]
 pub mod client;
 #[path = "./scr/db/helpers.rs"]

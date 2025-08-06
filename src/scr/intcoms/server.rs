@@ -267,7 +267,7 @@ impl DbInteract {
                 global_pluginscraper.name = "InternalFileAdd".to_string();
                 let ratelimiter_obj = threading::create_ratelimiter(ratelimit, &0, &0);
                 let manageeplugin = self.globalload.clone();
-                let client = download::client_create();
+                let client = Arc::new(RwLock::new(download::client_create()));
                 let jobstorage = self.jobmanager.clone();
                 let database = self._database.clone();
                 let thread = thread::spawn(move || {
@@ -276,7 +276,7 @@ impl DbInteract {
                         database,
                         ratelimiter_obj,
                         manageeplugin,
-                        &client.clone(),
+                        client,
                         jobstorage,
                         &global_pluginscraper,
                         &0,
@@ -301,7 +301,7 @@ impl DbInteract {
 
                 let ratelimiter_obj = threading::create_ratelimiter(ratelimit, &0, &0);
                 let manageeplugin = self.globalload.clone();
-                let client = &download::client_create();
+                let client = Arc::new(RwLock::new(download::client_create()));
                 let jobstorage = self.jobmanager.clone();
                 threading::main_file_loop(
                     &mut file,
@@ -489,6 +489,7 @@ impl DbInteract {
             }
             types::SupportedDBRequests::GetNamespace(name) => {
                 let unwrappy = self._database.read().unwrap();
+                unwrappy.debugdb();
                 let tmep = unwrappy.namespace_get(&name);
                 Self::option_to_bytes(tmep)
             }

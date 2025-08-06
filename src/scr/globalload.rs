@@ -133,6 +133,9 @@ pub fn url_dump(
     Ok(out)
 }
 
+///
+/// Used by a scraper to download a file. ONLY ONE :/
+///
 pub fn download_from(
     file: &sharedtypes::FileObject,
     arc_scrapermanager: Arc<RwLock<GlobalLoad>>,

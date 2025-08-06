@@ -16,8 +16,8 @@ pub fn get_global_info() -> Vec<sharedtypes::GlobalPluginScraper> {
     defaultscraper.name = "Kemono".into();
     defaultscraper.storage_type = Some(sharedtypes::ScraperOrPlugin::Scraper(
         sharedtypes::ScraperInfo {
-            ratelimit: (5, Duration::from_secs(10)),
-            sites: vec!["kemono.su".into()],
+            ratelimit: (1, Duration::from_secs(1)),
+            sites: vec!["kemono.cr".into(), "kemono.cr".into()],
             priority: DEFAULT_PRIORITY,
             num_threads: None,
         },
@@ -171,7 +171,7 @@ pub fn parser(
             }
 
             for post in parsed_json.members() {
-                parse_post(post, &"kemono.su".into(), &Sitetype::Kemono, &mut out);
+                parse_post(post, &"kemono.cr".into(), &Sitetype::Kemono, &mut out);
             }
         }
 
@@ -202,7 +202,7 @@ pub fn parser(
 
                         for offset in (0..=2147483647).step_by(50) {
                             let url = format!(
-                                "https://kemono.su/api/v1/{}/user/{}?o={}",
+                                "https://kemono.cr/api/v1/{}/user/{}?o={}",
                                 item["service"], item["id"], offset
                             );
 
@@ -334,7 +334,7 @@ fn parse_type(inp: &String) -> Option<Componenttype> {
 
     // matches a site
     let mut site_str = None;
-    let site_regex = Regex::new(r"[a-z]+\.(su|party)").unwrap();
+    let site_regex = Regex::new(r"[a-z]+\.(su|party|cr)").unwrap();
 
     if let Some(reg_match) = site_regex.captures(inp) {
         if let Some(reg) = reg_match.get(0) {
@@ -418,7 +418,7 @@ fn filter_params(
                 .user_data
                 .insert("Potiential User".into(), user.to_string());
             scraperdata.job = sharedtypes::JobScraper {
-                site: "kemono.su".into(),
+                site: "kemono.cr".into(),
                 param: vec![sharedtypes::ScraperParam::Normal(user.to_string())],
                 job_type: sharedtypes::DbJobType::Scraper,
             };
@@ -426,7 +426,7 @@ fn filter_params(
             scraperdata
                 .user_data
                 .insert("action".into(), "creators".into());
-            out.push(("https://kemono.su/api/v1/creators.txt".into(), scraperdata));
+            out.push(("https://kemono.cr/api/v1/creators.txt".into(), scraperdata));
         }
     }
     out

@@ -168,7 +168,7 @@ impl Worker {
         let thread = thread::spawn(move || {
             let ratelimiter_obj = ratelimiter_main.clone();
 
-            let client = download::client_create();
+            let client = Arc::new(RwLock::new(download::client_create()));
             let mut should_remove_original_job;
             'bigloop: loop {
                 let jobsstorage;
@@ -386,7 +386,7 @@ Worker: {id} JobId: {} -- While trying to parse parameters we got this error: {:
                                 if !scraper.should_handle_text_scraping {
                                     resp = task::block_on(download::dltext_new(
                                         url_string,
-                                        &client,
+                                        client.clone(),
                                         &ratelimiter_obj,
                                         &id,
                                     ));
@@ -479,7 +479,7 @@ Worker: {id} JobId: {} -- While trying to parse parameters we got this error: {:
                                         db,
                                         ratelimiter_obj,
                                         globalload,
-                                        &client,
+                                        client,
                                         jobstorage,
                                         &scraper,
                                         &id,
@@ -690,11 +690,12 @@ fn download_add_to_db(
     source: &String,
     location: String,
     globalload: Arc<RwLock<GlobalLoad>>,
-    client: &Client,
+    client: Arc<RwLock<Client>>,
     db: Arc<RwLock<database::Main>>,
     file: &mut sharedtypes::FileObject,
     worker_id: &usize,
     job_id: &usize,
+    scraper: &sharedtypes::GlobalPluginScraper,
 ) -> Option<usize> {
     // Early exit for if the file is a dead url
     {
@@ -708,19 +709,21 @@ fn download_add_to_db(
         }
     }
 
+    let mut_client = &mut client.write().unwrap();
+
     // Download file doesn't exist. URL doesn't exist in DB Will download
     let blopt;
     {
         blopt = download::dlfile_new(
-            client,
+            mut_client,
             db.clone(),
             file,
-            &location,
             Some(globalload),
             &ratelimiter_obj,
             source,
             worker_id,
             job_id,
+            Some(scraper),
         );
     }
 
@@ -863,7 +866,7 @@ pub fn main_file_loop(
     db: Arc<RwLock<database::Main>>,
     ratelimiter_obj: Arc<Mutex<Ratelimiter>>,
     globalload: Arc<RwLock<GlobalLoad>>,
-    client: &Client,
+    client: Arc<RwLock<Client>>,
     jobstorage: Arc<RwLock<crate::jobs::Jobs>>,
     scraper: &sharedtypes::GlobalPluginScraper,
     worker_id: &usize,
@@ -917,6 +920,7 @@ pub fn main_file_loop(
                 file,
                 worker_id,
                 job_id,
+                scraper,
             ) {
                 None => return,
                 Some(id) => id,
@@ -953,6 +957,7 @@ pub fn main_file_loop(
                         file,
                         worker_id,
                         job_id,
+                        scraper,
                     ) {
                         None => return,
                         Some(id) => id,

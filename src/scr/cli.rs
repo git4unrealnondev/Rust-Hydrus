@@ -552,6 +552,7 @@ pub fn main(data: Arc<RwLock<database::Main>>, globalload: Arc<RwLock<GlobalLoad
                                 let _ = f.lock().unwrap().flush();
                                 *cnt.lock().unwrap() = 0;
                             }
+                            let client = &mut download::client_create();
                             if !Path::new(&lispa).exists() {
                                 println!("{}", &file.hash);
                                 if nsid.is_some() {
@@ -563,7 +564,6 @@ pub fn main(data: Arc<RwLock<database::Main>>, globalload: Arc<RwLock<GlobalLoad
                                             dat.name, fid
                                         ));
                                         if dat.namespace == nsid.unwrap() {
-                                            let client = download::client_create();
                                             let mut file = sharedtypes::FileObject {
                                                 source_url: Some(dat.name.clone()),
                                                 hash: sharedtypes::HashesSupported::Sha512(
@@ -573,15 +573,15 @@ pub fn main(data: Arc<RwLock<database::Main>>, globalload: Arc<RwLock<GlobalLoad
                                                 skip_if: Vec::new(),
                                             };
                                             download::dlfile_new(
-                                                &client,
+                                                client,
                                                 dbstore.clone(),
                                                 &mut file,
-                                                &data.location_get(),
                                                 None,
                                                 &ratelimiter_obj,
                                                 &dat.name.clone(),
                                                 &0,
                                                 &0,
+                                                None,
                                             );
                                         }
                                     }
@@ -606,7 +606,6 @@ pub fn main(data: Arc<RwLock<database::Main>>, globalload: Arc<RwLock<GlobalLoad
                                                 dat.name, fid
                                             ));
                                             if dat.namespace == nsid.unwrap() {
-                                                let client = download::client_create();
                                                 let mut file = sharedtypes::FileObject {
                                                     source_url: Some(dat.name.clone()),
                                                     hash: sharedtypes::HashesSupported::Sha512(
@@ -616,15 +615,15 @@ pub fn main(data: Arc<RwLock<database::Main>>, globalload: Arc<RwLock<GlobalLoad
                                                     skip_if: Vec::new(),
                                                 };
                                                 download::dlfile_new(
-                                                    &client,
+                                                    client,
                                                     dbstore.clone(),
                                                     &mut file,
-                                                    &data.location_get(),
                                                     None,
                                                     &ratelimiter_obj,
                                                     &dat.name.clone(),
                                                     &0,
                                                     &0,
+                                                    None,
                                                 );
                                             }
                                         }
