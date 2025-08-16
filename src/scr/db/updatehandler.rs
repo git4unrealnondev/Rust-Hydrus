@@ -668,4 +668,109 @@ impl Main {
         self.db_drop_table(&"Jobs_Old".to_string());
         self.db_version_set(6);
     }
+
+    pub fn db_update_six_to_seven(&mut self) {
+        logging::info_log(&"Backing up db this could be messy.".to_string());
+        self.backup_db();
+
+        if self.check_table_exists("Namespace_Old".to_string()) {
+            self.db_drop_table(&"Namespace_Old".to_string());
+        }
+
+        if self.check_table_exists("Parents_Old".to_string()) {
+            self.db_drop_table(&"Parents_Old".to_string());
+        }
+
+        if self.check_table_exists("Tags_Old".to_string()) {
+            self.db_drop_table(&"Tags_Old".to_string());
+        }
+
+        if self.check_table_exists("Namespace".into()) {
+            self.alter_table(&"Namespace".to_string(), &"Namespace_Old".to_string());
+
+            let keys = &vec_of_strings!("id", "name", "description");
+            let vals = &vec_of_strings!("INTEGER PRIMARY KEY", "TEXT NOT NULL", "TEXT");
+
+            self.table_create(&"Namespace".to_string(), keys, vals);
+
+            let conn = self._conn.lock().unwrap();
+
+            logging::info_log(&"Starting to process Namespace for DB V7 Upgrade".to_string());
+
+            let tag_sqlite_inp = "INSERT INTO Namespace (id, name, description) VALUES (?, ?, ?)";
+            let mut stmt = conn
+                .prepare("SELECT id, name, description FROM Namespace_Old")
+                .unwrap();
+            let mut rows = stmt.query([]).unwrap();
+            while let Some(row) = rows.next().unwrap() {
+                let id: usize = row.get(0).unwrap();
+                let name: String = row.get(1).unwrap();
+                let desc: String = row.get(2).unwrap();
+
+                logging::info_log(&format!("Adding Namespace: {}", &id));
+                conn.execute(tag_sqlite_inp, params![id, name, desc])
+                    .unwrap();
+            }
+        }
+        if self.check_table_exists("Parents".into()) {
+            self.alter_table(&"Parents".to_string(), &"Parents_Old".to_string());
+
+            let keys = &vec_of_strings!("id", "tag_id", "relate_tag_id", "limit_to");
+            let vals = &vec_of_strings!(
+                "INTEGER PRIMARY KEY",
+                "INTEGER NOT NULL",
+                "INTEGER NOT NULL",
+                "INTEGER"
+            );
+
+            self.table_create(&"Parents".to_string(), keys, vals);
+
+            let conn = self._conn.lock().unwrap();
+
+            logging::info_log(&"Starting to process Parents for DB V7 Upgrade".to_string());
+
+            let tag_sqlite_inp =
+                "INSERT INTO Parents (tag_id, relate_tag_id, limit_to) VALUES (?, ?, ?)";
+            let mut stmt = conn
+                .prepare("SELECT tag_id, relate_tag_id, limit_to FROM Parents_Old")
+                .unwrap();
+            let mut rows = stmt.query([]).unwrap();
+            while let Some(row) = rows.next().unwrap() {
+                let tagid: usize = row.get(0).unwrap();
+                let relatetagid: usize = row.get(1).unwrap();
+                let limitto: Option<usize> = row.get(2).unwrap();
+
+                conn.execute(tag_sqlite_inp, params![tagid, relatetagid, limitto])
+                    .unwrap();
+            }
+        }
+        if self.check_table_exists("Tags".into()) {
+            self.alter_table(&"Tags".to_string(), &"Tags_Old".to_string());
+            let keys = &vec_of_strings!("id", "name", "namespace");
+            let vals = &vec_of_strings!("INTEGER PRIMARY KEY", "TEXT NOT NULL", "INTEGER NOT NULL");
+
+            self.table_create(&"Tags".to_string(), keys, vals);
+            let conn = self._conn.lock().unwrap();
+
+            logging::info_log(&"Starting to process Tags for DB V7 Upgrade".to_string());
+
+            let tag_sqlite_inp = "INSERT INTO Tags (id, name, namespace) VALUES (?, ?, ?)";
+            let mut stmt = conn
+                .prepare("SELECT id, name, namespace FROM Tags_Old")
+                .unwrap();
+            let mut rows = stmt.query([]).unwrap();
+            while let Some(row) = rows.next().unwrap() {
+                let id: usize = row.get(0).unwrap();
+                let name: String = row.get(1).unwrap();
+                let namespace: usize = row.get(2).unwrap();
+
+                conn.execute(tag_sqlite_inp, params![id, name, namespace])
+                    .unwrap();
+            }
+        }
+        self.db_drop_table(&"Namespace_Old".to_string());
+        self.db_drop_table(&"Parents_Old".to_string());
+        self.db_drop_table(&"Tags_Old".to_string());
+        self.db_version_set(7);
+    }
 }

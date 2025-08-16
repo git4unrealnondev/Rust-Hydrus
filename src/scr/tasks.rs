@@ -116,8 +116,8 @@ pub fn import_files(
             ext_id,
             storage_id,
         });
-        let file_id = db.file_add(file, true);
-        let namespace_id = db.namespace_add(row.namespace, None, true);
+        let file_id = db.file_add(file);
+        let namespace_id = db.namespace_add(&row.namespace, &None);
         let tag_id = db.tag_add(&row.tag, namespace_id, true, Some(row.id));
         db.relationship_add(file_id.to_owned(), tag_id.to_owned(), true);
     }

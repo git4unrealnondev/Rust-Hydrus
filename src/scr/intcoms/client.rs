@@ -137,9 +137,9 @@ pub fn namespace_get(name: String) -> Option<usize> {
 
 /// See the database reference for this function. I'm a lazy turd just check it
 /// their
-pub fn namespace_put(name: String, description: Option<String>, addtodb: bool) -> usize {
+pub fn namespace_put(name: String, description: Option<String>) -> usize {
     init_data_request(&types::SupportedRequests::Database(
-        types::SupportedDBRequests::CreateNamespace(name, description, addtodb),
+        types::SupportedDBRequests::CreateNamespace(name, description),
     ))
 }
 

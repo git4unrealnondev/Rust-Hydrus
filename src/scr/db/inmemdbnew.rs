@@ -134,8 +134,10 @@ impl NewinMemDB {
         //dbg!(&self._file_name_id, &self._file_id_data);
         //pause();
         dbg!(&self._relationship_file_tag);
-
-        pause();
+        dbg!(&self._file_name_id);
+        dbg!(&self._tag_nns_id_data);
+        dbg!(&self._parents_tag_rel);
+        dbg!(&self._jobs_max);
     }
 
     /// Adds setting into internal DB. Updates setting if it doesn't exist.

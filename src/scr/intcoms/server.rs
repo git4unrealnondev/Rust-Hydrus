@@ -333,7 +333,7 @@ impl DbInteract {
             }
             types::SupportedDBRequests::GetJob(id) => {
                 let unwrappy = self._database.read().unwrap();
-                Self::option_to_bytes(unwrappy.jobs_get(&id))
+                Self::option_to_bytes(unwrappy.jobs_get(&id).as_ref())
             }
             types::SupportedDBRequests::ParentsPut(parent) => {
                 let mut unwrappy = self._database.write().unwrap();
@@ -341,7 +341,6 @@ impl DbInteract {
                     parent.tag_id,
                     parent.relate_tag_id,
                     parent.limit_to,
-                    true,
                 ))
             }
             types::SupportedDBRequests::ParentsGet((parentswitch, id)) => {
@@ -404,7 +403,7 @@ impl DbInteract {
             types::SupportedDBRequests::GetTagId(id) => {
                 let unwrappy = self._database.read().unwrap();
                 let tmep = unwrappy.tag_id_get(&id);
-                Self::option_to_bytes(tmep)
+                Self::option_to_bytes(tmep.as_ref())
             }
             types::SupportedDBRequests::Logging(log) => {
                 logging::info_log(&log);
@@ -475,23 +474,23 @@ impl DbInteract {
             types::SupportedDBRequests::GetTagName((name, namespace)) => {
                 let unwrappy = self._database.read().unwrap();
                 let tmep = unwrappy.tag_get_name(name, namespace);
-                Self::option_to_bytes(tmep)
+                Self::option_to_bytes(tmep.as_ref())
             }
             types::SupportedDBRequests::GetFileHash(name) => {
                 let unwrappy = self._database.read().unwrap();
                 let tmep = unwrappy.file_get_hash(&name);
-                Self::option_to_bytes(tmep)
+                Self::option_to_bytes(tmep.as_ref())
             }
-            types::SupportedDBRequests::CreateNamespace(name, description, addtodb) => {
+            types::SupportedDBRequests::CreateNamespace(name, description) => {
                 let mut unwrappy = self._database.write().unwrap();
-                let out = unwrappy.namespace_add(name, description, addtodb);
+                let out = unwrappy.namespace_add(&name, &description);
                 Self::data_size_to_b(&out)
             }
             types::SupportedDBRequests::GetNamespace(name) => {
                 let unwrappy = self._database.read().unwrap();
                 unwrappy.debugdb();
                 let tmep = unwrappy.namespace_get(&name);
-                Self::option_to_bytes(tmep)
+                Self::option_to_bytes(tmep.as_ref())
             }
             types::SupportedDBRequests::TestUsize() => {
                 let test: usize = 32;
@@ -500,7 +499,7 @@ impl DbInteract {
             types::SupportedDBRequests::GetNamespaceString(id) => {
                 let unwrappy = self._database.read().unwrap();
                 let tmep = unwrappy.namespace_get_string(&id);
-                Self::option_to_bytes(tmep)
+                Self::option_to_bytes(tmep.as_ref())
             }
             types::SupportedDBRequests::LoadTable(table) => {
                 let mut unwrappy = self._database.write().unwrap();

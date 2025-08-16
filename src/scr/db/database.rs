@@ -41,14 +41,14 @@ pub fn dbinit(dbpath: &String) -> Connection {
     Connection::open(dbpath).unwrap()
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub enum CacheType {
     // Default option. Will use in memory DB to make store cached data.
     InMemdb,
     // Not yet implmented will be used for using sqlite 3 inmemory db calls.
     InMemory,
     // Will be use to query the DB directly. No caching.
-    Bare(String),
+    Bare,
 }
 /// Holder of database self variables
 pub struct Main {
@@ -90,7 +90,7 @@ impl Main {
                     _dbcommitnum_static: Some(3000),
                     _tables_loaded: vec![],
                     _tables_loading: vec![],
-                    _cache: CacheType::Bare(file_path.to_string()),
+                    _cache: CacheType::Bare,
                     globalload: None,
                     localref: None,
                 };
@@ -157,6 +157,7 @@ impl Main {
             main.first_db();
             main.updatedb();
             main.db_commit_man_set();
+            main.load_caching();
         } else {
             // Database does exist.
             main.transaction_start();
@@ -164,6 +165,7 @@ impl Main {
                 "Database Exists: {} : Skipping creation.",
                 first_time_load_flag
             ));
+            main.load_caching();
         }
         main
     }
@@ -175,7 +177,52 @@ impl Main {
 
     /// Clears in memdb structures
     pub fn clear_cache(&mut self) {
-        self._inmemdb.clear_all();
+        match self._cache {
+            CacheType::Bare => {}
+            _ => {
+                self._inmemdb.clear_all();
+            }
+        }
+    }
+
+    ///
+    /// Loads the cache configuration
+    ///
+    pub fn load_caching(&mut self) {
+        let temp;
+
+        loop {
+            let cache = match self.settings_get_name(&"dbcachemode".into()) {
+                None => {
+                    self.setup_default_cache();
+                    self.settings_get_name(&"dbcachemode".into())
+                        .unwrap()
+                        .param
+                        .clone()
+                }
+                Some(setting) => setting.param.clone(),
+            };
+
+            if let Some(ref cache) = cache {
+                let cachemode = match cache.as_str() {
+                    "Bare" => Some(CacheType::Bare),
+                    "InMemdb" => Some(CacheType::InMemdb),
+                    "InMemory" => Some(CacheType::InMemory),
+                    _ => {
+                        self.setup_default_cache();
+                        None
+                    }
+                };
+                if let Some(cachemode) = cachemode {
+                    temp = cachemode;
+                    break;
+                }
+            } else {
+                self.setup_default_cache();
+            }
+        }
+
+        self._cache = temp
     }
 
     /// Backs up the DB file.
@@ -324,7 +371,7 @@ impl Main {
 
                 // New revision of the downloader adds the extension to the file downloaded.
                 // This will rename the file if it uses the old file ext
-                if let Some(ext_str) = self.extension_get_string(&file.ext_id) {
+                if let Some(ref ext_str) = self.extension_get_string(&file.ext_id) {
                     if Path::new(&out).with_extension(ext_str).exists() {
                         return Some(
                             Path::new(&out)
@@ -352,58 +399,61 @@ impl Main {
     ///
     pub fn add_dead_url(&mut self, url: &String) {
         self.add_dead_url_sql(url);
-        self.add_dead_url_internal(url.to_string());
-    }
-
-    fn add_dead_url_internal(&mut self, url: String) {
-        self._inmemdb.add_dead_source_url(url);
+        match self._cache {
+            CacheType::Bare => {}
+            _ => {
+                self._inmemdb.add_dead_source_url(url.to_string());
+            }
+        }
     }
 
     ///
     ///Checks if a url is dead
     ///
     pub fn check_dead_url(&self, url: &String) -> bool {
-        match self._inmemdb.does_dead_source_exist(url) {
-            true => {
-                return true;
-            }
-            false => {
-                let conn = self._conn.lock().unwrap();
-                conn.query_row(
-                    "SELECT id from dead_source_urls WHERE dead_url = ?",
-                    params![url],
-                    |row| Ok(row.get(0).unwrap_or(false)),
-                )
-                .unwrap_or(false)
-            }
+        match self._cache {
+            CacheType::Bare => self.does_dead_source_exist(url),
+            _ => match self._inmemdb.does_dead_source_exist(url) {
+                true => true,
+                // Need to check if we have a cache miss
+                false => self.does_dead_source_exist(url),
+            },
         }
-
-        /**/
     }
 
     /// Adds the job to the inmemdb
     pub fn jobs_add_new_todb(&mut self, job: sharedtypes::DbJobsObj) {
-        // let querya = query.split(' ').map(|s| s.to_string()).collect(); let wrap =
-        // jobs::JobsRef{};
-        self._inmemdb.jobref_new(job);
-        // self._inmemdb.jobref_new( site.to_string(), querya, current_time, time_offset,
-        // committype.clone(), );
+        match self._cache {
+            CacheType::Bare => {
+                self.jobs_add_sql(&job);
+            }
+            _ => {
+                self._inmemdb.jobref_new(job);
+            }
+        }
     }
 
-    // fn jobs_add_new_sql( &mut self, site: &String, query: &String, _time: &str,
-    // committype: &sharedtypes::CommitType, current_time: usize, time_offset: usize,
-    // jobtype: sharedtypes::DbJobType, ) { let inp = "INSERT INTO Jobs VALUES(?, ?,
-    // ?, ?, ?, ?)"; let _out = self._conn.lock().unwrap().borrow_mut().execute( inp,
-    // params![ current_time.to_string(), time_offset.to_string(), site, query,
-    // committype.to_string(), jobtype.to_string() ], ); self.db_commit_man(); }
-    /// Flips the status of if a job is running
-    pub fn jobs_flip_inmemdb(&mut self, id: &usize) -> Option<bool> {
-        self._inmemdb.jobref_flip_isrunning(id)
+    ///
+    /// Flips the running of a job by id
+    /// Returns the status of the job if it exists
+    ///
+    pub fn jobs_flip_running(&mut self, id: &usize) -> Option<bool> {
+        match self._cache {
+            CacheType::Bare => {
+                todo!("Bare implementation not implemineted");
+            }
+            _ => self._inmemdb.jobref_flip_isrunning(id),
+        }
     }
 
     /// Gets all running jobs in the db
     pub fn jobs_get_isrunning(&self) -> HashSet<&sharedtypes::DbJobsObj> {
-        self._inmemdb.jobref_get_isrunning()
+        match self._cache {
+            CacheType::Bare => {
+                todo!("Bare implementation not implemineted");
+            }
+            _ => self._inmemdb.jobref_get_isrunning(),
+        }
     }
 
     /// File Sanity Checker This will check that the files by id will have a matching
@@ -516,50 +566,72 @@ impl Main {
     }
 
     /// Wrapper
-    pub fn jobs_get_all(&self) -> &HashMap<usize, sharedtypes::DbJobsObj> {
+    pub fn jobs_get_all(&self) -> HashMap<usize, sharedtypes::DbJobsObj> {
         match &self._cache {
-            CacheType::InMemdb => self._inmemdb.jobs_get_all(),
-            CacheType::InMemory => {
-                todo!();
-            }
-            CacheType::Bare(_dbpath) => {
-                todo!();
-            }
+            CacheType::Bare => self.jobs_get_all_sql(),
+            _ => self._inmemdb.jobs_get_all().clone(),
         }
     }
 
     /// Pull job by id TODO NEEDS TO ADD IN PROPER POLLING FROM DB.
-    pub fn jobs_get(&self, id: &usize) -> Option<&sharedtypes::DbJobsObj> {
-        self._inmemdb.jobs_get(id)
+    pub fn jobs_get(&self, id: &usize) -> Option<sharedtypes::DbJobsObj> {
+        match self._cache {
+            CacheType::Bare => self.jobs_get_id_sql(id),
+            _ => self._inmemdb.jobs_get(id).cloned(),
+        }
     }
 
-    pub fn tag_id_get(&self, uid: &usize) -> Option<&sharedtypes::DbTagNNS> {
-        self._inmemdb.tags_get_data(uid)
+    ///
+    /// Gets a tag by id
+    ///
+    pub fn tag_id_get(&self, uid: &usize) -> Option<sharedtypes::DbTagNNS> {
+        match self._cache {
+            CacheType::Bare => self.tags_get_dbtagnns_sql(uid),
+            _ => self._inmemdb.tags_get_data(uid).cloned(),
+        }
     }
 
+    ///
+    ///Returns the max id of something inside of the db
+    ///
     pub fn tags_max_id(&self) -> usize {
-        self._inmemdb.tags_max_return()
+        match self._cache {
+            CacheType::Bare => self.tags_max_return_sql(),
+            _ => self._inmemdb.tags_max_return(),
+        }
     }
 
     ///
     /// Returns a list of loaded tag ids
     ///
     pub fn tags_get_list_id(&self) -> HashSet<usize> {
-        self._inmemdb.tags_get_list_id()
+        match self._cache {
+            CacheType::Bare => self.tags_get_id_list_sql(),
+            _ => self._inmemdb.tags_get_list_id(),
+        }
     }
 
     /// returns file id's based on relationships with a tag
     pub fn relationship_get_fileid(&self, tag: &usize) -> HashSet<usize> {
-        self._inmemdb.relationship_get_fileid(tag)
+        match self._cache {
+            CacheType::Bare => self.relationship_get_fileid_sql(tag),
+            _ => self._inmemdb.relationship_get_fileid(tag),
+        }
     }
 
-    pub fn relationship_get_one_fileid(&self, tag: &usize) -> Option<&usize> {
-        self._inmemdb.relationship_get_one_fileid(tag)
+    pub fn relationship_get_one_fileid(&self, tag: &usize) -> Option<usize> {
+        //self._inmemdb.relationship_get_one_fileid(tag)
+        let temp = self.relationship_get_fileid(tag);
+        let out = temp.iter().next();
+        out.copied()
     }
 
     /// Returns tagid's based on relationship with a fileid.
-    pub fn relationship_get_tagid(&self, tag: &usize) -> HashSet<usize> {
-        self._inmemdb.relationship_get_tagid(tag)
+    pub fn relationship_get_tagid(&self, file_id: &usize) -> HashSet<usize> {
+        match self._cache {
+            CacheType::Bare => self.relationship_get_tagid_sql(file_id),
+            _ => self._inmemdb.relationship_get_tagid(file_id),
+        }
     }
 
     pub fn settings_get_name(&self, name: &String) -> Option<&sharedtypes::DbSettingObj> {
@@ -567,8 +639,11 @@ impl Main {
     }
 
     /// Returns next jobid from _inmemdb
-    pub fn jobs_get_max(&self) -> &usize {
-        self._inmemdb.jobs_get_max()
+    pub fn jobs_get_max(&self) -> usize {
+        match self._cache {
+            CacheType::Bare => self.jobs_return_count_sql(),
+            _ => self._inmemdb.jobs_get_max().clone(),
+        }
     }
 
     /// Vacuums database. cleans everything.
@@ -701,9 +776,24 @@ impl Main {
             true,
         );
 
+        self.setup_default_cache();
+
         self.enclave_create_default_file_download(self.location_get());
 
         self.transaction_flush();
+    }
+
+    ///
+    /// Default caching option for the db
+    ///
+    fn setup_default_cache(&mut self) {
+        self.setting_add(
+            "dbcachemode".to_string(),
+            Some("The database caching options. Supports: Bare, InMemdb and InMemory".to_string()),
+            None,
+            Some("InMemdb".to_string()),
+            true,
+        );
     }
 
     ///
@@ -774,11 +864,10 @@ impl Main {
     /// Gets a default namespace id if it doesn't exist
     ///
     pub fn create_default_source_url_ns_id(&mut self) -> usize {
-        match self.namespace_get(&"source_url".to_string()).cloned() {
+        match self.namespace_get(&"source_url".to_string()) {
             None => self.namespace_add(
-                "source_url".to_string(),
-                Some("Source URL for a file.".to_string()),
-                true,
+                &"source_url".to_string(),
+                &Some("Source URL for a file.".to_string()),
             ),
             Some(id) => id,
         }
@@ -970,6 +1059,8 @@ impl Main {
                 self.db_update_four_to_five();
             } else if db_vers == 5 {
                 self.db_update_five_to_six();
+            } else if db_vers == 6 {
+                self.db_update_six_to_seven();
             }
             logging::info_log(&format!("Finished upgrade to V{}.", db_vers));
             self.transaction_flush();
@@ -1038,12 +1129,18 @@ impl Main {
 
     /// Adds file into Memdb instance.
     pub fn file_add_db(&mut self, file: sharedtypes::DbFileStorage) -> usize {
-        self._inmemdb.file_put(file)
+        match self._cache {
+            CacheType::Bare => self.file_add_sql(&file),
+            _ => self._inmemdb.file_put(file),
+        }
     }
 
     /// NOTE USES PASSED CONNECTION FROM FUNCTION NOT THE DB CONNECTION GETS ARROUND
     /// MEMROY SAFETY ISSUES WITH CLASSES IN RUST
     fn load_files(&mut self) {
+        if self._cache == CacheType::Bare {
+            return;
+        }
         self.load_extensions();
 
         logging::info_log(&"Database is Loading: Files".to_string());
@@ -1089,14 +1186,20 @@ impl Main {
     ///
     /// Gets an ID if a extension string exists
     ///
-    pub fn extension_get_id(&self, ext: &String) -> Option<&usize> {
-        self._inmemdb.extension_get_id(ext)
+    pub fn extension_get_id(&self, ext: &String) -> Option<usize> {
+        match self._cache {
+            CacheType::Bare => self.extension_get_id_sql(ext),
+            _ => self._inmemdb.extension_get_id(ext).copied(),
+        }
     }
     ///
     /// Gets an ID if a extension string exists
     ///
-    pub fn extension_get_string(&self, ext_id: &usize) -> Option<&String> {
-        self._inmemdb.extension_get_string(ext_id)
+    pub fn extension_get_string(&self, ext_id: &usize) -> Option<String> {
+        match self._cache {
+            CacheType::Bare => self.extension_get_string(ext_id),
+            _ => self._inmemdb.extension_get_string(ext_id).cloned(),
+        }
     }
 
     ///
@@ -1104,29 +1207,19 @@ impl Main {
     ///
     pub fn extension_put_string(&mut self, ext: &String) -> usize {
         match self.extension_get_id(ext) {
-            Some(id) => *id,
-            None => {
-                let conn = self._conn.lock().unwrap();
-                conn.execute(
-                    "insert or ignore into FileExtensions(extension) VALUES (?)",
-                    params![ext],
-                )
-                .unwrap();
-                let out: usize = conn
-                    .query_row(
-                        "select id from FileExtensions where extension = ?",
-                        params![ext],
-                        |row| row.get(0),
-                    )
-                    .unwrap();
-                out
-            }
+            Some(id) => self.extension_put_id_ext_sql(Some(id), ext),
+            None => self.extension_put_id_ext_sql(None, ext),
         }
     }
 
     /// Puts extension into mem cache
-    pub fn extension_load(&mut self, id: usize, extension: String) {
-        self._inmemdb.extension_load(id, extension);
+    pub fn extension_load(&mut self, id: usize, ext: String) {
+        match self._cache {
+            CacheType::Bare => {
+                self.extension_put_id_ext_sql(Some(id), &ext);
+            }
+            _ => self._inmemdb.extension_load(id, ext),
+        }
     }
 
     /// Loads extensions into db
@@ -1155,27 +1248,40 @@ impl Main {
 
     /// Same as above
     fn load_namespace(&mut self) {
+        match self._cache {
+            CacheType::Bare => return,
+            _ => {}
+        }
+
+        let mut nses: Vec<sharedtypes::DbNamespaceObj> = vec![];
         logging::info_log(&"Database is Loading: Namespace".to_string());
-        let binding = self._conn.clone();
-        let temp_test = binding.lock().unwrap();
-        let temp = temp_test.prepare("SELECT * FROM Namespace");
-        if let Ok(mut con) = temp {
-            let namespaces = con
-                .query_map([], |row| {
-                    Ok(sharedtypes::DbNamespaceObj {
-                        id: row.get(0).unwrap(),
-                        name: row.get(1).unwrap(),
-                        description: row.get(2).unwrap(),
+        {
+            let binding = self._conn.clone();
+            let temp_test = binding.lock().unwrap();
+            let temp = temp_test.prepare("SELECT * FROM Namespace");
+            if let Ok(mut con) = temp {
+                let namespaces = con
+                    .query_map([], |row| {
+                        Ok(sharedtypes::DbNamespaceObj {
+                            id: row.get(0).unwrap(),
+                            name: row.get(1).unwrap(),
+                            description: row.get(2).unwrap(),
+                        })
                     })
-                })
-                .unwrap();
-            for each in namespaces {
-                if let Ok(res) = each {
-                    self.namespace_add(res.name, res.description, false);
-                } else {
-                    error!("Bad Namespace cant load {:?}", each);
+                    .unwrap();
+                for each in namespaces {
+                    if let Ok(res) = each {
+                        nses.push(res);
+                    } else {
+                        error!("Bad Namespace cant load {:?}", each);
+                    }
                 }
             }
+        }
+
+        for ns in nses {
+            self.namespace_add_id_exists(ns);
+            //self.namespace_add(res.name, res.description);
         }
     }
 
@@ -1229,17 +1335,24 @@ impl Main {
     }
 
     /// Wrapper
-    pub fn file_get_hash(&self, hash: &String) -> Option<&usize> {
-        self._inmemdb.file_get_hash(hash)
+    pub fn file_get_hash(&self, hash: &String) -> Option<usize> {
+        match self._cache {
+            CacheType::Bare => self.file_get_id_sql(hash),
+            _ => self._inmemdb.file_get_hash(hash).copied(),
+        }
     }
 
     /// Wrapper
-    pub fn tag_get_name(&self, tag: String, namespace: usize) -> Option<&usize> {
+    pub fn tag_get_name(&self, tag: String, namespace: usize) -> Option<usize> {
         let tagobj = &sharedtypes::DbTagNNS {
             name: tag,
             namespace,
         };
-        self._inmemdb.tags_get_id(tagobj)
+
+        match self._cache {
+            CacheType::Bare => self.tags_get_id_sql(tagobj),
+            _ => self._inmemdb.tags_get_id(tagobj).copied(),
+        }
     }
 
     /// Loads _dbcommitnum from DB Used for determining when to flush to DB.
@@ -1257,13 +1370,19 @@ impl Main {
     }
 
     /// db get namespace wrapper
-    pub fn namespace_get(&self, inp: &String) -> Option<&usize> {
-        self._inmemdb.namespace_get(inp)
+    pub fn namespace_get(&self, namespace: &String) -> Option<usize> {
+        match self._cache {
+            CacheType::Bare => self.namespace_get_id_sql(namespace),
+            _ => self._inmemdb.namespace_get(namespace).copied(),
+        }
     }
 
     /// Returns namespace as a string from an ID returns None if it doesn't exist.
-    pub fn namespace_get_string(&self, inp: &usize) -> Option<&sharedtypes::DbNamespaceObj> {
-        self._inmemdb.namespace_id_get(inp)
+    pub fn namespace_get_string(&self, ns_id: &usize) -> Option<sharedtypes::DbNamespaceObj> {
+        match self._cache {
+            CacheType::Bare => self.namespace_get_namespaceobj_sql(ns_id),
+            _ => self._inmemdb.namespace_id_get(ns_id).cloned(),
+        }
     }
 
     ///
@@ -1276,19 +1395,17 @@ impl Main {
     }
 
     /// Adds a file into the db sqlite. Do this first.
-    pub fn file_add(&mut self, file: sharedtypes::DbFileStorage, addtodb: bool) -> usize {
+    pub fn file_add(&mut self, file: sharedtypes::DbFileStorage) -> usize {
         match file {
             sharedtypes::DbFileStorage::Exist(ref file_obj) => {
                 if self.file_get_hash(&file_obj.hash).is_none() {
                     let id = self.file_add_db(file.clone());
-                    if addtodb {
-                        self.file_add_sql(
-                            &Some(file_obj.hash.clone()),
-                            &Some(file_obj.ext_id),
-                            &Some(file_obj.storage_id),
-                            &file_obj.id,
-                        );
-                    }
+                    self.file_add_sql(&sharedtypes::DbFileStorage::Exist(sharedtypes::DbFileObj {
+                        id: file_obj.id,
+                        hash: file_obj.hash.clone(),
+                        ext_id: file_obj.ext_id,
+                        storage_id: file_obj.storage_id,
+                    }));
                     id
                 } else {
                     file_obj.id
@@ -1297,17 +1414,17 @@ impl Main {
             sharedtypes::DbFileStorage::NoIdExist(ref noid_obj) => {
                 if self.file_get_hash(&noid_obj.hash).is_none() {
                     let id = self.file_add_db(file.clone());
-                    if addtodb {
-                        self.file_add_sql(
-                            &Some(noid_obj.hash.clone()),
-                            &Some(noid_obj.ext_id),
-                            &Some(noid_obj.storage_id),
-                            &id,
-                        );
-                    }
+                    self.file_add_sql(&sharedtypes::DbFileStorage::NoIdExist(
+                        sharedtypes::DbFileObjNoId {
+                            hash: noid_obj.hash.clone(),
+                            ext_id: noid_obj.ext_id,
+                            storage_id: noid_obj.storage_id,
+                        },
+                    ));
+
                     id
                 } else {
-                    *self.file_get_hash(&noid_obj.hash).unwrap()
+                    self.file_get_hash(&noid_obj.hash).unwrap()
                 }
             }
             sharedtypes::DbFileStorage::NoExist(_) => {
@@ -1331,8 +1448,11 @@ impl Main {
 
     /// Wrapper for inmemdb function: file_get_id Returns info for file in Option
     // DO NOT USE UNLESS NECISSARY. LOG(n2) * 3
-    pub fn file_get_id(&self, fileid: &usize) -> Option<&sharedtypes::DbFileStorage> {
-        self._inmemdb.file_get_id(fileid)
+    pub fn file_get_id(&self, file_id: &usize) -> Option<sharedtypes::DbFileStorage> {
+        match self._cache {
+            CacheType::Bare => self.files_get_id_sql(file_id),
+            _ => self._inmemdb.file_get_id(file_id).cloned(),
+        }
     }
 
     /// Wrapper for inmemdb adding
@@ -1340,46 +1460,56 @@ impl Main {
         self._inmemdb.namespace_put(namespace_obj)
     }
 
+    ///
+    /// Adds a namespace into the db if it may or may not exist
+    ///
+    pub fn namespace_add(&mut self, name: &String, description: &Option<String>) -> usize {
+        if let Some(id) = self.namespace_get(name) {
+            return id;
+        }
+
+        match self._cache {
+            CacheType::Bare => {
+                let id = self.namespace_return_count_sql();
+                self.namespace_add_sql(name, description, &id);
+                id
+            }
+            _ => self.namespace_add_inmemdb(name.clone(), description.clone()),
+        }
+    }
+
+    ///
+    /// Adds a ns into the db if the id already exists
+    ///
+    pub fn namespace_add_id_exists(&mut self, ns: sharedtypes::DbNamespaceObj) -> usize {
+        match self._cache {
+            CacheType::Bare => {
+                self.namespace_add_sql(&ns.name, &ns.description, &ns.id);
+
+                self.namespace_get(&ns.name).unwrap()
+            }
+            _ => self.namespace_add_inmemdb(ns.name, ns.description),
+        }
+    }
+
     /// Adds namespace into DB. Returns the ID of the namespace.
-    pub fn namespace_add(
-        &mut self,
-        name: String,
-        description: Option<String>,
-        addtodb: bool,
-    ) -> usize {
+    fn namespace_add_inmemdb(&mut self, name: String, description: Option<String>) -> usize {
         let namespace_grab = self._inmemdb.namespace_get(&name);
         match namespace_grab {
             None => {}
             Some(id) => return id.to_owned(),
         }
+
         let ns_id = self._inmemdb.namespace_get_max();
         let ns = sharedtypes::DbNamespaceObj {
             id: ns_id,
             name,
             description,
         };
-        if addtodb && namespace_grab.is_none() {
+        if namespace_grab.is_none() {
             self.namespace_add_sql(&ns.name, &ns.description, &ns_id);
         }
         self.namespace_add_db(ns)
-    }
-
-    /// Wrapper that handles inserting parents info into DB.
-    fn parents_add_sql(&mut self, parent: &sharedtypes::DbParentsObj) {
-        let inp = "INSERT INTO Parents VALUES(?, ?, ?)";
-        let limit_to = match parent.limit_to {
-            None => &Null as &dyn ToSql,
-            Some(out) => &out.to_string(),
-        };
-        let _out = self._conn.borrow_mut().lock().unwrap().execute(
-            inp,
-            params![
-                parent.tag_id.to_string(),
-                parent.relate_tag_id.to_string(),
-                limit_to
-            ],
-        );
-        self.db_commit_man();
     }
 
     /// Wrapper for inmemdb adding
@@ -1393,7 +1523,6 @@ impl Main {
         tag_id: usize,
         relate_tag_id: usize,
         limit_to: Option<usize>,
-        addtodb: bool,
     ) -> usize {
         let par = sharedtypes::DbParentsObj {
             tag_id,
@@ -1401,7 +1530,7 @@ impl Main {
             limit_to,
         };
         let parent = self._inmemdb.parents_get(&par);
-        if addtodb & &parent.is_none() {
+        if parent.is_none() {
             self.parents_add_sql(&par);
         }
         self.parents_add_db(par)
@@ -1464,7 +1593,7 @@ impl Main {
         &mut self,
         namespace_obj: sharedtypes::GenericNamespaceObj,
     ) -> usize {
-        self.namespace_add(namespace_obj.name, namespace_obj.description, true)
+        self.namespace_add(&namespace_obj.name, &namespace_obj.description)
     }
 
     pub fn tag_add_tagobject(&mut self, tag: &sharedtypes::TagObject) -> usize {
@@ -1482,19 +1611,17 @@ impl Main {
     ) -> usize {
         //testing only please remove once the direct download plugin finishes
 
-        match id {
-            None => {
-                //if let Some(globalload) = &self.globalload {
-                //let globalload = globalload.clone();
-                /*globalload::plugin_on_tag(
-                    &mut globalload.write().unwrap(),
-                    self,
-                    tags,
-                    &namespace,
-                );*/
-                //}
+        let tag_id = match id {
+            None => self.tags_max_id(),
+            Some(id) => id,
+        };
 
-                // Do we have an ID coming in to add manually?
+        match self._cache {
+            CacheType::Bare => {
+                self.tag_add_sql(&tag_id, tags, &namespace);
+                tag_id
+            }
+            _ => {
                 let tagnns = sharedtypes::DbTagNNS {
                     name: tags.to_string(),
                     namespace,
@@ -1506,18 +1633,10 @@ impl Main {
                         if addtodb {
                             self.tag_add_sql(&tag_id, tags, &namespace);
                         }
-                        tag_id
+                        return tag_id;
                     }
                     Some(tag_id) => tag_id,
                 }
-            }
-            Some(_) => {
-                // We've got an ID coming in will check if it exists.
-                let tag_id = self.tag_add_db(tags, &namespace, id);
-                if addtodb {
-                    self.tag_add_sql(&tag_id, tags, &namespace);
-                }
-                tag_id
             }
         }
     }
@@ -1556,39 +1675,22 @@ impl Main {
 
     /// Updates the database for inmemdb and sql
     pub fn jobs_update_db(&mut self, jobs_obj: sharedtypes::DbJobsObj) {
-        if self._inmemdb.jobref_new(jobs_obj.clone()) {
-            self.jobs_update_by_id(&jobs_obj);
-        } else {
-            self.jobs_add_sql(&jobs_obj)
+        match self._cache {
+            CacheType::Bare => {
+                if self.jobs_get_id_sql(&jobs_obj.id.unwrap()).is_none() {
+                    self.jobs_add_sql(&jobs_obj)
+                } else {
+                    self.jobs_update_by_id(&jobs_obj);
+                }
+            }
+            _ => {
+                if self._inmemdb.jobref_new(jobs_obj.clone()) {
+                    self.jobs_update_by_id(&jobs_obj);
+                } else {
+                    self.jobs_add_sql(&jobs_obj)
+                }
+            }
         }
-    }
-
-    /// Adds a job to sql
-    fn jobs_add_sql(&mut self, data: &sharedtypes::DbJobsObj) {
-        dbg!(data);
-        let inp = "INSERT INTO Jobs VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
-        self._conn
-            .borrow_mut()
-            .lock()
-            .unwrap()
-            .execute(
-                inp,
-                params![
-                    data.id.unwrap().to_string(),
-                    data.time.to_string(),
-                    data.reptime.unwrap().to_string(),
-                    data.priority.to_string(),
-                    serde_json::to_string(&data.cachetime).unwrap(),
-                    serde_json::to_string(&data.cachechecktype).unwrap(),
-                    serde_json::to_string(&data.jobmanager).unwrap(),
-                    data.site,
-                    serde_json::to_string(&data.param).unwrap(),
-                    serde_json::to_string(&data.system_data).unwrap(),
-                    serde_json::to_string(&data.user_data).unwrap(),
-                ],
-            )
-            .unwrap();
-        self.db_commit_man();
     }
 
     /// Updates job by id
@@ -1635,7 +1737,7 @@ impl Main {
         jobsmanager: sharedtypes::DbJobsManager,
     ) -> usize {
         let id = match id {
-            None => *self.jobs_get_max(),
+            None => self.jobs_get_max(),
             Some(id) => id,
         };
 
@@ -1673,7 +1775,7 @@ impl Main {
     pub fn jobs_add_new(&mut self, dbjobsobj: sharedtypes::DbJobsObj) -> usize {
         let mut dbjobsobj = dbjobsobj.clone();
         let id = match dbjobsobj.id {
-            None => *self.jobs_get_max(),
+            None => self.jobs_get_max(),
             Some(id) => id,
         };
 
@@ -1834,7 +1936,7 @@ impl Main {
     fn search_for_namespace(&self, search: &sharedtypes::DbSearchObject) -> Option<usize> {
         match &search.namespace {
             None => search.namespace_id,
-            Some(id_string) => self.namespace_get(id_string).copied(),
+            Some(id_string) => self.namespace_get(id_string),
         }
     }
 
@@ -2142,24 +2244,6 @@ impl Main {
     pub fn condense_file_locations(&mut self) {
         self.load_table(&sharedtypes::LoadDBTable::Files);
 
-        /*let mut location_list = HashSet::new();
-        let mut bad_fids = HashSet::new();
-
-        info_log(&format!("Starting to correct bad fids"));
-        for fid in self.file_get_list_id().iter() {
-            if let Some(_) = self.get_file(fid) {
-                let location = self.file_get_id(fid).unwrap().location;
-                location_list.insert(location);
-            } else {
-                bad_fids.insert(fid);
-            }
-        }
-
-        for fid in bad_fids {
-            let file = self.file_get_id(fid);
-        }
-        info_log(&format!("Finished correcting bad fids"));*/
-
         let mut file_id_list: Vec<usize> = self.file_get_list_all().clone().into_keys().collect();
 
         file_id_list.par_sort_unstable();
@@ -2241,7 +2325,7 @@ impl Main {
                                 parent.relate_tag_id,
                                 parent.limit_to
                             ));
-                            self.parents_add(cnt, parent.relate_tag_id, parent.limit_to, true);
+                            self.parents_add(cnt, parent.relate_tag_id, parent.limit_to);
                         }
 
                         // Removes parent by ID and readds it with the new id
@@ -2255,7 +2339,7 @@ impl Main {
                                 cnt,
                                 parent.limit_to
                             ));
-                            self.parents_add(parent.tag_id, cnt, parent.limit_to, true);
+                            self.parents_add(parent.tag_id, cnt, parent.limit_to);
                         }
                         // Kinda hacky but nothing bad will happen if we have nothing in the limit
                         // slot
@@ -2269,7 +2353,7 @@ impl Main {
                                 parent.relate_tag_id,
                                 cnt
                             ));
-                            self.parents_add(parent.tag_id, parent.relate_tag_id, Some(cnt), true);
+                            self.parents_add(parent.tag_id, parent.relate_tag_id, Some(cnt));
                         }
 
                         self.tag_remove(&id);
@@ -2380,35 +2464,69 @@ impl Main {
 #[cfg(test)]
 pub(crate) mod test_database {
     use super::*;
-    use crate::VERS;
+    use crate::{client::relationship_get_tagid, VERS};
 
-    pub fn setup_default_db() -> Main {
-        let mut db = Main::new(None, VERS);
-        db.parents_add(1, 2, Some(3), true);
-        db.parents_add(2, 3, Some(4), true);
-        db.parents_add(3, 4, Some(5), true);
-        db.tag_add(&"test".to_string(), 1, false, None);
-        db.tag_add(&"test1".to_string(), 1, false, None);
-        db.tag_add(&"test2".to_string(), 1, false, None);
-        db
+    pub fn setup_default_db() -> Vec<Main> {
+        let mut out = Vec::new();
+        for cachetype in [CacheType::Bare, CacheType::InMemdb, CacheType::InMemory] {
+            let mut db = Main::new(None, VERS);
+            if &cachetype == &CacheType::Bare {
+                db._dbpath = Some("test1.db".into());
+            }
+            db._cache = cachetype;
+            db.parents_add(1, 2, Some(3), true);
+            db.parents_add(2, 3, Some(4), true);
+            db.parents_add(3, 4, Some(5), true);
+            db.tag_add(&"test".to_string(), 1, false, None);
+            db.tag_add(&"test1".to_string(), 1, false, None);
+            db.tag_add(&"test2".to_string(), 1, false, None);
+            out.push(db);
+        }
+        out
+    }
+
+    #[test]
+    fn db_relationship() {
+        for mut main in setup_default_db() {
+            main.relationship_add(0, 0, true);
+            assert_eq!(main.relationship_get_fileid(&0).len(), 1);
+            assert_eq!(main.relationship_get_tagid(&0).len(), 1);
+            let mut test_hashset: HashSet<usize> = HashSet::new();
+            test_hashset.insert(0);
+            assert_eq!(main.relationship_get_fileid(&0), test_hashset);
+            assert_eq!(main.relationship_get_tagid(&0), test_hashset);
+        }
     }
 
     #[test]
     fn db_parents_tagid_remove() {
-        let mut main = setup_default_db();
-        main.parents_tagid_remove(&1);
-        assert_eq!(main.parents_rel_get(&1), None);
-        assert_eq!(main.parents_tag_get(&1), None);
+        for mut main in setup_default_db() {
+            main.parents_tagid_remove(&1);
+            assert_eq!(main.parents_rel_get(&1), None);
+            assert_eq!(main.parents_tag_get(&1), None);
+        }
     }
 
     #[test]
     fn db_test_load_tags() {
-        let mut main = setup_default_db();
-        assert_eq!(main._inmemdb.tags_max_return(), 3);
-        let id = main.tag_add(&"test3".to_string(), 3, false, None);
-        assert_eq!(id, 3);
+        for mut main in setup_default_db() {
+            assert_eq!(main.tags_max_id(), 3);
+            let id = main.tag_add(&"test3".to_string(), 3, false, None);
+            assert_eq!(id, 3);
 
-        assert!(main.tag_id_get(&2).is_some());
+            assert!(main.tag_id_get(&2).is_some());
+        }
+    }
+
+    #[test]
+    fn db_namespace() {
+        for mut main in setup_default_db() {
+            main.namespace_add("test".into(), Some("woohoo".into()));
+            main.namespace_add("desc".into(), None);
+
+            assert!(main.namespace_get(&"test".into()).is_some());
+            assert!(main.namespace_get(&"desc".into()).is_some());
+        }
     }
 
     ///
@@ -2416,56 +2534,61 @@ pub(crate) mod test_database {
     ///
     #[test]
     fn db_jobs_check_id() {
-        let mut main = setup_default_db();
-        dbg!(main.jobs_get_max());
-        main.jobs_add(
-            None,
-            0,
-            0,
-            sharedtypes::DEFAULT_PRIORITY,
-            sharedtypes::DEFAULT_CACHETIME,
-            sharedtypes::DEFAULT_CACHECHECK,
-            "".to_string(),
-            vec![],
-            BTreeMap::new(),
-            BTreeMap::new(),
-            sharedtypes::DbJobsManager {
-                jobtype: sharedtypes::DbJobType::NoScrape,
-                recreation: None,
-            },
-        );
-        dbg!(main.jobs_get_max());
-        assert_eq!(main.jobs_get_max(), &1);
-        main.jobs_add(
-            None,
-            0,
-            0,
-            sharedtypes::DEFAULT_PRIORITY,
-            sharedtypes::DEFAULT_CACHETIME,
-            sharedtypes::DEFAULT_CACHECHECK,
-            "yeet".to_string(),
-            vec![],
-            BTreeMap::new(),
-            BTreeMap::new(),
-            sharedtypes::DbJobsManager {
-                jobtype: sharedtypes::DbJobType::NoScrape,
-                recreation: None,
-            },
-        );
-        dbg!(main.jobs_get_max());
-        dbg!(main.jobs_get_all());
-        assert_eq!(main.jobs_get_max(), &2);
-        assert!(main.jobs_get(&1).is_some());
+        for mut main in setup_default_db() {
+            dbg!(&main._cache);
+            dbg!(main.jobs_get_max());
+            main.jobs_add(
+                None,
+                0,
+                0,
+                sharedtypes::DEFAULT_PRIORITY,
+                sharedtypes::DEFAULT_CACHETIME,
+                sharedtypes::DEFAULT_CACHECHECK,
+                "".to_string(),
+                vec![],
+                BTreeMap::new(),
+                BTreeMap::new(),
+                sharedtypes::DbJobsManager {
+                    jobtype: sharedtypes::DbJobType::NoScrape,
+                    recreation: None,
+                },
+            );
+            dbg!(main.jobs_get_max());
+            dbg!(main.jobs_get(&0));
+            assert_eq!(main.jobs_get_max(), 1);
+            main.jobs_add(
+                None,
+                0,
+                0,
+                sharedtypes::DEFAULT_PRIORITY,
+                sharedtypes::DEFAULT_CACHETIME,
+                sharedtypes::DEFAULT_CACHECHECK,
+                "yeet".to_string(),
+                vec![],
+                BTreeMap::new(),
+                BTreeMap::new(),
+                sharedtypes::DbJobsManager {
+                    jobtype: sharedtypes::DbJobType::NoScrape,
+                    recreation: None,
+                },
+            );
+            dbg!(main.jobs_get_max());
+            dbg!(main.jobs_get_all());
+            assert_eq!(main.jobs_get_max(), 2);
+            assert!(main.jobs_get(&1).is_some());
+        }
     }
 
     #[test]
     fn db_dead_jobs() {
-        let mut main = Main::new(Some("test1.db".to_string()), VERS);
-        main.add_dead_url(&"test".to_string());
+        let mut mains = setup_default_db();
+        mains.push(Main::new(Some("test1.db".to_string()), VERS));
 
-        assert!(main.check_dead_url(&"test".to_string()));
-        assert!(!main.check_dead_url(&"Null".to_string()));
+        for mut main in mains {
+            main.add_dead_url(&"test".to_string());
 
-        std::fs::remove_file("test1.db").unwrap();
+            assert!(main.check_dead_url(&"test".to_string()));
+            assert!(!main.check_dead_url(&"Null".to_string()));
+        }
     }
 }

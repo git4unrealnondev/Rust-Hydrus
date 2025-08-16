@@ -12,7 +12,7 @@ use tracing_mutex::stdsync::{Mutex, RwLock};
 // use std::sync::{Arc, Mutex};
 use std::{thread, time};
 
-pub const VERS: usize = 6;
+pub const VERS: usize = 7;
 pub const DEFAULT_LOC_PLUGIN: &str = "plugins";
 pub const DEFAULT_LOC_SCRAPER: &str = "scrapers";
 extern crate ratelimit;
@@ -210,15 +210,6 @@ fn main() {
     // just determines if we have any loaded jobs
     jobmanager.write().unwrap().jobs_run_new();
 
-    /* //
-    // Loads the scrapers for their on_start function
-    for (scraper, libloading) in globalload_arc.lock().unwrap().library_get_raw() {
-        {
-            dbg!(scraper);
-            globalload::on_start(libloading, scraper);
-        }
-    }*/
-
     {
         for scraper in jobmanager.read().unwrap().job_scrapers_get() {
             threadhandler.startwork(
@@ -269,5 +260,6 @@ fn main() {
     let mills_fifty = time::Duration::from_millis(50);
     std::thread::sleep(mills_fifty);
     logging::info_log(&"UNLOADING".to_string());
+    arc.write().unwrap().debugdb();
     log::logger().flush();
 }

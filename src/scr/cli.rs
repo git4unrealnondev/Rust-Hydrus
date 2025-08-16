@@ -184,7 +184,7 @@ pub fn main(data: Arc<RwLock<database::Main>>, globalload: Arc<RwLock<GlobalLoad
                 let mut data = data.write().unwrap();
                 data.load_table(&sharedtypes::LoadDBTable::Parents);
                 data.load_table(&sharedtypes::LoadDBTable::Tags);
-                match data.tag_get_name(parent.tag.clone(), parent.namespace) {
+                match &data.tag_get_name(parent.tag.clone(), parent.namespace) {
                     None => {
                         dbg!("Cannot find tag.");
                     }
@@ -248,7 +248,7 @@ pub fn main(data: Arc<RwLock<database::Main>>, globalload: Arc<RwLock<GlobalLoad
                 data.load_table(&sharedtypes::LoadDBTable::All);
                 let nsid = data.namespace_get(&tag.namespace);
                 if let Some(nsid) = nsid {
-                    let tid = data.tag_get_name(tag.tag.clone(), *nsid);
+                    let tid = &data.tag_get_name(tag.tag.clone(), nsid);
                     if let Some(tid) = tid {
                         let fids = data.relationship_get_fileid(tid);
 
@@ -279,7 +279,7 @@ pub fn main(data: Arc<RwLock<database::Main>>, globalload: Arc<RwLock<GlobalLoad
                         println!("Cannot find hash in db: {}", &hash.hash);
                     }
                     Some(fid) => {
-                        let hstags = data.relationship_get_tagid(fid);
+                        let hstags = data.relationship_get_tagid(&fid);
                         if hstags.is_empty() {
                             println!("Cannot find any loaded relationships for fileid: {}", &fid);
                         } else {
@@ -524,7 +524,7 @@ pub fn main(data: Arc<RwLock<database::Main>>, globalload: Arc<RwLock<GlobalLoad
                         {
                             let nso = data.namespace_get(&"source_url".to_owned());
                             if let Some(ns) = nso {
-                                nsid = Some(*ns);
+                                nsid = Some(ns);
                             }
                         }
 
@@ -650,8 +650,7 @@ pub fn main(data: Arc<RwLock<database::Main>>, globalload: Arc<RwLock<GlobalLoad
                         let ns_id = match db_n_rmv {
                             cli_structs::NamespaceInfo::NamespaceString(ns) => {
                                 data.load_table(&sharedtypes::LoadDBTable::Namespace);
-                                let db_id = match data.namespace_get(&ns.namespace_string).cloned()
-                                {
+                                let db_id = match data.namespace_get(&ns.namespace_string) {
                                     None => {
                                         logging::info_log(&format!(
                                             "Cannot find the tasks remove string in namespace {}",
@@ -689,8 +688,7 @@ pub fn main(data: Arc<RwLock<database::Main>>, globalload: Arc<RwLock<GlobalLoad
                         let ns_id = match db_rmv {
                             cli_structs::NamespaceInfo::NamespaceString(ns) => {
                                 data.load_table(&sharedtypes::LoadDBTable::Namespace);
-                                let db_id = match data.namespace_get(&ns.namespace_string).cloned()
-                                {
+                                let db_id = match data.namespace_get(&ns.namespace_string) {
                                     None => {
                                         logging::info_log(&format!(
                                             "Cannot find the tasks remove string in namespace {}",

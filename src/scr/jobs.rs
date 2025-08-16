@@ -12,7 +12,7 @@ use crate::RwLock;
 ///
 /// Holds the previously seen jobs
 ///
-#[derive(Debug, Hash, PartialEq, Eq)]
+#[derive(Debug, Hash, PartialEq, Eq, Clone)]
 struct PreviouslySeenObj {
     site: String,
     params: Vec<sharedtypes::ScraperParam>,
@@ -20,6 +20,7 @@ struct PreviouslySeenObj {
     reptime: Option<usize>,
 }
 
+#[derive(Clone)]
 pub struct Jobs {
     db: Arc<RwLock<database::Main>>,
     site_job: HashMap<sharedtypes::GlobalPluginScraper, HashSet<sharedtypes::DbJobsObj>>,
@@ -331,11 +332,15 @@ mod tests {
     ///
     /// Creates a default job obj to use
     ///
-    pub fn create_default() -> Jobs {
+    pub fn create_default() -> Vec<Jobs> {
+        let mut out = Vec::new();
         let dsb = test_database::setup_default_db();
-        let db = Arc::new(RwLock::new(dsb));
+        for db in dsb {
+            let db = Arc::new(RwLock::new(db));
 
-        Jobs::new(db)
+            out.push(Jobs::new(db));
+        }
+        out
     }
 
     ///
@@ -370,53 +375,54 @@ mod tests {
 
     #[test]
     fn insert_duplicate_job() {
-        let mut job = create_default();
-        let globalload = get_globalload(job.db.clone(), Arc::new(RwLock::new(create_default())));
+        for mut job in create_default() {
+            let globalload = get_globalload(job.db.clone(), Arc::new(RwLock::new(job.clone())));
 
-        job.jobs_load(globalload);
-        let mut scraper = sharedtypes::return_default_globalpluginparser();
-        scraper.storage_type = Some(sharedtypes::ScraperOrPlugin::Scraper(
-            sharedtypes::ScraperInfo {
-                ratelimit: (1, Duration::from_secs(1)),
-                sites: vec!["Nah".to_string()],
-                priority: DEFAULT_PRIORITY,
-                num_threads: None,
-            },
-        ));
+            job.jobs_load(globalload);
+            let mut scraper = sharedtypes::return_default_globalpluginparser();
+            scraper.storage_type = Some(sharedtypes::ScraperOrPlugin::Scraper(
+                sharedtypes::ScraperInfo {
+                    ratelimit: (1, Duration::from_secs(1)),
+                    sites: vec!["Nah".to_string()],
+                    priority: DEFAULT_PRIORITY,
+                    num_threads: None,
+                },
+            ));
 
-        let dbjobsobj = return_dbjobsobj();
-        job.jobs_add(scraper.clone(), dbjobsobj.clone());
-        job.jobs_add(scraper.clone(), dbjobsobj);
-        assert_eq!(job.site_job.get(&scraper).unwrap().len(), 1);
-        assert_eq!(job.previously_seen.get(&scraper).unwrap().len(), 1);
+            let dbjobsobj = return_dbjobsobj();
+            job.jobs_add(scraper.clone(), dbjobsobj.clone());
+            job.jobs_add(scraper.clone(), dbjobsobj);
+            assert_eq!(job.site_job.get(&scraper).unwrap().len(), 1);
+            assert_eq!(job.previously_seen.get(&scraper).unwrap().len(), 1);
 
-        assert_eq!(job.jobs_get(&scraper).len(), 1);
+            assert_eq!(job.jobs_get(&scraper).len(), 1);
+        }
     }
     #[test]
     fn jobs_remove_job() {
-        let mut job = create_default();
+        for mut job in create_default() {
+            let globalload = get_globalload(job.db.clone(), Arc::new(RwLock::new(job.clone())));
+            job.jobs_load(globalload);
+            let mut scraper = sharedtypes::return_default_globalpluginparser();
+            scraper.storage_type = Some(sharedtypes::ScraperOrPlugin::Scraper(
+                sharedtypes::ScraperInfo {
+                    ratelimit: (1, Duration::from_secs(1)),
+                    sites: vec!["Nah".to_string()],
+                    priority: DEFAULT_PRIORITY,
+                    num_threads: None,
+                },
+            ));
 
-        let globalload = get_globalload(job.db.clone(), Arc::new(RwLock::new(create_default())));
-        job.jobs_load(globalload);
-        let mut scraper = sharedtypes::return_default_globalpluginparser();
-        scraper.storage_type = Some(sharedtypes::ScraperOrPlugin::Scraper(
-            sharedtypes::ScraperInfo {
-                ratelimit: (1, Duration::from_secs(1)),
-                sites: vec!["Nah".to_string()],
-                priority: DEFAULT_PRIORITY,
-                num_threads: None,
-            },
-        ));
+            let dbjobsobj = return_dbjobsobj();
+            job.jobs_add(scraper.clone(), dbjobsobj.clone());
+            job.debug();
+            assert_eq!(job.site_job.get(&scraper).unwrap().len(), 1);
+            assert_eq!(job.previously_seen.get(&scraper).unwrap().len(), 1);
+            job.jobs_remove_dbjob(&scraper, &dbjobsobj, &0);
 
-        let dbjobsobj = return_dbjobsobj();
-        job.jobs_add(scraper.clone(), dbjobsobj.clone());
-        job.debug();
-        assert_eq!(job.site_job.get(&scraper).unwrap().len(), 1);
-        assert_eq!(job.previously_seen.get(&scraper).unwrap().len(), 1);
-        job.jobs_remove_dbjob(&scraper, &dbjobsobj, &0);
-
-        let unwrappy = job.db.read().unwrap();
-        assert_eq!(unwrappy.jobs_get_all().keys().len(), 0);
-        assert_eq!(job.site_job.get(&scraper).unwrap().len(), 0);
+            let unwrappy = job.db.read().unwrap();
+            assert_eq!(unwrappy.jobs_get_all().keys().len(), 0);
+            assert_eq!(job.site_job.get(&scraper).unwrap().len(), 0);
+        }
     }
 }

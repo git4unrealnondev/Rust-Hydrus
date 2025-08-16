@@ -233,7 +233,7 @@ impl Main {
             ext_id,
             storage_id,
         });
-        let fileid = self.file_add(filestorage, true);
+        let fileid = self.file_add(filestorage);
         if let Some(source_url) = source_url {
             let tagid = self.tag_add(source_url, source_url_ns_id, true, None);
             self.relationship_add(fileid, tagid, true);

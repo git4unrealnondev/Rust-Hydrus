@@ -72,7 +72,7 @@ pub enum SupportedDBRequests {
     GetFileExt(usize),
     GetFileHash(String),
     GetNamespace(String),
-    CreateNamespace(String, Option<String>, bool),
+    CreateNamespace(String, Option<String>),
     GetNamespaceTagIDs(usize),
     GetNamespaceString(usize),
     SettingsGetName(String),

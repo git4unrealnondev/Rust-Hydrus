@@ -540,11 +540,8 @@ pub fn parse_tags(
             let tag_id;
             {
                 let mut unwrappy = db.write().unwrap();
-                namespace_id = unwrappy.namespace_add(
-                    tag.namespace.name.clone(),
-                    tag.namespace.description.clone(),
-                    true,
-                );
+                namespace_id =
+                    unwrappy.namespace_add(&tag.namespace.name, &tag.namespace.description);
                 tag_id = unwrappy.tag_add(&tag.tag, namespace_id, true, None);
             }
             globalload::plugin_on_tag(manager, db.clone(), &tag.tag, &namespace_id);
@@ -555,25 +552,19 @@ pub fn parse_tags(
                 }
                 Some(relate) => {
                     let mut unwrappy = db.write().unwrap();
-                    let relate_ns_id = unwrappy.namespace_add(
-                        relate.namespace.name.clone(),
-                        relate.namespace.description.clone(),
-                        true,
-                    );
+                    let relate_ns_id = unwrappy
+                        .namespace_add(&relate.namespace.name, &relate.namespace.description);
                     let limit_to = match &relate.limit_to {
                         None => None,
                         Some(tag) => {
-                            let namespace_id = unwrappy.namespace_add(
-                                tag.namespace.name.clone(),
-                                tag.namespace.description.clone(),
-                                true,
-                            );
+                            let namespace_id = unwrappy
+                                .namespace_add(&tag.namespace.name, &tag.namespace.description);
                             let tid = unwrappy.tag_add(&tag.tag, namespace_id, true, None);
                             Some(tid)
                         }
                     };
                     let relate_tag_id = unwrappy.tag_add(&relate.tag, relate_ns_id, true, None);
-                    unwrappy.parents_add(tag_id, relate_tag_id, limit_to, true);
+                    unwrappy.parents_add(tag_id, relate_tag_id, limit_to);
                 }
             }
             match file_id {
@@ -604,10 +595,10 @@ pub fn parse_tags(
                     )) => {
                         let mut cnt = 0;
                         let unwrappy = db.read().unwrap();
-                        if let Some(nidf) = unwrappy.namespace_get(&namespace_filter.name) {
-                            if let Some(nid) = unwrappy.namespace_get(&unique_tag.namespace.name) {
+                        if let Some(nidf) = &unwrappy.namespace_get(&namespace_filter.name) {
+                            if let Some(nid) = &unwrappy.namespace_get(&unique_tag.namespace.name) {
                                 if let Some(tid) =
-                                    unwrappy.tag_get_name(unique_tag.tag.clone(), *nid)
+                                    &unwrappy.tag_get_name(unique_tag.tag.clone(), *nid)
                                 {
                                     let fids = unwrappy.relationship_get_fileid(tid);
                                     if fids.len() == 1 {
@@ -649,7 +640,7 @@ pub fn parse_tags(
                             }
                             Some(id) => id,
                         };
-                        match unwrappy.tag_get_name(taginfo.tag.clone(), *id) {
+                        match &unwrappy.tag_get_name(taginfo.tag.clone(), id) {
                             None => {
                                 println!("WillDownload: {}", taginfo.tag);
                                 url_return.insert(jobscraped.clone());
@@ -741,7 +732,7 @@ fn download_add_to_db(
                 ext_id,
                 storage_id,
             });
-            let fileid = unwrappydb.file_add(file, true);
+            let fileid = unwrappydb.file_add(file);
             let source_url_ns_id = unwrappydb.create_default_source_url_ns_id();
             let tagid = unwrappydb.tag_add(source, source_url_ns_id, true, None);
             unwrappydb.relationship_add(fileid, tagid, true);
@@ -813,9 +804,9 @@ fn parse_skipif(
         sharedtypes::SkipIf::FileNamespaceNumber((unique_tag, namespace_filter, filter_number)) => {
             let unwrappydb = db.read().unwrap();
             let mut cnt = 0;
-            if let Some(nidf) = unwrappydb.namespace_get(&namespace_filter.name) {
+            if let Some(nidf) = &unwrappydb.namespace_get(&namespace_filter.name) {
                 if let Some(nid) = unwrappydb.namespace_get(&unique_tag.namespace.name) {
-                    if let Some(tid) = unwrappydb.tag_get_name(unique_tag.tag.clone(), *nid) {
+                    if let Some(tid) = &unwrappydb.tag_get_name(unique_tag.tag.clone(), nid) {
                         let fids = unwrappydb.relationship_get_fileid(tid);
                         if fids.len() == 1 {
                             let fid = fids.iter().next().unwrap();
@@ -844,10 +835,7 @@ fn parse_skipif(
         sharedtypes::SkipIf::FileTagRelationship(tag) => {
             let unwrappydb = db.read().unwrap();
             if let Some(nsid) = unwrappydb.namespace_get(&tag.namespace.name) {
-                if unwrappydb
-                    .tag_get_name(tag.tag.to_string(), *nsid)
-                    .is_some()
-                {
+                if unwrappydb.tag_get_name(tag.tag.to_string(), nsid).is_some() {
                     info_log(&format!(
                         "Worker: {worker_id} JobId: {job_id} -- Skipping file: {} Due to skip tag {} already existing in Tags Table.",
                         file_url_source, tag.tag
@@ -902,9 +890,7 @@ pub fn main_file_loop(
     let url_tag;
     {
         let unwrappydb = db.read().unwrap();
-        url_tag = unwrappydb
-            .tag_get_name(source.clone(), source_url_id)
-            .cloned();
+        url_tag = unwrappydb.tag_get_name(source.clone(), source_url_id);
     };
 
     // Get's the hash & file ext for the file.
@@ -931,7 +917,7 @@ pub fn main_file_loop(
             {
                 // We've already got a valid relationship
                 let unwrappydb = &mut db.read().unwrap();
-                file_id = unwrappydb.relationship_get_one_fileid(&url_id).copied();
+                file_id = unwrappydb.relationship_get_one_fileid(&url_id);
                 if let Some(fid) = file_id {
                     unwrappydb.file_get_id(&fid).unwrap();
                 }

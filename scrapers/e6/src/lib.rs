@@ -976,7 +976,6 @@ pub fn db_upgrade_call_3(site: &Site) {
         None => client::namespace_put(
             nsobjplg(&NsIdent::PoolId, site).name,
             nsobjplg(&NsIdent::PoolId, site).description,
-            true,
         ),
     };
     // Gets namespace id from poolid
@@ -986,7 +985,6 @@ pub fn db_upgrade_call_3(site: &Site) {
         None => client::namespace_put(
             nsobjplg(&NsIdent::PoolPosition, site).name,
             nsobjplg(&NsIdent::PoolPosition, site).description,
-            true,
         ),
     };
 
@@ -996,7 +994,6 @@ pub fn db_upgrade_call_3(site: &Site) {
         None => client::namespace_put(
             nsobjplg(&NsIdent::FileId, site).name,
             nsobjplg(&NsIdent::FileId, site).description,
-            true,
         ),
     }; // Gets e6's parent ids from db
     let parent_nsid = match client::namespace_get(nsobjplg(&NsIdent::Parent, site).name) {
@@ -1004,7 +1001,6 @@ pub fn db_upgrade_call_3(site: &Site) {
         None => client::namespace_put(
             nsobjplg(&NsIdent::Parent, site).name,
             nsobjplg(&NsIdent::Parent, site).description,
-            true,
         ),
     }; // Gets e6's children id's from db
     let children_nsid = match client::namespace_get(nsobjplg(&NsIdent::Children, site).name) {
@@ -1012,7 +1008,6 @@ pub fn db_upgrade_call_3(site: &Site) {
         None => client::namespace_put(
             nsobjplg(&NsIdent::Children, site).name,
             nsobjplg(&NsIdent::Children, site).description,
-            true,
         ),
     };
 
@@ -1021,7 +1016,7 @@ pub fn db_upgrade_call_3(site: &Site) {
     // Gets namespace id from source urls ensures that we're only working on e621 files
     let sourceurl_nsid = match client::namespace_get("source_url".to_string()) {
         Some(id) => id,
-        None => client::namespace_put("source_url".to_string(), None, true),
+        None => client::namespace_put("source_url".to_string(), None),
     };
 
     // Loads all tagid's that are attached to the e621 sources
@@ -1311,7 +1306,7 @@ pub fn on_start(site_struct: &sharedtypes::GlobalPluginScraper) {
         for (nsname, ref nsident, ref mut id) in legacy_ns.iter_mut() {
             let nso = nsobjplg(&nsident, &site);
             if client::namespace_get(nsname.to_string()).is_some() {
-                *id = Some(client::namespace_put(nso.name, nso.description, true));
+                *id = Some(client::namespace_put(nso.name, nso.description));
             }
         }
 

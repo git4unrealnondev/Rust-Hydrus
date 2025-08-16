@@ -157,7 +157,7 @@ pub fn parse_file(
                     None,
                     enclave::DEFAULT_PUT_DISK,
                 );
-                fileid = unwrappy.file_get_hash(&sha512hash).copied();
+                fileid = unwrappy.file_get_hash(&sha512hash);
             }
 
             // imports all tags onto the file that we dl'ed
@@ -201,7 +201,7 @@ pub fn parse_file(
                         None,
                         enclave::DEFAULT_PUT_DISK,
                     );
-                    subfileid = unwrappy.file_get_hash(&sub_sha512hash).copied();
+                    subfileid = unwrappy.file_get_hash(&sub_sha512hash);
                 }
                 // imports all tags onto the file that we dl'ed
                 for tag in tags.iter() {

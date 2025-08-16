@@ -503,7 +503,7 @@ fn parse_plugin_output_andmain(
                         for namespace in temp {
                             // IF Valid ID && Name && Description info are valid then we have a valid namespace id to pull
                             let mut unwrappy = db.write().unwrap();
-                            unwrappy.namespace_add(namespace.name, namespace.description, true);
+                            unwrappy.namespace_add(&namespace.name, &namespace.description);
                         }
                     }
                     if let Some(temp) = names.file {
@@ -532,7 +532,7 @@ fn parse_plugin_output_andmain(
                                         storage_id,
                                     },
                                 );
-                                unwrappy.file_add(file, true);
+                                unwrappy.file_add(file);
                             }
                         }
                     }
@@ -541,7 +541,7 @@ fn parse_plugin_output_andmain(
                             let namespace_id;
                             {
                                 let unwrappy = db.read().unwrap();
-                                namespace_id = unwrappy.namespace_get(&tags.namespace).cloned();
+                                namespace_id = unwrappy.namespace_get(&tags.namespace);
                             }
                             //match namespace_id {}
                             if tags.parents.is_none() && namespace_id.is_some() {
@@ -604,14 +604,12 @@ fn parse_plugin_output_andmain(
                         {
                             let unwrappy = db.read().unwrap();
                             for relations in temp {
-                                let file_id = unwrappy.file_get_hash(&relations.file_hash).cloned();
+                                let file_id = unwrappy.file_get_hash(&relations.file_hash);
                                 let namespace_id = unwrappy.namespace_get(&relations.tag_namespace);
-                                let tag_id = unwrappy
-                                    .tag_get_name(
-                                        relations.tag_name.clone(),
-                                        *namespace_id.unwrap(),
-                                    )
-                                    .cloned();
+                                let tag_id = unwrappy.tag_get_name(
+                                    relations.tag_name.clone(),
+                                    namespace_id.unwrap(),
+                                );
                                 temp_vec.push((file_id, tag_id));
                                 /*println!(
                                     "plugins356 relating: file id {:?} to {:?}",
@@ -1139,12 +1137,12 @@ impl GlobalLoad {
                         let mut ns_not_u = Vec::new();
                         for ns in ns {
                             if let Some(nsid) = unwrappy.namespace_get(ns) {
-                                ns_u.push(*nsid);
+                                ns_u.push(nsid);
                             }
                         }
                         for ns in not_ns {
                             if let Some(nsid) = unwrappy.namespace_get(ns) {
-                                ns_not_u.push(*nsid);
+                                ns_not_u.push(nsid);
                             }
                         }
                         let searchtype = match searchtype {

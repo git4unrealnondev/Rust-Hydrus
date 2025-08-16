@@ -1,15 +1,172 @@
+use crate::database::CacheType;
 use crate::database::Main;
 use crate::error;
 use crate::logging;
 use crate::sharedtypes;
 use rusqlite::params;
+use rusqlite::types::Null;
 use rusqlite::OptionalExtension;
+use rusqlite::ToSql;
 use std::borrow::BorrowMut;
+use std::collections::HashMap;
+use std::collections::HashSet;
 impl Main {
+    ///
+    /// Gets all jobs from the sql tables
+    ///
+    pub fn jobs_get_all_sql(&self) -> HashMap<usize, sharedtypes::DbJobsObj> {
+        let mut out = HashMap::new();
+        let max_jobs = self.jobs_return_count_sql();
+
+        for job_id in 0..max_jobs {
+            if let Some(job) = self.jobs_get_id_sql(&job_id) {
+                out.insert(job_id, job.clone());
+            }
+        }
+
+        out
+    }
+
+    ///
+    /// Returns the total count of the jobs table
+    ///
+    pub fn jobs_return_count_sql(&self) -> usize {
+        let conn = self._conn.lock().unwrap();
+        conn.query_row("SELECT COUNT(*) FROM Jobs", params![], |row| row.get(0))
+            .unwrap_or(0)
+    }
+    ///
+    /// Returns the total count of the namespace table
+    ///
+    pub fn namespace_return_count_sql(&self) -> usize {
+        let conn = self._conn.lock().unwrap();
+        conn.query_row("SELECT COUNT(*) FROM Namespace", params![], |row| {
+            row.get(0)
+        })
+        .unwrap_or(0)
+    }
+
+    ///
+    /// Get file if it exists by id
+    ///
+    pub fn files_get_id_sql(&self, file_id: &usize) -> Option<sharedtypes::DbFileStorage> {
+        let conn = self._conn.lock().unwrap();
+        let inp = "SELECT * FROM File where id = ?";
+        conn.query_row(inp, params![file_id], |row| {
+            let id = row.get(0).unwrap();
+            let hash = row.get(1).unwrap();
+            let ext_id = row.get(2).unwrap();
+            let storage_id = row.get(3).unwrap_or(sharedtypes::DEFAULT_PRIORITY);
+            Ok(Some(sharedtypes::DbFileStorage::Exist(
+                sharedtypes::DbFileObj {
+                    id,
+                    hash,
+                    ext_id,
+                    storage_id,
+                },
+            )))
+        })
+        .unwrap_or(None)
+    }
+
+    ///
+    /// Gets a job by id
+    ///
+    pub fn jobs_get_id_sql(&self, job_id: &usize) -> Option<sharedtypes::DbJobsObj> {
+        let inp = "SELECT * FROM Jobs WHERE id = ?";
+        let conn = self._conn.lock().unwrap();
+        conn.query_row(inp, params![job_id], |row| {
+            let id = row.get(0).unwrap();
+            let time = row.get(1).unwrap();
+            let reptime = row.get(2).unwrap();
+            let priority = row.get(3).unwrap_or(sharedtypes::DEFAULT_PRIORITY);
+            let cachetime = row.get(4).unwrap_or_default();
+            let cachechecktype: String = row.get(5).unwrap();
+            let manager: String = row.get(6).unwrap();
+            let man = serde_json::from_str(&manager).unwrap();
+            let site = row.get(7).unwrap();
+            let param: String = row.get(8).unwrap();
+            let system_data_string: String = row.get(9).unwrap();
+            let user_data_string: String = row.get(10).unwrap();
+            let system_data = serde_json::from_str(&system_data_string).unwrap();
+            let user_data = serde_json::from_str(&user_data_string).unwrap();
+            Ok(Some(sharedtypes::DbJobsObj {
+                id,
+                time,
+                reptime,
+                priority,
+                cachetime,
+                cachechecktype: serde_json::from_str(&cachechecktype).unwrap(),
+                site,
+                param: serde_json::from_str(&param).unwrap(),
+                jobmanager: man,
+                isrunning: false,
+                user_data,
+                system_data,
+            }))
+        })
+        .unwrap_or(None)
+    }
+
+    /// Adds a job to sql
+    pub fn jobs_add_sql(&mut self, data: &sharedtypes::DbJobsObj) {
+        let inp = "INSERT INTO Jobs VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        self._conn
+            .borrow_mut()
+            .lock()
+            .unwrap()
+            .execute(
+                inp,
+                params![
+                    data.id.unwrap().to_string(),
+                    data.time.to_string(),
+                    data.reptime.unwrap().to_string(),
+                    data.priority.to_string(),
+                    serde_json::to_string(&data.cachetime).unwrap(),
+                    serde_json::to_string(&data.cachechecktype).unwrap(),
+                    serde_json::to_string(&data.jobmanager).unwrap(),
+                    data.site,
+                    serde_json::to_string(&data.param).unwrap(),
+                    serde_json::to_string(&data.system_data).unwrap(),
+                    serde_json::to_string(&data.user_data).unwrap(),
+                ],
+            )
+            .unwrap();
+        self.db_commit_man();
+    }
+
+    /// Wrapper that handles inserting parents info into DB.
+    pub fn parents_add_sql(&mut self, parent: &sharedtypes::DbParentsObj) {
+        let inp = "INSERT INTO Parents VALUES(?, ?, ?)";
+        let limit_to = match parent.limit_to {
+            None => &Null as &dyn ToSql,
+            Some(out) => &out.to_string(),
+        };
+        let _out = self._conn.borrow_mut().lock().unwrap().execute(
+            inp,
+            params![
+                parent.tag_id.to_string(),
+                parent.relate_tag_id.to_string(),
+                limit_to
+            ],
+        );
+        self.db_commit_man();
+    }
+
     pub fn parents_delete_sql(&mut self, id: &usize) {
         self.parents_delete_tag_id_sql(id);
         self.parents_delete_relate_tag_id_sql(id);
         self.parents_delete_limit_to_sql(id);
+    }
+
+    pub fn does_dead_source_exist(&self, url: &String) -> bool {
+        let conn = self._conn.lock().unwrap();
+        conn.query_row(
+            "SELECT id from dead_source_urls WHERE dead_url = ?",
+            params![url],
+            |row| Ok(row.get(0).unwrap_or(false)),
+        )
+        .unwrap_or(false)
     }
 
     ///
@@ -51,6 +208,52 @@ impl Main {
         )
         .optional()
         .unwrap_or_default()
+    }
+
+    ///
+    /// Gets tag count
+    ///
+    pub fn tags_max_return_sql(&self) -> usize {
+        let conn = self._conn.lock().unwrap();
+        conn.query_row("SELECT COUNT(*) FROM Tags", params![], |row| row.get(0))
+            .unwrap_or(0)
+    }
+
+    ///
+    /// Gets a tag by id
+    ///
+    pub fn tags_get_dbtagnns_sql(&self, tag_id: &usize) -> Option<sharedtypes::DbTagNNS> {
+        let conn = self._conn.lock().unwrap();
+        conn.query_row(
+            "SELECT name, namespace from Tags where id = ?",
+            params![tag_id],
+            |row| match (row.get(0), row.get(1)) {
+                (Ok(Some(name)), Ok(Some(namespace_id))) => Ok(Some(sharedtypes::DbTagNNS {
+                    name,
+                    namespace: namespace_id,
+                })),
+                _ => Ok(None),
+            },
+        )
+        .optional()
+        .unwrap()?
+    }
+
+    ///
+    /// Gets a list of tag ids
+    ///
+    pub fn tags_get_id_list_sql(&self) -> HashSet<usize> {
+        let inp = "SELECT id FROM Tags";
+        let conn = self._conn.lock().unwrap();
+
+        let mut stmt = conn.prepare(inp).unwrap();
+        let temp = stmt.query_map([], |row| Ok(row.get(0).unwrap())).unwrap();
+
+        let mut out = HashSet::new();
+        for item in temp {
+            out.insert(item.unwrap());
+        }
+        out
     }
 
     ///
@@ -99,6 +302,10 @@ impl Main {
         description: &Option<String>,
         name_id: &usize,
     ) {
+        if let Some(id) = self.namespace_get_id_sql(name) {
+            return;
+        }
+
         let inp = "INSERT INTO Namespace VALUES(?, ?, ?)";
         let _out = self
             ._conn
@@ -111,10 +318,13 @@ impl Main {
 
     /// Loads Parents in from DB Connection
     pub(super) fn load_parents(&mut self) {
+        if self._cache == CacheType::Bare {
+            return;
+        }
         logging::info_log(&"Database is Loading: Parents".to_string());
         let binding = self._conn.clone();
         let temp_test = binding.lock().unwrap();
-        let temp = temp_test.prepare("SELECT * FROM Parents");
+        let temp = temp_test.prepare("SELECT tag_id, relate_tag_id, limit_to FROM Parents");
         if let Ok(mut con) = temp {
             let parents = con
                 .query_map([], |row| {
@@ -134,14 +344,90 @@ impl Main {
             }
         }
     }
+
+    ///
+    /// Adds a extension and an id OPTIONAL into the db
+    ///
+    pub fn extension_put_id_ext_sql(&mut self, id: Option<usize>, ext: &str) -> usize {
+        {
+            let conn = self._conn.lock().unwrap();
+            conn.execute(
+                "insert or ignore into FileExtensions(id, extension) VALUES (?,?)",
+                params![id, ext],
+            )
+            .unwrap();
+        }
+
+        self.extension_get_id_sql(ext).unwrap()
+    }
+    ///
+    /// Returns id if a hash exists
+    ///
+    pub fn file_get_id_sql(&self, hash: &str) -> Option<usize> {
+        let conn = self._conn.lock().unwrap();
+        conn.query_row("SELECT id FROM File WHERE hash = ?", params![hash], |row| {
+            row.get(0)
+        })
+        .unwrap()
+    }
+
+    ///
+    /// Returns if an extension exists gey by ext string
+    ///
+    pub fn extension_get_id_sql(&self, ext: &str) -> Option<usize> {
+        let conn = self._conn.lock().unwrap();
+        let out = conn
+            .query_row(
+                "select id from FileExtensions where extension = ?",
+                params![ext],
+                |row| row.get(0),
+            )
+            .unwrap();
+        out
+    }
+    ///
+    /// Returns if an extension exists get by id
+    ///
+    pub fn extension_get_string_sql(&self, id: &usize) -> Option<String> {
+        let conn = self._conn.lock().unwrap();
+        let out = conn
+            .query_row(
+                "select extension from FileExtensions where id = ?",
+                params![id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        out
+    }
+
     /// Adds file via SQL
-    pub(super) fn file_add_sql(
-        &mut self,
-        hash: &Option<String>,
-        extension: &Option<usize>,
-        storage_id: &Option<usize>,
-        file_id: &usize,
-    ) {
+    pub(super) fn file_add_sql(&mut self, file: &sharedtypes::DbFileStorage) -> usize {
+        let out_file_id;
+        let file_id;
+        let hash;
+        let extension;
+        let storage_id;
+        match file {
+            sharedtypes::DbFileStorage::Exist(file) => {
+                file_id = Some(file.id);
+                hash = file.hash.clone();
+                extension = file.ext_id;
+                storage_id = file.storage_id;
+            }
+            sharedtypes::DbFileStorage::NoIdExist(file) => {
+                file_id = None;
+                hash = file.hash.clone();
+                extension = file.ext_id;
+                storage_id = file.storage_id;
+            }
+            sharedtypes::DbFileStorage::NoExist(fid) => {
+                todo!()
+            }
+            sharedtypes::DbFileStorage::NoExistUnknown => {
+                todo!()
+            }
+        }
+
         let inp = "INSERT INTO File VALUES(?, ?, ?, ?)";
         let _out = self
             ._conn
@@ -149,11 +435,23 @@ impl Main {
             .lock()
             .unwrap()
             .execute(inp, params![file_id, hash, extension, storage_id]);
+
+        if let Some(id) = file_id {
+            out_file_id = id;
+        } else {
+            out_file_id = self.file_get_hash(&hash).unwrap();
+        }
+
         self.db_commit_man();
+
+        out_file_id
     }
 
     /// Loads Relationships in from DB connection
     pub(super) fn load_relationships(&mut self) {
+        if self._cache == CacheType::Bare {
+            return;
+        }
         logging::info_log(&"Database is Loading: Relationships".to_string());
         let binding = self._conn.clone();
         let temp_test = binding.lock().unwrap();
@@ -181,6 +479,41 @@ impl Main {
                 }
             }
         }
+    }
+
+    ///
+    /// Gets a list of fileid associated with a tagid
+    ///
+    pub fn relationship_get_fileid_sql(&self, tag_id: &usize) -> HashSet<usize> {
+        let mut out = HashSet::new();
+
+        let conn = self._conn.lock().unwrap();
+
+        let mut stmt = conn
+            .prepare("SELECT fileid from Relationship where tagid = ?")
+            .unwrap();
+        let temp = stmt.query_map(params![tag_id], |row| row.get(0)).unwrap();
+        for item in temp.flatten() {
+            out.insert(item);
+        }
+        out
+    }
+    ///
+    /// Gets a list of tagid associated with a fileid
+    ///
+    pub fn relationship_get_tagid_sql(&self, file_id: &usize) -> HashSet<usize> {
+        let mut out = HashSet::new();
+
+        let conn = self._conn.lock().unwrap();
+
+        let mut stmt = conn
+            .prepare("SELECT tagid from Relationship where fileid = ?")
+            .unwrap();
+        let temp = stmt.query_map(params![file_id], |row| row.get(0)).unwrap();
+        for item in temp.flatten() {
+            out.insert(item);
+        }
+        out
     }
 
     /// Loads settings into db
@@ -223,6 +556,56 @@ impl Main {
             )
             .unwrap();
     }
+    ///
+    /// Returns id if a tag exists
+    ///
+    pub fn tags_get_id_sql(&self, db_tag_nns: &sharedtypes::DbTagNNS) -> Option<usize> {
+        let conn = self._conn.lock().unwrap();
+        conn.query_row(
+            "SELECT id FROM Tags WHERE name = ? AND namespace = ?",
+            params![db_tag_nns.name, db_tag_nns.namespace],
+            |row| row.get(0),
+        )
+        .unwrap()
+    }
+
+    ///
+    /// Returns id if a namespace exists
+    ///
+    pub fn namespace_get_id_sql(&self, namespace: &String) -> Option<usize> {
+        let conn = self._conn.lock().unwrap();
+        conn.query_row(
+            "SELECT id FROM Namespace WHERE name = ?",
+            params![namespace],
+            |row| row.get(0),
+        )
+        .unwrap()
+    }
+    ///
+    /// Returns dbnamespace if a namespace id exists
+    ///
+    pub fn namespace_get_namespaceobj_sql(
+        &self,
+        ns_id: &usize,
+    ) -> Option<sharedtypes::DbNamespaceObj> {
+        let conn = self._conn.lock().unwrap();
+        conn.query_row(
+            "SELECT * FROM Namespace WHERE id = ?",
+            params![ns_id],
+            |row| {
+                if let (Ok(id), Ok(name)) = (row.get(0), row.get(1)) {
+                    Ok(Some(sharedtypes::DbNamespaceObj {
+                        id,
+                        name,
+                        description: row.get(2).unwrap(),
+                    }))
+                } else {
+                    Ok(None)
+                }
+            },
+        )
+        .unwrap()
+    }
 
     ///
     /// Loads the DB into memory
@@ -247,7 +630,7 @@ impl Main {
                             // logging::info_log(&format!( "Already have tag {:?} adding {} {} {}", id,
                             // res.name, res.namespace, res.id )); continue;
                             // delete_tags.insert((res.name.clone(), res.namespace.clone())); }
-                            self.add_dead_url_internal(res);
+                            self.add_dead_url(&res);
                         } else {
                             error!("Bad dead_source_url cant load {:?}", each);
                         }
@@ -265,6 +648,9 @@ impl Main {
 
     /// Loads tags into db
     pub(super) fn load_tags(&mut self) {
+        if self._cache == CacheType::Bare {
+            return;
+        }
         logging::info_log(&"Database is Loading: Tags".to_string());
 
         // let mut delete_tags = HashSet::new();
