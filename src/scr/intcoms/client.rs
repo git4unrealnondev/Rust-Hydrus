@@ -2,11 +2,10 @@
 #![allow(unused_variables)]
 
 use crate::sharedtypes::{self};
-use anyhow::Context;
-use interprocess::local_socket::prelude::LocalSocketStream;
-use interprocess::local_socket::traits::Stream;
 use interprocess::local_socket::GenericNamespaced;
 use interprocess::local_socket::ToNsName;
+use interprocess::local_socket::prelude::LocalSocketStream;
+use interprocess::local_socket::traits::Stream;
 use std::collections::{HashMap, HashSet};
 use std::io::BufReader;
 use std::time::Duration;
@@ -349,8 +348,7 @@ fn init_data_request<T: serde::de::DeserializeOwned>(requesttype: &types::Suppor
     loop {
         // Wait indefinitely for this to get a connection. shit way of doing it will
         // likely add a wait or something this will likely block the CPU or something.
-        let temp_conn =
-            LocalSocketStream::connect(name.clone()).context("Failed to connect to server");
+        let temp_conn = LocalSocketStream::connect(name.clone());
         if let Ok(con_ok) = temp_conn {
             conn = con_ok;
             break;

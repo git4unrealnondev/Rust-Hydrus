@@ -16,8 +16,13 @@ pub fn get_global_info() -> Vec<sharedtypes::GlobalPluginScraper> {
     defaultscraper.name = "Kemono".into();
     defaultscraper.storage_type = Some(sharedtypes::ScraperOrPlugin::Scraper(
         sharedtypes::ScraperInfo {
-            ratelimit: (1, Duration::from_secs(1)),
-            sites: vec!["kemono.cr".into(), "kemono.cr".into()],
+            ratelimit: (1, Duration::from_secs(2)),
+            sites: vec![
+                "kemono.cr".into(),
+                "kemono.cr".into(),
+                "kemono".into(),
+                "Kemono".into(),
+            ],
             priority: DEFAULT_PRIORITY,
             num_threads: None,
         },
@@ -125,9 +130,69 @@ fn parse_post(
         relates_to: post_subtag.clone(),
     };
 
+    if input_post["embed"].is_object() {
+        if !input_post["embed"]["url"].is_null() {
+            object.tag.insert(sharedtypes::TagObject {
+                namespace: get_genericnamespaceobj(Returntype::EmbedUrl, sitetype),
+                tag: input_post["embed"]["url"].to_string(),
+                tag_type: sharedtypes::TagType::Normal,
+                relates_to: post_subtag.clone(),
+            });
+        }
+        if !input_post["embed"]["subject"].is_null() {
+            object.tag.insert(sharedtypes::TagObject {
+                namespace: get_genericnamespaceobj(Returntype::EmbedSubject, sitetype),
+                tag: input_post["embed"]["subject"].to_string(),
+                tag_type: sharedtypes::TagType::Normal,
+                relates_to: post_subtag.clone(),
+            });
+        }
+        if !input_post["embed"]["description"].is_null() {
+            object.tag.insert(sharedtypes::TagObject {
+                namespace: get_genericnamespaceobj(Returntype::EmbedDescription, sitetype),
+                tag: input_post["embed"]["description"].to_string(),
+                tag_type: sharedtypes::TagType::Normal,
+                relates_to: post_subtag.clone(),
+            });
+        }
+    }
+
     object.tag.insert(post_id);
     object.tag.insert(title);
     object.tag.insert(userid);
+  
+for item in input_post["tags"].members() {
+object.tag.insert(sharedtypes::TagObject {
+                namespace: get_genericnamespaceobj(Returntype::PostTags, sitetype),
+                tag: item.to_string(),
+                tag_type: sharedtypes::TagType::Normal,
+                relates_to: post_subtag.clone(),
+            });
+
+}
+
+    for (cnt, attachments) in input_post["file"].members().enumerate() {
+        let file_position = sharedtypes::TagObject {
+            namespace: get_genericnamespaceobj(Returntype::PostAttachments, sitetype),
+            tag: cnt.to_string(),
+            tag_type: sharedtypes::TagType::Normal,
+            relates_to: post_subtag.clone(),
+        };
+        let file_name = sharedtypes::TagObject {
+            namespace: get_genericnamespaceobj(Returntype::PostAttachmentName, sitetype),
+            tag: attachments["name"].to_string(),
+            tag_type: sharedtypes::TagType::Normal,
+            relates_to: post_subtag.clone(),
+        };
+
+        let url = format!("https://{site}/data{}", attachments["path"]);
+        object.file.insert(sharedtypes::FileObject {
+            source: Some(sharedtypes::FileSource::Url(url)),
+            hash: sharedtypes::HashesSupported::None,
+            tag_list: vec![file_name, file_position],
+            skip_if: vec![],
+        });
+    }
 
     for (cnt, attachments) in input_post["attachments"].members().enumerate() {
         let file_position = sharedtypes::TagObject {
@@ -145,7 +210,7 @@ fn parse_post(
 
         let url = format!("https://{site}/data{}", attachments["path"]);
         object.file.insert(sharedtypes::FileObject {
-            source_url: Some(url),
+            source: Some(sharedtypes::FileSource::Url(url)),
             hash: sharedtypes::HashesSupported::None,
             tag_list: vec![file_name, file_position],
             skip_if: vec![],
@@ -159,22 +224,71 @@ pub fn parser(
     params: &Vec<sharedtypes::ScraperParam>,
     actual_params: &sharedtypes::ScraperData,
 ) -> Result<sharedtypes::ScraperObject, sharedtypes::ScraperReturn> {
+    let mut out = sharedtypes::ScraperObject {
+        file: HashSet::new(),
+        tag: HashSet::new(),
+    };
     // Handles when we're getting creators posts
     if let Some(name) = actual_params.user_data.get("confirmed user") {
-        let mut out = sharedtypes::ScraperObject {
-            file: HashSet::new(),
-            tag: HashSet::new(),
-        };
-        if let Ok(parsed_json) = json::parse(html_input) {
-            if parsed_json.is_empty() {
-                return Err(sharedtypes::ScraperReturn::Nothing);
-            }
+        if let Some(jobtype) = actual_params.user_data.get("jobtype") {
+            if jobtype == "posts" {
+                if let Ok(parsed_json) = json::parse(html_input) {
+                    for item in parsed_json.members() {
+                        let mut scraperdata = actual_params.clone();
 
-            for post in parsed_json.members() {
-                parse_post(post, &"kemono.cr".into(), &Sitetype::Kemono, &mut out);
+                        scraperdata.user_data.clear();
+
+                        scraperdata
+                            .user_data
+                            .insert("confirmed user".into(), name.into());
+                        scraperdata
+                            .user_data
+                            .insert("confirmed user id".into(), item["id"].to_string());
+                        scraperdata
+                            .user_data
+                            .insert("confirmed service".into(), item["service"].to_string());
+
+                        let site = scraperdata.job.site;
+
+                        let url = format!(
+                            "https://kemono.cr/api/v1/{}/user/{}/post/{}",
+                            item["service"], item["user"], item["id"]
+                        );
+                        scraperdata
+                            .user_data
+                            .insert("jobtype".into(), "post".to_string());
+
+                        scraperdata.job = sharedtypes::JobScraper {
+                            site: site.clone(),
+                            param: vec![sharedtypes::ScraperParam::Url(url.clone())],
+                            job_type: sharedtypes::DbJobType::Scraper,
+                        };
+
+                        out.tag.insert(sharedtypes::TagObject {
+                            namespace: sharedtypes::GenericNamespaceObj {
+                                name: "do not parse".into(),
+                                description: None,
+                            },
+                            tag: url.clone(),
+                            tag_type: sharedtypes::TagType::ParseUrl((scraperdata.clone(), None)),
+                            relates_to: None,
+                        });
+                    }
+                }
+            } else if jobtype == "post" {
+                if let Ok(parsed_json) = json::parse(html_input) {
+                    if parsed_json.is_empty() {
+                        return Err(sharedtypes::ScraperReturn::Nothing);
+                    }
+                    parse_post(
+                        &parsed_json["post"],
+                        &"kemono.cr".into(),
+                        &Sitetype::Kemono,
+                        &mut out,
+                    );
+                }
             }
         }
-
         return Ok(out);
     }
 
@@ -200,31 +314,26 @@ pub fn parser(
                         let mut tag = HashSet::new();
                         let site = scraperdata.job.site;
 
-                        for offset in (0..=2147483647).step_by(50) {
-                            let url = format!(
-                                "https://kemono.cr/api/v1/{}/user/{}?o={}",
-                                item["service"], item["id"], offset
-                            );
+                        let url = format!(
+                            "https://kemono.cr/api/v1/{}/user/{}/posts",
+                            item["service"], item["id"]
+                        );
 
-                            scraperdata.job = sharedtypes::JobScraper {
-                                site: site.clone(),
-                                param: vec![sharedtypes::ScraperParam::Url(url.clone())],
-                                job_type: sharedtypes::DbJobType::Scraper,
-                            };
+                        scraperdata.job = sharedtypes::JobScraper {
+                            site: site.clone(),
+                            param: vec![sharedtypes::ScraperParam::Url(url.clone())],
+                            job_type: sharedtypes::DbJobType::Scraper,
+                        };
 
-                            tag.insert(sharedtypes::TagObject {
-                                namespace: sharedtypes::GenericNamespaceObj {
-                                    name: "do not parse".into(),
-                                    description: None,
-                                },
-                                tag: url.clone(),
-                                tag_type: sharedtypes::TagType::ParseUrl((
-                                    scraperdata.clone(),
-                                    None,
-                                )),
-                                relates_to: None,
-                            });
-                        }
+                        tag.insert(sharedtypes::TagObject {
+                            namespace: sharedtypes::GenericNamespaceObj {
+                                name: "do not parse".into(),
+                                description: None,
+                            },
+                            tag: url.clone(),
+                            tag_type: sharedtypes::TagType::ParseUrl((scraperdata.clone(), None)),
+                            relates_to: None,
+                        });
                         return Ok(sharedtypes::ScraperObject {
                             file: HashSet::new(),
                             tag,
@@ -249,6 +358,10 @@ enum Returntype {
     PostAttachments,
     PostAttachmentName,
     PostAdded,
+    EmbedUrl,
+    EmbedSubject,
+    EmbedDescription,
+    PostTags
 }
 
 enum Sitetype {
@@ -297,7 +410,9 @@ fn get_genericnamespaceobj(inp: Returntype, site: &Sitetype) -> sharedtypes::Gen
         },
         Returntype::PostAttachments => sharedtypes::GenericNamespaceObj {
             name: format!("{site}_Post_Attachments",),
-            description: Some(format!("Any attachments added to a post on {site}. Records their position relative to a post")),
+            description: Some(format!(
+                "Any attachments added to a post on {site}. Records their position relative to a post"
+            )),
         },
         Returntype::PostAttachmentName => sharedtypes::GenericNamespaceObj {
             name: format!("{site}_Post_Attachment_Name"),
@@ -309,6 +424,22 @@ fn get_genericnamespaceobj(inp: Returntype, site: &Sitetype) -> sharedtypes::Gen
             name: format!("{site}_Post_Added",),
             description: Some(format!("Time when post was added to {site}")),
         },
+        Returntype::EmbedUrl => sharedtypes::GenericNamespaceObj {
+            name: format!("{site}_Post_Embed_Url",),
+            description: Some(format!("Something that was embedded into the site: {site}")),
+        },
+        Returntype::EmbedSubject => sharedtypes::GenericNamespaceObj {
+            name: format!("{site}_Post_Embed_Subject",),
+            description: Some(format!("An embeds title for {site}... Normally")),
+        },
+        Returntype::EmbedDescription => sharedtypes::GenericNamespaceObj {
+            name: format!("{site}_Post_Embed_Description",),
+            description: Some(format!("A description of the embed posted to {site}")),
+        },Returntype::PostTags => sharedtypes::GenericNamespaceObj {
+            name: format!("{site}_Post_Tag",),
+            description: Some(format!("A tag associated with a post on {site}")),
+        },
+
     }
 }
 
@@ -317,6 +448,7 @@ pub struct Componenttype {
     site_str: Option<String>,
     service: Option<String>,
     user_id: Option<String>,
+    post_id: Option<String>,
 }
 
 ///
@@ -347,7 +479,24 @@ fn parse_type(inp: &String) -> Option<Componenttype> {
         site_str,
         service: None,
         user_id: None,
+        post_id: None,
     };
+    // matches both the service and the user id and post id
+    let user_regex = Regex::new(r"/([a-z]+)/user/([0-9]+)/post/([0-9]+)").unwrap();
+
+    if let Some(reg_match) = user_regex.captures(inp) {
+        if let Some(service) = &reg_match.get(1) {
+            component.service = Some(service.as_str().to_string());
+        }
+        if let Some(userid) = &reg_match.get(2) {
+            component.user_id = Some(userid.as_str().to_string());
+        }
+        if let Some(userid) = &reg_match.get(3) {
+            component.post_id = Some(userid.as_str().to_string());
+        }
+
+        return Some(component);
+    }
 
     // matches both the service and the user id
     let user_regex = Regex::new(r"/([a-z]+)/user/([0-9]+)").unwrap();
@@ -362,18 +511,20 @@ fn parse_type(inp: &String) -> Option<Componenttype> {
 
         return Some(component);
     }
+
     None
 }
 
 fn generate_userid_search(inp: &Componenttype) -> Option<String> {
-    if let (Some(site_str), Some(userid), Some(service)) = (
-        inp.site_str.clone(),
-        inp.user_id.clone(),
-        inp.service.clone(),
-    ) {
-        return Some(format!("https://{site_str}/api/v1/{service}/user/{userid}"));
-    }
-    None
+    return match (&inp.site_str, &inp.service, &inp.user_id, &inp.post_id) {
+        (Some(site), Some(service), Some(user_id), None) => {
+            Some(format!("https://{site}/api/v1/{service}/user/{user_id}"))
+        }
+        (Some(site), Some(service), Some(user_id), Some(post_id)) => Some(format!(
+            "https://{site}/api/v1/{service}/user/{user_id}/post/{post_id}"
+        )),
+        _ => None,
+    };
 }
 
 fn filter_params(
@@ -387,21 +538,40 @@ fn filter_params(
         match item {
             sharedtypes::ScraperParam::Normal(something) => {
                 if let Some(component) = parse_type(something) {
+                    // If we extracted no post id then we need to query
                     if let Some(url) = generate_userid_search(&component) {
-                        let mut scraperdata = scraperdata.clone();
-                        scraperdata
-                            .user_data
-                            .insert("confirmed user".into(), component.user_id.clone().unwrap());
-                        scraperdata.job = sharedtypes::JobScraper {
-                            site: site_to_string(&component.site).to_string(),
-                            job_type: sharedtypes::DbJobType::Params,
-                            param: vec![],
-                        };
-                        for offset in (0..=1000000).step_by(50) {
-                            out.push((
-                                format!("{}{}", url, &format!("?o={}", offset)),
-                                scraperdata.clone(),
-                            ));
+                        if component.post_id.is_none() {
+                            let mut scraperdata = scraperdata.clone();
+                            scraperdata.user_data.insert(
+                                "confirmed user".into(),
+                                component.user_id.clone().unwrap(),
+                            );
+                            scraperdata
+                                .user_data
+                                .insert("jobtype".into(), "posts".into());
+
+                            scraperdata.job = sharedtypes::JobScraper {
+                                site: site_to_string(&component.site).to_string(),
+                                job_type: sharedtypes::DbJobType::Params,
+                                param: vec![],
+                            };
+                            out.push((format!("{}/posts", url), scraperdata.clone()));
+                        } else {
+                            let mut scraperdata = scraperdata.clone();
+                            scraperdata.user_data.insert(
+                                "confirmed user".into(),
+                                component.user_id.clone().unwrap(),
+                            );
+                            scraperdata
+                                .user_data
+                                .insert("jobtype".into(), "post".into());
+
+                            scraperdata.job = sharedtypes::JobScraper {
+                                site: site_to_string(&component.site).to_string(),
+                                job_type: sharedtypes::DbJobType::Params,
+                                param: vec![],
+                            };
+                            out.push((format!("{}", url), scraperdata.clone()));
                         }
                     }
                 } else {

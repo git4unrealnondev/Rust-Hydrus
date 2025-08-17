@@ -705,7 +705,7 @@ impl Main {
             while let Some(row) = rows.next().unwrap() {
                 let id: usize = row.get(0).unwrap();
                 let name: String = row.get(1).unwrap();
-                let desc: String = row.get(2).unwrap();
+                let desc: Option<String> = row.get(2).unwrap();
 
                 logging::info_log(&format!("Adding Namespace: {}", &id));
                 conn.execute(tag_sqlite_inp, params![id, name, desc])
@@ -744,6 +744,9 @@ impl Main {
                     .unwrap();
             }
         }
+
+        self.transaction_flush();
+
         if self.check_table_exists("Tags".into()) {
             self.alter_table(&"Tags".to_string(), &"Tags_Old".to_string());
             let keys = &vec_of_strings!("id", "name", "namespace");

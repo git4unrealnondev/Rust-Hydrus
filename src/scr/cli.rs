@@ -565,7 +565,9 @@ pub fn main(data: Arc<RwLock<database::Main>>, globalload: Arc<RwLock<GlobalLoad
                                         ));
                                         if dat.namespace == nsid.unwrap() {
                                             let mut file = sharedtypes::FileObject {
-                                                source_url: Some(dat.name.clone()),
+                                                source: Some(sharedtypes::FileSource::Url(
+                                                    dat.name.clone(),
+                                                )),
                                                 hash: sharedtypes::HashesSupported::Sha512(
                                                     file.hash.clone(),
                                                 ),
@@ -607,7 +609,9 @@ pub fn main(data: Arc<RwLock<database::Main>>, globalload: Arc<RwLock<GlobalLoad
                                             ));
                                             if dat.namespace == nsid.unwrap() {
                                                 let mut file = sharedtypes::FileObject {
-                                                    source_url: Some(dat.name.clone()),
+                                                    source: Some(sharedtypes::FileSource::Url(
+                                                        dat.name.clone(),
+                                                    )),
                                                     hash: sharedtypes::HashesSupported::Sha512(
                                                         file.hash.clone(),
                                                     ),

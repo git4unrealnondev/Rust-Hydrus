@@ -147,7 +147,7 @@ pub fn parse_file(
                 let mut unwrappy = db.write().unwrap();
                 unwrappy.enclave_run_process(
                     &mut sharedtypes::FileObject {
-                        source_url: None,
+                        source: None,
                         hash: sharedtypes::HashesSupported::Sha512(sha512hash.clone()),
                         tag_list: tag_list.clone(),
                         skip_if: vec![sharedtypes::SkipIf::FileHash(sha512hash.clone())],
@@ -191,7 +191,7 @@ pub fn parse_file(
                     let mut unwrappy = db.write().unwrap();
                     unwrappy.enclave_run_process(
                         &mut sharedtypes::FileObject {
-                            source_url: None,
+                            source: None,
                             hash: sharedtypes::HashesSupported::Sha512(sub_sha512hash.clone()),
                             tag_list: tags.clone(),
                             skip_if: vec![sharedtypes::SkipIf::FileHash(sub_sha512hash.clone())],
@@ -252,7 +252,7 @@ pub fn parse_sidecar(file_location: &Path, sidecar_location: &Path, db: Arc<RwLo
                 let mut unwrappy = db.write().unwrap();
                 unwrappy.enclave_run_process(
                     &mut sharedtypes::FileObject {
-                        source_url: None,
+                        source: None,
                         hash: sharedtypes::HashesSupported::Sha512(sha512hash.clone()),
                         tag_list,
                         skip_if: vec![sharedtypes::SkipIf::FileHash(sha512hash.clone())],

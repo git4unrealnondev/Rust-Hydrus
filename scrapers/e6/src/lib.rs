@@ -701,7 +701,7 @@ fn parse_pools(
             });
         }
         files.insert(sharedtypes::FileObject {
-            source_url: None,
+            source: None,
             hash: sharedtypes::HashesSupported::None,
             tag_list: tags_list,
             skip_if: Vec::new(),
@@ -933,7 +933,7 @@ pub fn parser(
             }
         };
         let file: sharedtypes::FileObject = sharedtypes::FileObject {
-            source_url: Some(url),
+            source: Some(sharedtypes::FileSource::Url(url)),
             hash: sharedtypes::HashesSupported::Md5(js["posts"][inc]["file"]["md5"].to_string()),
             tag_list: tags_list,
             skip_if: Vec::new(),

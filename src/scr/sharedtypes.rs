@@ -747,10 +747,18 @@ pub struct DBPluginOutput {
     pub file: Option<Vec<PluginFileObj>>,
 }
 
+#[derive(
+    Debug, Eq, Hash, PartialEq, Deserialize, Serialize, bincode::Encode, bincode::Decode, Clone,
+)]
+pub enum FileSource {
+    Url(String),
+    Bytes(Vec<u8>),
+}
+
 /// Represents one file
 #[derive(Debug, Eq, Hash, PartialEq, Deserialize, Serialize, bincode::Encode, bincode::Decode)]
 pub struct FileObject {
-    pub source_url: Option<String>,
+    pub source: Option<FileSource>,
     // Hash of file
     pub hash: HashesSupported,
     pub tag_list: Vec<TagObject>,

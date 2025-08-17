@@ -579,7 +579,7 @@ impl Main {
             params![namespace],
             |row| row.get(0),
         )
-        .unwrap()
+        .unwrap_or(None)
     }
     ///
     /// Returns dbnamespace if a namespace id exists

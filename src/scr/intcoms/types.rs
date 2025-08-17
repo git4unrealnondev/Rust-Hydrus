@@ -2,7 +2,6 @@
 #![allow(unused_variables)]
 
 use crate::sharedtypes;
-use anyhow::Context;
 use interprocess::local_socket::prelude::LocalSocketStream;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -164,14 +163,8 @@ pub fn send<T: Sized + Serialize + bincode::Encode>(
     let byte_buf = bincode::serde::encode_to_vec(&inp, bincode::config::standard()).unwrap();
     let size = &byte_buf.len();
 
-    conn.get_mut()
-        .write_all(&size.to_ne_bytes())
-        .context("Socket send failed")
-        .unwrap();
-    conn.get_mut()
-        .write_all(&byte_buf)
-        .context("Socket send failed")
-        .unwrap();
+    conn.get_mut().write_all(&size.to_ne_bytes()).unwrap();
+    conn.get_mut().write_all(&byte_buf).unwrap();
 }
 
 /// Writes all data into buffer. Assumes data is preserialzied from data generic
@@ -180,27 +173,18 @@ pub fn send<T: Sized + Serialize + bincode::Encode>(
 pub fn send_preserialize(inp: &Vec<u8>, conn: &mut BufReader<LocalSocketStream>) {
     let mut temp = inp.len().to_ne_bytes().to_vec();
     temp.extend(inp);
-    let _ = conn
-        .get_mut()
-        .write_all(&temp)
-        .context("Socket send failed");
+    let _ = conn.get_mut().write_all(&temp);
 }
 
 /// Returns a vec of bytes that represent an object
 pub fn recieve<T: serde::de::DeserializeOwned>(
     conn: &mut BufReader<LocalSocketStream>,
-) -> Result<T, anyhow::Error> {
+) -> Result<T, bincode::error::DecodeError> {
     let mut usize_b: [u8; std::mem::size_of::<usize>()] = [0; std::mem::size_of::<usize>()];
-    let _ = conn
-        .get_mut()
-        .read_exact(&mut usize_b[..])
-        .context("Socket send failed");
+    let _ = conn.get_mut().read_exact(&mut usize_b[..]);
     let size_of_data: usize = usize::from_ne_bytes(usize_b);
     let mut data_b = vec![0; size_of_data];
-    let _ = conn
-        .get_mut()
-        .read_exact(&mut data_b[..])
-        .context("Socket send failed");
+    let _ = conn.get_mut().read_exact(&mut data_b[..]);
 
     let out = bincode::serde::decode_from_slice(&data_b, bincode::config::standard())?;
     Ok(out.0)

@@ -260,6 +260,5 @@ fn main() {
     let mills_fifty = time::Duration::from_millis(50);
     std::thread::sleep(mills_fifty);
     logging::info_log(&"UNLOADING".to_string());
-    arc.write().unwrap().debugdb();
     log::logger().flush();
 }

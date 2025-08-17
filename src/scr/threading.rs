@@ -1,5 +1,7 @@
 use crate::database;
 use crate::download;
+use crate::download::hash_bytes;
+use crate::download::process_bytes;
 use crate::globalload;
 use crate::globalload::GlobalLoad;
 use crate::logging;
@@ -8,6 +10,7 @@ use crate::logging::info_log;
 use crate::sharedtypes;
 use crate::sharedtypes::ScraperReturn;
 use async_std::task;
+use file_format::FileFormat;
 
 // use log::{error, info};
 use ratelimit::Ratelimiter;
@@ -676,6 +679,9 @@ pub fn parse_tags(
     }
 }
 
+///
+/// Downloads a file into the db if needed
+///
 fn download_add_to_db(
     ratelimiter_obj: Arc<Mutex<Ratelimiter>>,
     source: &String,
@@ -860,98 +866,115 @@ pub fn main_file_loop(
     worker_id: &usize,
     job_id: &usize,
 ) {
-    let source;
-    match &file.source_url {
-        Some(temp) => {
-            source = temp.clone();
-        }
-        None => {
-            source = "".into();
-        }
-    };
-    // If url exists in db then don't download thread::sleep(Duration::from_secs(10));
-    for file_tag in file.skip_if.iter() {
-        if parse_skipif(file_tag, &source, db.clone(), worker_id, job_id) {
-            return;
-        }
-    }
-
-    // Gets the source url namespace id
-    let source_url_id = {
-        let mut unwrappydb = db.write().unwrap();
-        unwrappydb.create_default_source_url_ns_id()
-    };
-
-    let location = {
-        let unwrappydb = db.read().unwrap();
-        unwrappydb.location_get()
-    };
-
-    let url_tag;
-    {
-        let unwrappydb = db.read().unwrap();
-        url_tag = unwrappydb.tag_get_name(source.clone(), source_url_id);
-    };
-
-    // Get's the hash & file ext for the file.
-    let fileid = match url_tag {
-        None => {
-            match download_add_to_db(
-                ratelimiter_obj,
-                &source,
-                location,
-                globalload.clone(),
-                client,
-                db.clone(),
-                file,
-                worker_id,
-                job_id,
-                scraper,
-            ) {
-                None => return,
-                Some(id) => id,
-            }
-        }
-        Some(url_id) => {
-            let file_id;
-            {
-                // We've already got a valid relationship
-                let unwrappydb = &mut db.read().unwrap();
-                file_id = unwrappydb.relationship_get_one_fileid(&url_id);
-                if let Some(fid) = file_id {
-                    unwrappydb.file_get_id(&fid).unwrap();
-                }
-            }
-
-            // fixes busted links.
-            match file_id {
-                Some(file_id) => {
-                    info_log(&format!(
-                            "Worker: {worker_id} JobId: {job_id} -- Skipping file: {} Due to already existing in Tags Table.",
-                            &source
-                        ));
-                    file_id
-                }
-                None => {
-                    match download_add_to_db(
-                        ratelimiter_obj,
-                        &source,
-                        location,
-                        globalload.clone(),
-                        client,
-                        db.clone(),
-                        file,
-                        worker_id,
-                        job_id,
-                        scraper,
-                    ) {
-                        None => return,
-                        Some(id) => id,
+    let fileid;
+    match file.source.clone() {
+        Some(source) => match source {
+            sharedtypes::FileSource::Url(source_url) => {
+                // If url exists in db then don't download thread::sleep(Duration::from_secs(10));
+                for file_tag in file.skip_if.iter() {
+                    if parse_skipif(file_tag, &source_url, db.clone(), worker_id, job_id) {
+                        return;
                     }
                 }
+
+                // Gets the source url namespace id
+                let source_url_id = {
+                    let mut unwrappydb = db.write().unwrap();
+                    unwrappydb.create_default_source_url_ns_id()
+                };
+
+                let location = {
+                    let unwrappydb = db.read().unwrap();
+                    unwrappydb.location_get()
+                };
+
+                let url_tag;
+                {
+                    let unwrappydb = db.read().unwrap();
+                    url_tag = unwrappydb.tag_get_name(source_url.clone(), source_url_id);
+                };
+
+                // Get's the hash & file ext for the file.
+                fileid = match url_tag {
+                    None => {
+                        match download_add_to_db(
+                            ratelimiter_obj,
+                            &source_url,
+                            location,
+                            globalload.clone(),
+                            client,
+                            db.clone(),
+                            file,
+                            worker_id,
+                            job_id,
+                            scraper,
+                        ) {
+                            None => return,
+                            Some(id) => id,
+                        }
+                    }
+                    Some(url_id) => {
+                        let file_id;
+                        {
+                            // We've already got a valid relationship
+                            let unwrappydb = &mut db.read().unwrap();
+                            file_id = unwrappydb.relationship_get_one_fileid(&url_id);
+                            /*if let Some(fid) = file_id {
+                                unwrappydb.file_get_id(&fid).unwrap();
+                            }*/
+                        }
+
+                        // fixes busted links.
+                        match file_id {
+                            Some(file_id) => {
+                                info_log(&format!(
+                            "Worker: {worker_id} JobId: {job_id} -- Skipping file: {} Due to already existing in Tags Table.",
+                            &source_url
+                        ));
+                                file_id
+                            }
+                            None => {
+                                match download_add_to_db(
+                                    ratelimiter_obj,
+                                    &source_url,
+                                    location,
+                                    globalload.clone(),
+                                    client,
+                                    db.clone(),
+                                    file,
+                                    worker_id,
+                                    job_id,
+                                    scraper,
+                                ) {
+                                    None => return,
+                                    Some(id) => id,
+                                }
+                            }
+                        }
+                    }
+                };
             }
-        }
-    };
+            sharedtypes::FileSource::Bytes(bytes) => {
+                let bytes = bytes::Bytes::from(bytes);
+                let file_ext = FileFormat::from_bytes(&bytes).extension().to_string();
+                let sha512 = hash_bytes(&bytes, &sharedtypes::HashesSupported::Sha512("".into()));
+
+                process_bytes(
+                    bytes,
+                    Some(globalload.clone()),
+                    &sha512.0,
+                    &file_ext,
+                    db.clone(),
+                    file,
+                    None,
+                );
+
+                let unwrappy = db.read().unwrap();
+                fileid = unwrappy.file_get_hash(&sha512.0).unwrap();
+            }
+        },
+        None => return,
+    }
 
     // We've got valid fileid for reference.
     for tag in file.tag_list.iter() {

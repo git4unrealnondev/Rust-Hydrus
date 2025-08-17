@@ -488,7 +488,6 @@ impl DbInteract {
             }
             types::SupportedDBRequests::GetNamespace(name) => {
                 let unwrappy = self._database.read().unwrap();
-                unwrappy.debugdb();
                 let tmep = unwrappy.namespace_get(&name);
                 Self::option_to_bytes(tmep.as_ref())
             }

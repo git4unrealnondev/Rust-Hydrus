@@ -136,7 +136,12 @@ pub async fn dltext_new(
             worker_id, &url_string
         ));
 
-        let futureresult = client.read().unwrap().get(url).send();
+        let futureresult = client
+            .read()
+            .unwrap()
+            .get(url)
+            .header("Accept", "text/css")
+            .send();
 
         // let test = reqwest::get(url).await.unwrap().text(); let futurez =
         // futures::executor::block_on(futureresult); dbg!(&futureresult);
@@ -322,12 +327,6 @@ pub fn dlfile_new(
         None => false,
     };
 
-    dbg!(
-        &should_scraper_download,
-        globalload.is_some(),
-        scraper.is_some()
-    );
-
     if should_scraper_download {
         if let Some(ref globalload) = globalload {
             if let Some(scraper) = scraper {
@@ -346,7 +345,7 @@ pub fn dlfile_new(
         while boolloop {
             let mut hasher = Sha512::new();
             loop {
-                let fileurlmatch = match &file.source_url {
+                let fileurlmatch = match &file.source {
                     None => {
                         panic!(
                             "Tried to call dlfilenew when their was no file :C info: {:?}",
@@ -355,9 +354,9 @@ pub fn dlfile_new(
                     }
                     Some(fileurl) => fileurl,
                 };
-                let url = Url::parse(fileurlmatch).unwrap();
+                let url = Url::parse(source_url).unwrap();
                 ratelimiter_wait(ratelimiter_obj);
-                //logging::info_log(&format!("Downloading: {} to: {}", &fileurlmatch, &location));
+                logging::info_log(&format!("Downloading: {}", &source_url));
                 let mut futureresult = client.get(url.as_ref()).send();
                 loop {
                     match &futureresult {
@@ -457,30 +456,53 @@ pub fn dlfile_new(
 
     if let Some(bytes) = bytes {
         let file_ext = FileFormat::from_bytes(&bytes).extension().to_string();
-        // If the plugin manager is None then don't do anything plugin wise. Useful for if
-        // doing something that we CANNOT allow plugins to run.
-        {
-            if let Some(globalload) = globalload {
-                crate::globalload::plugin_on_download(
-                    globalload,
-                    db.clone(),
-                    bytes.as_ref(),
-                    &hash,
-                    &file_ext,
-                );
-            }
-        }
-        //
-        {
-            let mut unwrappydb = db.write().unwrap();
-            unwrappydb.create_default_source_url_ns_id();
-            unwrappydb.enclave_determine_processing(file, bytes, &hash, Some(source_url));
-        }
+        process_bytes(
+            bytes,
+            globalload,
+            &hash,
+            &file_ext,
+            db,
+            file,
+            Some(source_url),
+        );
         return FileReturnStatus::File((hash, file_ext));
     }
 
     // If we don't donwload anything the default to try again later
     FileReturnStatus::TryLater
+}
+
+///
+/// Runs external bytes processing and starts enclave work
+///
+pub fn process_bytes(
+    bytes: Bytes,
+    globalload: Option<Arc<RwLock<GlobalLoad>>>,
+    hash: &String,
+    file_ext: &String,
+    db: Arc<RwLock<Main>>,
+    file: &mut sharedtypes::FileObject,
+    source_url: Option<&String>,
+) {
+    // If the plugin manager is None then don't do anything plugin wise. Useful for if
+    // doing something that we CANNOT allow plugins to run.
+    {
+        if let Some(globalload) = globalload {
+            crate::globalload::plugin_on_download(
+                globalload,
+                db.clone(),
+                bytes.as_ref(),
+                &hash,
+                &file_ext,
+            );
+        }
+    }
+    //
+    {
+        let mut unwrappydb = db.write().unwrap();
+        unwrappydb.create_default_source_url_ns_id();
+        unwrappydb.enclave_determine_processing(file, bytes, &hash, source_url);
+    }
 }
 
 /// Hashes file from location string with specified hash into the hash of the file.

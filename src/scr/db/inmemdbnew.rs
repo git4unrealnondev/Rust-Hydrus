@@ -126,6 +126,7 @@ impl NewinMemDB {
 
     /// Dumps db data
     pub fn dumpe_data(&self) {
+        panic!();
         use crate::pause;
 
         //dbg!(&self._tag_nns_id_data, &self._tag_nns_data_id);
