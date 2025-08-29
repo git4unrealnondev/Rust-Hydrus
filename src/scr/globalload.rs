@@ -90,6 +90,10 @@ fn c_regex_match(
         > = match liba.get(b"on_regex_match") {
             Ok(good) => good,
             Err(_) => {
+                logging::error_log_silent(&format!(
+                    "Could not find function on_regex_match for plugin: {}",
+                    scraper.name
+                ));
                 return;
             }
         };
@@ -429,6 +433,7 @@ pub fn plugin_on_tag(
         }
     }
 
+    // #TODO need to fix this. Is calling multiple times
     for (pluginscraper, regex, searchtype) in storagemap.iter() {
         let mut pluginscraper = pluginscraper.clone();
         if let Some(scraper_or_plugin) = &pluginscraper.storage_type {

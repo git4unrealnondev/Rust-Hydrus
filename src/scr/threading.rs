@@ -171,7 +171,13 @@ impl Worker {
         let thread = thread::spawn(move || {
             let ratelimiter_obj = ratelimiter_main.clone();
 
-            let client = Arc::new(RwLock::new(download::client_create()));
+            let modifiers = download::get_modifiers(&scraper);
+
+            let client_text = Arc::new(RwLock::new(download::client_create(
+                modifiers.clone(),
+                true,
+            )));
+            let client_file = Arc::new(RwLock::new(download::client_create(modifiers, false)));
             let mut should_remove_original_job;
             'bigloop: loop {
                 let jobsstorage;
@@ -389,7 +395,7 @@ Worker: {id} JobId: {} -- While trying to parse parameters we got this error: {:
                                 if !scraper.should_handle_text_scraping {
                                     resp = task::block_on(download::dltext_new(
                                         url_string,
-                                        client.clone(),
+                                        client_text.clone(),
                                         &ratelimiter_obj,
                                         &id,
                                     ));
@@ -435,22 +441,53 @@ Worker: {id} JobId: {} -- While trying to parse parameters we got this error: {:
                                         }
                                     };
                                 } else {
-                                    if let Ok(scraperobj) = globalload::text_scraping(
-                                        url_string,
-                                        &scraperdata.job.param,
-                                        &scraperdata,
-                                        globalload.clone(),
-                                        &scraper,
-                                    ) {
-                                        out_st = scraperobj;
-                                    } else {
-                                        logging::error_log(&format!("Worker: {} -- While processing job {:?} was unable to download text.",&id, &job));
-                                        break 'errloop;
+                                    loop {
+                                        match globalload::text_scraping(
+                                            url_string,
+                                            &scraperdata.job.param,
+                                            &scraperdata,
+                                            globalload.clone(),
+                                            &scraper,
+                                        ) {
+                                            Ok(scraperobj) => {
+                                                out_st = scraperobj;
+                                                break;
+                                            }
+                                            Err(scraperreturn) => match scraperreturn {
+                                                sharedtypes::ScraperReturn::Timeout(time) => {
+                                                    thread::sleep(Duration::from_secs(time))
+                                                }
+                                                _ => {
+                                                    logging::error_log(&format!("Worker: {} -- While processing job {:?} was unable to download text.",&id, &job));
+                                                    break 'errloop;
+                                                }
+                                            },
+                                        }
+
+                                        /*if let Ok(scraperobj) = globalload::text_scraping(
+                                            url_string,
+                                            &scraperdata.job.param,
+                                            &scraperdata,
+                                            globalload.clone(),
+                                            &scraper,
+                                        ) {
+                                            out_st = scraperobj;
+                                        } else {
+                                            logging::error_log(&format!("Worker: {} -- While processing job {:?} was unable to download text.",&id, &job));
+                                            break 'errloop;
+                                        }*/
                                     }
                                 }
                             } else {
                                 // Finished checking everything for URLs and other stuff.
                                 break 'errloop;
+                            }
+                            for flag in out_st.flag {
+                                match flag {
+                                    sharedtypes::Flags::Redo => {
+                                        should_remove_original_job = false;
+                                    }
+                                }
                             }
                             for tag in out_st.tag.iter() {
                                 parse_jobs(
@@ -473,7 +510,7 @@ Worker: {id} JobId: {} -- While trying to parse parameters we got this error: {:
                                 let ratelimiter_obj = ratelimiter_main.clone();
                                 let globalload = globalload.clone();
                                 let db = db.clone();
-                                let client = client.clone();
+                                let client = client_file.clone();
                                 let jobstorage = jobstorage.clone();
                                 let scraper = scraper.clone();
                                 pool.execute(move || {
@@ -502,6 +539,9 @@ Worker: {id} JobId: {} -- While trying to parse parameters we got this error: {:
                                 &currentjob,
                                 &id,
                             );
+                        } else {
+                            let mut unwrappy = db.write().unwrap();
+                            unwrappy.transaction_flush();
                         }
                         {
                             jobstorage

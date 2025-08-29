@@ -58,6 +58,7 @@ impl Jobs {
             time: dbjobsobj.time,
             reptime: dbjobsobj.reptime,
         };
+
         // Stupid prefilter because an item can be either a scraper or a plugin. Not sure how I
         // didn't hit this issue sooner lol
         // Have to filter here because if a regex or something gets parsed as the "owner" of this

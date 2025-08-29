@@ -267,7 +267,7 @@ impl DbInteract {
                 global_pluginscraper.name = "InternalFileAdd".to_string();
                 let ratelimiter_obj = threading::create_ratelimiter(ratelimit, &0, &0);
                 let manageeplugin = self.globalload.clone();
-                let client = Arc::new(RwLock::new(download::client_create()));
+                let client = Arc::new(RwLock::new(download::client_create(vec![], false)));
                 let jobstorage = self.jobmanager.clone();
                 let database = self._database.clone();
                 let thread = thread::spawn(move || {
@@ -301,7 +301,7 @@ impl DbInteract {
 
                 let ratelimiter_obj = threading::create_ratelimiter(ratelimit, &0, &0);
                 let manageeplugin = self.globalload.clone();
-                let client = Arc::new(RwLock::new(download::client_create()));
+                let client = Arc::new(RwLock::new(download::client_create(vec![], false)));
                 let jobstorage = self.jobmanager.clone();
                 threading::main_file_loop(
                     &mut file,

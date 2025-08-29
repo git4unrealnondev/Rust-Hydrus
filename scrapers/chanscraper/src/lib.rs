@@ -32,7 +32,7 @@ pub struct ChanFile {
 
 pub trait Site {
     fn gen_fileurl(&self, boardcode: String, filename: String, fileext: String) -> String;
-    fn filter_board(&self, inp: &str) -> Option<String>;
+    fn filter_board(&self, inp: &str, param_cnt: &usize) -> Option<String>;
     fn gen_catalog(&self, boardcode: &str) -> String;
     fn gen_thread(&self, boardcode: &str, thread_number: &str) -> String;
     fn json_getfiles(&self, inp: &JsonValue, boardcode: &str) -> Option<Vec<ChanFile>>;
@@ -43,50 +43,8 @@ pub fn get_site(inp: &str) -> Option<Box<dyn Site>> {
     match inp {
         "4chan" => Some(Box::new(boards::fourchan::BoardCodes::B)),
         "lulz" => Some(Box::new(boards::lulz::BoardCodes::FURI)),
+        "8chan" => Some(Box::new(boards::eightchan::Holder::Base)),
         _ => None,
-    }
-}
-
-pub struct InternalScraper {
-    _version: usize,
-    _name: String,
-    _sites: Vec<String>,
-    _ratelimit: (u64, Duration),
-    _type: sharedtypes::ScraperType,
-}
-
-impl Default for InternalScraper {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl InternalScraper {
-    pub fn new() -> Self {
-        InternalScraper {
-            _version: 0,
-            _name: "4chan".to_string(),
-            _sites: vec_of_strings!("4chan", "lulz"),
-            _ratelimit: (1, Duration::from_secs(2)),
-            _type: sharedtypes::ScraperType::Automatic,
-        }
-    }
-    pub fn version_get(&self) -> usize {
-        self._version
-    }
-    pub fn name_get(&self) -> &String {
-        &self._name
-    }
-    pub fn name_put(&mut self, inp: String) {
-        self._name = inp;
-    }
-    pub fn sites_get(&self) -> Vec<String> {
-        println!("AHAGAFAD");
-        let mut vecs: Vec<String> = Vec::new();
-        for each in &self._sites {
-            vecs.push(each.to_string());
-        }
-        vecs
     }
 }
 
@@ -102,6 +60,7 @@ pub fn get_global_info() -> Vec<sharedtypes::GlobalPluginScraper> {
             sites: vec!["4ch".into(), "4chan".into(), "4chan.net".into()],
             priority: DEFAULT_PRIORITY,
             num_threads: None,
+            modifiers: vec![],
         },
     ));
 
@@ -113,10 +72,23 @@ pub fn get_global_info() -> Vec<sharedtypes::GlobalPluginScraper> {
             sites: vec!["lulz".into(), "lulz.net".into()],
             priority: DEFAULT_PRIORITY,
             num_threads: None,
+            modifiers: vec![],
         },
     ));
 
-    vec![fourchan, lulz]
+    let mut eightchan = sharedtypes::return_default_globalpluginparser();
+    eightchan.name = "8chan.moe".into();
+    eightchan.storage_type = Some(sharedtypes::ScraperOrPlugin::Scraper(
+        sharedtypes::ScraperInfo {
+            ratelimit: (1, Duration::from_secs(2)),
+            sites: vec!["8chan".into(), "8chan.moe".into()],
+            priority: DEFAULT_PRIORITY,
+            num_threads: None,
+            modifiers: vec![],
+        },
+    ));
+
+    vec![fourchan, lulz, eightchan]
 }
 
 ///
@@ -174,9 +146,9 @@ fn filter_boardcodes(
     //let mut params_query = Vec::new();
     let mut params_storage = Vec::new();
     let mut catalog_urls = Vec::new();
-    for each in params.iter() {
+    for (cnt, each) in params.iter().enumerate() {
         if let sharedtypes::ScraperParam::Normal(param_data) = each {
-            if let Some(boardcode) = site.filter_board(&param_data.to_string()) {
+            if let Some(boardcode) = site.filter_board(&param_data.to_string(), &cnt) {
                 params_boardcodes.push(boardcode.clone());
                 catalog_urls.push(site.gen_catalog(&boardcode));
             } else {
@@ -271,12 +243,15 @@ pub fn parser(
     let mut out = sharedtypes::ScraperObject {
         file: HashSet::new(),
         tag: HashSet::new(),
+        flag: Vec::new(),
     };
 
     let site = get_site(&actual_params.job.site);
 
     if let Some(site) = site {
         let bcode = &actual_params.user_data.get("key_board_0").unwrap();
+
+        dbg!(html_input);
 
         if let Some(jobtype) = actual_params.user_data.get("JobType") {
             let jobtype_str: &str = jobtype;
@@ -378,11 +353,6 @@ pub fn parser(
                                 for attachment in attachments {
                                     let mut tag_list = Vec::new();
 
-                                    /*let attachment_md5 = hex::encode(
-                                        base64::prelude::BASE64_STANDARD
-                                            .decode(each["md5"].as_str().unwrap())
-                                            .unwrap(),
-                                    );*/
                                     let skip = match attachment.attachment_hash_string {
                                         None => Vec::new(),
                                         Some(md5_hash) => {
@@ -426,7 +396,7 @@ pub fn parser(
                                         let file = sharedtypes::FileObject {
                                             tag_list,
                                             skip_if: skip,
-                                            source_url: Some(source_url),
+                                            source: Some(sharedtypes::FileSource::Url(source_url)),
                                             hash: attachment.attachment_hash,
                                         };
                                         out.file.insert(file);

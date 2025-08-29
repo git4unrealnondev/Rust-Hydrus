@@ -18,7 +18,7 @@ pub fn ddos_guard_bypass(
     url: &String,
 ) -> Option<Response> {
     let mut cookiestring = String::new();
-    let cli = download::client_create();
+    let cli = download::client_create(vec![], false);
     let mut should_attempt_bypass = false;
     for (header_name, header_value) in response_input.headers() {
         if header_name.as_str().contains("server")

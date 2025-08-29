@@ -185,6 +185,18 @@ pub struct ScraperInfo {
     pub priority: usize,
     // How many threads should we use to scrape a page. If none then use as many threads as on cpu
     pub num_threads: Option<usize>,
+    pub modifiers: Vec<ScraperModifiers>,
+}
+
+///
+/// Modifiers to add to a scraper job
+///
+#[derive(Debug, Clone, Eq, Hash, PartialEq)]
+pub enum ScraperModifiers {
+    // A useragent to use when scraping text or pulling siteinfo
+    TextUseragent(String),
+    // A useragent to use when downloading media
+    MediaUseragent(String),
 }
 
 ///
@@ -404,12 +416,21 @@ pub enum ScraperReturn {
     Timeout(u64),
 }
 
+///
+/// Kinda stupid. Will see if I need this in the future
+///
+#[derive(Debug)]
+pub enum Flags {
+    Redo,
+}
+
 /// What the scraper passes between loaded 3rd party scrapers and the internal
 /// scrpaer.
 #[derive(Debug)]
 pub struct ScraperObject {
     pub file: HashSet<FileObject>,
     pub tag: HashSet<TagObject>,
+    pub flag: Vec<Flags>,
 }
 
 /// Shared data to be passed for jobs

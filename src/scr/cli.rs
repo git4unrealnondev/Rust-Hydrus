@@ -552,7 +552,7 @@ pub fn main(data: Arc<RwLock<database::Main>>, globalload: Arc<RwLock<GlobalLoad
                                 let _ = f.lock().unwrap().flush();
                                 *cnt.lock().unwrap() = 0;
                             }
-                            let client = &mut download::client_create();
+                            let client = &mut download::client_create(vec![], false);
                             if !Path::new(&lispa).exists() {
                                 println!("{}", &file.hash);
                                 if nsid.is_some() {

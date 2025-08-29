@@ -383,6 +383,7 @@ pub fn get_global_info() -> Vec<sharedtypes::GlobalPluginScraper> {
             sites: vec_of_strings!("e6", "e621", "e621.net"),
             priority: DEFAULT_PRIORITY,
             num_threads: None,
+            modifiers: vec![],
         },
     ));
     e6.callbacks = vec![sharedtypes::GlobalCallbacks::Start(
@@ -409,6 +410,7 @@ pub fn get_global_info() -> Vec<sharedtypes::GlobalPluginScraper> {
             sites: vec_of_strings!("e6ai", "e6ai.net"),
             priority: DEFAULT_PRIORITY,
             num_threads: None,
+            modifiers: vec![],
         },
     ));
     e6ai.callbacks = vec![sharedtypes::GlobalCallbacks::Start(
@@ -708,7 +710,11 @@ fn parse_pools(
         });
     }
 
-    Ok(sharedtypes::ScraperObject { file: files, tag })
+    Ok(sharedtypes::ScraperObject {
+        file: files,
+        tag,
+        flag: vec![],
+    })
 }
 
 ///
@@ -943,6 +949,7 @@ pub fn parser(
     Ok(sharedtypes::ScraperObject {
         file: files,
         tag: HashSet::new(),
+        flag: vec![],
     })
     //return Ok(vecvecstr);
 }

@@ -21,7 +21,7 @@ impl Site for BoardCodes {
             ),
         }
     }
-    fn filter_board(&self, inp: &str) -> Option<String> {
+    fn filter_board(&self, inp: &str, _params_cnt: &usize) -> Option<String> {
         if let Ok(_) = BoardCodes::from_str(&inp.to_uppercase()) {
             Some(inp.to_lowercase())
         } else {

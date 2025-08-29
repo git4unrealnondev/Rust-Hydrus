@@ -25,6 +25,7 @@ pub fn get_global_info() -> Vec<sharedtypes::GlobalPluginScraper> {
             ],
             priority: DEFAULT_PRIORITY,
             num_threads: None,
+            modifiers: vec![],
         },
     ));
 
@@ -227,6 +228,7 @@ pub fn parser(
     let mut out = sharedtypes::ScraperObject {
         file: HashSet::new(),
         tag: HashSet::new(),
+        flag: vec![]
     };
     // Handles when we're getting creators posts
     if let Some(name) = actual_params.user_data.get("confirmed user") {
@@ -337,6 +339,7 @@ pub fn parser(
                         return Ok(sharedtypes::ScraperObject {
                             file: HashSet::new(),
                             tag,
+        flag: vec![]
                         });
                     }
                 }

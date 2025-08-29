@@ -17,7 +17,7 @@ impl Site for BoardCodes {
     fn gen_catalog(&self, boardcode: &str) -> String {
         format!("https://lulz.net/{boardcode}/catalog.json")
     }
-    fn filter_board(&self, inp: &str) -> Option<String> {
+    fn filter_board(&self, inp: &str, _params_cnt: &usize) -> Option<String> {
         if inp == "furi" {
             return Some("furi".to_string());
         }

@@ -12,6 +12,7 @@ use core::time;
 use file_format::FileFormat;
 use log::{error, info};
 use reqwest::blocking::Client;
+use reqwest::blocking::ClientBuilder;
 use reqwest::cookie;
 use sha2::Digest as sha2Digest;
 use sha2::Sha256;
@@ -65,6 +66,28 @@ pub fn ratelimiter_create(
     }
 }
 
+///
+/// Extracts any modifiers from a pluginscraper
+///
+pub fn get_modifiers(
+    scraper: &sharedtypes::GlobalPluginScraper,
+) -> Vec<sharedtypes::ScraperModifiers> {
+    let mut out = Vec::new();
+
+    if let Some(scrapertype) = &scraper.storage_type {
+        if let sharedtypes::ScraperOrPlugin::Scraper(scraper) = scrapertype {
+            for modifier in &scraper.modifiers {
+                out.push(modifier.clone());
+            }
+        }
+    }
+
+    out
+}
+
+///
+/// Waits a bit for process control
+///
 pub fn ratelimiter_wait(ratelimit_object: &Arc<Mutex<Ratelimiter>>) {
     loop {
         let limit;
@@ -81,8 +104,34 @@ pub fn ratelimiter_wait(ratelimit_object: &Arc<Mutex<Ratelimiter>>) {
     }
 }
 
+fn process_modifiers(
+    client: ClientBuilder,
+    modifers: Vec<sharedtypes::ScraperModifiers>,
+    is_text_download: bool,
+) -> ClientBuilder {
+    let mut client = client;
+    for modifer in modifers {
+        match modifer {
+            sharedtypes::ScraperModifiers::MediaUseragent(useragent) => {
+                if !is_text_download {
+                    client = client.user_agent(useragent);
+                }
+            }
+            sharedtypes::ScraperModifiers::TextUseragent(useragent) => {
+                if is_text_download {
+                    client = client.user_agent(useragent);
+                }
+            }
+        }
+    }
+    client
+}
+
 /// Creates Client that the downloader will use.
-pub fn client_create() -> Client {
+pub fn client_create(
+    modifers: Vec<sharedtypes::ScraperModifiers>,
+    is_text_download: bool,
+) -> Client {
     //let useragent = "RustHydrusV1 0".to_string();
     let useragent =
         "User-Agent Mozilla/5.0 (X11; Linux x86_64; rv:141.0) Gecko/20100101 Firefox/141.0"
@@ -90,7 +139,7 @@ pub fn client_create() -> Client {
 
     let jar = cookie::Jar::default();
     // The client that does the downloading
-    reqwest::blocking::ClientBuilder::new()
+    let mut client = reqwest::blocking::ClientBuilder::new()
         //.cookie_provider(jar.into())
         .cookie_store(false)
         .user_agent(useragent)
@@ -99,9 +148,11 @@ pub fn client_create() -> Client {
         .deflate(true)
         .zstd(true)
         .connect_timeout(time::Duration::from_secs(15))
-        .timeout(time::Duration::from_secs(120))
-        .build()
-        .unwrap()
+        .timeout(time::Duration::from_secs(120));
+
+    client = process_modifiers(client, modifers, is_text_download);
+
+    client.build().unwrap()
 }
 
 /// Downloads text into db as responses. Filters responses by default limit if
