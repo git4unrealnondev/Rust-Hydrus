@@ -137,7 +137,7 @@ impl Main {
 
     /// Wrapper that handles inserting parents info into DB.
     pub fn parents_add_sql(&mut self, parent: &sharedtypes::DbParentsObj) {
-        let inp = "INSERT INTO Parents VALUES(?, ?, ?)";
+        let inp = "INSERT INTO Parents(tag_id, relate_tag_id, limit_to) VALUES(?, ?, ?)";
         let limit_to = match parent.limit_to {
             None => &Null as &dyn ToSql,
             Some(out) => &out.to_string(),
@@ -212,11 +212,14 @@ impl Main {
 
     ///
     /// Gets tag count
+    /// Note needs to be offset by one because sqlite starts at 1 but the internal sqlite counter
+    /// starts at zero but the stupid actual count starts at 1
     ///
     pub fn tags_max_return_sql(&self) -> usize {
         let conn = self._conn.lock().unwrap();
-        conn.query_row("SELECT COUNT(*) FROM Tags", params![], |row| row.get(0))
+        conn.query_row("SELECT MAX(id) FROM Tags", params![], |row| row.get(0))
             .unwrap_or(0)
+            + 1
     }
 
     ///
@@ -695,21 +698,6 @@ impl Main {
                 }
             }
         }
-        // if self.check_table_exists("Tags_New".to_string()) {
-        // self.db_drop_table(&"Tags_New".to_string()); self.transaction_flush(); }
-        // self.table_create( &"Tags_New".to_string(), &[ "id".to_string(),
-        // "name".to_string(), "namespace".to_string(), ] .to_vec(), &[
-        // "INTEGER".to_string(), "TEXT".to_string(), "INTEGER".to_string(), ] .to_vec(),
-        // ); { let conn = self._conn.lock().unwrap(); let mut stmt = conn
-        // .prepare("INSERT INTO Tags_New (id,name,namespace) VALUES (?1,?2,?3)")
-        // .unwrap();
-        //
-        // for i in 0..self._inmemdb.tags_max_return() { if let Some(taginfo) =
-        // self._inmemdb.tags_get_data(&i) { stmt.execute((i, taginfo.name.clone(),
-        // taginfo.namespace)) .unwrap(); } } } self.db_drop_table(&"Tags".to_string());
-        // if !self.check_table_exists("Tags".to_string()) {
-        // self.alter_table(&"Tags_New".to_string(), &"Tags".to_string()); }
-        // self.transaction_flush();
     }
 
     /// Sets advanced settings for journaling. NOTE Experimental badness
@@ -720,8 +708,6 @@ impl Main {
             .lock()
             .unwrap()
             .execute("PRAGMA secure_delete = 0;", params![]);
-        // self.execute("PRAGMA journal_mode = MEMORY".to_string()); self.execute("PRAGMA
-        // synchronous = OFF".to_string()); info!("Setting synchronous = OFF");
     }
 }
 
@@ -733,9 +719,9 @@ mod tests {
 
     fn setup_default_db() -> Main {
         let mut db = Main::new(None, VERS);
-        db.parents_add(1, 2, Some(3), true);
-        db.parents_add(2, 3, Some(4), true);
-        db.parents_add(3, 4, Some(5), true);
+        db.parents_add(1, 2, Some(3));
+        db.parents_add(2, 3, Some(4));
+        db.parents_add(3, 4, Some(5));
         db
     }
 

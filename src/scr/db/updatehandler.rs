@@ -717,7 +717,7 @@ impl Main {
 
             let keys = &vec_of_strings!("id", "tag_id", "relate_tag_id", "limit_to");
             let vals = &vec_of_strings!(
-                "INTEGER PRIMARY KEY",
+                "INTEGER PRIMARY KEY NOT NULL",
                 "INTEGER NOT NULL",
                 "INTEGER NOT NULL",
                 "INTEGER"
@@ -750,7 +750,11 @@ impl Main {
         if self.check_table_exists("Tags".into()) {
             self.alter_table(&"Tags".to_string(), &"Tags_Old".to_string());
             let keys = &vec_of_strings!("id", "name", "namespace");
-            let vals = &vec_of_strings!("INTEGER PRIMARY KEY", "TEXT NOT NULL", "INTEGER NOT NULL");
+            let vals = &vec_of_strings!(
+                "INTEGER PRIMARY KEY NOT NULL",
+                "TEXT NOT NULL",
+                "INTEGER NOT NULL"
+            );
 
             self.table_create(&"Tags".to_string(), keys, vals);
             let conn = self._conn.lock().unwrap();

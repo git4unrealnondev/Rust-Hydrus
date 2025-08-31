@@ -667,19 +667,28 @@ impl Main {
         // Making Tags Table
         name = "Tags".to_string();
         keys = vec_of_strings!["id", "name", "namespace"];
-        vals = vec_of_strings!["INTEGER", "TEXT", "INTEGER"];
+        vals = vec_of_strings![
+            "INTEGER PRIMARY KEY NOT NULL",
+            "TEXT NOT NULL",
+            "INTEGER NOT NULL"
+        ];
         self.table_create(&name, &keys, &vals);
 
         // Making Parents Table. Relates tags to tag parents.
         name = "Parents".to_string();
-        keys = vec_of_strings!["tag_id", "relate_tag_id", "limit_to"];
-        vals = vec_of_strings!["INTEGER", "INTEGER", "INTEGER"];
+        keys = vec_of_strings!["id", "tag_id", "relate_tag_id", "limit_to"];
+        vals = vec_of_strings![
+            "INTEGER PRIMARY KEY NOT NULL",
+            "INTEGER NOT NULL",
+            "INTEGER NOT NULL",
+            "INTEGER"
+        ];
         self.table_create(&name, &keys, &vals);
 
         // Making Namespace Table
         name = "Namespace".to_string();
         keys = vec_of_strings!["id", "name", "description"];
-        vals = vec_of_strings!["INTEGER", "TEXT", "TEXT"];
+        vals = vec_of_strings!["INTEGER PRIMARY KEY NOT NULL", "TEXT NOT NULL", "TEXT"];
         self.table_create(&name, &keys, &vals);
 
         // Making Settings Table
@@ -2474,9 +2483,9 @@ pub(crate) mod test_database {
                 db._dbpath = Some("test1.db".into());
             }
             db._cache = cachetype;
-            db.parents_add(1, 2, Some(3), true);
-            db.parents_add(2, 3, Some(4), true);
-            db.parents_add(3, 4, Some(5), true);
+            db.parents_add(1, 2, Some(3));
+            db.parents_add(2, 3, Some(4));
+            db.parents_add(3, 4, Some(5));
             db.tag_add(&"test".to_string(), 1, false, None);
             db.tag_add(&"test1".to_string(), 1, false, None);
             db.tag_add(&"test2".to_string(), 1, false, None);
@@ -2510,9 +2519,16 @@ pub(crate) mod test_database {
     #[test]
     fn db_test_load_tags() {
         for mut main in setup_default_db() {
-            assert_eq!(main.tags_max_id(), 3);
+            dbg!(&main._cache);
+            dbg!(main.tags_max_id());
+            dbg!(main.tag_id_get(&0));
+            dbg!(main.tag_id_get(&1));
+            dbg!(main.tag_id_get(&2));
+            dbg!(main.tag_id_get(&3));
+            dbg!(main.tag_id_get(&4));
+            assert_eq!(main.tags_max_id(), 4);
             let id = main.tag_add(&"test3".to_string(), 3, false, None);
-            assert_eq!(id, 3);
+            assert_eq!(id, 4);
 
             assert!(main.tag_id_get(&2).is_some());
         }
@@ -2521,8 +2537,8 @@ pub(crate) mod test_database {
     #[test]
     fn db_namespace() {
         for mut main in setup_default_db() {
-            main.namespace_add("test".into(), Some("woohoo".into()));
-            main.namespace_add("desc".into(), None);
+            main.namespace_add(&"test".to_string(), &Some("woohoo".into()));
+            main.namespace_add(&"desc".to_string(), &None);
 
             assert!(main.namespace_get(&"test".into()).is_some());
             assert!(main.namespace_get(&"desc".into()).is_some());

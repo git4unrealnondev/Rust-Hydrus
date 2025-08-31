@@ -387,6 +387,7 @@ mod tests {
                     sites: vec!["Nah".to_string()],
                     priority: DEFAULT_PRIORITY,
                     num_threads: None,
+                    modifiers: vec![],
                 },
             ));
 
@@ -411,6 +412,7 @@ mod tests {
                     sites: vec!["Nah".to_string()],
                     priority: DEFAULT_PRIORITY,
                     num_threads: None,
+                    modifiers: vec![],
                 },
             ));
 

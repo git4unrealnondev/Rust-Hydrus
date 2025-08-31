@@ -99,12 +99,12 @@ impl NewinMemDB {
             file_enclave_action_max: 1,
             _relationship_dual: HashSet::default(),
             _file_location_count: 0,
-            _tag_max: 0,
+            _tag_max: 1,
             _settings_max: 0,
             _parents_max: 0,
             _jobs_max: 0,
             _namespace_max: 0,
-            _file_max: 0,
+            _file_max: 1,
             _relationship_max: 0,
         }
     }
@@ -1219,7 +1219,7 @@ mod inmemdb {
             },
             None,
         );
-        assert_eq!(db.tags_max_return(), 1);
+        assert_eq!(db.tags_max_return(), 2);
 
         db.tags_put(
             &sharedtypes::DbTagNNS {
@@ -1277,7 +1277,7 @@ mod inmemdb {
     #[test]
     fn tags_test_id_none() {
         let mut db = setup_db();
-        db.tags_put(
+        let yeet = db.tags_put(
             &sharedtypes::DbTagNNS {
                 name: "yeet".to_string(),
                 namespace: 0,
@@ -1285,14 +1285,14 @@ mod inmemdb {
             None,
         );
         assert_eq!(
-            db.tags_get_data(&0),
+            db.tags_get_data(&yeet),
             Some(&sharedtypes::DbTagNNS {
                 name: "yeet".to_string(),
                 namespace: 0
             })
         );
-        assert_eq!(db._tag_max, 1);
-        db.tags_put(
+        assert_eq!(db._tag_max, 2);
+        let yee = db.tags_put(
             &sharedtypes::DbTagNNS {
                 name: "yee".to_string(),
                 namespace: 0,
@@ -1300,13 +1300,13 @@ mod inmemdb {
             Some(0),
         );
         assert_eq!(
-            db.tags_get_data(&0),
+            db.tags_get_data(&yee),
             Some(&sharedtypes::DbTagNNS {
                 name: "yee".to_string(),
                 namespace: 0
             })
         );
-        assert_eq!(db._tag_max, 1);
+        assert_eq!(db._tag_max, 2);
         db.tags_put(
             &sharedtypes::DbTagNNS {
                 name: "yeet".to_string(),
@@ -1749,22 +1749,22 @@ mod inmemdb {
         let mut db = setup_db();
         dbg!(&db._file_id_data, &db._file_name_id, &db._file_max);
         let init = db.file_put(sharedtypes::DbFileStorage::NoExistUnknown);
-        assert_eq!(init, 0);
-        dbg!(&db._file_id_data, &db._file_name_id, &db._file_max);
-        let init = db.file_put(sharedtypes::DbFileStorage::NoExistUnknown);
         assert_eq!(init, 1);
         dbg!(&db._file_id_data, &db._file_name_id, &db._file_max);
+        let init = db.file_put(sharedtypes::DbFileStorage::NoExistUnknown);
+        assert_eq!(init, 2);
+        dbg!(&db._file_id_data, &db._file_name_id, &db._file_max);
         let file = sharedtypes::DbFileObj {
-            id: 1,
+            id: 2,
             hash: "None".to_owned(),
             ext_id: 0,
             storage_id: 0,
         };
         let init = db.file_put(sharedtypes::DbFileStorage::Exist(file));
         dbg!(&db._file_id_data, &db._file_name_id, &db._file_max);
-        assert_eq!(init, 1);
-        let init = db.file_put(sharedtypes::DbFileStorage::NoExistUnknown);
         assert_eq!(init, 2);
+        let init = db.file_put(sharedtypes::DbFileStorage::NoExistUnknown);
+        assert_eq!(init, 3);
         let file = sharedtypes::DbFileObj {
             id: 10,
             hash: "None".to_owned(),
