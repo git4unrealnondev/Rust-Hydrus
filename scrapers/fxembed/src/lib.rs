@@ -175,8 +175,8 @@ pub fn url_dump(
 ///
 #[unsafe(no_mangle)]
 pub fn parser(
-    html_input: &String,
-    source_url: &String,
+    html_input: &str,
+    source_url: &str,
     scraperdata: &sharedtypes::ScraperData,
 ) -> Result<sharedtypes::ScraperObject, sharedtypes::ScraperReturn> {
     let mut out = sharedtypes::ScraperObject {
