@@ -157,6 +157,7 @@ impl Main {
             main.first_db();
             main.updatedb();
             main.db_commit_man_set();
+            main.load_table(&sharedtypes::LoadDBTable::Settings);
             main.load_caching();
         } else {
             // Database does exist.
@@ -165,6 +166,7 @@ impl Main {
                 "Database Exists: {} : Skipping creation.",
                 first_time_load_flag
             ));
+            main.load_table(&sharedtypes::LoadDBTable::Settings);
             main.load_caching();
         }
         main

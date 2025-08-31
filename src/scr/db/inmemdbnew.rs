@@ -126,7 +126,6 @@ impl NewinMemDB {
 
     /// Dumps db data
     pub fn dumpe_data(&self) {
-        panic!();
         use crate::pause;
 
         //dbg!(&self._tag_nns_id_data, &self._tag_nns_data_id);
@@ -139,6 +138,7 @@ impl NewinMemDB {
         dbg!(&self._tag_nns_id_data);
         dbg!(&self._parents_tag_rel);
         dbg!(&self._jobs_max);
+        dbg!(&self._settings_id_data, &self._settings_name_id);
     }
 
     /// Adds setting into internal DB. Updates setting if it doesn't exist.

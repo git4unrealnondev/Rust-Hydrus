@@ -345,6 +345,14 @@ pub fn text_scraping(
                     },
                 ];
 
+                // Weird workaround for if its your first time running this garbage
+                if let None = client::namespace_get("Mega_Handle".into()) {
+                    client::namespace_put(
+                        "Mega_Handle".into(),
+                        Some("A individual handle that links a file to a dir in mega".into()),
+                    );
+                }
+
                 // Ghetto way to pre-filter if we've already downloaded a file
                 if let Some(namespace_id) = client::namespace_get("Mega_Handle".into()) {
                     if client::tag_get_name(root.handle().into(), namespace_id).is_none() {

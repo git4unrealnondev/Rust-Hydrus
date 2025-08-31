@@ -1,16 +1,5 @@
-use base64::Engine;
-use chrono::DateTime;
-use regex::Regex;
-use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
-use std::collections::HashMap;
-use std::collections::HashSet;
-use std::io;
-use std::io::BufRead;
 use std::time::Duration;
 
-#[path = "../../../src/scr/intcoms/client.rs"]
-mod client;
 #[path = "../../../src/scr/sharedtypes.rs"]
 mod sharedtypes;
 
@@ -23,31 +12,29 @@ static PLUGIN_NAME: &str = "File Downloader";
 static PLUGIN_DESCRIPTION: &str =
     "Tries to download files directly if this plugin can recognize a url.";
 
-#[no_mangle]
-pub fn return_info() -> sharedtypes::PluginInfo {
-    let  tag_vec = vec![   (     Some(sharedtypes::SearchType::Regex(
-            //r"(http(s)?://www.|((www.|http(s)?://)))[a-zA-Z0-9-].[a-zA-Z0-9-_.]*/[a-zA-Z0-9/_%]+\.[a-zA-Z0-9/_%\.?=&-]+"
-            r"(http(s)?://www.|((www.|http(s)?://)))[a-zA-Z0-9-].[a-zA-Z0-9-_.]*/[a-zA-Z0-9/_%-]+\.[a-zA-Z0-9/_%\.?=&-]+"
-            .to_string()),
-        ),
-        None,
-        Some("source_url".to_string()),
-    )];
+pub const REGEX_COLLECTIONS: &str = r"(http(s)?://www.|((www.|http(s)?://)))[a-zA-Z0-9-].[a-zA-Z0-9-_.]*/[a-zA-Z0-9/_%-]+\.[a-zA-Z0-9/_%\.?=&-]+";
 
-    let callbackvec = vec![sharedtypes::PluginCallback::Tag(tag_vec)];
-    sharedtypes::PluginInfo {
-        name: PLUGIN_NAME.to_string(),
-        description: PLUGIN_DESCRIPTION.to_string(),
-        version: 1.00,
-        api_version: 1.00,
-        callbacks: callbackvec,
-        communication: Some(sharedtypes::PluginSharedData {
-            thread: sharedtypes::PluginThreadType::Inline,
-            com_channel: Some(sharedtypes::PluginCommunicationChannel::Pipe(
-                "beans".to_string(),
-            )),
-        }),
-    }
+#[no_mangle]
+pub fn get_global_info() -> Vec<sharedtypes::GlobalPluginScraper> {
+    let tag_vec = (
+        Some(sharedtypes::SearchType::Regex(REGEX_COLLECTIONS.into())),
+        vec![],
+        vec!["source_url".to_string()],
+    );
+
+    let callbackvec = vec![sharedtypes::GlobalCallbacks::Tag(tag_vec)];
+
+    let mut plugin = sharedtypes::return_default_globalpluginparser();
+    plugin.name = PLUGIN_NAME.to_string();
+    plugin.storage_type = Some(sharedtypes::ScraperOrPlugin::Plugin(
+        sharedtypes::PluginInfo2 {
+            com_channel: true,
+            redirect: None,
+        },
+    ));
+    plugin.callbacks = callbackvec;
+
+    vec![plugin]
 }
 
 #[no_mangle]
@@ -55,7 +42,7 @@ pub fn on_regex_match(
     tag: &String,
     tag_ns: &String,
     regex_match: &String,
-    callback: &Option<SearchType>,
+    callback: &Option<sharedtypes::SearchType>,
 ) -> Vec<sharedtypes::DBPluginOutputEnum> {
     let mut out = Vec::new();
     if regex_match.contains("bsky.app") {
@@ -92,12 +79,21 @@ pub fn on_regex_match(
     };
 
     let file = sharedtypes::FileObject {
-        source_url: Some(regex_match.to_string()),
+        source: Some(sharedtypes::FileSource::Url(regex_match.to_string())),
         hash: sharedtypes::HashesSupported::None,
         tag_list: vec![taginfo],
         skip_if: vec![sharedtypes::SkipIf::FileTagRelationship(earlyexistag)],
     };
     let ratelimit = (1, Duration::from_secs(1));
+
+    let mut default_job = sharedtypes::return_default_jobsobj();
+
+    default_job.site = "direct download".to_string();
+    default_job.param = vec![sharedtypes::ScraperParam::Url(regex_match.into())];
+    default_job.jobmanager = sharedtypes::DbJobsManager {
+        jobtype: sharedtypes::DbJobType::FileUrl,
+        recreation: None,
+    };
 
     out.push(sharedtypes::DBPluginOutputEnum::Add(vec![
         sharedtypes::DBPluginOutput {
@@ -105,22 +101,7 @@ pub fn on_regex_match(
             setting: None,
             relationship: None,
             parents: None,
-            jobs: Some(vec![sharedtypes::DbJobsObj {
-                id: 0,
-                time: 0,
-                reptime: Some(0),
-
-                site: "direct download".to_string(),
-                param: vec![sharedtypes::ScraperParam::Url(regex_match.to_string())],
-                jobmanager: sharedtypes::DbJobsManager {
-                    jobtype: sharedtypes::DbJobType::FileUrl,
-                    recreation: None,
-                },
-                committype: Some(sharedtypes::CommitType::StopOnNothing),
-                isrunning: false,
-                system_data: BTreeMap::new(),
-                user_data: BTreeMap::new(),
-            }]),
+            jobs: Some(vec![default_job]),
             namespace: None,
             file: None,
         },

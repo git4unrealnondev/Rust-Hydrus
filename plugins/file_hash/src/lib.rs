@@ -179,7 +179,7 @@ fn get_set(inp: Supset) -> SettingInfo {
 fn check_existing_db_table(table: TableData) -> usize {
     let bns = client::namespace_get(table.name.to_string());
     let uns = match bns {
-        None => client::namespace_put(table.name, table.description, true),
+        None => client::namespace_put(table.name, table.description),
         Some(id) => id,
     };
     client::transaction_flush();
