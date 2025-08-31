@@ -235,8 +235,8 @@ fn nsout(inp: &Nsid) -> sharedtypes::GenericNamespaceObj {
 ///
 #[no_mangle]
 pub fn parser(
-    html_input: &String,
-    _: &String,
+    html_input: &str,
+    _: &str,
     scraperdata: &sharedtypes::ScraperData,
 ) -> Result<sharedtypes::ScraperObject, sharedtypes::ScraperReturn> {
     let mut scraper_data = scraperdata.clone();
@@ -250,8 +250,6 @@ pub fn parser(
 
     if let Some(site) = site {
         let bcode = &scraperdata.user_data.get("key_board_0").unwrap();
-
-        dbg!(html_input);
 
         if let Some(jobtype) = scraperdata.user_data.get("JobType") {
             let jobtype_str: &str = jobtype;
@@ -311,7 +309,15 @@ pub fn parser(
                                         namespace: nsout(&Nsid::PostComment),
                                         tag: comment.to_string(),
                                         tag_type: sharedtypes::TagType::Normal,
-                                        relates_to: Some(com),
+                                        relates_to: Some(com.clone()),
+                                    });
+                                }
+                                if let Some(comment) = each["time"].as_usize() {
+                                    out.tag.insert(sharedtypes::TagObject {
+                                        namespace: nsout(&Nsid::PostTimestamp),
+                                        tag: comment.to_string(),
+                                        tag_type: sharedtypes::TagType::Normal,
+                                        relates_to: Some(com.clone()),
                                     });
                                 }
 
@@ -330,14 +336,6 @@ pub fn parser(
                                         relates_to: Some(subthread.clone()),
                                     });
                                 }
-                            }
-                            if let Some(comment) = each["time"].as_usize() {
-                                out.tag.insert(sharedtypes::TagObject {
-                                    namespace: nsout(&Nsid::PostTimestamp),
-                                    tag: comment.to_string(),
-                                    tag_type: sharedtypes::TagType::Normal,
-                                    relates_to: Some(subthread.clone()),
-                                });
                             }
 
                             // If we have a file name then we should download it
@@ -420,11 +418,19 @@ pub fn parser(
                         if key == "*" {
                             process = true;
                         }
-                        if thread["com"].to_string().contains(key) {
+                        if thread["com"]
+                            .to_string()
+                            .to_lowercase()
+                            .contains(&key.to_lowercase())
+                        {
                             process = true;
                         }
                         if !thread["sub"].is_null() {
-                            if thread["sub"].to_string().contains(key) {
+                            if thread["sub"]
+                                .to_string()
+                                .to_lowercase()
+                                .contains(&key.to_lowercase())
+                            {
                                 process = true;
                             }
                         }
