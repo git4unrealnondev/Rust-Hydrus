@@ -408,9 +408,7 @@ pub fn text_scraping(
                 }
             }
         }
-    } else {
-        dbg!(nref.err().unwrap());
-    }
+    } 
     Ok(sharedtypes::ScraperObject { file, tag, flag })
 }
 
