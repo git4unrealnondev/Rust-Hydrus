@@ -47,7 +47,9 @@ const FILTER_ARRAY: [(&str, &str, Option<&str>); 3] = [
     ),
 ];
 
-const DEBUG: bool = false;
+const SOURCE_REPLACEMENTS_TWTR: [&str; 3] = ["fxtwitter", "skibidix", "fixupx"];
+
+const DEBUG: bool = true;
 
 ///
 /// Returns the info needed to scrape an fxembed system
@@ -119,14 +121,24 @@ pub fn url_dump(
     if scraperdata.job.param.len() == 1 {
         for param in scraperdata.job.param.iter() {
             if let sharedtypes::ScraperParam::Normal(temp) = param {
+
                 // Replaces any x or bsky links with the alternatives from fxembed
                 let url = temp
                     .replace("x.com", DEFAULT_REPLACEMENT_NAME_TWIT)
                     .replace("/twitter.com", DEFAULT_REPLACEMENT_NAME_TWIT)
                     .replace("/bsky.app", DEFAULT_REPLACEMENT_NAME_BSKY);
 
+                let mut stripped = temp.clone();
+                for each in SOURCE_REPLACEMENTS_TWTR {
+                    stripped = stripped.replace(each, "x");
+                }
                 let mut scraperdata = scraperdata.clone();
-                scraperdata.user_data.insert("post_source".into(), url.clone());
+                scraperdata
+                    .user_data
+                    .insert("post_source".into(), stripped);
+                scraperdata
+                    .user_data
+                    .insert("post_source_edited".into(), url.clone());
                 out.push((url.clone(), scraperdata.clone()));
             }
         }
@@ -151,7 +163,7 @@ pub fn parser(
     };
 
     if DEBUG {
-    dbg!(&html_input, actual_params);
+        dbg!(&html_input, actual_params);
     }
     let fragment = Html::parse_fragment(html_input);
     let selector = Selector::parse("meta").unwrap();
@@ -162,10 +174,15 @@ pub fn parser(
 
     let mut urlsource = None;
 
-let postsource = match actual_params.user_data.get("post_source") {
-                            Some(out) => out.to_string(),
-                            None => {return Ok(out)},
-                        };
+    let postsource = match actual_params.user_data.get("post_source") {
+        Some(out) => out.to_string(),
+        None => return Ok(out),
+    };
+
+let postsourceedited = match actual_params.user_data.get("post_source_edited") {
+        Some(out) => out.to_string(),
+        None => return Ok(out),
+    };
 
 
     // Filters for the source urls
@@ -184,9 +201,9 @@ let postsource = match actual_params.user_data.get("post_source") {
             if mat == key {
                 let urlinp;
                 if postsource.contains("bsky.app") {
-urlinp = postsource.clone();
+                    urlinp = postsource.clone();
                 } else {
-                    urlinp=val.into();
+                    urlinp = val.into();
                 }
                 urlsource = Some(sharedtypes::SubTag {
                     namespace: url_source_ns.clone(),
@@ -245,7 +262,6 @@ urlinp = postsource.clone();
                 //pos += 1;
 
                 if let Some(sourceurl) = &urlsource {
-                    
                     let indivimg_vec: Vec<&str> = arrayvec[1].split("url=").collect();
 
                     if indivimg_vec.len() != 2 {
@@ -256,23 +272,23 @@ urlinp = postsource.clone();
                         dbg!(&indivimg_vec);
                     }
 
-
-
                     let mut indivimg;
                     if indivimg_vec[1].contains("x.com") {
                         indivimg = indivimg_vec[1]
                             .replace("x.com", &format!("d.{}", DEFAULT_REPLACEMENT_NAME_TWIT));
-                    indivimg.push_str(&format!("/photo/{}", pos));
+                        indivimg.push_str(&format!("/photo/{}", pos));
                     } else if indivimg_vec[1].contains("bsky.app") {
-                        indivimg = postsource.clone(); 
-                        indivimg = indivimg
-                            .replace("fxbsky.app", &format!("d.{}", DEFAULT_REPLACEMENT_NAME_BSKY));
+                        indivimg = postsourceedited.clone();
+                        indivimg = indivimg.replace(
+                            "fxbsky.app",
+                            &format!("d.{}", DEFAULT_REPLACEMENT_NAME_BSKY),
+                        );
                         //indivimg = "https://d.fxbsky.app/profile/kadlifal.bsky.social/post/3ljzvg5xek22g".into();
                     } else {
                         continue;
                     }
 
-let position_sub = Some(sharedtypes::SubTag {
+                    let position_sub = Some(sharedtypes::SubTag {
                         namespace: sharedtypes::GenericNamespaceObj {
                             name: "FxEmbed_Position".into(),
                             description: Some("The position of an item inside of a post".into()),
@@ -300,15 +316,18 @@ let position_sub = Some(sharedtypes::SubTag {
                         source: Some(sharedtypes::FileSource::Url(indivimg)),
                         hash: sharedtypes::HashesSupported::None,
                         tag_list: vec![pos_tag],
-                        skip_if: vec![sharedtypes::SkipIf::DownloadedFileExtension(("html".into(), true))],
+                        skip_if: vec![sharedtypes::SkipIf::DownloadedFileExtension((
+                            "html".into(),
+                            true,
+                        ))],
                     });
                 }
             }
         }
     }
 
-    if DEBUG{
-    dbg!(&out);
+    if DEBUG {
+        dbg!(&out);
     }
     Ok(out)
 }
