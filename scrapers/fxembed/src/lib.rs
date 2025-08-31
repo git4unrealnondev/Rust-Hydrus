@@ -14,11 +14,11 @@ pub const LOCAL_NAME: &str = "FxEmbed";
 
 // Replacment url to put everything on. IE x.com to fxtwitter.com
 pub const DEFAULT_REPLACEMENT_NAME_TWIT: &str = "fxtwitter.com";
-pub const DEFAULT_REPLACEMENT_NAME_BSKY: &str = "fxbsky.com";
+pub const DEFAULT_REPLACEMENT_NAME_BSKY: &str = "fxbsky.app";
 
 // Regex to match a url when a tag comes in
 pub const REGEX_COLLECTIONS: &str =
-    r"(http(s)?://)?(fxtwitter|skibidix|fixupx|fxbsky)[.a-zA-Z///_0-9]+";
+    r"(http(s)?://)?(fxtwitter|skibidix|fixupx|fxbsky|x)[.a-zA-Z///_0-9]+";
 
 // Sources for a url to attach data to
 const SOURCE_FILTER_ARRAY: [(&str, &str, Option<&str>); 1] =
@@ -47,6 +47,8 @@ const FILTER_ARRAY: [(&str, &str, Option<&str>); 3] = [
     ),
 ];
 
+const DEBUG: bool = false;
+
 ///
 /// Returns the info needed to scrape an fxembed system
 ///
@@ -62,6 +64,7 @@ pub fn get_global_info() -> Vec<sharedtypes::GlobalPluginScraper> {
                 "fxtwitter.com".into(),
                 "fixupx.com".into(),
                 "fxbsky.app".into(),
+                "x.com".into(),
                 LOCAL_NAME.into(),
                 LOCAL_NAME.to_lowercase(),
             ],
@@ -108,15 +111,22 @@ pub fn get_global_info() -> Vec<sharedtypes::GlobalPluginScraper> {
 ///
 #[unsafe(no_mangle)]
 pub fn url_dump(
-    params: &Vec<sharedtypes::ScraperParam>,
+    _params: &Vec<sharedtypes::ScraperParam>,
     scraperdata: &sharedtypes::ScraperData,
 ) -> Vec<(String, sharedtypes::ScraperData)> {
     let mut out = vec![];
 
     if scraperdata.job.param.len() == 1 {
         for param in scraperdata.job.param.iter() {
-            if let sharedtypes::ScraperParam::Normal(url) = param {
-                //let url:String  = url.replace("fx", "d.fx");
+            if let sharedtypes::ScraperParam::Normal(temp) = param {
+                // Replaces any x or bsky links with the alternatives from fxembed
+                let url = temp
+                    .replace("x.com", DEFAULT_REPLACEMENT_NAME_TWIT)
+                    .replace("/twitter.com", DEFAULT_REPLACEMENT_NAME_TWIT)
+                    .replace("/bsky.app", DEFAULT_REPLACEMENT_NAME_BSKY);
+
+                let mut scraperdata = scraperdata.clone();
+                scraperdata.user_data.insert("post_source".into(), url.clone());
                 out.push((url.clone(), scraperdata.clone()));
             }
         }
@@ -132,7 +142,7 @@ pub fn url_dump(
 pub fn parser(
     html_input: &String,
     _params: &Vec<sharedtypes::ScraperParam>,
-    _actual_params: &sharedtypes::ScraperData,
+    actual_params: &sharedtypes::ScraperData,
 ) -> Result<sharedtypes::ScraperObject, sharedtypes::ScraperReturn> {
     let mut out = sharedtypes::ScraperObject {
         file: HashSet::new(),
@@ -140,6 +150,9 @@ pub fn parser(
         flag: vec![],
     };
 
+    if DEBUG {
+    dbg!(&html_input, actual_params);
+    }
     let fragment = Html::parse_fragment(html_input);
     let selector = Selector::parse("meta").unwrap();
     let url_source_ns = sharedtypes::GenericNamespaceObj {
@@ -148,6 +161,12 @@ pub fn parser(
     };
 
     let mut urlsource = None;
+
+let postsource = match actual_params.user_data.get("post_source") {
+                            Some(out) => out.to_string(),
+                            None => {return Ok(out)},
+                        };
+
 
     // Filters for the source urls
     for element in fragment.select(&selector) {
@@ -163,9 +182,15 @@ pub fn parser(
 
         'sourceloop: for (mat, _ns_name, _ns_description) in SOURCE_FILTER_ARRAY {
             if mat == key {
+                let urlinp;
+                if postsource.contains("bsky.app") {
+urlinp = postsource.clone();
+                } else {
+                    urlinp=val.into();
+                }
                 urlsource = Some(sharedtypes::SubTag {
                     namespace: url_source_ns.clone(),
-                    tag: val.into(),
+                    tag: urlinp,
                     tag_type: sharedtypes::TagType::Normal,
                     limit_to: None,
                 });
@@ -220,7 +245,34 @@ pub fn parser(
                 //pos += 1;
 
                 if let Some(sourceurl) = &urlsource {
-                    let position_sub = Some(sharedtypes::SubTag {
+                    
+                    let indivimg_vec: Vec<&str> = arrayvec[1].split("url=").collect();
+
+                    if indivimg_vec.len() != 2 {
+                        continue;
+                    }
+
+                    if DEBUG {
+                        dbg!(&indivimg_vec);
+                    }
+
+
+
+                    let mut indivimg;
+                    if indivimg_vec[1].contains("x.com") {
+                        indivimg = indivimg_vec[1]
+                            .replace("x.com", &format!("d.{}", DEFAULT_REPLACEMENT_NAME_TWIT));
+                    indivimg.push_str(&format!("/photo/{}", pos));
+                    } else if indivimg_vec[1].contains("bsky.app") {
+                        indivimg = postsource.clone(); 
+                        indivimg = indivimg
+                            .replace("fxbsky.app", &format!("d.{}", DEFAULT_REPLACEMENT_NAME_BSKY));
+                        //indivimg = "https://d.fxbsky.app/profile/kadlifal.bsky.social/post/3ljzvg5xek22g".into();
+                    } else {
+                        continue;
+                    }
+
+let position_sub = Some(sharedtypes::SubTag {
                         namespace: sharedtypes::GenericNamespaceObj {
                             name: "FxEmbed_Position".into(),
                             description: Some("The position of an item inside of a post".into()),
@@ -229,29 +281,10 @@ pub fn parser(
                         tag: pos.to_string(),
                         tag_type: sharedtypes::TagType::Normal,
                         limit_to: Some(sharedtypes::Tag {
-                            tag: sourceurl.tag.clone(),
+                            tag: postsource.clone(),
                             namespace: sourceurl.namespace.clone(),
                         }),
                     });
-
-                    let indivimg_vec: Vec<&str> = arrayvec[1].split("url=").collect();
-
-                    if indivimg_vec.len() != 2 {
-                        continue;
-                    }
-
-                    let mut indivimg;
-                    if indivimg_vec[1].contains("x.com") {
-                        indivimg = indivimg_vec[1]
-                            .replace("x.com", &format!("d.{}", DEFAULT_REPLACEMENT_NAME_TWIT));
-                    } else if indivimg_vec[1].contains("bsky.com") {
-                        indivimg = indivimg_vec[1]
-                            .replace("bsky.com", &format!("d.{}", DEFAULT_REPLACEMENT_NAME_BSKY));
-                    } else {
-                        continue;
-                    }
-
-                    indivimg.push_str(&format!("/photo/{}", pos));
 
                     let pos_tag = sharedtypes::TagObject {
                         namespace: sharedtypes::GenericNamespaceObj {
@@ -267,12 +300,15 @@ pub fn parser(
                         source: Some(sharedtypes::FileSource::Url(indivimg)),
                         hash: sharedtypes::HashesSupported::None,
                         tag_list: vec![pos_tag],
-                        skip_if: vec![],
+                        skip_if: vec![sharedtypes::SkipIf::DownloadedFileExtension(("html".into(), true))],
                     });
                 }
             }
         }
     }
 
+    if DEBUG{
+    dbg!(&out);
+    }
     Ok(out)
 }

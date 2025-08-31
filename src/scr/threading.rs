@@ -625,6 +625,10 @@ pub fn parse_tags(
                     url_return.insert(jobscraped.clone());
                 }
                 Some(skip_if) => match skip_if {
+                    sharedtypes::SkipIf::DownloadedFileExtension((
+                        extension,
+                        should_download_later,
+                    )) => {}
                     sharedtypes::SkipIf::FileHash(sha512hash) => {
                         let unwrappy = db.read().unwrap();
                         if unwrappy.file_get_hash(sha512hash).is_none() {
@@ -843,6 +847,7 @@ fn parse_skipif(
     job_id: &usize,
 ) -> bool {
     match file_tag {
+        sharedtypes::SkipIf::DownloadedFileExtension((extension, should_download_later)) => {}
         sharedtypes::SkipIf::FileHash(sha512hash) => {
             let unwrappy = db.read().unwrap();
             return unwrappy.file_get_hash(&sha512hash).is_some();

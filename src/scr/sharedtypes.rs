@@ -890,6 +890,9 @@ pub enum SkipIf {
     FileNamespaceNumber((Tag, GenericNamespaceObj, usize)),
     // Skips a file if the hash X exists
     FileHash(String),
+    // If we download X extension then skip processing it. if bool is true then do not try and
+    // redownload the file
+    DownloadedFileExtension((String, bool)),
 }
 
 #[derive(
