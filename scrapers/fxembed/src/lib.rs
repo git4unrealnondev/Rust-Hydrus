@@ -49,7 +49,7 @@ const FILTER_ARRAY: [(&str, &str, Option<&str>); 3] = [
 
 const SOURCE_REPLACEMENTS_TWTR: [&str; 3] = ["fxtwitter", "skibidix", "fixupx"];
 
-const DEBUG: bool = true;
+const DEBUG: bool = false;
 
 ///
 /// Returns the info needed to scrape an fxembed system
