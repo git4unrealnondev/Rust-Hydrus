@@ -16,7 +16,7 @@ pub fn get_global_info() -> Vec<sharedtypes::GlobalPluginScraper> {
         },
     ));
     main.callbacks = vec![sharedtypes::GlobalCallbacks::Start(
-        sharedtypes::StartupThreadType::SpawnInline,
+        sharedtypes::StartupThreadType::Spawn,
     )];
     let out = vec![main];
 
