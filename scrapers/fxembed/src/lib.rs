@@ -121,7 +121,6 @@ pub fn url_dump(
     if scraperdata.job.param.len() == 1 {
         for param in scraperdata.job.param.iter() {
             if let sharedtypes::ScraperParam::Normal(temp) = param {
-
                 // Replaces any x or bsky links with the alternatives from fxembed
                 let url = temp
                     .replace("x.com", DEFAULT_REPLACEMENT_NAME_TWIT)
@@ -133,9 +132,7 @@ pub fn url_dump(
                     stripped = stripped.replace(each, "x");
                 }
                 let mut scraperdata = scraperdata.clone();
-                scraperdata
-                    .user_data
-                    .insert("post_source".into(), stripped);
+                scraperdata.user_data.insert("post_source".into(), stripped);
                 scraperdata
                     .user_data
                     .insert("post_source_edited".into(), url.clone());
@@ -179,11 +176,10 @@ pub fn parser(
         None => return Ok(out),
     };
 
-let postsourceedited = match actual_params.user_data.get("post_source_edited") {
+    let postsourceedited = match actual_params.user_data.get("post_source_edited") {
         Some(out) => out.to_string(),
         None => return Ok(out),
     };
-
 
     // Filters for the source urls
     for element in fragment.select(&selector) {
