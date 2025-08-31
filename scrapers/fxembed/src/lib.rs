@@ -18,7 +18,7 @@ pub const DEFAULT_REPLACEMENT_NAME_BSKY: &str = "fxbsky.app";
 
 // Regex to match a url when a tag comes in
 pub const REGEX_COLLECTIONS: &str =
-    r"(http(s)?://)?(fxtwitter|skibidix|fixupx|fxbsky|x)[.a-zA-Z///_0-9]+";
+    r"(http(s)?://)?(fxtwitter|skibidix|fixupx|fxbsky|x|bsky)\.(com|app)[.a-zA-Z///_0-9]+";
 
 // Sources for a url to attach data to
 const SOURCE_FILTER_ARRAY: [(&str, &str, Option<&str>); 1] =
