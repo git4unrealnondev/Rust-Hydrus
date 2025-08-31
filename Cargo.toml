@@ -70,7 +70,6 @@ debug = true
 strip = false
 
 [dev-dependencies]
-criterion = { version = "0.6", features = ["html_reports"] }
 
 [[bench]]
 name = "inmemdb"
