@@ -62,6 +62,7 @@ pub fn get_global_info() -> Vec<sharedtypes::GlobalPluginScraper> {
             ],
             priority: DEFAULT_PRIORITY,
             num_threads: None,
+            modifiers: vec![],
         },
     ));
     vec![plugin, scraper]
@@ -197,7 +198,7 @@ pub fn parser(
             for img in list_elements.select(&selector_link) {
                 if let Some(link) = img.attr("href") {
                     file_list.insert(sharedtypes::FileObject {
-                        source_url: Some(link.into()),
+                        source: Some(sharedtypes::FileSource::Url(link.into())),
                         hash: sharedtypes::HashesSupported::None,
                         tag_list: vec![sharedtypes::TagObject {
                             namespace: sharedtypes::GenericNamespaceObj {
@@ -256,6 +257,7 @@ pub fn parser(
     Ok(sharedtypes::ScraperObject {
         file: file_list,
         tag: tag_list,
+        flag: Vec::new(),
     })
 }
 
@@ -268,7 +270,6 @@ pub fn on_start(parserscraper: &sharedtypes::GlobalPluginScraper) {
         client::namespace_put(
             "Catbox Collection".into(),
             Some("A CatBox collection album. Stores Pictures.".into()),
-            true,
         );
         should_reload_regex = true;
     }
@@ -276,7 +277,6 @@ pub fn on_start(parserscraper: &sharedtypes::GlobalPluginScraper) {
         client::namespace_put(
             "Catbox Collection Position".into(),
             Some("The position of the image inside of a catbox collection.".into()),
-            true,
         );
         should_reload_regex = true;
     }
@@ -284,7 +284,6 @@ pub fn on_start(parserscraper: &sharedtypes::GlobalPluginScraper) {
         client::namespace_put(
             "Catbox Collection".into(),
             Some("A CatBox collection album. Stores Pictures".into()),
-            true,
         );
         should_reload_regex = true;
     }
