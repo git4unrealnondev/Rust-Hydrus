@@ -12,7 +12,7 @@ use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
-pub fn ddos_guard_bypass(
+pub fn ddoas_guard_bypass(
     response_input: &Response,
     cli: &mut Client,
     url: &String,

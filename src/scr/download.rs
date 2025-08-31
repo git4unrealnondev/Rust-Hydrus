@@ -1,5 +1,3 @@
-use crate::bypasses;
-use crate::bypasses::ddos_guard_bypass;
 use crate::database::Main;
 use crate::globalload;
 use crate::globalload::GlobalLoad;
@@ -428,7 +426,7 @@ pub fn dlfile_new(
                 loop {
                     match &futureresult {
                         Ok(result) => {
-                            if let Err(err) = result.error_for_status_ref() {
+                            /*if let Err(err) = result.error_for_status_ref() {
                                 match ddos_guard_bypass(result, client, source_url) {
                                     Some(bypass_response) => futureresult = Ok(bypass_response),
                                     None => {
@@ -445,7 +443,7 @@ pub fn dlfile_new(
                                         }
                                     }
                                 }
-                            }
+                            }*/
                             break;
                         }
                         Err(_) => {
