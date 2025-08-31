@@ -236,24 +236,24 @@ fn nsout(inp: &Nsid) -> sharedtypes::GenericNamespaceObj {
 #[no_mangle]
 pub fn parser(
     html_input: &String,
-    params: &Vec<sharedtypes::ScraperParam>,
-    actual_params: &sharedtypes::ScraperData,
+    _: &String,
+    scraperdata: &sharedtypes::ScraperData,
 ) -> Result<sharedtypes::ScraperObject, sharedtypes::ScraperReturn> {
-    let mut scraper_data = actual_params.clone();
+    let mut scraper_data = scraperdata.clone();
     let mut out = sharedtypes::ScraperObject {
         file: HashSet::new(),
         tag: HashSet::new(),
         flag: Vec::new(),
     };
 
-    let site = get_site(&actual_params.job.site);
+    let site = get_site(&scraperdata.job.site);
 
     if let Some(site) = site {
-        let bcode = &actual_params.user_data.get("key_board_0").unwrap();
+        let bcode = &scraperdata.user_data.get("key_board_0").unwrap();
 
         dbg!(html_input);
 
-        if let Some(jobtype) = actual_params.user_data.get("JobType") {
+        if let Some(jobtype) = scraperdata.user_data.get("JobType") {
             let jobtype_str: &str = jobtype;
             match jobtype_str {
                 "Thread" => {
@@ -281,20 +281,20 @@ pub fn parser(
                         };
                         let thread = sharedtypes::TagObject {
                             namespace: nsout(&Nsid::ThreadId),
-                            tag: actual_params.user_data.get("ThreadID").unwrap().to_string(),
+                            tag: scraperdata.user_data.get("ThreadID").unwrap().to_string(),
                             tag_type: sharedtypes::TagType::Normal,
                             relates_to: Some(boatd),
                         };
                         out.tag.insert(thread);
                         let subthread = sharedtypes::SubTag {
                             namespace: nsout(&Nsid::ThreadId),
-                            tag: actual_params.user_data.get("ThreadID").unwrap().to_string(),
+                            tag: scraperdata.user_data.get("ThreadID").unwrap().to_string(),
                             tag_type: sharedtypes::TagType::Normal,
                             limit_to: None,
                         };
                         let tagthread = sharedtypes::Tag {
                             namespace: nsout(&Nsid::ThreadId),
-                            tag: actual_params.user_data.get("ThreadID").unwrap().to_string(),
+                            tag: scraperdata.user_data.get("ThreadID").unwrap().to_string(),
                         };
 
                         for each in chjson["posts"].members() {
@@ -452,7 +452,7 @@ pub fn parser(
                                     tag_type: sharedtypes::TagType::ParseUrl((
                                         sharedtypes::ScraperData {
                                             job: sharedtypes::JobScraper {
-                                                site: actual_params.job.site.to_string(),
+                                                site: scraperdata.job.site.to_string(),
                                                 param: vec![sharedtypes::ScraperParam::Url(
                                                     threadurl,
                                                 )],

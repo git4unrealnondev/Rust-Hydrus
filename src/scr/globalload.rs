@@ -43,7 +43,7 @@ fn c_run_onstart(path: &Path, global: &sharedtypes::GlobalPluginScraper) {
 ///
 pub fn parser_call(
     url_output: &String,
-    actual_params: &Vec<sharedtypes::ScraperParam>,
+    source_url: &String,
     scraperdata: &sharedtypes::ScraperData,
     globalload: Arc<RwLock<GlobalLoad>>,
     scraper: &GlobalPluginScraper,
@@ -52,13 +52,13 @@ pub fn parser_call(
         let scraper_library = scraper_library_rwlock.read().unwrap();
         let temp: libloading::Symbol<
             unsafe extern "C" fn(
-                &String,
-                &Vec<sharedtypes::ScraperParam>,
+                &str,
+                &str,
                 &sharedtypes::ScraperData,
             )
                 -> Result<sharedtypes::ScraperObject, sharedtypes::ScraperReturn>,
         > = unsafe { scraper_library.get(b"parser\0").unwrap() };
-        unsafe { temp(url_output, actual_params, scraperdata) }
+        unsafe { temp(url_output, source_url, scraperdata) }
     } else {
         Err(sharedtypes::ScraperReturn::Nothing)
     }

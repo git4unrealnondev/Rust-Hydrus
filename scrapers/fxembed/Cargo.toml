@@ -21,3 +21,4 @@ serde = { version = "1.0.192", features = ["derive"] }
 bincode = { version = "2.0.1", features = ["serde","alloc"] }
 interprocess = "2.2.3"
 scraper = "0.24.0"
+url = "2.5.7"

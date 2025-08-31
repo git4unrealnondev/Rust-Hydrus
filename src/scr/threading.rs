@@ -400,9 +400,9 @@ Worker: {id} JobId: {} -- While trying to parse parameters we got this error: {:
                                         &id,
                                     ));
                                     let st = match resp {
-                                        Ok(respstring) => globalload::parser_call(
+                                        Ok((respstring, resp_url)) => globalload::parser_call(
                                             &respstring,
-                                            &scraperdata.job.param,
+                                            &resp_url,
                                             &scraperdata,
                                             globalload.clone(),
                                             &scraper,
@@ -587,27 +587,36 @@ pub fn parse_tags(
                     unwrappy.namespace_add(&tag.namespace.name, &tag.namespace.description);
                 tag_id = unwrappy.tag_add(&tag.tag, namespace_id, true, None);
             }
-            globalload::plugin_on_tag(manager, db.clone(), &tag.tag, &namespace_id);
+
+            // Runs regex mostly
+            globalload::plugin_on_tag(manager.clone(), db.clone(), &tag.tag, &namespace_id);
+
             match &tag.relates_to {
                 None => {
                     // let relate_ns_id = unwrappy.namespace_add( relate.namespace.name.clone(),
                     // relate.namespace.description, true, );
                 }
                 Some(relate) => {
-                    let mut unwrappy = db.write().unwrap();
-                    let relate_ns_id = unwrappy
-                        .namespace_add(&relate.namespace.name, &relate.namespace.description);
-                    let limit_to = match &relate.limit_to {
-                        None => None,
-                        Some(tag) => {
-                            let namespace_id = unwrappy
-                                .namespace_add(&tag.namespace.name, &tag.namespace.description);
-                            let tid = unwrappy.tag_add(&tag.tag, namespace_id, true, None);
-                            Some(tid)
-                        }
-                    };
-                    let relate_tag_id = unwrappy.tag_add(&relate.tag, relate_ns_id, true, None);
-                    unwrappy.parents_add(tag_id, relate_tag_id, limit_to);
+                    let relate_ns_id;
+                    {
+                        let mut unwrappy = db.write().unwrap();
+                        relate_ns_id = unwrappy
+                            .namespace_add(&relate.namespace.name, &relate.namespace.description);
+                        let limit_to = match &relate.limit_to {
+                            None => None,
+                            Some(tag) => {
+                                let namespace_id = unwrappy
+                                    .namespace_add(&tag.namespace.name, &tag.namespace.description);
+                                let tid = unwrappy.tag_add(&tag.tag, namespace_id, true, None);
+                                Some(tid)
+                            }
+                        };
+                        let relate_tag_id = unwrappy.tag_add(&relate.tag, relate_ns_id, true, None);
+                        unwrappy.parents_add(tag_id, relate_tag_id, limit_to);
+                    }
+
+                    // Runs regex mostly
+                    globalload::plugin_on_tag(manager, db.clone(), &relate.tag, &relate_ns_id);
                 }
             }
             match file_id {
@@ -625,10 +634,6 @@ pub fn parse_tags(
                     url_return.insert(jobscraped.clone());
                 }
                 Some(skip_if) => match skip_if {
-                    sharedtypes::SkipIf::DownloadedFileExtension((
-                        extension,
-                        should_download_later,
-                    )) => {}
                     sharedtypes::SkipIf::FileHash(sha512hash) => {
                         let unwrappy = db.read().unwrap();
                         if unwrappy.file_get_hash(sha512hash).is_none() {
@@ -847,7 +852,6 @@ fn parse_skipif(
     job_id: &usize,
 ) -> bool {
     match file_tag {
-        sharedtypes::SkipIf::DownloadedFileExtension((extension, should_download_later)) => {}
         sharedtypes::SkipIf::FileHash(sha512hash) => {
             let unwrappy = db.read().unwrap();
             return unwrappy.file_get_hash(&sha512hash).is_some();

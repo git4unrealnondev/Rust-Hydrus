@@ -577,6 +577,7 @@ pub fn plugin_on_tag(
         if let Some(not_namespace) = not_namespace {
             if let Some(nsid) = db.namespace_get(not_namespace) {
                 if tag_nsid == nsid {
+                    dbg!("a");
                     return;
                 }
             }
@@ -584,6 +585,9 @@ pub fn plugin_on_tag(
 
         let regex_iter: Vec<&str> = regex.find_iter(tag).map(|m| m.as_str()).collect();
         for regex_match in regex_iter {
+            if db.namespace_get_string(tag_nsid).is_none() {
+                dbg!("b");
+            }
             let tag_ns = match db.namespace_get_string(tag_nsid) {
                 None => continue,
                 Some(namespace_name) => namespace_name.name.clone(),

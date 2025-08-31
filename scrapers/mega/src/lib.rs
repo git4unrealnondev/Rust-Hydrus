@@ -130,7 +130,14 @@ fn find_sub_dirs_and_files(
                             .collect::<String>();
                         fpath += &format!("/{}", node.name());
 
-                        if client::tag_get_name(node.handle().into(), namespace_id).is_none() {
+                        let mut search = true;
+                        if let Some(tid) = client::tag_get_name(node.handle().into(), namespace_id) {
+                           if !client::relationship_get_fileid(tid).is_empty() {
+search = false;
+                           }
+                        }
+
+                        if client::tag_get_name(node.handle().into(), namespace_id).is_none()||search {
                             client::log(format!("MEGA - Downloading: {}", &fpath));
 
                             download_file(
@@ -148,6 +155,7 @@ fn find_sub_dirs_and_files(
                             }));
                             if *cnt >= stop {
                                 flag.push(sharedtypes::Flags::Redo);
+                                client::log(format!("Stopping due to cnt: {}", cnt));
                                 break;
                             }
                             *cnt += 1;
@@ -175,7 +183,7 @@ fn find_sub_dirs_and_files(
                 },
             },
             sharedtypes::TagObject {
-                tag: fpath.into(),
+                tag: fpath,
                 tag_type: sharedtypes::TagType::Normal,
                 relates_to: Some(subtag),
                 namespace: sharedtypes::GenericNamespaceObj {
@@ -220,10 +228,10 @@ fn find_sub_dirs_and_files(
 ///
 #[unsafe(no_mangle)]
 pub fn on_regex_match(
-    tag: &String,
-    tag_ns: &String,
+    _tag: &String,
+    _tag_ns: &String,
     regex_match: &String,
-    plugin_callback: &Option<sharedtypes::SearchType>,
+    _plugin_callback: &Option<sharedtypes::SearchType>,
 ) -> Vec<sharedtypes::DBPluginOutputEnum> {
     let mut job = sharedtypes::return_default_jobsobj();
     job.site = "mega".into();
@@ -276,6 +284,15 @@ pub fn text_scraping(
 
     let nodes = client.fetch_public_nodes(url_input);
 
+// Weird workaround for if its your first time running this garbage
+                if client::namespace_get("Mega_Handle".into()).is_none() {
+                    client::namespace_put(
+                        "Mega_Handle".into(),
+                        Some("A individual handle that links a file to a dir in mega".into()),
+                    );
+                }
+
+
     let nref = task::block_on(nodes);
     if let Ok(nodes) = nref {
         for root in nodes.roots() {
@@ -289,6 +306,7 @@ pub fn text_scraping(
 
             loop {
                 if rootloop.is_empty() {
+                                client::log(format!("Stopping due to no more directories to search"));
                     break;
                 }
                 let rootnew = rootloop.pop().unwrap();
@@ -302,7 +320,8 @@ pub fn text_scraping(
 
                     fileordir.push(item);
                 }
-                if flag.len() >= 1 {
+                if !flag.is_empty() {
+                                client::log(format!("Stopping due to flags are empty"));
                     break;
                 }
             }
@@ -346,7 +365,7 @@ pub fn text_scraping(
                 ];
 
                 // Weird workaround for if its your first time running this garbage
-                if let None = client::namespace_get("Mega_Handle".into()) {
+                if client::namespace_get("Mega_Handle".into()).is_none() {
                     client::namespace_put(
                         "Mega_Handle".into(),
                         Some("A individual handle that links a file to a dir in mega".into()),
@@ -358,6 +377,7 @@ pub fn text_scraping(
                     if client::tag_get_name(root.handle().into(), namespace_id).is_none() {
                         let mut temp = Vec::new();
                         task::block_on(client.download_node(root, &mut temp)).unwrap();
+                        cnt += 1;
                         file.insert(sharedtypes::FileObject {
                             source: Some(sharedtypes::FileSource::Bytes(temp)),
                             hash: sharedtypes::HashesSupported::None,
@@ -373,9 +393,9 @@ pub fn text_scraping(
                         },
                     })],
                         });
-                        cnt += 1;
 
                         if stop_count == cnt {
+                                client::log(format!("Stopping loop due to cnt: {}", cnt));
                             return Err(sharedtypes::ScraperReturn::Timeout(0));
                         }
 
@@ -391,7 +411,6 @@ pub fn text_scraping(
     } else {
         dbg!(nref.err().unwrap());
     }
-
     Ok(sharedtypes::ScraperObject { file, tag, flag })
 }
 
@@ -405,21 +424,32 @@ fn download_file(
 ) {
     // Ghetto way to pre-filter if we've already downloaded a file
     if let Some(namespace_id) = client::namespace_get("Mega_Handle".into()) {
-        let subtag = sharedtypes::SubTag {
+
+        let limit_tag = sharedtypes::Tag {
+            tag: url_input.into(),
             namespace: sharedtypes::GenericNamespaceObj {
                 name: "Mega_Source".into(),
                 description: Some("A mega link.".into()),
-            },
-            tag: url_input.into(),
-            limit_to: None,
+            }
+        };
+
+        let subtag = sharedtypes::SubTag {
+            namespace:sharedtypes::GenericNamespaceObj {
+                    name: "Mega_Handle".into(),
+                    description: Some(
+                        "A individual handle that links a file to a dir in mega".into(),
+                    ),
+                } ,
+            tag:  node.handle().into(),
+            limit_to: Some(limit_tag),
             tag_type: sharedtypes::TagType::Normal,
         };
 
-        let tags = vec![
+        let mut tags = vec![
             sharedtypes::TagObject {
                 tag: node.handle().into(),
                 tag_type: sharedtypes::TagType::Normal,
-                relates_to: Some(subtag.clone()),
+                relates_to: None,
                 namespace: sharedtypes::GenericNamespaceObj {
                     name: "Mega_Handle".into(),
                     description: Some(
@@ -427,16 +457,9 @@ fn download_file(
                     ),
                 },
             },
-            sharedtypes::TagObject {
-                tag: localpath.into(),
-                tag_type: sharedtypes::TagType::Normal,
-                relates_to: Some(subtag),
-                namespace: sharedtypes::GenericNamespaceObj {
-                    name: "Mega_Name".into(),
-                    description: Some("A filepath inside a Mega archive".into()),
-                },
-            },
-        ];
+                    ];
+
+
 
         if client::tag_get_name(node.handle().into(), namespace_id).is_none() {
             let mut temp = Vec::new();
@@ -457,6 +480,18 @@ fn download_file(
             });
             //fileordir.push(MegaDirOrFile::File(megafile));
         } else {
+
+tags.push(sharedtypes::TagObject {
+                tag: localpath.into(),
+                tag_type: sharedtypes::TagType::Normal,
+                relates_to: Some(subtag),
+                namespace: sharedtypes::GenericNamespaceObj {
+                    name: "Mega_Name".into(),
+                    description: Some("A filepath inside a Mega archive".into()),
+                },
+            }
+);
+
             for tag in tags {
                 tag_list.lock().unwrap().insert(tag);
             }

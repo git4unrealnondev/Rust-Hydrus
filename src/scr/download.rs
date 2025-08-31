@@ -162,7 +162,7 @@ pub async fn dltext_new(
     client: Arc<RwLock<Client>>,
     ratelimiter_obj: &Arc<Mutex<Ratelimiter>>,
     worker_id: &usize,
-) -> Result<String, Box<dyn Error>> {
+) -> Result<(String, String), Box<dyn Error>> {
     // let mut ret: Vec<AHashMap<String, AHashMap<String, Vec`<String>`>>> =
     // Vec::new(); let ex = Executor::new(); let url =
     // Url::parse("http://www.google.com").unwrap();
@@ -206,9 +206,10 @@ pub async fn dltext_new(
                 if let Err(err) = res.error_for_status_ref() {
                     return Err(Box::new(err));
                 } else {
+                    let res_url = res.url().to_string();
                     match res.text() {
                         Ok(text) => {
-                            return Ok(text);
+                            return Ok((text, res_url));
                         }
                         Err(_) => {
                             continue;

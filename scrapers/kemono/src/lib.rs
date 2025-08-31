@@ -221,9 +221,9 @@ object.tag.insert(sharedtypes::TagObject {
 
 #[unsafe(no_mangle)]
 pub fn parser(
-    html_input: &String,
-    params: &Vec<sharedtypes::ScraperParam>,
-    actual_params: &sharedtypes::ScraperData,
+    html_input: &str,
+    _source_url: &str,
+    scraperdata: &sharedtypes::ScraperData,
 ) -> Result<sharedtypes::ScraperObject, sharedtypes::ScraperReturn> {
     let mut out = sharedtypes::ScraperObject {
         file: HashSet::new(),
@@ -231,12 +231,12 @@ pub fn parser(
         flag: vec![]
     };
     // Handles when we're getting creators posts
-    if let Some(name) = actual_params.user_data.get("confirmed user") {
-        if let Some(jobtype) = actual_params.user_data.get("jobtype") {
+    if let Some(name) = scraperdata.user_data.get("confirmed user") {
+        if let Some(jobtype) = scraperdata.user_data.get("jobtype") {
             if jobtype == "posts" {
                 if let Ok(parsed_json) = json::parse(html_input) {
                     for item in parsed_json.members() {
-                        let mut scraperdata = actual_params.clone();
+                        let mut scraperdata = scraperdata.clone();
 
                         scraperdata.user_data.clear();
 
@@ -295,13 +295,13 @@ pub fn parser(
     }
 
     // Handles the main creators page scraping. After we determine if theirs a user here
-    if let Some(user) = actual_params.user_data.get("Potiential User") {
+    if let Some(user) = scraperdata.user_data.get("Potiential User") {
         if let Ok(parsed_json) = json::parse(html_input) {
-            if parsed_json.is_array() && params.len() == 1 {
+            if parsed_json.is_array() && scraperdata.job.param.len() == 1 {
                 for item in parsed_json.members() {
                     let name = item["name"].to_string();
                     if name.contains(user) {
-                        let mut scraperdata = actual_params.clone();
+                        let mut scraperdata = scraperdata.clone();
 
                         scraperdata.user_data.clear();
 
@@ -457,7 +457,7 @@ pub struct Componenttype {
 ///
 /// Returns a type based on an input string.
 ///
-fn parse_type(inp: &String) -> Option<Componenttype> {
+fn parse_type(inp: &str) -> Option<Componenttype> {
     let site;
     if inp.contains("kemono.") {
         site = Sitetype::Kemono
@@ -519,7 +519,7 @@ fn parse_type(inp: &String) -> Option<Componenttype> {
 }
 
 fn generate_userid_search(inp: &Componenttype) -> Option<String> {
-    return match (&inp.site_str, &inp.service, &inp.user_id, &inp.post_id) {
+    match (&inp.site_str, &inp.service, &inp.user_id, &inp.post_id) {
         (Some(site), Some(service), Some(user_id), None) => {
             Some(format!("https://{site}/api/v1/{service}/user/{user_id}"))
         }
@@ -527,7 +527,7 @@ fn generate_userid_search(inp: &Componenttype) -> Option<String> {
             "https://{site}/api/v1/{service}/user/{user_id}/post/{post_id}"
         )),
         _ => None,
-    };
+    }
 }
 
 fn filter_params(
@@ -574,7 +574,7 @@ fn filter_params(
                                 job_type: sharedtypes::DbJobType::Params,
                                 param: vec![],
                             };
-                            out.push((format!("{}", url), scraperdata.clone()));
+                            out.push((url.to_string(), scraperdata.clone()));
                         }
                     }
                 } else {
