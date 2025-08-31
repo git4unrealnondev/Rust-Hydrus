@@ -224,7 +224,7 @@ pub fn parser(
                 }
                 urlsource = Some(sharedtypes::SubTag {
                     namespace: url_source_ns.clone(),
-                    tag: urlinp,
+                    tag: urlinp.to_string(),
                     tag_type: sharedtypes::TagType::Normal,
                     limit_to: None,
                 });
@@ -314,7 +314,7 @@ pub fn parser(
                         tag: pos.to_string(),
                         tag_type: sharedtypes::TagType::Normal,
                         limit_to: Some(sharedtypes::Tag {
-                            tag: source_url.clone(),
+                            tag: source_url.to_string(),
                             namespace: sourceurl.namespace.clone(),
                         }),
                     });
