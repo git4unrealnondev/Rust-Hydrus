@@ -310,7 +310,7 @@ pub fn parser(
                                 if let Some(comment) = each["com"].as_str() {
                                     out.tag.insert(sharedtypes::TagObject {
                                         namespace: nsout(&Nsid::PostComment),
-                                        tag: comment.to_string(),
+                                        tag: comment.to_string().replace("<wbr>", ""),
                                         tag_type: sharedtypes::TagType::Normal,
                                         relates_to: Some(com.clone()),
                                     });
