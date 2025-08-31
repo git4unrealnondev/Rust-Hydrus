@@ -689,7 +689,7 @@ impl Main {
             self.alter_table(&"Namespace".to_string(), &"Namespace_Old".to_string());
 
             let keys = &vec_of_strings!("id", "name", "description");
-            let vals = &vec_of_strings!("INTEGER PRIMARY KEY", "TEXT NOT NULL", "TEXT");
+            let vals = &vec_of_strings!("INTEGER PRIMARY KEY NOT NULL", "TEXT NOT NULL", "TEXT");
 
             self.table_create(&"Namespace".to_string(), keys, vals);
 
