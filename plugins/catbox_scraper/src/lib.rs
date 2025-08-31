@@ -100,8 +100,8 @@ pub fn url_dump(
 
 #[no_mangle]
 pub fn parser(
-    html_input: &String,
-    params: &Vec<sharedtypes::ScraperParam>,
+    html_input: &str,
+    _source_url: &str,
     scraperdata: &sharedtypes::ScraperData,
 ) -> Result<sharedtypes::ScraperObject, sharedtypes::ScraperReturn> {
     let mut file_list = HashSet::new();
@@ -109,9 +109,9 @@ pub fn parser(
     let mut url = Vec::new();
     let mut html_usertext = Vec::new();
 
-    for param in params {
+    for param in scraperdata.job.param.iter() {
         if let sharedtypes::ScraperParam::Url(link) = param {
-            url.push(link);
+            url.push(link.clone());
         }
     }
 
@@ -214,7 +214,7 @@ pub fn parser(
                                         "A CatBox collection album. Stores Pictures.".into(),
                                     ),
                                 },
-                                tag: url.into(),
+                                tag: url.clone(),
                                 limit_to: None,
                                 tag_type: sharedtypes::TagType::Normal,
                             }),
@@ -238,7 +238,7 @@ pub fn parser(
                             },
                             tag: link.into(),
                             limit_to: Some(sharedtypes::Tag {
-                                tag: url.into(),
+                                tag: url.clone(),
                                 namespace: sharedtypes::GenericNamespaceObj {
                                     name: "Catbox Collection".into(),
                                     description: Some(
