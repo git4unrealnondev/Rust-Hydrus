@@ -11,12 +11,13 @@ pub fn get_global_info() -> Vec<sharedtypes::GlobalPluginScraper> {
     main.version = 0;
     main.storage_type = Some(sharedtypes::ScraperOrPlugin::Plugin(
         sharedtypes::PluginInfo2 {
-            com_type: sharedtypes::PluginThreadType::Spawn,
             com_channel: true,
             redirect: None,
         },
     ));
-    main.callbacks = vec![sharedtypes::GlobalCallbacks::Start];
+    main.callbacks = vec![sharedtypes::GlobalCallbacks::Start(
+        sharedtypes::StartupThreadType::SpawnInline,
+    )];
     let out = vec![main];
 
     out
