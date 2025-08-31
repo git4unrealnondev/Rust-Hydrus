@@ -60,7 +60,10 @@ pub fn get_global_info() -> Vec<sharedtypes::GlobalPluginScraper> {
             sites: vec!["4ch".into(), "4chan".into(), "4chan.net".into()],
             priority: DEFAULT_PRIORITY,
             num_threads: None,
-            modifiers: vec![],
+            modifiers: vec![sharedtypes::ScraperModifiers::MediaHeader((
+                "Referrer".into(),
+                "boards.4chan.org".to_string(),
+            ))],
         },
     ));
 

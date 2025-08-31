@@ -14,6 +14,9 @@ use log::{error, info};
 use reqwest::blocking::Client;
 use reqwest::blocking::ClientBuilder;
 use reqwest::cookie;
+use reqwest::header::HeaderMap;
+use reqwest::header::HeaderName;
+use reqwest::header::HeaderValue;
 use sha2::Digest as sha2Digest;
 use sha2::Sha256;
 use sha2::Sha512;
@@ -21,6 +24,7 @@ use std::error::Error;
 use std::io::BufReader;
 use std::io::Cursor;
 use std::io::Read;
+use std::str::FromStr;
 use std::time::Duration;
 use url::Url;
 
@@ -112,6 +116,17 @@ fn process_modifiers(
     let mut client = client;
     for modifer in modifers {
         match modifer {
+            sharedtypes::ScraperModifiers::MediaHeader((key, val)) => {
+                if !is_text_download {
+                    let key = key.clone();
+                    let val = val.clone();
+                    let mut headers = HeaderMap::new();
+                    let header_key = HeaderName::from_str(&key).unwrap();
+                    let header_val = HeaderValue::from_str(&val).unwrap();
+                    headers.insert(header_key, header_val);
+                    client = client.default_headers(headers);
+                }
+            }
             sharedtypes::ScraperModifiers::MediaUseragent(useragent) => {
                 if !is_text_download {
                     client = client.user_agent(useragent);

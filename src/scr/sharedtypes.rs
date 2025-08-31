@@ -197,6 +197,8 @@ pub enum ScraperModifiers {
     TextUseragent(String),
     // A useragent to use when downloading media
     MediaUseragent(String),
+    //,Adds a header to a media download
+    MediaHeader((String, String)),
 }
 
 ///
