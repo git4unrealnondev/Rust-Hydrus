@@ -9,11 +9,11 @@ use walkdir::WalkDir;
 
 use crate::globalload::GlobalLoad;
 // use std::str::pattern::Searcher;
+use crate::Mutex;
+use crate::RwLock;
 use crate::download;
 use crate::file::{find_sidecar, parse_file};
 use crate::sharedtypes::{DEFAULT_CACHECHECK, DEFAULT_CACHETIME, DEFAULT_PRIORITY};
-use crate::Mutex;
-use crate::RwLock;
 use crate::{
     database, logging, pause,
     sharedtypes::{self},
@@ -355,6 +355,9 @@ pub fn main(data: Arc<RwLock<database::Main>>, globalload: Arc<RwLock<GlobalLoad
                     for sidecar in sidecars.iter() {
                         files.remove(sidecar);
                     }
+
+                    logging::info_log(&"Starting to process files".into());
+
                     // Removes any sidecar files from files
                     files.par_iter().for_each(|(file, sidecars)| {
                         let file_id = parse_file(file, sidecars, data.clone(), globalload.clone());

@@ -1097,10 +1097,10 @@ impl GlobalLoad {
                 match global.storage_type {
                     None => {
                         logging::error_log(&format!(
-                "Skipping parsing of name: {} due to storage_type not being set.From {}",
-                global.name,
-                path.to_string_lossy()
-            ));
+                            "Skipping parsing of name: {} due to storage_type not being set.From {}",
+                            global.name,
+                            path.to_string_lossy()
+                        ));
 
                         continue;
                     }

@@ -11,7 +11,7 @@ use crate::threading;
 use anyhow::Context;
 
 // use interprocess::local_socket::traits::tokio::Listener;
-use interprocess::local_socket::{prelude::*, GenericNamespaced, ListenerOptions};
+use interprocess::local_socket::{GenericNamespaced, ListenerOptions, prelude::*};
 use std::collections::HashSet;
 use std::sync::Arc;
 //use std::sync::Mutex;
@@ -20,7 +20,7 @@ use std::thread;
 
 // use std::sync::{Arc, Mutex};
 use std::{
-    io::{self, prelude::*, BufReader},
+    io::{self, BufReader, prelude::*},
     sync::mpsc::Sender,
 };
 

@@ -2,11 +2,11 @@ use futures::TryStreamExt;
 use reqwest::blocking::{Client, Response};
 use reqwest_websocket::Message;
 
+use crate::Mutex;
+use crate::RwLock;
 use crate::download;
 use crate::globalload::download_from;
 use crate::logging;
-use crate::Mutex;
-use crate::RwLock;
 use reqwest_websocket::RequestBuilderExt;
 use std::sync::Arc;
 use std::thread;

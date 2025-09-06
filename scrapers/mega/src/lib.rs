@@ -241,6 +241,8 @@ pub fn on_regex_match(
         recreation: None,
     };
 
+    job.priority = 0;
+
     let mut out = vec![sharedtypes::DBPluginOutputEnum::Add(vec![
         sharedtypes::DBPluginOutput {
             tag: None,

@@ -1,6 +1,6 @@
 #![forbid(unsafe_code)]
 
-use log::{error, info, LevelFilter};
+use log::{LevelFilter, error, info};
 use std::fs;
 use std::path::Path;
 

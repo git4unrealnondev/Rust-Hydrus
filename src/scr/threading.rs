@@ -357,7 +357,10 @@ Worker: {id} JobId: {} -- While trying to parse parameters we got this error: {:
                                         ",
                                         jobid, err
                                     ));
-                                    logging::error_log(&format!("Worker: {} JobId: {} -- Telling system to keep job due to previous error.", id, jobid));
+                                    logging::error_log(&format!(
+                                        "Worker: {} JobId: {} -- Telling system to keep job due to previous error.",
+                                        id, jobid
+                                    ));
                                     jobstorage.write().unwrap().jobs_remove_job(&scraper, &job);
                                     should_remove_original_job = false;
                                 }
@@ -408,7 +411,10 @@ Worker: {id} JobId: {} -- While trying to parse parameters we got this error: {:
                                             &scraper,
                                         ),
                                         Err(_) => {
-                                            logging::error_log(&format!("Worker: {} -- While processing job {:?} was unable to download text.",&id, &job));
+                                            logging::error_log(&format!(
+                                                "Worker: {} -- While processing job {:?} was unable to download text.",
+                                                &id, &job
+                                            ));
                                             break 'errloop;
                                         }
                                     };
@@ -417,9 +423,9 @@ Worker: {id} JobId: {} -- While trying to parse parameters we got this error: {:
                                         Err(ScraperReturn::Nothing) => {
                                             // job_params.lock().unwrap().remove(&scraper_data);
                                             logging::info_log(&format!(
-                                        "Worker: {id} JobId: {} -- Exiting loop due to nothing.",
-                                        jobid
-                                    ));
+                                                "Worker: {id} JobId: {} -- Exiting loop due to nothing.",
+                                                jobid
+                                            ));
                                             break 'urlloop;
                                         }
                                         Err(ScraperReturn::EMCStop(emc)) => {
@@ -458,7 +464,10 @@ Worker: {id} JobId: {} -- While trying to parse parameters we got this error: {:
                                                     thread::sleep(Duration::from_secs(time))
                                                 }
                                                 _ => {
-                                                    logging::error_log(&format!("Worker: {} -- While processing job {:?} was unable to download text.",&id, &job));
+                                                    logging::error_log(&format!(
+                                                        "Worker: {} -- While processing job {:?} was unable to download text.",
+                                                        &id, &job
+                                                    ));
                                                     break 'errloop;
                                                 }
                                             },
@@ -668,12 +677,10 @@ pub fn parse_tags(
                             }
                         }
                         if cnt >= *filter_number {
-                            info_log(
-                                    &format!(
-                                        "Not downloading because unique namespace is greater then limit number. {}",
-                                        unique_tag.tag
-                                    ),
-                                );
+                            info_log(&format!(
+                                "Not downloading because unique namespace is greater then limit number. {}",
+                                unique_tag.tag
+                            ));
                         } else {
                             info_log(
                                     &"Downloading due to unique namespace not existing or number less then limit number.".to_string(),
@@ -977,9 +984,9 @@ pub fn main_file_loop(
                         match file_id {
                             Some(file_id) => {
                                 info_log(&format!(
-                            "Worker: {worker_id} JobId: {job_id} -- Skipping file: {} Due to already existing in Tags Table.",
-                            &source_url
-                        ));
+                                    "Worker: {worker_id} JobId: {job_id} -- Skipping file: {} Due to already existing in Tags Table.",
+                                    &source_url
+                                ));
                                 file_id
                             }
                             None => {

@@ -1,15 +1,15 @@
 #![forbid(unsafe_code)]
+use crate::Mutex;
+use crate::RwLock;
 use crate::globalload::GlobalLoad;
 use crate::logging;
 use crate::sharedtypes;
 use crate::sharedtypes::ScraperParam;
-use crate::Mutex;
-use crate::RwLock;
 use eta::{Eta, TimeAcc};
 use log::{error, info};
 use rayon::prelude::*;
 pub use rusqlite::types::ToSql;
-pub use rusqlite::{params, types::Null, Connection, Result, Transaction};
+pub use rusqlite::{Connection, Result, Transaction, params, types::Null};
 use std::borrow::BorrowMut;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
@@ -1707,8 +1707,7 @@ impl Main {
     /// Updates job by id
     fn jobs_update_by_id(&mut self, data: &sharedtypes::DbJobsObj) {
         dbg!(data);
-        let inp =
-            "UPDATE Jobs SET id=?, time=?, reptime=?, Manager=?, priority=?,cachetime=?,cachechecktype=?, site=?, param=?, SystemData=?, UserData=? WHERE id = ?";
+        let inp = "UPDATE Jobs SET id=?, time=?, reptime=?, Manager=?, priority=?,cachetime=?,cachechecktype=?, site=?, param=?, SystemData=?, UserData=? WHERE id = ?";
         let _out = self._conn.borrow_mut().lock().unwrap().execute(
             inp,
             params![
@@ -2475,7 +2474,7 @@ impl Main {
 #[cfg(test)]
 pub(crate) mod test_database {
     use super::*;
-    use crate::{client::relationship_get_tagid, VERS};
+    use crate::{VERS, client::relationship_get_tagid};
 
     pub fn setup_default_db() -> Vec<Main> {
         let mut out = Vec::new();

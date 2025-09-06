@@ -2,11 +2,11 @@ use std::fs;
 use std::io::{Cursor, Error};
 use std::path::{Path, PathBuf};
 
-use crate::database::{enclave, Main};
+use crate::database::{Main, enclave};
 use crate::download::{hash_file, process_archive_files};
-use crate::globalload::{callback_on_import, GlobalLoad};
+use crate::globalload::{GlobalLoad, callback_on_import};
 use crate::threading::parse_tags;
-use crate::{logging, sharedtypes, Arc, RwLock};
+use crate::{Arc, RwLock, logging, sharedtypes};
 use std::fs::File;
 use std::io::{self, BufRead};
 

@@ -64,7 +64,7 @@ pub mod server;
 /// This code is trash. lmao. Has threading and plugins soon tm Will probably work
 /// :D
 fn pause() {
-    use std::io::{stdin, stdout, Read, Write};
+    use std::io::{Read, Write, stdin, stdout};
 
     let mut stdout = stdout();
     stdout.write_all(b"Press Enter to continue...").unwrap();

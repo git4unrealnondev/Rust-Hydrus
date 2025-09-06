@@ -330,7 +330,9 @@ impl Main {
         ) {
             (true, true) => {}
             (false, false) => {
-                panic!("Cannot figure out where DB is at for file table four to five. Table does not exist.");
+                panic!(
+                    "Cannot figure out where DB is at for file table four to five. Table does not exist."
+                );
             }
             (true, false) => {}
             (false, true) => {
@@ -346,7 +348,9 @@ impl Main {
         ) {
             (true, true) => {}
             (false, false) => {
-                panic!("Cannot figure out where DB is at for file table four to five. Table does not exist.");
+                panic!(
+                    "Cannot figure out where DB is at for file table four to five. Table does not exist."
+                );
             }
             (true, false) => {}
             (false, true) => {
@@ -362,7 +366,9 @@ impl Main {
         ) {
             (true, true) => {}
             (false, false) => {
-                panic!("Cannot figure out where DB is at for file table four to five. Table does not exist.");
+                panic!(
+                    "Cannot figure out where DB is at for file table four to five. Table does not exist."
+                );
             }
             (true, false) => {}
             (false, true) => {

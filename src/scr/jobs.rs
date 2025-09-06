@@ -302,13 +302,17 @@ impl Jobs {
 
                 //for sites in global_load.read().unwrap().sites_get(&scraper) {
                 for (_, job) in hashjobs.iter() {
-                    if sites == job.site {
+                    if sites == job.site && job.priority != 0 {
                         jobs_vec.push((scraper.clone(), job.clone()));
                     }
                 }
                 //}
             }
         }
+
+        // Sorts by priority
+        jobs_vec.sort_by_key(|job| job.1.priority);
+
         for (scraper, job) in jobs_vec {
             self.jobs_add(scraper.clone(), job.clone());
         }

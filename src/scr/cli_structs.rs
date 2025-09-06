@@ -1,5 +1,5 @@
 use crate::sharedtypes;
-use clap::{arg, Parser, Subcommand, ValueEnum};
+use clap::{Parser, Subcommand, ValueEnum, arg};
 
 /// From: git4unrealnondev Das code sucks.
 #[derive(Parser, Debug)]
