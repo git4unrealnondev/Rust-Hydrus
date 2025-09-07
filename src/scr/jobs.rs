@@ -313,8 +313,13 @@ impl Jobs {
         // Sorts by priority
         jobs_vec.sort_by_key(|job| job.1.priority);
 
+        let jobs_vec: Vec<(sharedtypes::GlobalPluginScraper, sharedtypes::DbJobsObj)> = jobs_vec
+            .into_iter()
+            .filter(|job| job.1.priority != 0)
+            .collect();
+
         for (scraper, job) in jobs_vec {
-            self.jobs_add(scraper.clone(), job.clone());
+            self.jobs_add(scraper, job);
         }
     }
 }
