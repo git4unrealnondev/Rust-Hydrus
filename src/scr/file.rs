@@ -50,7 +50,6 @@ pub fn find_sidecar(location: &Path) -> Vec<PathBuf> {
             out.push(test_path.to_path_buf());
         }
     }
-
     out
 }
 

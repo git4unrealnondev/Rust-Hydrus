@@ -1015,6 +1015,8 @@ pub fn main_file_loop(
                 let file_ext = FileFormat::from_bytes(&bytes).extension().to_string();
                 let sha512 = hash_bytes(&bytes, &sharedtypes::HashesSupported::Sha512("".into()));
 
+                dbg!(&sha512.0);
+
                 process_bytes(
                     bytes,
                     Some(globalload.clone()),

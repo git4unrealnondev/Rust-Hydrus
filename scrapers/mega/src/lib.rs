@@ -2,7 +2,11 @@ use async_std::task;
 use mega::{Node, Nodes};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use regex::Regex;
-use reqwest::Proxy;
+use reqwest::{Client, Proxy};
+use reqwest_middleware::ClientBuilder;
+use reqwest_proxy_pool::{
+    ProxyPoolConfig, ProxyPoolMiddleware, ProxySelectionStrategy, config::ProxySource,
+};
 use std::{
     collections::{HashMap, HashSet},
     sync::{Arc, Mutex},
@@ -131,13 +135,16 @@ fn find_sub_dirs_and_files(
                         fpath += &format!("/{}", node.name());
 
                         let mut search = true;
-                        if let Some(tid) = client::tag_get_name(node.handle().into(), namespace_id) {
-                           if !client::relationship_get_fileid(tid).is_empty() {
-search = false;
-                           }
+                        if let Some(tid) = client::tag_get_name(node.handle().into(), namespace_id)
+                        {
+                            if !client::relationship_get_fileid(tid).is_empty() {
+                                search = false;
+                            }
                         }
 
-                        if client::tag_get_name(node.handle().into(), namespace_id).is_none()||search {
+                        if client::tag_get_name(node.handle().into(), namespace_id).is_none()
+                            || search
+                        {
                             client::log(format!("MEGA - Downloading: {}", &fpath));
 
                             download_file(
@@ -213,6 +220,7 @@ search = false;
     }
     let temp = Arc::try_unwrap(file_arc).unwrap();
     for file in temp.into_inner().unwrap() {
+        dbg!("A");
         filelist.insert(file);
     }
     let temp = Arc::try_unwrap(tag_arc).unwrap();
@@ -277,23 +285,58 @@ pub fn text_scraping(
     let mut fileordir = Vec::new();
     let mut flag = Vec::new();
 
-    let http_client = reqwest::Client::builder()
+    client::log(format!("Starting pool init"));
+
+    let config = ProxyPoolConfig::builder()
+        // free socks5 proxy urls, format like `Free-Proxy`
+        .sources(vec![
+            ProxySource::Proxy("socks5://192.241.156.17:1080".to_string()),
+            ProxySource::Proxy("socks5://134.199.159.23:1080".to_string()),
+            ProxySource::Proxy("socks5://142.54.226.214:4145".to_string()),
+            ProxySource::Proxy("socks5://184.178.172.28:15294".to_string()),
+            ProxySource::Proxy("socks5://184.178.172.13:15311".to_string()),
+            ProxySource::Proxy("socks5://98.188.47.132:4145".to_string()),
+            ProxySource::Proxy("socks5://192.169.140.98:45739".to_string()),
+
+            ProxySource::Proxy("socks5://8.218.217.168:1100".to_string()),
+            ProxySource::Proxy("socks5://47.250.157.116:1100".to_string()),
+            ProxySource::Proxy("socks5://68.191.23.134:9200".to_string()),
+            ProxySource::Proxy("socks5://8.219.119.119:1024".to_string()),
+ProxySource::Proxy("socks5://94.254.244.251:8192".to_string()),
+            //ProxySource::Proxy("socks5://:".to_string()),
+        ])
+        .health_check_timeout(Duration::from_secs(10))
+        .retry_count(2)
+        .selection_strategy(ProxySelectionStrategy::FastestResponse)
+        // rate limit for each proxy, lower performance but avoid banned
+        .max_requests_per_second(3.0)
+        .build();
+
+    let proxy_pool = task::block_on(ProxyPoolMiddleware::new(config)).unwrap();
+
+
+let cli = reqwest::Client::builder().timeout(Duration::from_secs(120)).build().unwrap();
+
+    let http_client = ClientBuilder::new(cli)
         //.proxy(Proxy::http("socks5://143.110.217.153:1080").unwrap())
-        .build()
-        .unwrap();
+        .with(proxy_pool)
+        .build();
+
+    //let http_client = Client::builder().proxy().build().unwrap()
 
     let client = mega::Client::builder().build(http_client).unwrap();
 
     let nodes = client.fetch_public_nodes(url_input);
 
-// Weird workaround for if its your first time running this garbage
-                if client::namespace_get("Mega_Handle".into()).is_none() {
-                    client::namespace_put(
-                        "Mega_Handle".into(),
-                        Some("A individual handle that links a file to a dir in mega".into()),
-                    );
-                }
+    // Weird workaround for if its your first time running this garbage
+    if client::namespace_get("Mega_Handle".into()).is_none() {
+        client::namespace_put(
+            "Mega_Handle".into(),
+            Some("A individual handle that links a file to a dir in mega".into()),
+        );
+    }
 
+    client::log(format!("Starting processing for {}", url_input));
 
     let nref = task::block_on(nodes);
     if let Ok(nodes) = nref {
@@ -308,7 +351,7 @@ pub fn text_scraping(
 
             loop {
                 if rootloop.is_empty() {
-                                client::log(format!("Stopping due to no more directories to search"));
+                    client::log(format!("Stopping due to no more directories to search"));
                     break;
                 }
                 let rootnew = rootloop.pop().unwrap();
@@ -323,7 +366,7 @@ pub fn text_scraping(
                     fileordir.push(item);
                 }
                 if !flag.is_empty() {
-                                client::log(format!("Stopping due to flags are empty"));
+                    client::log(format!("Stopping due to flags are empty"));
                     break;
                 }
             }
@@ -377,7 +420,7 @@ pub fn text_scraping(
                 // Ghetto way to pre-filter if we've already downloaded a file
                 if let Some(namespace_id) = client::namespace_get("Mega_Handle".into()) {
                     if client::tag_get_name(root.handle().into(), namespace_id).is_none() {
-                        let mut temp = Vec::new();
+                        /*let mut temp = Vec::new();
                         task::block_on(client.download_node(root, &mut temp)).unwrap();
                         cnt += 1;
                         file.insert(sharedtypes::FileObject {
@@ -397,9 +440,9 @@ pub fn text_scraping(
                         });
 
                         if stop_count == cnt {
-                                client::log(format!("Stopping loop due to cnt: {}", cnt));
+                            client::log(format!("Stopping loop due to cnt: {}", cnt));
                             return Err(sharedtypes::ScraperReturn::Timeout(0));
-                        }
+                        }*/
 
                         //fileordir.push(MegaDirOrFile::File(megafile));
                     } else {
@@ -410,7 +453,10 @@ pub fn text_scraping(
                 }
             }
         }
-    } 
+    }
+    for file in file.iter() {
+        dbg!(&file.tag_list);
+    }
     Ok(sharedtypes::ScraperObject { file, tag, flag })
 }
 
@@ -424,64 +470,61 @@ fn download_file(
 ) {
     // Ghetto way to pre-filter if we've already downloaded a file
     if let Some(namespace_id) = client::namespace_get("Mega_Handle".into()) {
-
         let limit_tag = sharedtypes::Tag {
             tag: url_input.into(),
             namespace: sharedtypes::GenericNamespaceObj {
                 name: "Mega_Source".into(),
                 description: Some("A mega link.".into()),
-            }
+            },
         };
 
         let subtag = sharedtypes::SubTag {
-            namespace:sharedtypes::GenericNamespaceObj {
-                    name: "Mega_Handle".into(),
-                    description: Some(
-                        "A individual handle that links a file to a dir in mega".into(),
-                    ),
-                } ,
-            tag:  node.handle().into(),
+            namespace: sharedtypes::GenericNamespaceObj {
+                name: "Mega_Handle".into(),
+                description: Some("A individual handle that links a file to a dir in mega".into()),
+            },
+            tag: node.handle().into(),
             limit_to: Some(limit_tag),
             tag_type: sharedtypes::TagType::Normal,
         };
 
-        let mut tags = vec![
-            sharedtypes::TagObject {
-                tag: node.handle().into(),
-                tag_type: sharedtypes::TagType::Normal,
-                relates_to: None,
-                namespace: sharedtypes::GenericNamespaceObj {
-                    name: "Mega_Handle".into(),
-                    description: Some(
-                        "A individual handle that links a file to a dir in mega".into(),
-                    ),
-                },
+        let mut tags = vec![sharedtypes::TagObject {
+            tag: node.handle().into(),
+            tag_type: sharedtypes::TagType::Normal,
+            relates_to: None,
+            namespace: sharedtypes::GenericNamespaceObj {
+                name: "Mega_Handle".into(),
+                description: Some("A individual handle that links a file to a dir in mega".into()),
             },
-                    ];
-
-
+        }];
 
         if client::tag_get_name(node.handle().into(), namespace_id).is_none() {
             let mut temp = Vec::new();
-            task::block_on(client.download_node(&node, &mut temp)).unwrap();
-            file_list.lock().unwrap().insert(sharedtypes::FileObject {
-                source: Some(sharedtypes::FileSource::Bytes(temp)),
-                hash: sharedtypes::HashesSupported::None,
-                tag_list: tags,
-                skip_if: vec![sharedtypes::SkipIf::FileTagRelationship(sharedtypes::Tag {
-                    tag: node.handle().into(),
-                    namespace: sharedtypes::GenericNamespaceObj {
-                        name: "Mega_Handle".into(),
-                        description: Some(
-                            "A individual handle that links a file to a dir in mega".into(),
-                        ),
-                    },
-                })],
-            });
-            //fileordir.push(MegaDirOrFile::File(megafile));
-        } else {
+            loop {
+            match task::block_on(client.download_node(&node, &mut temp)){ Ok(_)=>{
+                file_list.lock().unwrap().insert(sharedtypes::FileObject {
+                    source: Some(sharedtypes::FileSource::Bytes(temp)),
+                    hash: sharedtypes::HashesSupported::None,
+                    tag_list: tags,
+                    skip_if: vec![sharedtypes::SkipIf::FileTagRelationship(sharedtypes::Tag {
+                        tag: node.handle().into(),
+                        namespace: sharedtypes::GenericNamespaceObj {
+                            name: "Mega_Handle".into(),
+                            description: Some(
+                                "A individual handle that links a file to a dir in mega".into(),
+                            ),
+                        },
+                    })],
+                });
+                break;
+            } Err(err) => {
+                dbg!("Got ERROR", err);
+            }
 
-tags.push(sharedtypes::TagObject {
+            };
+            }
+        } else {
+            tags.push(sharedtypes::TagObject {
                 tag: localpath.into(),
                 tag_type: sharedtypes::TagType::Normal,
                 relates_to: Some(subtag),
@@ -489,8 +532,7 @@ tags.push(sharedtypes::TagObject {
                     name: "Mega_Name".into(),
                     description: Some("A filepath inside a Mega archive".into()),
                 },
-            }
-);
+            });
 
             for tag in tags {
                 tag_list.lock().unwrap().insert(tag);

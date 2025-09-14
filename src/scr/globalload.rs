@@ -42,8 +42,8 @@ fn c_run_onstart(path: &Path, global: &sharedtypes::GlobalPluginScraper) {
 /// Calls a parser to cleave information from a lib
 ///
 pub fn parser_call(
-    url_output: &String,
-    source_url: &String,
+    url_output: &str,
+    source_url: &str,
     scraperdata: &sharedtypes::ScraperData,
     globalload: Arc<RwLock<GlobalLoad>>,
     scraper: &GlobalPluginScraper,

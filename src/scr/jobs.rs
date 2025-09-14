@@ -331,9 +331,9 @@ mod tests {
     use std::sync::Arc;
     use std::time::Duration;
 
-    use crate::database::test_database;
     use crate::database::Main;
-    use crate::globalload::{test_globalload, GlobalLoad};
+    use crate::database::test_database;
+    use crate::globalload::{GlobalLoad, test_globalload};
     use crate::sharedtypes::DbJobsObj;
     use crate::sharedtypes::{self, DEFAULT_PRIORITY};
 
