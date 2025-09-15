@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 
 use crate::database::{Main, enclave};
 use crate::download::{hash_file, process_archive_files};
-use crate::globalload::{GlobalLoad, callback_on_import};
+use crate::globalload::GlobalLoad;
 use crate::threading::parse_tags;
 use crate::{Arc, RwLock, logging, sharedtypes};
 use std::fs::File;
@@ -164,7 +164,12 @@ pub fn parse_file(
                 parse_tags(db.clone(), tag, fileid, &0, &0, manager_arc.clone());
             }
 
-            callback_on_import(manager_arc.clone(), db.clone(), &bytes, &sha512hash);
+            manager_arc
+                .read()
+                .unwrap()
+                .callback_on_import(&bytes, &sha512hash);
+
+            // callback_on_import(manager_arc.clone(), db.clone(), &bytes, &sha512hash);
 
             if let Ok(filetype) = file_format::FileFormat::from_file(file_location) {
                 inside_files.append(&mut process_archive_files(
@@ -206,12 +211,18 @@ pub fn parse_file(
                 for tag in tags.iter() {
                     parse_tags(db.clone(), tag, subfileid, &0, &0, manager_arc.clone());
                 }
-                callback_on_import(
+
+                manager_arc
+                    .read()
+                    .unwrap()
+                    .callback_on_import(&file_bytes, &sub_sha512hash);
+
+                /* callback_on_import(
                     manager_arc.clone(),
                     db.clone(),
                     &file_bytes,
                     &sub_sha512hash,
-                );
+                );*/
             }
             if let Some(fid) = fileid {
                 return Some(fid);

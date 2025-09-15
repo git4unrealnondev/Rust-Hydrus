@@ -148,7 +148,7 @@ fn parse_plugin_output(
     parse_plugin_output_andmain(plugin_data, unwrappy, scraper, jobmanager, manager);
 }
 
-///
+/*///
 /// Runs on importing a file
 ///
 pub fn callback_on_import(
@@ -157,63 +157,7 @@ pub fn callback_on_import(
     bytes: &bytes::Bytes,
     hash: &String,
 ) {
-    let (libpath, libscraper);
-    {
-        let manager = manager_arc.read().unwrap();
-        (libpath, libscraper) = (
-            manager.get_lib_path_from_callback(&sharedtypes::GlobalCallbacks::Import),
-            manager.get_scrapers_from_callback(&sharedtypes::GlobalCallbacks::Import),
-        );
-    }
-
-    for (cnt, lib_path) in libpath.iter().enumerate() {
-        let lib;
-        unsafe {
-            match libloading::Library::new(lib_path) {
-                Ok(good_lib) => lib = good_lib,
-                Err(_) => {
-                    logging::error_log(&format!(
-                        "Cannot load library at path: {}",
-                        lib_path.to_string_lossy()
-                    ));
-                    continue;
-                }
-            }
-        }
-        let output;
-        unsafe {
-            let plugindatafunc: libloading::Symbol<
-                unsafe extern "C" fn(&[u8], &String) -> Vec<sharedtypes::DBPluginOutputEnum>,
-                //unsafe extern "C" fn(Cursor<Bytes>, &String, &String, Arc<RwLock<database::Main>>),
-            > = match lib.get(b"on_import") {
-                Ok(lib) => lib,
-                Err(_) => {
-                    logging::info_log(&format!(
-                        "Could not find on_download for plugin: {}",
-                        lib_path.to_string_lossy()
-                    ));
-                    continue;
-                }
-            };
-            //unwrappy.
-            output = plugindatafunc(bytes, hash);
-        }
-
-        let jobmanager;
-        {
-            let manager = manager_arc.read().unwrap();
-            jobmanager = manager.jobmanager.clone();
-        }
-        parse_plugin_output(
-            output,
-            db.clone(),
-            libscraper.get(cnt).unwrap(),
-            jobmanager,
-            manager_arc.clone(),
-        );
-        let _ = lib.close();
-    }
-}
+}*/
 
 ///
 /// Hopefully a thread-safe way to call plugins per thread avoiding a lock.
@@ -375,8 +319,10 @@ fn parse_plugin_output_andmain(
                         }
                     }
                     for tag in names.tag {
-                        let mut unwrappy = db.write().unwrap();
-                        unwrappy.tag_add_tagobject(&tag, true);
+                        {
+                            let mut unwrappy = db.write().unwrap();
+                            unwrappy.tag_add_tagobject(&tag, true);
+                        }
                         manager.read().unwrap().plugin_on_tag(&tag);
                         /*let namespace_id;
                         {
@@ -405,8 +351,8 @@ fn parse_plugin_output_andmain(
                             }
                         }*/
                     }
-                    let mut unwrappy = db.write().unwrap();
                     for settings in names.setting {
+                        let mut unwrappy = db.write().unwrap();
                         unwrappy.setting_add(
                             settings.name,
                             settings.pretty,
@@ -499,6 +445,60 @@ impl GlobalLoad {
             regex_storage: HashMap::new(),
             jobmanager: jobs,
         }))
+    }
+
+    pub fn callback_on_import(&self, bytes: &bytes::Bytes, hash: &String) {
+        let (libpath, libscraper);
+        {
+            (libpath, libscraper) = (
+                self.get_lib_path_from_callback(&sharedtypes::GlobalCallbacks::Import),
+                self.get_scrapers_from_callback(&sharedtypes::GlobalCallbacks::Import),
+            );
+        }
+
+        for (cnt, lib_path) in libpath.iter().enumerate() {
+            let lib;
+            unsafe {
+                match libloading::Library::new(lib_path) {
+                    Ok(good_lib) => lib = good_lib,
+                    Err(_) => {
+                        logging::error_log(&format!(
+                            "Cannot load library at path: {}",
+                            lib_path.to_string_lossy()
+                        ));
+                        continue;
+                    }
+                }
+            }
+            let output;
+            unsafe {
+                let plugindatafunc: libloading::Symbol<
+                    unsafe extern "C" fn(&[u8], &String) -> Vec<sharedtypes::DBPluginOutputEnum>,
+                    //unsafe extern "C" fn(Cursor<Bytes>, &String, &String, Arc<RwLock<database::Main>>),
+                > = match lib.get(b"on_import") {
+                    Ok(lib) => lib,
+                    Err(_) => {
+                        logging::info_log(&format!(
+                            "Could not find on_download for plugin: {}",
+                            lib_path.to_string_lossy()
+                        ));
+                        continue;
+                    }
+                };
+                //unwrappy.
+                output = plugindatafunc(bytes, hash);
+            }
+
+            self.parse_plugin_output_local(output, libscraper.get(cnt).unwrap());
+            /*parse_plugin_output(
+                output,
+                db.clone(),
+                libscraper.get(cnt).unwrap(),
+                jobmanager,
+                manager_arc.clone(),
+            );*/
+            let _ = lib.close();
+        }
     }
 
     fn run_regex(&self, name: &String, namespace: &sharedtypes::GenericNamespaceObj) {
