@@ -7,3 +7,6 @@
 [submodule "plugins/File_Thumbnail/plugins/File_Thumbnail/thumbnailer"]
 	path = plugins/File_Thumbnail/plugins/File_Thumbnail/thumbnailer
 	url = https://github.com/git4unrealnondev/thumbnailer
+[submodule "scrapers/mega/mega-rs"]
+	path = scrapers/mega/mega-rs
+	url = git@github.com:git4unrealnondev/mega-rs.git
