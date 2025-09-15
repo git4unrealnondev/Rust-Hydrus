@@ -70,7 +70,7 @@ pub fn get_global_info() -> Vec<sharedtypes::GlobalPluginScraper> {
 
 #[no_mangle]
 pub fn url_dump(
-    params: &Vec<sharedtypes::ScraperParam>,
+    params: &[sharedtypes::ScraperParam],
     scraperdata: &sharedtypes::ScraperData,
 ) -> Vec<(String, sharedtypes::ScraperData)> {
     let mut out = Vec::new();
@@ -439,9 +439,9 @@ pub fn on_start(parserscraper: &sharedtypes::GlobalPluginScraper) {
 
 #[no_mangle]
 pub fn on_regex_match(
-    tag: &String,
-    tag_ns: &String,
-    regex_match: &String,
+    tag_name: &str,
+    tag_namespace: &sharedtypes::GenericNamespaceObj,
+    regex_match: &str,
     callback: &Option<sharedtypes::SearchType>,
 ) -> Vec<sharedtypes::DBPluginOutputEnum> {
     let mut out = Vec::new();
@@ -459,23 +459,28 @@ pub fn on_regex_match(
     job.cachetime = DEFAULT_CACHE;
     job.cachechecktype = sharedtypes::JobCacheType::Param;
 
+    let tag = sharedtypes::TagObject {
+        namespace: sharedtypes::GenericNamespaceObj {
+            name: "Catbox Collection".into(),
+            description: Some("A CatBox collection album. Stores Pictures.".into()),
+        },
+        tag: regex_match.to_string(),
+        tag_type: sharedtypes::TagType::NormalNoRegex,
+        relates_to: Some(sharedtypes::SubTag {
+            namespace: tag_namespace.clone(),
+            tag: tag_name.to_string(),
+            limit_to: None,
+            tag_type: sharedtypes::TagType::NormalNoRegex,
+        }),
+    };
+
     out.push(sharedtypes::DBPluginOutputEnum::Add(vec![
         sharedtypes::DBPluginOutput {
-            tag: Some(vec![sharedtypes::DBPluginTagOut {
-                name: regex_match.to_string(),
-                namespace: "Catbox Collection".to_string(),
-                parents: Some(vec![sharedtypes::DbPluginParentsObj {
-                    tag_namespace_string: "Catbox Collection".to_string(),
-                    relate_namespace_id: tag_ns.to_string(),
-                    relate_tag_id: tag.to_string(),
-                }]),
-            }]),
-            setting: None,
-            relationship: None,
-            parents: None,
-            jobs: Some(vec![job]),
-            namespace: None,
-            file: None,
+            tag: vec![tag],
+            setting: vec![],
+            relationship: vec![],
+            jobs: vec![job],
+            file: vec![],
         },
     ]));
 
