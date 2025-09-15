@@ -389,8 +389,8 @@ mod tests {
     fn insert_duplicate_job() {
         for mut job in create_default() {
             let globalload = get_globalload(job.db.clone(), Arc::new(RwLock::new(job.clone())));
-
-            job.jobs_load(globalload);
+            let globalload_sites = globalload.read().unwrap().return_all_sites();
+            job.jobs_load(globalload_sites);
             let mut scraper = sharedtypes::return_default_globalpluginparser();
             scraper.storage_type = Some(sharedtypes::ScraperOrPlugin::Scraper(
                 sharedtypes::ScraperInfo {
@@ -415,7 +415,8 @@ mod tests {
     fn jobs_remove_job() {
         for mut job in create_default() {
             let globalload = get_globalload(job.db.clone(), Arc::new(RwLock::new(job.clone())));
-            job.jobs_load(globalload);
+            let globalload_sites = globalload.read().unwrap().return_all_sites();
+            job.jobs_load(globalload_sites);
             let mut scraper = sharedtypes::return_default_globalpluginparser();
             scraper.storage_type = Some(sharedtypes::ScraperOrPlugin::Scraper(
                 sharedtypes::ScraperInfo {
