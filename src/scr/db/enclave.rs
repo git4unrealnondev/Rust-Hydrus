@@ -1,10 +1,8 @@
-use crate::RwLock;
 use crate::database::Main;
 use crate::download;
 use crate::file::folder_make;
 use crate::logging;
 use crate::sharedtypes;
-use crate::threading::parse_tags;
 use crate::vec_of_strings;
 use bytes::Bytes;
 use chrono::Utc;
@@ -12,7 +10,6 @@ use core::panic;
 use file_format::FileFormat;
 use rusqlite::OptionalExtension;
 use rusqlite::params;
-use std::sync::Arc;
 
 const DEFAULT_PRIORITY_DOWNLOAD: usize = 10;
 const DEFAULT_PRIORITY_PUT: usize = 5;

@@ -65,53 +65,6 @@ pub fn parser_call(
 }
 
 ///
-/// Calls a regex function
-///
-fn c_regex_match(
-    db: Arc<RwLock<Main>>,
-    tag: &String,
-    tag_ns: &String,
-    regex_match: &String,
-    plugin_callback: &Option<sharedtypes::SearchType>,
-    liba: &libloading::Library,
-    scraper: &GlobalPluginScraper,
-    jobmanager: Arc<RwLock<Jobs>>,
-    manager: Arc<RwLock<GlobalLoad>>,
-) {
-    let output;
-    unsafe {
-        let plugindatafunc: libloading::Symbol<
-            unsafe extern "C" fn(
-                &String,
-                &String,
-                &String,
-                &Option<sharedtypes::SearchType>,
-            ) -> Vec<sharedtypes::DBPluginOutputEnum>,
-        > = match liba.get(b"on_regex_match") {
-            Ok(good) => good,
-            Err(_) => {
-                logging::error_log_silent(&format!(
-                    "Could not find function on_regex_match for plugin: {}",
-                    scraper.name
-                ));
-                return;
-            }
-        };
-        liba.get::<libloading::Symbol<
-            unsafe extern "C" fn(
-                &String,
-                &String,
-                &String,
-                &Option<sharedtypes::SearchType>,
-            ) -> Vec<sharedtypes::DBPluginOutputEnum>,
-        >>(b"on_regex_match")
-            .unwrap();
-        output = plugindatafunc(tag, tag_ns, regex_match, plugin_callback);
-    };
-    parse_plugin_output_andmain(output, db, scraper, jobmanager, manager);
-}
-
-///
 /// Gets a scraper to output any URLs based on params
 ///
 pub fn url_dump(
@@ -126,7 +79,7 @@ pub fn url_dump(
         let lib = lib.read().unwrap();
         let temp: libloading::Symbol<
             unsafe extern "C" fn(
-                &Vec<sharedtypes::ScraperParam>,
+                &[sharedtypes::ScraperParam],
                 &sharedtypes::ScraperData,
             ) -> Vec<(String, sharedtypes::ScraperData)>,
         > = unsafe { lib.get(b"url_dump\0")? };
@@ -169,7 +122,7 @@ pub fn text_scraping(
         let lib = lib.read().unwrap();
         let temp: libloading::Symbol<
             unsafe extern "C" fn(
-                &String,
+                &str,
                 &Vec<sharedtypes::ScraperParam>,
                 &sharedtypes::ScraperData,
             )
@@ -381,116 +334,6 @@ pub fn db_upgrade_call(
     unsafe { temp(db_version, site_struct) }
 }
 
-///
-/// Threadsafe way to call callback on adding a tag into the db
-///
-pub fn plugin_on_tag(
-    manager: Arc<RwLock<GlobalLoad>>,
-    db: Arc<RwLock<Main>>,
-    tag: &String,
-    tag_nsid: &usize,
-) {
-    let mut storagemap = Vec::new();
-
-    {
-        let mread = manager.read().unwrap();
-        let reg_store = mread.return_regex_storage();
-        'searchloop: for (((search_string, search_regex), ns, not_ns), pluginscraper_list) in
-            reg_store.iter()
-        {
-            // Filtering for weather we should apply this to a tag of X namespace
-            for ns in ns {
-                if ns != tag_nsid {
-                    continue 'searchloop;
-                }
-            }
-
-            for not_ns in not_ns {
-                if not_ns == tag_nsid {
-                    continue 'searchloop;
-                }
-            }
-
-            // Actual matching going on here
-            if let Some(search) = search_string {
-                if tag.contains(search) {}
-            } else if let Some(regex) = search_regex {
-                let regex_iter: Vec<&str> = regex.0.find_iter(tag).map(|m| m.as_str()).collect();
-                for regexmatch in regex_iter {
-                    for pluginscraper in pluginscraper_list {
-                        storagemap.push((
-                            pluginscraper.clone(),
-                            regexmatch,
-                            Some(sharedtypes::SearchType::Regex(regex.0.to_string())),
-                        ));
-                    }
-                }
-            } else {
-                for pluginscraper in pluginscraper_list {
-                    storagemap.push((pluginscraper.clone(), "", None));
-                }
-            }
-        }
-    }
-
-    // #TODO need to fix this. Is calling multiple times
-    for (pluginscraper, regex, searchtype) in storagemap.iter() {
-        let mut pluginscraper = pluginscraper.clone();
-        if let Some(scraper_or_plugin) = &pluginscraper.storage_type {
-            if let sharedtypes::ScraperOrPlugin::Plugin(plugininfo) = scraper_or_plugin {
-                if let Some(redirect_site) = &plugininfo.redirect {
-                    if let Some(good_scraper) = manager
-                        .read()
-                        .unwrap()
-                        .return_scraper_from_site(&redirect_site)
-                    {
-                        pluginscraper = good_scraper.clone();
-                    }
-                }
-            }
-        }
-
-        let tag_ns;
-        {
-            let db = db.clone();
-            let unwrappy = db.read().unwrap();
-            match unwrappy.namespace_get_string(tag_nsid) {
-                None => {
-                    continue;
-                }
-                Some(nso) => {
-                    tag_ns = nso.name.clone();
-                }
-            }
-        }
-
-        let liba;
-        {
-            match manager.read().unwrap().library_get_path(&pluginscraper) {
-                None => {
-                    liba = None;
-                }
-                Some(libpath) => {
-                    liba = Some(libpath.clone());
-                }
-            }
-        }
-        if let Some(liba) = liba {
-            let jobmanager = manager.read().unwrap().jobmanager.clone();
-            c_regex_match(
-                db.clone(),
-                tag,
-                &tag_ns,
-                &regex.to_string(),
-                &searchtype,
-                &unsafe { libloading::Library::new(liba).unwrap() },
-                &pluginscraper,
-                jobmanager.clone(),
-                manager.clone(),
-            );
-        }
-    }
-}
 fn parse_plugin_output_andmain(
     plugin_data: Vec<sharedtypes::DBPluginOutputEnum>,
     db: Arc<RwLock<Main>>,
@@ -504,52 +347,51 @@ fn parse_plugin_output_andmain(
                 for names in name {
                     // Loops through the namespace objects and selects the last one that's valid.
                     // IF ONE IS NOT VALID THEN THEIR WILL NOT BE ONE ADDED INTO THE DB
-                    if let Some(temp) = names.namespace {
-                        for namespace in temp {
-                            // IF Valid ID && Name && Description info are valid then we have a valid namespace id to pull
+                    for files in names.file {
+                        if files.id.is_none() && files.hash.is_some() && files.ext.is_some() {
+                            // Gets the extension id
                             let mut unwrappy = db.write().unwrap();
-                            unwrappy.namespace_add(&namespace.name, &namespace.description);
+                            let ext_id = unwrappy.extension_put_string(&files.ext.unwrap());
+
+                            let storage_id = match files.location {
+                                Some(exists) => {
+                                    unwrappy.storage_put(&exists);
+                                    unwrappy.storage_get_id(&exists).unwrap()
+                                }
+                                None => {
+                                    let exists = unwrappy.location_get();
+                                    unwrappy.storage_put(&exists);
+                                    unwrappy.storage_get_id(&exists).unwrap()
+                                }
+                            };
+
+                            let file =
+                                sharedtypes::DbFileStorage::NoIdExist(sharedtypes::DbFileObjNoId {
+                                    hash: files.hash.unwrap(),
+                                    ext_id,
+                                    storage_id,
+                                });
+                            unwrappy.file_add(file);
                         }
                     }
-                    if let Some(temp) = names.file {
-                        for files in temp {
-                            if files.id.is_none() && files.hash.is_some() && files.ext.is_some() {
-                                // Gets the extension id
-                                let mut unwrappy = db.write().unwrap();
-                                let ext_id = unwrappy.extension_put_string(&files.ext.unwrap());
-
-                                let storage_id = match files.location {
-                                    Some(exists) => {
-                                        unwrappy.storage_put(&exists);
-                                        unwrappy.storage_get_id(&exists).unwrap()
-                                    }
-                                    None => {
-                                        let exists = unwrappy.location_get();
-                                        unwrappy.storage_put(&exists);
-                                        unwrappy.storage_get_id(&exists).unwrap()
-                                    }
-                                };
-
-                                let file = sharedtypes::DbFileStorage::NoIdExist(
-                                    sharedtypes::DbFileObjNoId {
-                                        hash: files.hash.unwrap(),
-                                        ext_id,
-                                        storage_id,
-                                    },
-                                );
-                                unwrappy.file_add(file);
-                            }
+                    for tag in names.tag {
+                        let mut unwrappy = db.write().unwrap();
+                        unwrappy.tag_add_tagobject(&tag, true);
+                        manager.read().unwrap().plugin_on_tag(&tag);
+                        /*let namespace_id;
+                        {
+                            let unwrappy = db.read().unwrap();
+                            namespace_id = unwrappy.namespace_get(&tags.namespace);
                         }
-                    }
-                    if let Some(temp) = names.tag {
-                        for tags in temp {
-                            let namespace_id;
+                        //match namespace_id {}
+                        if tags.parents.is_none() && namespace_id.is_some() {
                             {
-                                let unwrappy = db.read().unwrap();
-                                namespace_id = unwrappy.namespace_get(&tags.namespace);
+                                let mut unwrappy = db.write().unwrap();
+                                unwrappy.tag_add(&tags.name, namespace_id.unwrap(), true, None);
                             }
-                            //match namespace_id {}
-                            if tags.parents.is_none() && namespace_id.is_some() {
+                            manager.read().unwrap().plugin_on_tag(&tags);
+                        } else {
+                            for _parents_obj in tags.parents.unwrap() {
                                 {
                                     let mut unwrappy = db.write().unwrap();
                                     unwrappy.tag_add(&tags.name, namespace_id.unwrap(), true, None);
@@ -560,76 +402,48 @@ fn parse_plugin_output_andmain(
                                     &tags.name,
                                     &namespace_id.unwrap(),
                                 );
-                            } else {
-                                for _parents_obj in tags.parents.unwrap() {
-                                    {
-                                        let mut unwrappy = db.write().unwrap();
-                                        unwrappy.tag_add(
-                                            &tags.name,
-                                            namespace_id.unwrap(),
-                                            true,
-                                            None,
-                                        );
-                                    }
-                                    plugin_on_tag(
-                                        manager.clone(),
-                                        db.clone(),
-                                        &tags.name,
-                                        &namespace_id.unwrap(),
-                                    );
-                                }
                             }
-                        }
+                        }*/
                     }
-                    if let Some(temp) = names.setting {
-                        let mut unwrappy = db.write().unwrap();
-                        for settings in temp {
-                            unwrappy.setting_add(
-                                settings.name,
-                                settings.pretty,
-                                settings.num,
-                                settings.param,
-                                true,
-                            );
-                        }
+                    let mut unwrappy = db.write().unwrap();
+                    for settings in names.setting {
+                        unwrappy.setting_add(
+                            settings.name,
+                            settings.pretty,
+                            settings.num,
+                            settings.param,
+                            true,
+                        );
                     }
 
-                    if let Some(temp) = names.jobs {
-                        for job in temp {
-                            jobmanager.write().unwrap().jobs_add_nolock(
-                                scraper.clone(),
-                                job,
-                                db.clone(),
-                            );
-                            //db.jobs_add_new(job);
+                    for job in names.jobs {
+                        jobmanager.write().unwrap().jobs_add_nolock(
+                            scraper.clone(),
+                            job,
+                            db.clone(),
+                        );
+                        //db.jobs_add_new(job);
+                    }
+
+                    let mut temp_vec: Vec<(Option<usize>, Option<usize>)> = Vec::new();
+                    {
+                        let unwrappy = db.read().unwrap();
+                        for relations in names.relationship {
+                            let file_id = unwrappy.file_get_hash(&relations.file_hash);
+                            let namespace_id = unwrappy.namespace_get(&relations.tag_namespace);
+                            let tag_id = unwrappy
+                                .tag_get_name(relations.tag_name.clone(), namespace_id.unwrap());
+                            temp_vec.push((file_id, tag_id));
+                            /*println!(
+                                "plugins356 relating: file id {:?} to {:?}",
+                                file_id, relations.tag_name
+                            );*/
+                            //unwrappy.relationship_add(file, tag, addtodb)
                         }
                     }
-                    if let Some(temp) = names.relationship {
-                        let mut temp_vec: Vec<(Option<usize>, Option<usize>)> = Vec::new();
-                        {
-                            let unwrappy = db.read().unwrap();
-                            for relations in temp {
-                                let file_id = unwrappy.file_get_hash(&relations.file_hash);
-                                let namespace_id = unwrappy.namespace_get(&relations.tag_namespace);
-                                let tag_id = unwrappy.tag_get_name(
-                                    relations.tag_name.clone(),
-                                    namespace_id.unwrap(),
-                                );
-                                temp_vec.push((file_id, tag_id));
-                                /*println!(
-                                    "plugins356 relating: file id {:?} to {:?}",
-                                    file_id, relations.tag_name
-                                );*/
-                                //unwrappy.relationship_add(file, tag, addtodb)
-                            }
-                        }
-                        for (file_id, tag_id) in temp_vec {
-                            let mut unwrappy = db.write().unwrap();
-                            unwrappy.relationship_add(file_id.unwrap(), tag_id.unwrap(), true);
-                        }
-                    }
-                    if let Some(_temp) = names.parents {
-                        //for parent in temp {}
+                    for (file_id, tag_id) in temp_vec {
+                        let mut unwrappy = db.write().unwrap();
+                        unwrappy.relationship_add(file_id.unwrap(), tag_id.unwrap(), true);
                     }
                 }
             }
@@ -685,6 +499,291 @@ impl GlobalLoad {
             regex_storage: HashMap::new(),
             jobmanager: jobs,
         }))
+    }
+
+    fn run_regex(&self, name: &String, namespace: &sharedtypes::GenericNamespaceObj) {
+        let mut storagemap = Vec::new();
+        let tag_nsid = match self.db.read().unwrap().namespace_get(&namespace.name) {
+            Some(id) => id,
+            None => return,
+        };
+        {
+            let reg_store = self.return_regex_storage();
+            'searchloop: for (((search_string, search_regex), ns, not_ns), pluginscraper_list) in
+                reg_store.iter()
+            {
+                // Filtering for weather we should apply this to a tag of X namespace
+                for ns in ns {
+                    if *ns != tag_nsid {
+                        continue 'searchloop;
+                    }
+                }
+                for not_ns in not_ns {
+                    if *not_ns == tag_nsid {
+                        continue 'searchloop;
+                    }
+                }
+
+                // Actual matching going on here
+                if let Some(search) = search_string {
+                    if name.contains(search) {}
+                } else if let Some(regex) = search_regex {
+                    let regex_iter: Vec<&str> =
+                        regex.0.find_iter(name).map(|m| m.as_str()).collect();
+                    for regexmatch in regex_iter {
+                        for pluginscraper in pluginscraper_list {
+                            storagemap.push((
+                                pluginscraper.clone(),
+                                regexmatch,
+                                Some(sharedtypes::SearchType::Regex(regex.0.to_string())),
+                            ));
+                        }
+                    }
+                } else {
+                    for pluginscraper in pluginscraper_list {
+                        storagemap.push((pluginscraper.clone(), "", None));
+                    }
+                }
+            }
+        }
+
+        // #TODO need to fix this. Is calling multiple times
+        for (pluginscraper, regex, searchtype) in storagemap.iter() {
+            let mut pluginscraper = pluginscraper.clone();
+            if let Some(scraper_or_plugin) = &pluginscraper.storage_type
+                && let sharedtypes::ScraperOrPlugin::Plugin(plugininfo) = scraper_or_plugin
+                && let Some(redirect_site) = &plugininfo.redirect
+                && let Some(good_scraper) = self.return_scraper_from_site(redirect_site)
+            {
+                pluginscraper = good_scraper.clone();
+            }
+
+            let tag_ns;
+            {
+                let unwrappy = self.db.read().unwrap();
+                match unwrappy.namespace_get_string(&tag_nsid) {
+                    None => {
+                        continue;
+                    }
+                    Some(nso) => {
+                        tag_ns = nso.name.clone();
+                    }
+                }
+            }
+
+            let liba;
+            {
+                match self.library_get_path(&pluginscraper) {
+                    None => {
+                        liba = None;
+                    }
+                    Some(libpath) => {
+                        liba = Some(libpath.clone());
+                    }
+                }
+            }
+            if let Some(liba) = liba {
+                self.c_regex_match(
+                    name,
+                    namespace,
+                    regex,
+                    searchtype,
+                    &unsafe { libloading::Library::new(liba).unwrap() },
+                    &pluginscraper,
+                );
+            }
+        }
+    }
+
+    ///
+    /// Threadsafe way to call callback on adding a tag into the db
+    ///
+    pub fn plugin_on_tag(
+        &self,
+        tag: &sharedtypes::TagObject, //tag: &String,tag_nsid: &usize,
+    ) {
+        // Designed to run regex on any tag that comes in. I'll leave the filtering to the plugins
+        self.run_regex(&tag.tag, &tag.namespace);
+        if let Some(relate) = &tag.relates_to {
+            self.run_regex(&relate.tag, &relate.namespace);
+            if let Some(limitto) = &relate.limit_to {
+                self.run_regex(&limitto.tag, &limitto.namespace);
+            }
+        }
+    }
+
+    ///
+    /// Calls a regex function
+    ///
+    fn c_regex_match(
+        &self,
+        tag: &str,
+        tag_namespace: &sharedtypes::GenericNamespaceObj,
+        regex_match: &str,
+        plugin_callback: &Option<sharedtypes::SearchType>,
+        liba: &libloading::Library,
+        scraper: &GlobalPluginScraper,
+    ) {
+        let output;
+        unsafe {
+            let plugindatafunc: libloading::Symbol<
+                unsafe extern "C" fn(
+                    &str,
+                    &sharedtypes::GenericNamespaceObj,
+                    &str,
+                    &Option<sharedtypes::SearchType>,
+                ) -> Vec<sharedtypes::DBPluginOutputEnum>,
+            > = match liba.get(b"on_regex_match") {
+                Ok(good) => good,
+                Err(_) => {
+                    logging::error_log_silent(&format!(
+                        "Could not find function on_regex_match for plugin: {}",
+                        scraper.name
+                    ));
+                    return;
+                }
+            };
+            liba.get::<libloading::Symbol<
+                unsafe extern "C" fn(
+                    &str,
+                    &sharedtypes::GenericNamespaceObj,
+                    &str,
+                    &Option<sharedtypes::SearchType>,
+                ) -> Vec<sharedtypes::DBPluginOutputEnum>,
+            >>(b"on_regex_match")
+                .unwrap();
+            output = plugindatafunc(tag, tag_namespace, regex_match, plugin_callback);
+        };
+        self.parse_plugin_output_local(output, scraper);
+        // parse_plugin_output_andmain(output, db, scraper, jobmanager, &self)
+    }
+
+    ///
+    /// Local plugin parser
+    ///
+    fn parse_plugin_output_local(
+        &self,
+        plugin_data: Vec<sharedtypes::DBPluginOutputEnum>,
+        scraper: &GlobalPluginScraper,
+    ) {
+        for each in plugin_data {
+            match each {
+                sharedtypes::DBPluginOutputEnum::Add(name) => {
+                    for names in name {
+                        // Loops through the namespace objects and selects the last one that's valid.
+                        // IF ONE IS NOT VALID THEN THEIR WILL NOT BE ONE ADDED INTO THE DB
+                        for files in names.file {
+                            if files.id.is_none() && files.hash.is_some() && files.ext.is_some() {
+                                // Gets the extension id
+                                let mut unwrappy = self.db.write().unwrap();
+                                let ext_id = unwrappy.extension_put_string(&files.ext.unwrap());
+
+                                let storage_id = match files.location {
+                                    Some(exists) => {
+                                        unwrappy.storage_put(&exists);
+                                        unwrappy.storage_get_id(&exists).unwrap()
+                                    }
+                                    None => {
+                                        let exists = unwrappy.location_get();
+                                        unwrappy.storage_put(&exists);
+                                        unwrappy.storage_get_id(&exists).unwrap()
+                                    }
+                                };
+
+                                let file = sharedtypes::DbFileStorage::NoIdExist(
+                                    sharedtypes::DbFileObjNoId {
+                                        hash: files.hash.unwrap(),
+                                        ext_id,
+                                        storage_id,
+                                    },
+                                );
+                                unwrappy.file_add(file);
+                            }
+                        }
+                        for tag in names.tag {
+                            if tag.tag_type != sharedtypes::TagType::NormalNoRegex {
+                                self.plugin_on_tag(&tag);
+                            }
+                            {
+                                let mut unwrappy = self.db.write().unwrap();
+                                unwrappy.tag_add_tagobject(&tag, true);
+                            }
+
+                            /*let namespace_id;
+                            {
+                                let unwrappy = db.read().unwrap();
+                                namespace_id = unwrappy.namespace_get(&tags.namespace);
+                            }
+                            //match namespace_id {}
+                            if tags.parents.is_none() && namespace_id.is_some() {
+                                {
+                                    let mut unwrappy = db.write().unwrap();
+                                    unwrappy.tag_add(&tags.name, namespace_id.unwrap(), true, None);
+                                }
+                                manager.read().unwrap().plugin_on_tag(&tags);
+                            } else {
+                                for _parents_obj in tags.parents.unwrap() {
+                                    {
+                                        let mut unwrappy = db.write().unwrap();
+                                        unwrappy.tag_add(&tags.name, namespace_id.unwrap(), true, None);
+                                    }
+                                    plugin_on_tag(
+                                        manager.clone(),
+                                        db.clone(),
+                                        &tags.name,
+                                        &namespace_id.unwrap(),
+                                    );
+                                }
+                            }*/
+                        }
+                        for settings in names.setting {
+                            let mut unwrappy = self.db.write().unwrap();
+                            unwrappy.setting_add(
+                                settings.name,
+                                settings.pretty,
+                                settings.num,
+                                settings.param,
+                                true,
+                            );
+                        }
+
+                        for job in names.jobs {
+                            self.jobmanager.write().unwrap().jobs_add_nolock(
+                                scraper.clone(),
+                                job,
+                                self.db.clone(),
+                            );
+                            //db.jobs_add_new(job);
+                        }
+
+                        let mut temp_vec: Vec<(Option<usize>, Option<usize>)> = Vec::new();
+                        {
+                            let unwrappy = self.db.read().unwrap();
+                            for relations in names.relationship {
+                                let file_id = unwrappy.file_get_hash(&relations.file_hash);
+                                let namespace_id = unwrappy.namespace_get(&relations.tag_namespace);
+                                let tag_id = unwrappy.tag_get_name(
+                                    relations.tag_name.clone(),
+                                    namespace_id.unwrap(),
+                                );
+                                temp_vec.push((file_id, tag_id));
+                                /*println!(
+                                    "plugins356 relating: file id {:?} to {:?}",
+                                    file_id, relations.tag_name
+                                );*/
+                                //unwrappy.relationship_add(file, tag, addtodb)
+                            }
+                        }
+                        for (file_id, tag_id) in temp_vec {
+                            let mut unwrappy = self.db.write().unwrap();
+                            unwrappy.relationship_add(file_id.unwrap(), tag_id.unwrap(), true);
+                        }
+                    }
+                }
+                sharedtypes::DBPluginOutputEnum::Del(name) => for _names in name {},
+                sharedtypes::DBPluginOutputEnum::None => {}
+            }
+        }
     }
 
     pub fn return_regex_storage(
@@ -942,35 +1041,32 @@ impl GlobalLoad {
     ///
     pub fn pluginscraper_on_start(&mut self) {
         for (callback, list) in self.callback.iter() {
-            match callback {
-                sharedtypes::GlobalCallbacks::Start(thread_type) => {
-                    for to_run in list {
-                        logging::log(&format!("Starting Call Start for: {}", &to_run.name));
-                        let file = self.library_path.get(to_run).unwrap().clone();
-                        match thread_type {
-                            sharedtypes::StartupThreadType::Spawn => {
-                                let run = to_run.clone();
-                                let to_run = to_run.clone();
-                                let thread = thread::spawn(move || {
-                                    c_run_onstart(&file, &to_run.clone());
-                                });
-                                self.thread.insert(run.clone(), thread);
-                            }
-                            sharedtypes::StartupThreadType::SpawnInline => {
-                                let run = to_run.clone();
-                                let to_run = to_run.clone();
-                                let thread = thread::spawn(move || {
-                                    c_run_onstart(&file, &to_run);
-                                });
-                                self.thread.insert(run.clone(), thread);
-                            }
-                            sharedtypes::StartupThreadType::Inline => {
+            if let sharedtypes::GlobalCallbacks::Start(thread_type) = callback {
+                for to_run in list {
+                    logging::log(&format!("Starting Call Start for: {}", &to_run.name));
+                    let file = self.library_path.get(to_run).unwrap().clone();
+                    match thread_type {
+                        sharedtypes::StartupThreadType::Spawn => {
+                            let run = to_run.clone();
+                            let to_run = to_run.clone();
+                            let thread = thread::spawn(move || {
+                                c_run_onstart(&file, &to_run.clone());
+                            });
+                            self.thread.insert(run.clone(), thread);
+                        }
+                        sharedtypes::StartupThreadType::SpawnInline => {
+                            let run = to_run.clone();
+                            let to_run = to_run.clone();
+                            let thread = thread::spawn(move || {
                                 c_run_onstart(&file, &to_run);
-                            }
+                            });
+                            self.thread.insert(run.clone(), thread);
+                        }
+                        sharedtypes::StartupThreadType::Inline => {
+                            c_run_onstart(&file, to_run);
                         }
                     }
                 }
-                _ => {}
             }
         }
 
@@ -1023,17 +1119,14 @@ impl GlobalLoad {
     pub fn plugin_on_start_should_wait(&mut self) -> bool {
         self.thread_finish_closed();
         for (check, list) in self.callback.iter() {
-            match check {
-                sharedtypes::GlobalCallbacks::Start(thread) => {
-                    for item in list {
-                        if &sharedtypes::StartupThreadType::SpawnInline == thread
-                            && self.thread.contains_key(item)
-                        {
-                            return true;
-                        }
+            if let sharedtypes::GlobalCallbacks::Start(thread) = check {
+                for item in list {
+                    if &sharedtypes::StartupThreadType::SpawnInline == thread
+                        && self.thread.contains_key(item)
+                    {
+                        return true;
                     }
                 }
-                _ => {}
             }
         }
         /*if let Some(plugin_list) = self.callback.get(&sharedtypes::GlobalCallbacks::Start) {
@@ -1141,14 +1234,10 @@ impl GlobalLoad {
                         let mut ns_u = Vec::new();
                         let mut ns_not_u = Vec::new();
                         for ns in ns {
-                            if let Some(nsid) = unwrappy.namespace_get(ns) {
-                                ns_u.push(nsid);
-                            }
+                            ns_u.push(unwrappy.namespace_add(ns, &None));
                         }
                         for ns in not_ns {
-                            if let Some(nsid) = unwrappy.namespace_get(ns) {
-                                ns_not_u.push(nsid);
-                            }
+                            ns_not_u.push(unwrappy.namespace_add(ns, &None));
                         }
                         let searchtype = match searchtype {
                             Some(searchtype) => match searchtype {
@@ -1271,12 +1360,11 @@ impl GlobalLoad {
 
     pub fn filter_sites_return_lib(&self, site: &String) -> Option<&RwLock<Library>> {
         for scraper in self.scraper_get().iter() {
-            if let Some(ref storage_type) = scraper.storage_type {
-                if let sharedtypes::ScraperOrPlugin::Scraper(scraperinfo) = &storage_type {
-                    if scraperinfo.sites.contains(site) {
-                        return self.library_get(scraper);
-                    }
-                }
+            if let Some(ref storage_type) = scraper.storage_type
+                && let sharedtypes::ScraperOrPlugin::Scraper(scraperinfo) = &storage_type
+                && scraperinfo.sites.contains(site)
+            {
+                return self.library_get(scraper);
             }
         }
         None

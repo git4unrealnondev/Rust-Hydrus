@@ -76,13 +76,12 @@ pub fn get_modifiers(
 ) -> Vec<sharedtypes::ScraperModifiers> {
     let mut out = Vec::new();
 
-    if let Some(scrapertype) = &scraper.storage_type {
-        if let sharedtypes::ScraperOrPlugin::Scraper(scraper) = scrapertype {
+    if let Some(scrapertype) = &scraper.storage_type
+        && let sharedtypes::ScraperOrPlugin::Scraper(scraper) = scrapertype {
             for modifier in &scraper.modifiers {
                 out.push(modifier.clone());
             }
         }
-    }
 
     out
 }
@@ -292,14 +291,10 @@ pub fn process_archive_files(
     filetype: Option<FileFormat>,
     linkto: sharedtypes::SubTag,
 ) -> Vec<(Vec<u8>, Vec<sharedtypes::TagObject>)> {
-    if let Some(filetype) = filetype {
-        match filetype {
-            FileFormat::Zip => {
-                return process_archive_zip(inp_bytes, linkto);
-            }
-            _ => {}
+    if let Some(filetype) = filetype
+        && filetype == FileFormat::Zip {
+            return process_archive_zip(inp_bytes, linkto);
         }
-    }
     Vec::new()
 }
 
@@ -393,8 +388,8 @@ pub fn dlfile_new(
     };
 
     if should_scraper_download {
-        if let Some(ref globalload) = globalload {
-            if let Some(scraper) = scraper {
+        if let Some(ref globalload) = globalload
+            && let Some(scraper) = scraper {
                 match globalload::download_from(file, globalload.clone(), scraper) {
                     None => {
                         logging::log(&format!("Could not pull info for file {:?}", &file));
@@ -404,7 +399,6 @@ pub fn dlfile_new(
                     }
                 }
             }
-        }
         //return FileReturnStatus::TryLater;
     } else {
         while boolloop {
@@ -557,8 +551,8 @@ pub fn process_bytes(
                 globalload,
                 db.clone(),
                 bytes.as_ref(),
-                &hash,
-                &file_ext,
+                hash,
+                file_ext,
             );
         }
     }
@@ -566,7 +560,7 @@ pub fn process_bytes(
     {
         let mut unwrappydb = db.write().unwrap();
         unwrappydb.create_default_source_url_ns_id();
-        unwrappydb.enclave_determine_processing(file, bytes, &hash, source_url);
+        unwrappydb.enclave_determine_processing(file, bytes, hash, source_url);
     }
 }
 

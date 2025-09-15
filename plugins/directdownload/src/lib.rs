@@ -39,23 +39,19 @@ pub fn get_global_info() -> Vec<sharedtypes::GlobalPluginScraper> {
 
 #[no_mangle]
 pub fn on_regex_match(
-    tag: &String,
-    tag_ns: &String,
-    regex_match: &String,
-    callback: &Option<sharedtypes::SearchType>,
+    tag_name: &str,
+    tag_namespace: &sharedtypes::GenericNamespaceObj,
+    regex_match: &str,
+    _callback: &Option<sharedtypes::SearchType>,
 ) -> Vec<sharedtypes::DBPluginOutputEnum> {
     let mut out = Vec::new();
     if regex_match.contains("bsky.app") {
         return out;
     }
-    dbg!(tag, tag_ns);
 
     let subtag = sharedtypes::SubTag {
-        namespace: sharedtypes::GenericNamespaceObj {
-            name: tag_ns.to_string(),
-            description: None,
-        },
-        tag: tag.to_string(),
+        namespace: tag_namespace.clone(),
+        tag: tag_name.to_string(),
         tag_type: sharedtypes::TagType::Normal,
         limit_to: None,
     };
@@ -97,13 +93,11 @@ pub fn on_regex_match(
 
     out.push(sharedtypes::DBPluginOutputEnum::Add(vec![
         sharedtypes::DBPluginOutput {
-            tag: None,
-            setting: None,
-            relationship: None,
-            parents: None,
-            jobs: Some(vec![default_job]),
-            namespace: None,
-            file: None,
+            tag: vec![],
+            setting: vec![],
+            relationship: vec![],
+            jobs: vec![default_job],
+            file: vec![],
         },
     ]));
 

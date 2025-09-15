@@ -286,7 +286,7 @@ fn nsobjplg(name: &NsIdent, site: &Site) -> sharedtypes::GenericNamespaceObj {
 ///
 /// Builds the URL for scraping activities.
 ///
-fn build_url(params: &Vec<sharedtypes::ScraperParam>, pagenum: u64, site: &Site) -> String {
+fn build_url(params: &[sharedtypes::ScraperParam], pagenum: u64, site: &Site) -> String {
     let lowercase_site = site_to_string(site).to_lowercase();
     let url_base = format!("https://{}.net/posts.json", lowercase_site);
     let page = "&page=";
@@ -437,7 +437,7 @@ pub fn url_get(params: &Vec<sharedtypes::ScraperParam>) -> Vec<String> {
 ///
 #[no_mangle]
 pub fn url_dump(
-    params: &Vec<sharedtypes::ScraperParam>,
+    params: &[sharedtypes::ScraperParam],
     scraperdata: &sharedtypes::ScraperData,
 ) -> Vec<(String, sharedtypes::ScraperData)> {
     let site_a = scraperdata.user_data.get("loaded_site");

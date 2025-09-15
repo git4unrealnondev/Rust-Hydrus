@@ -61,6 +61,12 @@ pub struct NewinMemDB {
     _file_max: usize,
 }
 
+impl Default for NewinMemDB {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl NewinMemDB {
     pub fn new() -> NewinMemDB {
         NewinMemDB {
@@ -126,7 +132,7 @@ impl NewinMemDB {
 
     /// Dumps db data
     pub fn dumpe_data(&self) {
-        use crate::pause;
+        
 
         //dbg!(&self._tag_nns_id_data, &self._tag_nns_data_id);
         //dbg!();
@@ -584,12 +590,11 @@ impl NewinMemDB {
                 Some(out) => *out,
             },
             Some(out) => {
-                if let Some(matchid) = self._tag_nns_id_data.get(&out) {
-                    if matchid != tag_info {
+                if let Some(matchid) = self._tag_nns_id_data.get(&out)
+                    && matchid != tag_info {
                         let id = self._tag_nns_data_id.remove(matchid).unwrap();
                         self._tag_nns_id_data.remove(&id);
                     }
-                }
 
                 match self._tag_max.cmp(&out) {
                     std::cmp::Ordering::Greater => {}
@@ -638,12 +643,11 @@ impl NewinMemDB {
         if let Some(match_id) = self._tag_nns_data_id.get(&sharedtypes::DbTagNNS {
             name: tag_info.name.to_owned(),
             namespace: tag_info.namespace,
-        }) {
-            if *match_id != tag_info.id {
+        })
+            && *match_id != tag_info.id {
                 let tagnns = self._tag_nns_id_data.remove(match_id).unwrap();
                 self._tag_nns_data_id.remove(&tagnns).unwrap();
             }
-        }
 
         self._tag_nns_id_data.insert(
             tag_info.id,

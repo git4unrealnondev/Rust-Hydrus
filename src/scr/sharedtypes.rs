@@ -730,12 +730,6 @@ pub struct DbPluginParentsObj {
     pub relate_tag_id: String,
 }
 
-/// Namespace for plugin objects
-#[derive(Debug, PartialEq)]
-pub struct DbPluginNamespace {
-    pub name: String,
-    pub description: Option<String>,
-}
 ///
 /// Defines actions we can do on import
 ///
@@ -755,19 +749,16 @@ pub enum FileAction {
 #[derive(Debug)]
 pub struct DBPluginOutput {
     // Adds a tag to DB
-    pub tag: Option<Vec<DBPluginTagOut>>,
-    // Add;s a setting
-    pub setting: Option<Vec<DbSettingObj>>,
+    pub tag: Vec<TagObject>,
+
+    // Adds a setting
+    pub setting: Vec<DbSettingObj>,
     // Adds a relationship into the DB.
-    pub relationship: Option<Vec<DbPluginRelationshipObj>>,
-    // Adds a parent object in db
-    pub parents: Option<Vec<DbParentsObj>>,
+    pub relationship: Vec<DbPluginRelationshipObj>,
     // Adds a job
-    pub jobs: Option<Vec<DbJobsObj>>,
-    // Adds a namespace
-    pub namespace: Option<Vec<DbPluginNamespace>>,
+    pub jobs: Vec<DbJobsObj>,
     // Adds a file into db
-    pub file: Option<Vec<PluginFileObj>>,
+    pub file: Vec<PluginFileObj>,
 }
 
 #[derive(
@@ -863,6 +854,8 @@ pub struct GenericNamespaceObj {
 pub enum TagType {
     // Normal tag.
     Normal,
+    // Do not run any regex on this pos
+    NormalNoRegex,
     // Scraper to download and parse a new url.
     ParseUrl((ScraperData, Option<SkipIf>)),
     // Probably will add support for something like file descriptors or plugin

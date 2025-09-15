@@ -2,13 +2,9 @@ use futures::TryStreamExt;
 use reqwest::blocking::{Client, Response};
 use reqwest_websocket::Message;
 
-use crate::Mutex;
-use crate::RwLock;
 use crate::download;
-use crate::globalload::download_from;
 use crate::logging;
 use reqwest_websocket::RequestBuilderExt;
-use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
@@ -47,7 +43,7 @@ pub fn ddoas_guard_bypass(
         .send()
         .unwrap();
 
-    let guard_check_url = format!("https://check.ddos-guard.net/check.js");
+    let guard_check_url = "https://check.ddos-guard.net/check.js".to_string();
 
     let guard_resp = cli.get(guard_check_url).send().unwrap();
 
@@ -75,7 +71,7 @@ pub fn ddoas_guard_bypass(
     let ddos_id = cli
         .get(format!(
             "https://kemono.cr/.well-known/ddos-guard/id/{}",
-            etag.to_string()
+            etag
         ))
         .header("Referer", url)
         .header("Cookie", cookiestring.clone())
@@ -87,7 +83,7 @@ pub fn ddoas_guard_bypass(
         .unwrap();
     cli.get(format!(
         "https://check.ddos-guard.net/.well-known/ddos-guard/id/{}",
-        etag.to_string()
+        etag
     ))
     .header("Referer", url)
     .header("Cookie", cookiestring.clone())
@@ -156,7 +152,7 @@ pub fn ddoas_guard_bypass(
             Some(out) => out,
         };
 
-        let guard_check_url = format!("https://check.ddos-guard.net/check.js",);
+        let guard_check_url = "https://check.ddos-guard.net/check.js".to_string();
         let mark_url = format!("https://{}/.well-known/ddos-guard/mark/", host);
 
         let guard_resp = cli.get(guard_check_url).send().unwrap();
@@ -254,13 +250,12 @@ async fn wss(cookiestring: &String) {
 
     let mut websocket = r.into_websocket().await.unwrap();
 
-    if let Some(msg) = websocket.try_next().await.unwrap() {
-        if let Message::Text(msg) = msg {
+    if let Some(msg) = websocket.try_next().await.unwrap()
+        && let Message::Text(msg) = msg {
             println!("{}", msg);
         }
-    }
 }
 
 fn get_ws_ack(cookiestring: &String) {
-    let websocket = async_std::task::block_on(wss(cookiestring));
+    async_std::task::block_on(wss(cookiestring));
 }

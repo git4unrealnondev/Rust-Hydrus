@@ -379,28 +379,28 @@ impl Main {
     ///
     pub fn extension_get_id_sql(&self, ext: &str) -> Option<usize> {
         let conn = self._conn.lock().unwrap();
-        let out = conn
+        
+        conn
             .query_row(
                 "select id from FileExtensions where extension = ?",
                 params![ext],
                 |row| row.get(0),
             )
-            .unwrap();
-        out
+            .unwrap()
     }
     ///
     /// Returns if an extension exists get by id
     ///
     pub fn extension_get_string_sql(&self, id: &usize) -> Option<String> {
         let conn = self._conn.lock().unwrap();
-        let out = conn
+        
+        conn
             .query_row(
                 "select extension from FileExtensions where id = ?",
                 params![id],
                 |row| row.get(0),
             )
-            .unwrap();
-        out
+            .unwrap()
     }
 
     /// Adds file via SQL

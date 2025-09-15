@@ -215,20 +215,19 @@ impl Jobs {
         scraper: &sharedtypes::GlobalPluginScraper,
         worker_id: &usize,
     ) {
-        if let Some(job_list) = self.site_job.get_mut(scraper) {
-            if let Some(job) = job_list.get(data) {
-                if let Some(recursion) = &job.jobmanager.recreation {
-                    match recursion {
-                        sharedtypes::DbJobRecreation::OnTag(_, _, _) => {}
-                        sharedtypes::DbJobRecreation::OnTagId(_, _) => {}
-                        sharedtypes::DbJobRecreation::AlwaysTime(_, count) => {
-                            if let &Some(count) = count {
-                                if count == 0 {
-                                    self.jobs_remove_dbjob(scraper, data, worker_id);
-                                } else {
-                                    //count -= 1;
-                                }
-                            }
+        if let Some(job_list) = self.site_job.get_mut(scraper)
+            && let Some(job) = job_list.get(data)
+            && let Some(recursion) = &job.jobmanager.recreation
+        {
+            match recursion {
+                sharedtypes::DbJobRecreation::OnTag(_, _, _) => {}
+                sharedtypes::DbJobRecreation::OnTagId(_, _) => {}
+                sharedtypes::DbJobRecreation::AlwaysTime(_, count) => {
+                    if let &Some(count) = count {
+                        if count == 0 {
+                            self.jobs_remove_dbjob(scraper, data, worker_id);
+                        } else {
+                            //count -= 1;
                         }
                     }
                 }
@@ -276,7 +275,10 @@ impl Jobs {
     ///
     ///Loads jobs from DB into the internal Jobs structure
     ///
-    pub fn jobs_load(&mut self, global_load: Arc<RwLock<GlobalLoad>>) {
+    pub fn jobs_load(
+        &mut self,
+        globalplugin_sites: Vec<(sharedtypes::GlobalPluginScraper, String)>,
+    ) {
         // Loads table if this hasn't been loaded yet
         {
             self.db
@@ -292,7 +294,7 @@ impl Jobs {
         }
 
         {
-            'mainloop: for (scraper, sites) in global_load.read().unwrap().return_all_sites() {
+            'mainloop: for (scraper, sites) in globalplugin_sites {
                 // Stupid prefilter because an item can be either a scraper or a plugin. Not sure how I
                 // didn't hit this issue sooner lol
                 if let Some(sharedtypes::ScraperOrPlugin::Scraper(_)) = scraper.storage_type {

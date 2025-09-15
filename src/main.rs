@@ -195,11 +195,11 @@ fn main() {
         }
     }
 
-    // Checks if we need to load any jobs
-    jobmanager
-        .write()
-        .unwrap()
-        .jobs_load(globalload_arc.clone());
+    {
+        let globalload_sites = globalload_arc.read().unwrap().return_all_sites();
+        // Checks if we need to load any jobs
+        jobmanager.write().unwrap().jobs_load(globalload_sites);
+    }
 
     // One flush after all the on_start unless needed
     arc.write().unwrap().transaction_flush();
@@ -232,10 +232,8 @@ fn main() {
         }
 
         {
-            jobmanager
-                .write()
-                .unwrap()
-                .jobs_load(globalload_arc.clone());
+            let globalload_sites = globalload_arc.read().unwrap().return_all_sites();
+            jobmanager.write().unwrap().jobs_load(globalload_sites);
         }
 
         for scraper in jobmanager.read().unwrap().job_scrapers_get() {

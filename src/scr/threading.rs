@@ -37,6 +37,12 @@ pub struct Threads {
 }
 
 /// Holder for workers. Workers manage their own threads.
+impl Default for Threads {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Threads {
     pub fn new() -> Self {
         let workers = 0;
@@ -585,49 +591,15 @@ pub fn parse_tags(
 ) -> BTreeSet<sharedtypes::ScraperData> {
     let mut url_return: BTreeSet<sharedtypes::ScraperData> = BTreeSet::new();
     match &tag.tag_type {
-        sharedtypes::TagType::Normal => {
+        sharedtypes::TagType::Normal | sharedtypes::TagType::NormalNoRegex => {
             // println!("Adding tag: {} {:?}", tag.tag, &file_id); We've recieved a normal
             // tag. Will parse.
-            let namespace_id;
-            let tag_id;
-            {
-                let mut unwrappy = db.write().unwrap();
-                namespace_id =
-                    unwrappy.namespace_add(&tag.namespace.name, &tag.namespace.description);
-                tag_id = unwrappy.tag_add(&tag.tag, namespace_id, true, None);
+
+            if tag.tag_type != sharedtypes::TagType::NormalNoRegex {
+                // Runs regex mostly
+                manager.read().unwrap().plugin_on_tag(tag);
             }
-
-            // Runs regex mostly
-            globalload::plugin_on_tag(manager.clone(), db.clone(), &tag.tag, &namespace_id);
-
-            match &tag.relates_to {
-                None => {
-                    // let relate_ns_id = unwrappy.namespace_add( relate.namespace.name.clone(),
-                    // relate.namespace.description, true, );
-                }
-                Some(relate) => {
-                    let relate_ns_id;
-                    {
-                        let mut unwrappy = db.write().unwrap();
-                        relate_ns_id = unwrappy
-                            .namespace_add(&relate.namespace.name, &relate.namespace.description);
-                        let limit_to = match &relate.limit_to {
-                            None => None,
-                            Some(tag) => {
-                                let namespace_id = unwrappy
-                                    .namespace_add(&tag.namespace.name, &tag.namespace.description);
-                                let tid = unwrappy.tag_add(&tag.tag, namespace_id, true, None);
-                                Some(tid)
-                            }
-                        };
-                        let relate_tag_id = unwrappy.tag_add(&relate.tag, relate_ns_id, true, None);
-                        unwrappy.parents_add(tag_id, relate_tag_id, limit_to);
-                    }
-
-                    // Runs regex mostly
-                    globalload::plugin_on_tag(manager, db.clone(), &relate.tag, &relate_ns_id);
-                }
-            }
+            let tag_id = db.write().unwrap().tag_add_tagobject(tag, true);
             match file_id {
                 None => {}
                 Some(id) => {
@@ -656,22 +628,17 @@ pub fn parse_tags(
                     )) => {
                         let mut cnt = 0;
                         let unwrappy = db.read().unwrap();
-                        if let Some(nidf) = &unwrappy.namespace_get(&namespace_filter.name) {
-                            if let Some(nid) = &unwrappy.namespace_get(&unique_tag.namespace.name) {
-                                if let Some(tid) =
-                                    &unwrappy.tag_get_name(unique_tag.tag.clone(), *nid)
-                                {
-                                    let fids = unwrappy.relationship_get_fileid(tid);
-                                    if fids.len() == 1 {
-                                        let fid = fids.iter().next().unwrap();
-                                        for tidtofilter in
-                                            unwrappy.relationship_get_tagid(fid).iter()
-                                        {
-                                            //if unwrappy.namespace_contains_id(nidf) {
-                                            if unwrappy.namespace_contains_id(nidf, tidtofilter) {
-                                                cnt += 1;
-                                            }
-                                        }
+                        if let Some(nidf) = &unwrappy.namespace_get(&namespace_filter.name)
+                            && let Some(nid) = &unwrappy.namespace_get(&unique_tag.namespace.name)
+                            && let Some(tid) = &unwrappy.tag_get_name(unique_tag.tag.clone(), *nid)
+                        {
+                            let fids = unwrappy.relationship_get_fileid(tid);
+                            if fids.len() == 1 {
+                                let fid = fids.iter().next().unwrap();
+                                for tidtofilter in unwrappy.relationship_get_tagid(fid).iter() {
+                                    //if unwrappy.namespace_contains_id(nidf) {
+                                    if unwrappy.namespace_contains_id(nidf, tidtofilter) {
+                                        cnt += 1;
                                     }
                                 }
                             }
@@ -861,23 +828,22 @@ fn parse_skipif(
     match file_tag {
         sharedtypes::SkipIf::FileHash(sha512hash) => {
             let unwrappy = db.read().unwrap();
-            return unwrappy.file_get_hash(&sha512hash).is_some();
+            return unwrappy.file_get_hash(sha512hash).is_some();
         }
         sharedtypes::SkipIf::FileNamespaceNumber((unique_tag, namespace_filter, filter_number)) => {
             let unwrappydb = db.read().unwrap();
             let mut cnt = 0;
-            if let Some(nidf) = &unwrappydb.namespace_get(&namespace_filter.name) {
-                if let Some(nid) = unwrappydb.namespace_get(&unique_tag.namespace.name) {
-                    if let Some(tid) = &unwrappydb.tag_get_name(unique_tag.tag.clone(), nid) {
-                        let fids = unwrappydb.relationship_get_fileid(tid);
-                        if fids.len() == 1 {
-                            let fid = fids.iter().next().unwrap();
-                            for tidtofilter in unwrappydb.relationship_get_tagid(fid).iter() {
-                                if unwrappydb.namespace_contains_id(nidf, tidtofilter) {
-                                    //if unwrappydb.namespace_contains_id(nidf, tidtofilter) {
-                                    cnt += 1;
-                                }
-                            }
+            if let Some(nidf) = &unwrappydb.namespace_get(&namespace_filter.name)
+                && let Some(nid) = unwrappydb.namespace_get(&unique_tag.namespace.name)
+                && let Some(tid) = &unwrappydb.tag_get_name(unique_tag.tag.clone(), nid)
+            {
+                let fids = unwrappydb.relationship_get_fileid(tid);
+                if fids.len() == 1 {
+                    let fid = fids.iter().next().unwrap();
+                    for tidtofilter in unwrappydb.relationship_get_tagid(fid).iter() {
+                        if unwrappydb.namespace_contains_id(nidf, tidtofilter) {
+                            //if unwrappydb.namespace_contains_id(nidf, tidtofilter) {
+                            cnt += 1;
                         }
                     }
                 }
@@ -896,14 +862,14 @@ fn parse_skipif(
         }
         sharedtypes::SkipIf::FileTagRelationship(tag) => {
             let unwrappydb = db.read().unwrap();
-            if let Some(nsid) = unwrappydb.namespace_get(&tag.namespace.name) {
-                if unwrappydb.tag_get_name(tag.tag.to_string(), nsid).is_some() {
-                    info_log(&format!(
-                        "Worker: {worker_id} JobId: {job_id} -- Skipping file: {} Due to skip tag {} already existing in Tags Table.",
-                        file_url_source, tag.tag
-                    ));
-                    return true;
-                }
+            if let Some(nsid) = unwrappydb.namespace_get(&tag.namespace.name)
+                && unwrappydb.tag_get_name(tag.tag.to_string(), nsid).is_some()
+            {
+                info_log(&format!(
+                    "Worker: {worker_id} JobId: {job_id} -- Skipping file: {} Due to skip tag {} already existing in Tags Table.",
+                    file_url_source, tag.tag
+                ));
+                return true;
             }
         }
     }

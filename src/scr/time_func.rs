@@ -40,7 +40,7 @@ pub fn time_conv(inp: &str) -> usize {
             if tmp[0].is_empty() {
                 break;
             }
-            ttl += nums[cnt] * tmp[0].parse::<usize>().unwrap();
+            ttl += nums[cnt] * tmp[0].parse::<usize>().unwrap_or(0);
             st = tmp[1];
         }
     }

@@ -285,7 +285,7 @@ pub fn main(data: Arc<RwLock<database::Main>>, globalload: Arc<RwLock<GlobalLoad
                         } else {
                             let mut tvec = Vec::new();
                             for tid in hstags.iter() {
-                                if let Some(_) = data.tag_id_get(tid) {
+                                if data.tag_id_get(tid).is_some() {
                                     tvec.push(tid)
                                 }
                             }
@@ -397,7 +397,6 @@ pub fn main(data: Arc<RwLock<database::Main>>, globalload: Arc<RwLock<GlobalLoad
                     //let data = data.read().unwrap();
                     if !Path::new(&loc.location).exists() {
                         println!("Couldn't find location: {}", &loc.location);
-                        return;
                     }
                     /* // Loads the scraper info for parsing.
                     let scraperlibrary = scraper.read().unwrap().filter_sites_return_lib(&loc.site);
@@ -657,7 +656,8 @@ pub fn main(data: Arc<RwLock<database::Main>>, globalload: Arc<RwLock<GlobalLoad
                         let ns_id = match db_n_rmv {
                             cli_structs::NamespaceInfo::NamespaceString(ns) => {
                                 data.load_table(&sharedtypes::LoadDBTable::Namespace);
-                                let db_id = match data.namespace_get(&ns.namespace_string) {
+                                
+                                match data.namespace_get(&ns.namespace_string) {
                                     None => {
                                         logging::info_log(&format!(
                                             "Cannot find the tasks remove string in namespace {}",
@@ -666,8 +666,7 @@ pub fn main(data: Arc<RwLock<database::Main>>, globalload: Arc<RwLock<GlobalLoad
                                         return;
                                     }
                                     Some(id) => id,
-                                };
-                                db_id
+                                }
                             }
                             cli_structs::NamespaceInfo::NamespaceId(ns) => ns.namespace_id,
                         };
@@ -695,7 +694,8 @@ pub fn main(data: Arc<RwLock<database::Main>>, globalload: Arc<RwLock<GlobalLoad
                         let ns_id = match db_rmv {
                             cli_structs::NamespaceInfo::NamespaceString(ns) => {
                                 data.load_table(&sharedtypes::LoadDBTable::Namespace);
-                                let db_id = match data.namespace_get(&ns.namespace_string) {
+                                
+                                match data.namespace_get(&ns.namespace_string) {
                                     None => {
                                         logging::info_log(&format!(
                                             "Cannot find the tasks remove string in namespace {}",
@@ -704,8 +704,7 @@ pub fn main(data: Arc<RwLock<database::Main>>, globalload: Arc<RwLock<GlobalLoad
                                         return;
                                     }
                                     Some(id) => id,
-                                };
-                                db_id
+                                }
                             }
                             cli_structs::NamespaceInfo::NamespaceId(ns) => ns.namespace_id,
                         };

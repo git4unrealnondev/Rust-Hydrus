@@ -12,7 +12,6 @@ pub use rusqlite::types::ToSql;
 pub use rusqlite::{Connection, Result, Transaction, params, types::Null};
 use std::borrow::BorrowMut;
 use std::collections::BTreeMap;
-use std::collections::BTreeSet;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::panic;
@@ -373,15 +372,15 @@ impl Main {
 
                 // New revision of the downloader adds the extension to the file downloaded.
                 // This will rename the file if it uses the old file ext
-                if let Some(ref ext_str) = self.extension_get_string(&file.ext_id) {
-                    if Path::new(&out).with_extension(ext_str).exists() {
-                        return Some(
-                            Path::new(&out)
-                                .with_extension(ext_str)
-                                .to_string_lossy()
-                                .to_string(),
-                        );
-                    }
+                if let Some(ref ext_str) = self.extension_get_string(&file.ext_id)
+                    && Path::new(&out).with_extension(ext_str).exists()
+                {
+                    return Some(
+                        Path::new(&out)
+                            .with_extension(ext_str)
+                            .to_string_lossy()
+                            .to_string(),
+                    );
                 }
 
                 if Path::new(&out).exists() {
@@ -644,7 +643,7 @@ impl Main {
     pub fn jobs_get_max(&self) -> usize {
         match self._cache {
             CacheType::Bare => self.jobs_return_count_sql(),
-            _ => self._inmemdb.jobs_get_max().clone(),
+            _ => *self._inmemdb.jobs_get_max(),
         }
     }
 
@@ -1247,10 +1246,10 @@ impl Main {
                     let id: Option<usize> = row.get(0).unwrap();
                     let extension: Option<String> = row.get(1).unwrap();
 
-                    if let Some(ext) = extension {
-                        if let Some(id) = id {
-                            self.extension_load(id, ext);
-                        }
+                    if let Some(ext) = extension
+                        && let Some(id) = id
+                    {
+                        self.extension_load(id, ext);
                     }
                 }
             }
@@ -1259,9 +1258,8 @@ impl Main {
 
     /// Same as above
     fn load_namespace(&mut self) {
-        match self._cache {
-            CacheType::Bare => return,
-            _ => {}
+        if self._cache == CacheType::Bare {
+            return;
         }
 
         let mut nses: Vec<sharedtypes::DbNamespaceObj> = vec![];
@@ -1371,12 +1369,12 @@ impl Main {
     fn db_commit_man(&mut self) {
         self._dbcommitnum += 1;
 
-        if let Some(static_commit) = self._dbcommitnum_static {
-            if self._dbcommitnum >= static_commit {
-                logging::info_log(&format!("Flushing {} Records into DB.", static_commit));
+        if let Some(static_commit) = self._dbcommitnum_static
+            && self._dbcommitnum >= static_commit
+        {
+            logging::info_log(&format!("Flushing {} Records into DB.", static_commit));
 
-                self.transaction_flush();
-            }
+            self.transaction_flush();
         }
     }
 
@@ -1559,7 +1557,7 @@ impl Main {
 
     /// Adds tag into inmemdb
     fn tag_add_db(&mut self, tag: &String, namespace: &usize, id: Option<usize>) -> usize {
-        let selected_id = match id {
+        match id {
             None => {
                 match self._inmemdb.tags_get_id(&sharedtypes::DbTagNNS {
                     name: tag.to_string(),
@@ -1582,9 +1580,7 @@ impl Main {
                 };
                 self._inmemdb.tags_put(&tag_info, Some(out))
             }
-        };
-
-        selected_id
+        }
     }
 
     /// Prints db info
@@ -1607,9 +1603,27 @@ impl Main {
         self.namespace_add(&namespace_obj.name, &namespace_obj.description)
     }
 
-    pub fn tag_add_tagobject(&mut self, tag: &sharedtypes::TagObject) -> usize {
+    ///
+    /// More modern way to add a file into the db
+    ///
+    pub fn tag_add_tagobject(&mut self, tag: &sharedtypes::TagObject, addtodb: bool) -> usize {
+        let mut limitto_id = None;
+
         let nsid = self.namespace_add_namespaceobject(tag.namespace.clone());
-        self.tag_add(&tag.tag, nsid, true, None)
+        let tag_id = self.tag_add(&tag.tag, nsid, true, None);
+
+        // Parent tag adding
+        if let Some(subtag) = &tag.relates_to {
+            let nsid = self.namespace_add_namespaceobject(subtag.namespace.clone());
+            let relate_tag_id = self.tag_add(&subtag.tag, nsid, addtodb, None);
+            if let Some(limit_to) = &subtag.limit_to {
+                let nsid = self.namespace_add_namespaceobject(limit_to.namespace.clone());
+                limitto_id = Some(self.tag_add(&limit_to.tag, nsid, addtodb, None));
+            }
+
+            self.parents_add(tag_id, relate_tag_id, limitto_id);
+        }
+        tag_id
     }
 
     /// Adds tag into DB if it doesn't exist in the memdb.
@@ -1644,7 +1658,7 @@ impl Main {
                         if addtodb {
                             self.tag_add_sql(&tag_id, tags, &namespace);
                         }
-                        return tag_id;
+                        tag_id
                     }
                     Some(tag_id) => tag_id,
                 }
@@ -2456,8 +2470,7 @@ impl Main {
 
     /// Returns all file objects in db.
     pub fn file_get_list_all(&self) -> &HashMap<usize, sharedtypes::DbFileStorage> {
-        let out = self._inmemdb.file_get_list_all();
-        out
+        (self._inmemdb.file_get_list_all()) as _
     }
 
     /// Returns the location of the DB. Helper function

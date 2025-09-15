@@ -38,15 +38,14 @@ impl ProxyPool {
         pool.initialize_proxies().await?;
 
         // Perform initial health check synchronously
-        dbg!("Starting synchronous initial health check");
+        info!("Starting synchronous initial health check");
         pool.check_all_proxies().await;
 
         // Display initial stats
         let (total, healthy) = pool.get_stats();
-        dbg!(
+        info!(
             "Initial proxy pool status: {}/{} healthy proxies",
-            healthy,
-            total
+            healthy, total
         );
 
         // Start background health check task
@@ -57,10 +56,9 @@ impl ProxyPool {
                 pool_clone.check_all_proxies().await;
 
                 let (total, healthy) = pool_clone.get_stats();
-                dbg!(
+                info!(
                     "Proxy pool status update: {}/{} healthy proxies",
-                    healthy,
-                    total
+                    healthy, total
                 );
             }
         });
@@ -70,7 +68,7 @@ impl ProxyPool {
 
     /// Initialize the proxy pool by fetching proxies from all configured sources.
     async fn initialize_proxies(&self) -> Result<(), reqwest::Error> {
-        dbg!(
+        info!(
             "Initializing proxy pool from {} sources",
             self.config.sources.len()
         );
@@ -81,7 +79,7 @@ impl ProxyPool {
         for source in &self.config.sources {
             match utils::fetch_proxies_from_source(source).await {
                 Ok(source_proxies) => {
-                    dbg!("Fetched {} proxies from {:?}", source_proxies.len(), source);
+                    info!("Fetched {} proxies from {:?}", source_proxies.len(), source);
                     all_proxies.extend(source_proxies);
                 }
                 Err(e) => {
@@ -90,7 +88,7 @@ impl ProxyPool {
             }
         }
 
-        dbg!(
+        info!(
             "Found {} unique proxies before health check",
             all_proxies.len()
         );
@@ -108,7 +106,7 @@ impl ProxyPool {
 
     /// Check the health of all proxies in the pool.
     pub async fn check_all_proxies(&self) {
-        dbg!("Starting health check for all proxies");
+        info!("Starting health check for all proxies");
 
         let proxies = {
             let guard = self.proxies.read();
@@ -173,11 +171,9 @@ impl ProxyPool {
 
                     // Log status changes
                     if old_status != proxy.status {
-                        dbg!(
+                        info!(
                             "Proxy {} status changed: {:?} -> {:?}",
-                            &proxy.url,
-                            old_status,
-                            proxy.status
+                            &proxy.url, old_status, proxy.status
                         );
                     }
 
@@ -186,10 +182,9 @@ impl ProxyPool {
             }
         }
 
-        dbg!(
+        info!(
             "Health check completed: {} healthy, {} unhealthy",
-            healthy_count,
-            unhealthy_count
+            healthy_count, unhealthy_count
         );
     }
 
