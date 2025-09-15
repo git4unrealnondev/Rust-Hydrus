@@ -818,26 +818,28 @@ fn parse_jobs(
 }
 
 /// Parses weather we should skip downloading the file
+/// Returns a Some(usize) if the fileid exists
 fn parse_skipif(
     file_tag: &sharedtypes::SkipIf,
     file_url_source: &String,
     db: Arc<RwLock<database::Main>>,
     worker_id: &usize,
     job_id: &usize,
-) -> bool {
+) -> Option<usize> {
     match file_tag {
         sharedtypes::SkipIf::FileHash(sha512hash) => {
             let unwrappy = db.read().unwrap();
-            return unwrappy.file_get_hash(sha512hash).is_some();
+            return unwrappy.file_get_hash(sha512hash);
         }
         sharedtypes::SkipIf::FileNamespaceNumber((unique_tag, namespace_filter, filter_number)) => {
             let unwrappydb = db.read().unwrap();
             let mut cnt = 0;
+            let fids;
             if let Some(nidf) = &unwrappydb.namespace_get(&namespace_filter.name)
                 && let Some(nid) = unwrappydb.namespace_get(&unique_tag.namespace.name)
                 && let Some(tid) = &unwrappydb.tag_get_name(unique_tag.tag.clone(), nid)
             {
-                let fids = unwrappydb.relationship_get_fileid(tid);
+                fids = unwrappydb.relationship_get_fileid(tid);
                 if fids.len() == 1 {
                     let fid = fids.iter().next().unwrap();
                     for tidtofilter in unwrappydb.relationship_get_tagid(fid).iter() {
@@ -847,17 +849,20 @@ fn parse_skipif(
                         }
                     }
                 }
+            } else {
+                return None;
             }
             if cnt > *filter_number {
                 info_log(&format!(
                     "Not downloading because unique namespace is greater then limit number. {}",
                     unique_tag.tag
                 ));
-                return true;
             } else {
                 info_log(
                     &"Downloading due to unique namespace not existing or number less then limit number.".to_string(),
                 );
+                let vec: Vec<usize> = fids.iter().cloned().collect();
+                return Some(vec[0]);
             }
         }
         sharedtypes::SkipIf::FileTagRelationship(tag) => {
@@ -869,11 +874,13 @@ fn parse_skipif(
                     "Worker: {worker_id} JobId: {job_id} -- Skipping file: {} Due to skip tag {} already existing in Tags Table.",
                     file_url_source, tag.tag
                 ));
-                return true;
+                if let Some(tid) = unwrappydb.tag_get_name(tag.tag.to_string(), nsid) {
+                    return unwrappydb.relationship_get_one_fileid(&tid);
+                }
             }
         }
     }
-    false
+    None
 }
 
 /// Main file checking loop manages the downloads
@@ -894,7 +901,19 @@ pub fn main_file_loop(
             sharedtypes::FileSource::Url(source_url) => {
                 // If url exists in db then don't download thread::sleep(Duration::from_secs(10));
                 for file_tag in file.skip_if.iter() {
-                    if parse_skipif(file_tag, &source_url, db.clone(), worker_id, job_id) {
+                    if let Some(file_id) =
+                        parse_skipif(file_tag, &source_url, db.clone(), worker_id, job_id)
+                    {
+                        for tag in file.tag_list.iter() {
+                            parse_tags(
+                                db.clone(),
+                                tag,
+                                Some(file_id),
+                                worker_id,
+                                job_id,
+                                globalload.clone(),
+                            );
+                        }
                         return;
                     }
                 }
@@ -1000,7 +1019,6 @@ pub fn main_file_loop(
         None => return,
     }
 
-    // We've got valid fileid for reference.
     for tag in file.tag_list.iter() {
         parse_jobs(
             tag,

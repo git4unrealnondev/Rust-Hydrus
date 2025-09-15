@@ -251,9 +251,10 @@ async fn wss(cookiestring: &String) {
     let mut websocket = r.into_websocket().await.unwrap();
 
     if let Some(msg) = websocket.try_next().await.unwrap()
-        && let Message::Text(msg) = msg {
-            println!("{}", msg);
-        }
+        && let Message::Text(msg) = msg
+    {
+        println!("{}", msg);
+    }
 }
 
 fn get_ws_ack(cookiestring: &String) {

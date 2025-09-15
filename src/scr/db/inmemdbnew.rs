@@ -132,8 +132,6 @@ impl NewinMemDB {
 
     /// Dumps db data
     pub fn dumpe_data(&self) {
-        
-
         //dbg!(&self._tag_nns_id_data, &self._tag_nns_data_id);
         //dbg!();
         // &self. , &self. , &self. , &self. , &self. , &self.
@@ -591,10 +589,11 @@ impl NewinMemDB {
             },
             Some(out) => {
                 if let Some(matchid) = self._tag_nns_id_data.get(&out)
-                    && matchid != tag_info {
-                        let id = self._tag_nns_data_id.remove(matchid).unwrap();
-                        self._tag_nns_id_data.remove(&id);
-                    }
+                    && matchid != tag_info
+                {
+                    let id = self._tag_nns_data_id.remove(matchid).unwrap();
+                    self._tag_nns_id_data.remove(&id);
+                }
 
                 match self._tag_max.cmp(&out) {
                     std::cmp::Ordering::Greater => {}
@@ -643,11 +642,11 @@ impl NewinMemDB {
         if let Some(match_id) = self._tag_nns_data_id.get(&sharedtypes::DbTagNNS {
             name: tag_info.name.to_owned(),
             namespace: tag_info.namespace,
-        })
-            && *match_id != tag_info.id {
-                let tagnns = self._tag_nns_id_data.remove(match_id).unwrap();
-                self._tag_nns_data_id.remove(&tagnns).unwrap();
-            }
+        }) && *match_id != tag_info.id
+        {
+            let tagnns = self._tag_nns_id_data.remove(match_id).unwrap();
+            self._tag_nns_data_id.remove(&tagnns).unwrap();
+        }
 
         self._tag_nns_id_data.insert(
             tag_info.id,

@@ -77,11 +77,12 @@ pub fn get_modifiers(
     let mut out = Vec::new();
 
     if let Some(scrapertype) = &scraper.storage_type
-        && let sharedtypes::ScraperOrPlugin::Scraper(scraper) = scrapertype {
-            for modifier in &scraper.modifiers {
-                out.push(modifier.clone());
-            }
+        && let sharedtypes::ScraperOrPlugin::Scraper(scraper) = scrapertype
+    {
+        for modifier in &scraper.modifiers {
+            out.push(modifier.clone());
         }
+    }
 
     out
 }
@@ -292,9 +293,10 @@ pub fn process_archive_files(
     linkto: sharedtypes::SubTag,
 ) -> Vec<(Vec<u8>, Vec<sharedtypes::TagObject>)> {
     if let Some(filetype) = filetype
-        && filetype == FileFormat::Zip {
-            return process_archive_zip(inp_bytes, linkto);
-        }
+        && filetype == FileFormat::Zip
+    {
+        return process_archive_zip(inp_bytes, linkto);
+    }
     Vec::new()
 }
 
@@ -389,16 +391,17 @@ pub fn dlfile_new(
 
     if should_scraper_download {
         if let Some(ref globalload) = globalload
-            && let Some(scraper) = scraper {
-                match globalload::download_from(file, globalload.clone(), scraper) {
-                    None => {
-                        logging::log(&format!("Could not pull info for file {:?}", &file));
-                    }
-                    Some(filebytes) => {
-                        bytes = Some(Bytes::from(filebytes));
-                    }
+            && let Some(scraper) = scraper
+        {
+            match globalload::download_from(file, globalload.clone(), scraper) {
+                None => {
+                    logging::log(&format!("Could not pull info for file {:?}", &file));
+                }
+                Some(filebytes) => {
+                    bytes = Some(Bytes::from(filebytes));
                 }
             }
+        }
         //return FileReturnStatus::TryLater;
     } else {
         while boolloop {

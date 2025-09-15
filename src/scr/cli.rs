@@ -656,7 +656,7 @@ pub fn main(data: Arc<RwLock<database::Main>>, globalload: Arc<RwLock<GlobalLoad
                         let ns_id = match db_n_rmv {
                             cli_structs::NamespaceInfo::NamespaceString(ns) => {
                                 data.load_table(&sharedtypes::LoadDBTable::Namespace);
-                                
+
                                 match data.namespace_get(&ns.namespace_string) {
                                     None => {
                                         logging::info_log(&format!(
@@ -694,7 +694,7 @@ pub fn main(data: Arc<RwLock<database::Main>>, globalload: Arc<RwLock<GlobalLoad
                         let ns_id = match db_rmv {
                             cli_structs::NamespaceInfo::NamespaceString(ns) => {
                                 data.load_table(&sharedtypes::LoadDBTable::Namespace);
-                                
+
                                 match data.namespace_get(&ns.namespace_string) {
                                     None => {
                                         logging::info_log(&format!(
