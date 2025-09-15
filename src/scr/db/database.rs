@@ -1343,7 +1343,9 @@ impl Main {
         }
     }
 
-    /// Wrapper
+    ///
+    /// Gets a fileid from a hash
+    ///
     pub fn file_get_hash(&self, hash: &String) -> Option<usize> {
         match self._cache {
             CacheType::Bare => self.file_get_id_sql(hash),
@@ -1351,7 +1353,9 @@ impl Main {
         }
     }
 
-    /// Wrapper
+    ///
+    /// Gets a tagid from a unique tag and namespace combo
+    ///
     pub fn tag_get_name(&self, tag: String, namespace: usize) -> Option<usize> {
         let tagobj = &sharedtypes::DbTagNNS {
             name: tag,
