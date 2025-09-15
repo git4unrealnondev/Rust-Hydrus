@@ -107,7 +107,7 @@ pub fn url_get(_params: &Vec<sharedtypes::ScraperParam>) -> Vec<String> {
 ///
 #[no_mangle]
 pub fn url_dump(
-    params: &Vec<sharedtypes::ScraperParam>,
+    params: &[sharedtypes::ScraperParam],
     scraperdata: &sharedtypes::ScraperData,
 ) -> Vec<(String, sharedtypes::ScraperData)> {
     if scraperdata.user_data.contains_key("Stop") {
