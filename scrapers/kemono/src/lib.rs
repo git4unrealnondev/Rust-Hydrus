@@ -34,7 +34,7 @@ pub fn get_global_info() -> Vec<sharedtypes::GlobalPluginScraper> {
 
 #[unsafe(no_mangle)]
 pub fn url_dump(
-    params: &Vec<sharedtypes::ScraperParam>,
+    params: &[sharedtypes::ScraperParam],
     scraperdata: &sharedtypes::ScraperData,
 ) -> Vec<(String, sharedtypes::ScraperData)> {
     let mut out = vec![];
@@ -161,16 +161,15 @@ fn parse_post(
     object.tag.insert(post_id);
     object.tag.insert(title);
     object.tag.insert(userid);
-  
-for item in input_post["tags"].members() {
-object.tag.insert(sharedtypes::TagObject {
-                namespace: get_genericnamespaceobj(Returntype::PostTags, sitetype),
-                tag: item.to_string(),
-                tag_type: sharedtypes::TagType::Normal,
-                relates_to: post_subtag.clone(),
-            });
 
-}
+    for item in input_post["tags"].members() {
+        object.tag.insert(sharedtypes::TagObject {
+            namespace: get_genericnamespaceobj(Returntype::PostTags, sitetype),
+            tag: item.to_string(),
+            tag_type: sharedtypes::TagType::Normal,
+            relates_to: post_subtag.clone(),
+        });
+    }
 
     for (cnt, attachments) in input_post["file"].members().enumerate() {
         let file_position = sharedtypes::TagObject {
@@ -228,7 +227,7 @@ pub fn parser(
     let mut out = sharedtypes::ScraperObject {
         file: HashSet::new(),
         tag: HashSet::new(),
-        flag: vec![]
+        flag: vec![],
     };
     // Handles when we're getting creators posts
     if let Some(name) = scraperdata.user_data.get("confirmed user") {
@@ -339,7 +338,7 @@ pub fn parser(
                         return Ok(sharedtypes::ScraperObject {
                             file: HashSet::new(),
                             tag,
-        flag: vec![]
+                            flag: vec![],
                         });
                     }
                 }
@@ -364,7 +363,7 @@ enum Returntype {
     EmbedUrl,
     EmbedSubject,
     EmbedDescription,
-    PostTags
+    PostTags,
 }
 
 enum Sitetype {
@@ -438,11 +437,11 @@ fn get_genericnamespaceobj(inp: Returntype, site: &Sitetype) -> sharedtypes::Gen
         Returntype::EmbedDescription => sharedtypes::GenericNamespaceObj {
             name: format!("{site}_Post_Embed_Description",),
             description: Some(format!("A description of the embed posted to {site}")),
-        },Returntype::PostTags => sharedtypes::GenericNamespaceObj {
+        },
+        Returntype::PostTags => sharedtypes::GenericNamespaceObj {
             name: format!("{site}_Post_Tag",),
             description: Some(format!("A tag associated with a post on {site}")),
         },
-
     }
 }
 
@@ -531,7 +530,7 @@ fn generate_userid_search(inp: &Componenttype) -> Option<String> {
 }
 
 fn filter_params(
-    item: &Vec<sharedtypes::ScraperParam>,
+    item: &[sharedtypes::ScraperParam],
     scraperdata: &sharedtypes::ScraperData,
 ) -> Vec<(String, sharedtypes::ScraperData)> {
     let mut out = Vec::new();
