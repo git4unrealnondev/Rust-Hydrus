@@ -36,30 +36,28 @@ pub fn on_import(byte_c: &[u8], hash_in: &String) -> Vec<sharedtypes::DBPluginOu
     for hash in Supset::iter() {
         let hastring = hash_file(hash, byte_c);
         if let Some(st) = hastring {
+            let tag = sharedtypes::TagObject {
+                tag: st.to_string(),
+                tag_type: sharedtypes::TagType::Normal,
+                relates_to: None,
+                namespace: get_set(hash.to_owned()),
+            };
+
             let tag_output = sharedtypes::DBPluginOutput {
-                file: Some(vec![sharedtypes::PluginFileObj {
+                file: vec![sharedtypes::PluginFileObj {
                     id: None,
                     hash: Some(hash_in.to_owned()),
                     ext: None,
                     location: None,
-                }]),
-                jobs: None,
-                namespace: Some(vec![sharedtypes::DbPluginNamespace {
-                    name: get_set(hash).name,
-                    description: get_set(hash).description,
-                }]),
-                parents: None,
-                setting: None,
-                tag: Some(vec![sharedtypes::DBPluginTagOut {
-                    name: st.to_string(),
-                    namespace: get_set(hash).name,
-                    parents: None,
-                }]),
-                relationship: Some(vec![sharedtypes::DbPluginRelationshipObj {
+                }],
+                jobs: vec![],
+                setting: vec![],
+                tag: vec![tag],
+                relationship: vec![sharedtypes::DbPluginRelationshipObj {
                     file_hash: hash_in.to_owned(),
                     tag_name: st,
                     tag_namespace: get_set(hash.to_owned()).name,
-                }]),
+                }],
             };
             output.push(sharedtypes::DBPluginOutputEnum::Add(vec![tag_output]));
         }
@@ -78,30 +76,28 @@ pub fn on_download(
     for hash in Supset::iter() {
         let hastring = hash_file(hash, byte_c);
         if let Some(st) = hastring {
+            let tag = sharedtypes::TagObject {
+                tag: st.to_string(),
+                tag_type: sharedtypes::TagType::Normal,
+                relates_to: None,
+                namespace: get_set(hash.to_owned()),
+            };
+
             let tag_output = sharedtypes::DBPluginOutput {
-                file: Some(vec![sharedtypes::PluginFileObj {
+                file: vec![sharedtypes::PluginFileObj {
                     id: None,
                     hash: Some(hash_in.to_owned()),
                     ext: Some(ext_in.to_owned()),
                     location: None,
-                }]),
-                jobs: None,
-                namespace: Some(vec![sharedtypes::DbPluginNamespace {
-                    name: get_set(hash).name,
-                    description: get_set(hash).description,
-                }]),
-                parents: None,
-                setting: None,
-                tag: Some(vec![sharedtypes::DBPluginTagOut {
-                    name: st.to_string(),
-                    namespace: get_set(hash).name,
-                    parents: None,
-                }]),
-                relationship: Some(vec![sharedtypes::DbPluginRelationshipObj {
+                }],
+                jobs: vec![],
+                setting: vec![],
+                tag: vec![tag],
+                relationship: vec![sharedtypes::DbPluginRelationshipObj {
                     file_hash: hash_in.to_owned(),
                     tag_name: st,
                     tag_namespace: get_set(hash.to_owned()).name,
-                }]),
+                }],
             };
             output.push(sharedtypes::DBPluginOutputEnum::Add(vec![tag_output]));
         }
@@ -113,11 +109,6 @@ pub fn on_download(
 #[no_mangle]
 pub fn on_start() {
     check_existing_db();
-}
-
-struct SettingInfo {
-    name: String,
-    description: Option<String>,
 }
 
 #[derive(EnumIter, PartialEq, Clone, Copy, Debug, Eq, Hash)]
@@ -141,32 +132,32 @@ struct TableData {
 ///
 /// Gets info. holder for stuff
 ///
-fn get_set(inp: Supset) -> SettingInfo {
+fn get_set(inp: Supset) -> sharedtypes::GenericNamespaceObj {
     match inp {
-        Supset::MD5 => SettingInfo {
+        Supset::MD5 => sharedtypes::GenericNamespaceObj {
             name: "FileHash-MD5".to_string(),
             description: Some("From plugin FileHash. MD5 hash of the file.".to_string()),
         },
-        Supset::SHA1 => SettingInfo {
+        Supset::SHA1 => sharedtypes::GenericNamespaceObj {
             name: "FileHash-SHA1".to_string(),
             description: Some("From plugin FileHash. SHA1 hash of the file.".to_string()),
         },
-        Supset::SHA256 => SettingInfo {
+        Supset::SHA256 => sharedtypes::GenericNamespaceObj {
             name: "FileHash-SHA256".to_string(),
             description: Some("From plugin FileHash. SHA256 hash of the file.".to_string()),
         },
-        Supset::SHA512 => SettingInfo {
+        Supset::SHA512 => sharedtypes::GenericNamespaceObj {
             name: "FileHash-SHA512".to_string(),
             description: Some("From plugin FileHash. SHA512 hash of the file.".to_string()),
         },
-        Supset::IPFSCID => SettingInfo {
+        Supset::IPFSCID => sharedtypes::GenericNamespaceObj {
             name: "FileHash-IPFSCID".to_string(),
             description: Some("From plugin FileHash. IPFS Content ID of the file for usage with the IPFS network.".to_string()),
-        },Supset::IPFSCID1 => SettingInfo {
+        },Supset::IPFSCID1 => sharedtypes::GenericNamespaceObj {
             name: "FileHash-IPFSCID1".to_string(),
             description: Some("From plugin FileHash. IPFS Content ID of the file for usage with the IPFS network. Version 1 more modern".to_string()),
         },
-            Supset::IMAGEHASH => SettingInfo {
+            Supset::IMAGEHASH => sharedtypes::GenericNamespaceObj {
             name: "FileHash-ImageHash".to_string(),
             description: Some("From plugin FileHash. PHash of the image. Used to deduplicate similar images if the hashes aren't the same".to_string())
         }
