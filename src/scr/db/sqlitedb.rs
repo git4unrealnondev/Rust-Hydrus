@@ -348,6 +348,51 @@ impl Main {
         }
     }
 
+    pub fn parents_get_id_list_sql(&self, par: &sharedtypes::DbParentsObj) -> HashSet<usize> {
+        let mut out = HashSet::new();
+        let limit_to = match par.limit_to {
+            None => &Null as &dyn ToSql,
+            Some(temp) => &temp.clone() as &dyn ToSql,
+        };
+
+        {
+            let binding = self._conn.clone();
+            let temp_test = binding.lock().unwrap();
+
+            let temp = match par.limit_to {
+            None => {
+                temp_test.prepare("SELECT id FROM Parents WHERE tag_id = ? AND relate_tag_id = ? ")
+            }
+            Some(_) => temp_test.prepare(
+                "SELECT id FROM Parents WHERE tag_id = ? AND relate_tag_id = ? AND limit_to = ?",
+            ),
+        };
+
+            if let Ok(mut con) = temp {
+                let parents = con
+                    .query_map(
+                        [
+                            &par.tag_id as &dyn ToSql,
+                            &par.relate_tag_id as &dyn ToSql,
+                            limit_to,
+                        ],
+                        |row| {
+                            let kep: usize = row.get(0).unwrap();
+
+                            Ok(kep)
+                        },
+                    )
+                    .unwrap();
+                for each in parents.flatten() {
+                    let ear: usize = each.clone();
+                    out.insert(ear);
+                }
+            }
+        }
+
+        out
+    }
+
     ///
     /// Adds a extension and an id OPTIONAL into the db
     ///

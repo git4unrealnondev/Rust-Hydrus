@@ -55,7 +55,6 @@ pub struct Main {
     pub _conn: Arc<Mutex<Connection>>,
     _vers: usize,
     _active_vers: usize,
-    // inmem db with ahash low lookup/insert time. Alernative to hashmap
     _inmemdb: NewinMemDB,
     _dbcommitnum: usize,
     _dbcommitnum_static: Option<usize>,
@@ -657,6 +656,16 @@ impl Main {
         logging::info_log(&"Finishing Vacuum db!".to_string());
     }
 
+    /// Analyzes the sqlite database. Shouldn't need this but will be nice for indexes
+    fn analyze(&mut self) {
+        logging::info_log(&"Starting to analyze db!".to_string());
+        self.transaction_flush();
+        self.transaction_close();
+        self.execute("ANALYZE;".to_string());
+        self.transaction_start();
+        logging::info_log(&"Finishing analyze db!".to_string());
+    }
+
     /// Sets up first database interaction. Makes tables and does first time setup.
     pub fn first_db(&mut self) {
         // Making Relationship Table
@@ -1071,7 +1080,10 @@ impl Main {
                 self.db_update_five_to_six();
             } else if db_vers == 6 {
                 self.db_update_six_to_seven();
+            } else if db_vers == 7 {
+                self.db_update_seven_to_eight();
             }
+
             logging::info_log(&format!("Finished upgrade to V{}.", db_vers));
             self.transaction_flush();
             if db_vers == self._vers {
@@ -1469,9 +1481,7 @@ impl Main {
     }
 
     /// Wrapper for inmemdb adding
-    fn namespace_add_db(&mut self, namespace_obj: sharedtypes::DbNamespaceObj) -> usize {
-        self._inmemdb.namespace_put(namespace_obj)
-    }
+    //fn namespace_add_db(&mut self, namespace_obj: sharedtypes::DbNamespaceObj) -> usize {}
 
     ///
     /// Adds a namespace into the db if it may or may not exist
@@ -1522,7 +1532,8 @@ impl Main {
         if namespace_grab.is_none() {
             self.namespace_add_sql(&ns.name, &ns.description, &ns_id);
         }
-        self.namespace_add_db(ns)
+        //self.namespace_add_db(ns)
+        self._inmemdb.namespace_put(ns)
     }
 
     /// Wrapper for inmemdb adding
@@ -1531,17 +1542,13 @@ impl Main {
     }
 
     /// Wrapper for inmemdb and parents_add_db
-    pub fn parents_add(
-        &mut self,
-        tag_id: usize,
-        relate_tag_id: usize,
-        limit_to: Option<usize>,
-    ) -> usize {
-        let par = sharedtypes::DbParentsObj {
-            tag_id,
-            relate_tag_id,
-            limit_to,
-        };
+    pub fn parents_add(&mut self, par: sharedtypes::DbParentsObj) -> usize {
+        /*match self._cache {
+            CacheType::Bare => {
+                let tagid = self.parents_get_id_list_sql(&par)
+            }
+        }*/
+
         let parent = self._inmemdb.parents_get(&par);
         if parent.is_none() {
             self.parents_add_sql(&par);
@@ -1611,7 +1618,7 @@ impl Main {
     /// More modern way to add a file into the db
     ///
     pub fn tag_add_tagobject(&mut self, tag: &sharedtypes::TagObject, addtodb: bool) -> usize {
-        let mut limitto_id = None;
+        let mut limit_to = None;
 
         let nsid = self.namespace_add_namespaceobject(tag.namespace.clone());
         let tag_id = self.tag_add(&tag.tag, nsid, true, None);
@@ -1620,12 +1627,17 @@ impl Main {
         if let Some(subtag) = &tag.relates_to {
             let nsid = self.namespace_add_namespaceobject(subtag.namespace.clone());
             let relate_tag_id = self.tag_add(&subtag.tag, nsid, addtodb, None);
-            if let Some(limit_to) = &subtag.limit_to {
-                let nsid = self.namespace_add_namespaceobject(limit_to.namespace.clone());
-                limitto_id = Some(self.tag_add(&limit_to.tag, nsid, addtodb, None));
+            if let Some(limitto) = &subtag.limit_to {
+                let nsid = self.namespace_add_namespaceobject(limitto.namespace.clone());
+                limit_to = Some(self.tag_add(&limitto.tag, nsid, addtodb, None));
             }
+            let par = sharedtypes::DbParentsObj {
+                tag_id,
+                relate_tag_id,
+                limit_to,
+            };
 
-            self.parents_add(tag_id, relate_tag_id, limitto_id);
+            self.parents_add(par);
         }
         tag_id
     }
@@ -2353,7 +2365,12 @@ impl Main {
                                 parent.relate_tag_id,
                                 parent.limit_to
                             ));
-                            self.parents_add(cnt, parent.relate_tag_id, parent.limit_to);
+                            let par = sharedtypes::DbParentsObj {
+                                tag_id: cnt,
+                                relate_tag_id: parent.relate_tag_id,
+                                limit_to: parent.limit_to,
+                            };
+                            self.parents_add(par);
                         }
 
                         // Removes parent by ID and readds it with the new id
@@ -2367,7 +2384,12 @@ impl Main {
                                 cnt,
                                 parent.limit_to
                             ));
-                            self.parents_add(parent.tag_id, cnt, parent.limit_to);
+                            let par = sharedtypes::DbParentsObj {
+                                tag_id: parent.tag_id,
+                                relate_tag_id: cnt,
+                                limit_to: parent.limit_to,
+                            };
+                            self.parents_add(par);
                         }
                         // Kinda hacky but nothing bad will happen if we have nothing in the limit
                         // slot
@@ -2381,7 +2403,12 @@ impl Main {
                                 parent.relate_tag_id,
                                 cnt
                             ));
-                            self.parents_add(parent.tag_id, parent.relate_tag_id, Some(cnt));
+                            let par = sharedtypes::DbParentsObj {
+                                tag_id: parent.tag_id,
+                                relate_tag_id: parent.relate_tag_id,
+                                limit_to: Some(cnt),
+                            };
+                            self.parents_add(par);
                         }
 
                         self.tag_remove(&id);

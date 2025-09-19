@@ -50,8 +50,13 @@ const FILTER_ARRAY: [(&str, &str, Option<&str>); 3] = [
     ),
 ];
 
-const SOURCE_REPLACEMENTS_TWTR: [&str; 4] =
-    ["fxtwitter.com", "skibidix.com", "fixupx.com", "fixvx.com"];
+const SOURCE_REPLACEMENTS_TWTR: [&str; 5] = [
+    "fxtwitter.com",
+    "skibidix.com",
+    "fixupx.com",
+    "fixvx.com",
+    "cunnyx.com",
+];
 const SOURCE_REPLACEMENTS_BSKY: [&str; 2] = ["fxbsky.app", "bskyx.app"];
 
 const DEBUG: bool = false;

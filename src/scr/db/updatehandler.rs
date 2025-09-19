@@ -786,4 +786,122 @@ impl Main {
         self.db_drop_table(&"Tags_Old".to_string());
         self.db_version_set(7);
     }
+
+    pub fn db_update_seven_to_eight(&mut self) {
+        if self.check_table_exists("Relationship".into()) {
+            self.alter_table(&"Relationship".to_string(), &"Relationship_Old".to_string());
+
+            let conn = self._conn.lock().unwrap();
+
+            logging::info_log(&"Starting to process Relationships for DB V8 Upgrade".to_string());
+            conn.execute(
+                "CREATE TABLE Relationship (fileid INTEGER NOT NULL, tagid INTEGER NOT NULL, PRIMARY KEY (fileid, tagid) ) WITHOUT ROWID",
+                [],
+            )
+            .unwrap();
+
+            conn.execute("INSERT OR IGNORE INTO Relationship (fileid, tagid) SELECT fileid, tagid FROM Relationship_Old WHERE fileid IS NOT NULL AND tagid IS NOT NULL;", []).unwrap();
+
+            // Not needed because the unique key already makes it
+            conn.execute(
+                "CREATE INDEX idx_tagid_fileid ON Relationship(tagid, fileid);",
+                [],
+            )
+            .unwrap();
+
+            /* let tag_sqlite_inp = "INSERT INTO Relationship (fileid, tagid) VALUES (?, ?)";
+            let mut stmt = conn
+                .prepare("SELECT fileid, tagid FROM Relationship_Old")
+                .unwrap();
+            let mut rows = stmt.query([]).unwrap();
+            while let Some(row) = rows.next().unwrap() {
+                let fid: usize = row.get(0).unwrap();
+                let tid: usize = row.get(1).unwrap();
+
+                if let Err(err) = conn.execute(tag_sqlite_inp, params![fid, tid]) {
+                    dbg!(err, fid, tid);
+                }
+            }*/
+        }
+
+        logging::info_log(&"Starting to process Tags for DB V8 Upgrade".to_string());
+
+        if self.check_table_exists("Tags".into()) {
+            self.alter_table(&"Tags".to_string(), &"Tags_Old".to_string());
+
+            let conn = self._conn.lock().unwrap();
+
+            conn.execute(
+                "CREATE TABLE Tags (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, namespace INTEGER NOT NULL, UNIQUE(name, namespace) )",
+                [],
+            )
+            .unwrap();
+
+            conn.execute(
+                "INSERT INTO Tags (id, name, namespace) SELECT id, name, namespace FROM Tags_Old",
+                [],
+            )
+            .unwrap();
+
+            /*let tag_sqlite_inp = "INSERT INTO Tags (id, name, namespace) VALUES (?, ?, ?)";
+            let mut stmt = conn
+                .prepare("SELECT id, name, namespace FROM Tags_Old")
+                .unwrap();
+            let mut rows = stmt.query([]).unwrap();
+            while let Some(row) = rows.next().unwrap() {
+                let id: usize = row.get(0).unwrap();
+                let name: String = row.get(1).unwrap();
+                let namespace: usize = row.get(2).unwrap();
+
+                conn.execute(tag_sqlite_inp, params![id, name, namespace])
+                    .unwrap();
+            }*/
+        }
+
+        logging::info_log(&"Starting to process Files for DB V8 Upgrade".to_string());
+
+        if self.check_table_exists("File".into()) {
+            self.alter_table(&"File".to_string(), &"File_Old".to_string());
+
+            let conn = self._conn.lock().unwrap();
+
+            conn.execute(
+                "CREATE TABLE File 
+            (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, hash TEXT, extension INTEGER, storage_id INTEGER, 
+                CHECK (
+                    (hash IS NOT NULL AND extension IS NOT NULL AND storage_id IS NOT NULL) OR
+                    (hash IS NULL AND extension IS NULL AND storage_id IS NULL)
+                )
+            )",
+                [],
+            )
+            .unwrap();
+
+            conn.execute("INSERT INTO File (id, hash, extension, storage_id) SELECT id, hash, extension, storage_id FROM File_Old", []).unwrap();
+            /*let tag_sqlite_inp =
+                "INSERT INTO File (id, hash, extension, storage_id) VALUES (?, ?, ?, ?)";
+            let mut stmt = conn
+                .prepare("SELECT id, hash, extension, storage_id FROM File_Old")
+                .unwrap();
+            let mut rows = stmt.query([]).unwrap();
+            while let Some(row) = rows.next().unwrap() {
+                let id: usize = row.get(0).unwrap();
+                let hash: Option<String> = row.get(1).unwrap();
+                let exts: usize = row.get(2).unwrap();
+                let stor: usize = row.get(3).unwrap();
+
+                conn.execute(tag_sqlite_inp, params![id, hash, exts, stor])
+                    .unwrap();
+            }*/
+        }
+
+        //self.db_drop_table(&"Relationship_Old".to_string());
+        self.db_drop_table(&"Tags_Old".to_string());
+        self.db_drop_table(&"File_Old".to_string());
+        self.db_drop_table(&"Relationship_Old".to_string());
+
+        self.db_version_set(8);
+        self.vacuum();
+        self.analyze();
+    }
 }

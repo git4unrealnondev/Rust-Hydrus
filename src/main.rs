@@ -12,7 +12,7 @@ use tracing_mutex::stdsync::{Mutex, RwLock};
 // use std::sync::{Arc, Mutex};
 use std::{thread, time};
 
-pub const VERS: usize = 7;
+pub const VERS: usize = 8;
 pub const DEFAULT_LOC_PLUGIN: &str = "plugins";
 pub const DEFAULT_LOC_SCRAPER: &str = "scrapers";
 extern crate ratelimit;

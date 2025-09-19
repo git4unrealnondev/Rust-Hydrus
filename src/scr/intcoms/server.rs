@@ -337,11 +337,7 @@ impl DbInteract {
             }
             types::SupportedDBRequests::ParentsPut(parent) => {
                 let mut unwrappy = self._database.write().unwrap();
-                Self::data_size_to_b(&unwrappy.parents_add(
-                    parent.tag_id,
-                    parent.relate_tag_id,
-                    parent.limit_to,
-                ))
+                Self::data_size_to_b(&unwrappy.parents_add(parent))
             }
             types::SupportedDBRequests::ParentsGet((parentswitch, id)) => {
                 let unwrappy = self._database.read().unwrap();
