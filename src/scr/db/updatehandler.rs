@@ -808,20 +808,6 @@ impl Main {
                 [],
             )
             .unwrap();
-
-            /* let tag_sqlite_inp = "INSERT INTO Relationship (fileid, tagid) VALUES (?, ?)";
-            let mut stmt = conn
-                .prepare("SELECT fileid, tagid FROM Relationship_Old")
-                .unwrap();
-            let mut rows = stmt.query([]).unwrap();
-            while let Some(row) = rows.next().unwrap() {
-                let fid: usize = row.get(0).unwrap();
-                let tid: usize = row.get(1).unwrap();
-
-                if let Err(err) = conn.execute(tag_sqlite_inp, params![fid, tid]) {
-                    dbg!(err, fid, tid);
-                }
-            }*/
         }
 
         logging::info_log(&"Starting to process Tags for DB V8 Upgrade".to_string());
@@ -858,9 +844,8 @@ impl Main {
             }*/
         }
 
-        logging::info_log(&"Starting to process Files for DB V8 Upgrade".to_string());
-
         if self.check_table_exists("File".into()) {
+            logging::info_log(&"Starting to process Files for DB V8 Upgrade".to_string());
             self.alter_table(&"File".to_string(), &"File_Old".to_string());
 
             let conn = self._conn.lock().unwrap();
@@ -894,11 +879,76 @@ impl Main {
                     .unwrap();
             }*/
         }
+        if self.check_table_exists("Parents".into()) {
+            logging::info_log(&"Starting to process Parent Index for DB V8 Upgrade".to_string());
+            let conn = self._conn.lock().unwrap();
+            conn.execute(
+                "CREATE INDEX idx_parents ON Parents (tag_id, relate_tag_id)",
+                [],
+            )
+            .unwrap();
+        }
+
+        if self.check_table_exists("Namespace".into()) {
+            logging::info_log(&"Starting to process Namespace for DB V8 Upgrade".to_string());
+            self.alter_table(&"Namespace".to_string(), &"Namespace_Old".to_string());
+            let conn = self._conn.lock().unwrap();
+            conn.execute(
+                "CREATE TABLE Namespace (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, name TEXT NOT NULL UNIQUE, description TEXT )",
+                [],
+            )
+            .unwrap();
+
+            conn.execute("CREATE INDEX idx_namespace ON Namespace (name)", [])
+                .unwrap();
+            conn.execute("INSERT INTO Namespace (id, name, description) SELECT id, name, description FROM Namespace_Old", []).unwrap();
+        }
+
+        if !self.check_table_exists("Jobs".to_string()) {
+            logging::info_log(&"Starting to process Jobs for DB V8 Upgrade".to_string());
+            self.alter_table(&"Jobs".to_string(), &"Jobs_Old".to_string());
+            let name = "Jobs".to_string();
+            let keys = vec_of_strings!(
+                "id",
+                "time",
+                "reptime",
+                "priority",
+                "cachetime",
+                "cachechecktype",
+                "Manager",
+                "site",
+                "param",
+                "SystemData",
+                "UserData"
+            );
+            let vals = vec_of_strings!(
+                "INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL",
+                "INTEGER NOT NULL",
+                "INTEGER NOT NULL",
+                "INTEGER NOT NULL",
+                "INTEGER",
+                "INTEGER NOT NULL",
+                "TEXT NOT NULL",
+                "TEXT NOT NULL",
+                "TEXT NOT NULL",
+                "TEXT NOT NULL",
+                "TEXT NOT NULL"
+            );
+
+            self.table_create(&name, &keys, &vals);
+
+            {
+                let conn = self._conn.lock().unwrap();
+                conn.execute("INSERT INTO Jobs (id, time, reptime, priority, cachetime, cachechecktype, Manager, site, param, SystemData, UserData) SELECT  id, time, reptime, priority, cachetime, cachechecktype, Manager, site, param, SystemData, UserData FROM Jobs_Old", []).unwrap();
+            }
+        }
 
         //self.db_drop_table(&"Relationship_Old".to_string());
         self.db_drop_table(&"Tags_Old".to_string());
         self.db_drop_table(&"File_Old".to_string());
         self.db_drop_table(&"Relationship_Old".to_string());
+        self.db_drop_table(&"Namespace_Old".to_string());
+        self.db_drop_table(&"Jobs_Old".to_string());
 
         self.db_version_set(8);
         self.vacuum();

@@ -192,16 +192,12 @@ pub fn main(data: Arc<RwLock<database::Main>>, globalload: Arc<RwLock<GlobalLoad
                         dbg!("rel_get");
 
                         // let mut col = Vec::new(); let mut ucol = Vec::new();
-                        if let Some(rel) = data.parents_rel_get(tid) {
-                            for each in rel.iter() {
-                                dbg!(each, data.tag_id_get(each).unwrap());
-                            }
+                        for each in data.parents_rel_get(tid).iter() {
+                            dbg!(each, data.tag_id_get(each).unwrap());
                         }
                         dbg!("tag_get");
-                        if let Some(rel) = data.parents_tag_get(tid) {
-                            for each in rel.iter() {
-                                dbg!(each, data.tag_id_get(each).unwrap());
-                            }
+                        for each in data.parents_tag_get(tid).iter() {
+                            dbg!(each, data.tag_id_get(each).unwrap());
                         }
                     }
                 }
@@ -268,6 +264,7 @@ pub fn main(data: Arc<RwLock<database::Main>>, globalload: Arc<RwLock<GlobalLoad
                     }
                 } else {
                     logging::info_log(&"Namespace isn't correct or cannot find it".to_string());
+                    logging::info_log(&"Please use a namespace below:".to_string());
                 }
             }
             cli_structs::SearchStruct::Hash(hash) => {
@@ -684,7 +681,7 @@ pub fn main(data: Arc<RwLock<database::Main>>, globalload: Arc<RwLock<GlobalLoad
                         for each in key {
                             data.delete_namespace_sql(&each);
                         }
-                        data.drop_recreate_ns(&ns_id);
+                        //data.drop_recreate_ns(&ns_id);
                         panic!();
                     }
                     // Removing db namespace. Will get id to remove then remove it.

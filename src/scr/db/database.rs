@@ -669,18 +669,27 @@ impl Main {
     /// Sets up first database interaction. Makes tables and does first time setup.
     pub fn first_db(&mut self) {
         // Making Relationship Table
-        let mut name = "Relationship".to_string();
-        let mut keys = vec_of_strings!["fileid", "tagid"];
-        let mut vals = vec_of_strings!["INTEGER", "INTEGER"];
-        self.table_create(&name, &keys, &vals);
+        {
+            let conn = self._conn.lock().unwrap();
+            conn.execute(
+                "CREATE TABLE Relationship (fileid INTEGER NOT NULL, tagid INTEGER NOT NULL, PRIMARY KEY (fileid, tagid) ) WITHOUT ROWID",
+                [],
+            )
+            .unwrap();
 
+            conn.execute(
+                "CREATE INDEX idx_tagid_fileid ON Relationship(tagid, fileid)",
+                [],
+            )
+            .unwrap();
+        }
         // Making Tags Table
-        name = "Tags".to_string();
-        keys = vec_of_strings!["id", "name", "namespace"];
-        vals = vec_of_strings![
-            "INTEGER PRIMARY KEY NOT NULL",
+        let mut name = "Tags".to_string();
+        let mut keys = vec_of_strings!["id", "name", "namespace"];
+        let mut vals = vec_of_strings![
+            "INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL ",
             "TEXT NOT NULL",
-            "INTEGER NOT NULL"
+            "INTEGER NOT NULL, UNIQUE(name, namespace)"
         ];
         self.table_create(&name, &keys, &vals);
 
@@ -698,7 +707,11 @@ impl Main {
         // Making Namespace Table
         name = "Namespace".to_string();
         keys = vec_of_strings!["id", "name", "description"];
-        vals = vec_of_strings!["INTEGER PRIMARY KEY NOT NULL", "TEXT NOT NULL", "TEXT"];
+        vals = vec_of_strings![
+            "INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL",
+            "TEXT NOT NULL UNIQUE",
+            "TEXT"
+        ];
         self.table_create(&name, &keys, &vals);
 
         // Making Settings Table
@@ -723,7 +736,7 @@ impl Main {
             "UserData"
         );
         vals = vec_of_strings!(
-            "INTEGER PRIMARY KEY",
+            "INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL",
             "INTEGER NOT NULL",
             "INTEGER NOT NULL",
             "INTEGER NOT NULL",
@@ -737,6 +750,29 @@ impl Main {
         );
 
         self.table_create(&name, &keys, &vals);
+
+        {
+            let conn = self._conn.lock().unwrap();
+
+            conn.execute(
+                "CREATE TABLE File 
+            (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, hash TEXT, extension INTEGER, storage_id INTEGER, 
+                CHECK (
+                    (hash IS NOT NULL AND extension IS NOT NULL AND storage_id IS NOT NULL) OR
+                    (hash IS NULL AND extension IS NULL AND storage_id IS NULL)
+                )
+            )",
+                [],
+            )
+            .unwrap();
+            conn.execute(
+                "CREATE INDEX idx_parents ON Parents (tag_id, relate_tag_id, limit_to)",
+                [],
+            )
+            .unwrap();
+            conn.execute("CREATE INDEX idx_namespace ON Namespace (name)", [])
+                .unwrap();
+        }
 
         self.enclave_create_database_v5();
 
@@ -1308,6 +1344,9 @@ impl Main {
 
     /// Loads jobs in from DB Connection
     fn load_jobs(&mut self) {
+        if self._cache == CacheType::Bare {
+            return;
+        }
         logging::info_log(&"Database is Loading: Jobs".to_string());
         let binding = self._conn.clone();
         let temp_test = binding.lock().unwrap();
@@ -1541,29 +1580,65 @@ impl Main {
         self._inmemdb.parents_put(parent)
     }
 
+    ///
+    /// Gets a parent id if they exist
+    ///
+    fn parents_get(&self, parent: &sharedtypes::DbParentsObj) -> Option<usize> {
+        match self._cache {
+            CacheType::Bare => {
+                let tagid = self.parents_get_id_list_sql(parent);
+
+                if tagid.is_empty() {
+                    None
+                } else {
+                    let tags: Vec<usize> = tagid.into_iter().collect();
+                    Some(tags[0])
+                }
+            }
+            _ => self._inmemdb.parents_get(parent).copied(),
+        }
+    }
+
     /// Wrapper for inmemdb and parents_add_db
     pub fn parents_add(&mut self, par: sharedtypes::DbParentsObj) -> usize {
-        /*match self._cache {
+        match self._cache {
             CacheType::Bare => {
-                let tagid = self.parents_get_id_list_sql(&par)
-            }
-        }*/
+                let tagid = self.parents_get_id_list_sql(&par);
 
-        let parent = self._inmemdb.parents_get(&par);
-        if parent.is_none() {
-            self.parents_add_sql(&par);
+                if tagid.is_empty() {
+                    self.parents_add_sql(&par);
+                    let tagid = self.parents_get_id_list_sql(&par);
+                    let tagid: Vec<usize> = tagid.into_iter().collect();
+                    tagid[0]
+                } else {
+                    let tags: Vec<usize> = tagid.into_iter().collect();
+                    tags[0]
+                }
+            }
+            _ => {
+                let parent = self._inmemdb.parents_get(&par);
+                if parent.is_none() {
+                    self.parents_add_sql(&par);
+                }
+                self.parents_add_db(par)
+            }
         }
-        self.parents_add_db(par)
     }
 
     /// Relates the list of relationships assoicated with tag
-    pub fn parents_rel_get(&self, relid: &usize) -> Option<HashSet<usize>> {
-        self._inmemdb.parents_rel_get(relid, None)
+    pub fn parents_rel_get(&self, relid: &usize) -> HashSet<usize> {
+        match self._cache {
+            CacheType::Bare => self.parents_tagid_get(relid),
+            _ => self._inmemdb.parents_rel_get(relid, None),
+        }
     }
 
     /// Relates the list of tags assoicated with relations
-    pub fn parents_tag_get(&self, tagid: &usize) -> Option<HashSet<usize>> {
-        self._inmemdb.parents_tag_get(tagid, None)
+    pub fn parents_tag_get(&self, tagid: &usize) -> HashSet<usize> {
+        match self._cache {
+            CacheType::Bare => self.parents_relatetagid_get(tagid),
+            _ => self._inmemdb.parents_tag_get(tagid, None),
+        }
     }
 
     /// Adds tag into inmemdb
@@ -1650,8 +1725,6 @@ impl Main {
         addtodb: bool,
         id: Option<usize>,
     ) -> usize {
-        //testing only please remove once the direct download plugin finishes
-
         let tag_id = match id {
             None => self.tags_max_id(),
             Some(id) => id,
@@ -1659,8 +1732,14 @@ impl Main {
 
         match self._cache {
             CacheType::Bare => {
-                self.tag_add_sql(&tag_id, tags, &namespace);
-                tag_id
+                let tag = self.tag_get_name(tags.to_string(), namespace);
+                match tag {
+                    None => {
+                        self.tag_add_sql(&tag_id, tags, &namespace);
+                        self.tag_get_name(tags.to_string(), namespace).unwrap()
+                    }
+                    Some(id) => id,
+                }
             }
             _ => {
                 let tagnns = sharedtypes::DbTagNNS {
@@ -1670,7 +1749,7 @@ impl Main {
                 let tags_grab = self._inmemdb.tags_get_id(&tagnns).copied();
                 match tags_grab {
                     None => {
-                        let tag_id = self.tag_add_db(tags, &namespace, None);
+                        let tag_id = self.tag_add_db(tags, &namespace, id);
                         if addtodb {
                             self.tag_add_sql(&tag_id, tags, &namespace);
                         }
@@ -1688,30 +1767,36 @@ impl Main {
     }
 
     /// Adds relationship to SQL db.
-    fn relationship_add_sql(&mut self, file: usize, tag: usize) {
-        let inp = "INSERT INTO Relationship VALUES(?, ?)";
+    fn relationship_add_sql(&mut self, file: &usize, tag: &usize) {
+        let inp = "INSERT OR IGNORE INTO Relationship VALUES(?, ?)";
         let _out = self
             ._conn
             .borrow_mut()
             .lock()
             .unwrap()
-            .execute(inp, params![&file.to_string(), &tag.to_string()]);
+            .execute(inp, params![file, tag]);
         self.db_commit_man();
     }
 
     /// Adds relationship into DB. Inherently trusts user user to not duplicate stuff.
     pub fn relationship_add(&mut self, file: usize, tag: usize, addtodb: bool) {
-        let existcheck = self._inmemdb.relationship_get(&file, &tag);
-        if addtodb && !existcheck {
-            // println!("relationship a ");
-            self.relationship_add_sql(file, tag);
+        match self._cache {
+            CacheType::Bare => {
+                self.relationship_add_sql(&file, &tag);
+            }
+            _ => {
+                let existcheck = self._inmemdb.relationship_get(&file, &tag);
+                if addtodb && !existcheck {
+                    // println!("relationship a ");
+                    self.relationship_add_sql(&file, &tag);
+                }
+                if !existcheck {
+                    // println!("relationship b ");
+                    self.relationship_add_db(file, tag);
+                    self.db_commit_man();
+                }
+            }
         }
-        if !existcheck {
-            // println!("relationship b ");
-            self.relationship_add_db(file, tag);
-            self.db_commit_man();
-        }
-        // println!("relationship complete : {} {}", file, tag);
     }
 
     /// Updates the database for inmemdb and sql
@@ -1736,7 +1821,6 @@ impl Main {
 
     /// Updates job by id
     fn jobs_update_by_id(&mut self, data: &sharedtypes::DbJobsObj) {
-        dbg!(data);
         let inp = "UPDATE Jobs SET id=?, time=?, reptime=?, Manager=?, priority=?,cachetime=?,cachechecktype=?, site=?, param=?, SystemData=?, UserData=? WHERE id = ?";
         let _out = self._conn.borrow_mut().lock().unwrap().execute(
             inp,
@@ -1818,6 +1902,7 @@ impl Main {
             None => self.jobs_get_max(),
             Some(id) => id,
         };
+        dbg!(&id);
 
         for each in self.jobs_get_all() {
             if dbjobsobj.time == each.1.time
@@ -1825,6 +1910,7 @@ impl Main {
                 && dbjobsobj.site == each.1.site
                 && dbjobsobj.param == each.1.param
             {
+                dbg!("RET");
                 return id;
             }
         }
@@ -2055,29 +2141,6 @@ impl Main {
         self._inmemdb.jobref_remove(id)
     }
 
-    /// Removes a job from sql table by id
-    fn del_from_jobs_table_sql_better(&mut self, id: &usize) {
-        let inp = "DELETE FROM Jobs WHERE id = ?";
-        self._conn
-            .borrow_mut()
-            .lock()
-            .unwrap()
-            .execute(inp, params![id.to_string()])
-            .unwrap();
-    }
-
-    /// Removes a tag from sql table by name and namespace
-    fn del_from_tags_by_name_and_namespace(&mut self, name: &String, namespace: &String) {
-        dbg!("Deleting", name, namespace);
-        let inp = "DELETE FROM Tags WHERE name = ? AND namespace = ?";
-        self._conn
-            .borrow_mut()
-            .lock()
-            .unwrap()
-            .execute(inp, params![name, namespace])
-            .unwrap();
-    }
-
     /*/// Removes a job from the sql table
     fn del_from_jobs_table_sql(&mut self, site: &String, param: &String) {
         let mut delcommand = "DELETE FROM Jobs".to_string();
@@ -2101,63 +2164,6 @@ impl Main {
     /// Handles transactional pushes.
     pub fn transaction_execute(trans: Transaction, inp: String) {
         trans.execute(&inp, params![]).unwrap();
-    }
-
-    /// Sqlite wrapper for deleteing a relationship from table.
-    fn delete_relationship_sql(&mut self, file_id: &usize, tag_id: &usize) {
-        logging::info_log(&format!(
-            "Removing Relationship where fileid = {} and tagid = {}",
-            file_id, tag_id
-        ));
-
-        let inp = "DELETE FROM Relationship WHERE fileid = ? AND tagid = ?";
-        self._conn
-            .borrow_mut()
-            .lock()
-            .unwrap()
-            .execute(inp, params![file_id.to_string(), tag_id.to_string()])
-            .unwrap();
-        self.db_commit_man();
-    }
-
-    /// Sqlite wrapper for deleteing a parent from table.
-    fn delete_parent_sql(&mut self, tag_id: &usize, relate_tag_id: &usize) {
-        let inp = "DELETE FROM Parents WHERE tag_id = ? AND relate_tag_id = ?";
-        let _out = self
-            ._conn
-            .borrow_mut()
-            .lock()
-            .unwrap()
-            .execute(inp, params![tag_id.to_string(), relate_tag_id.to_string()]);
-        self.db_commit_man();
-    }
-
-    /// Sqlite wrapper for deleteing a tag from table.
-    fn delete_tag_sql(&mut self, tag_id: &usize) {
-        let inp = "DELETE FROM Tags WHERE id = ?";
-        let _out = self
-            ._conn
-            .borrow_mut()
-            .lock()
-            .unwrap()
-            .execute(inp, params![tag_id.to_string()]);
-        self.db_commit_man();
-    }
-
-    /// Sqlite wrapper for deleteing a tag from table.
-    pub fn delete_namespace_sql(&mut self, namespace_id: &usize) {
-        logging::info_log(&format!(
-            "Deleting namespace with id : {} from db",
-            namespace_id
-        ));
-        let inp = "DELETE FROM Namespace WHERE id = ?";
-        let _out = self
-            ._conn
-            .borrow_mut()
-            .lock()
-            .unwrap()
-            .execute(inp, params![namespace_id.to_string()]);
-        self.db_commit_man();
     }
 
     /// Removes tag & relationship from db.
@@ -2216,8 +2222,18 @@ impl Main {
     /// Removes parent from db
     ///
     pub fn parents_tagid_remove(&mut self, tag_id: &usize) -> HashSet<sharedtypes::DbParentsObj> {
-        self.parents_delete_tag_id_sql(tag_id);
-        self._inmemdb.parents_tagid_remove(tag_id)
+        match self._cache {
+            CacheType::Bare => {
+                let out = self.parents_tagid_tag_get(tag_id);
+
+                self.parents_delete_tag_id_sql(tag_id);
+                out
+            }
+            _ => {
+                self.parents_delete_tag_id_sql(tag_id);
+                self._inmemdb.parents_tagid_remove(tag_id)
+            }
+        }
     }
 
     ///
@@ -2227,19 +2243,45 @@ impl Main {
         &mut self,
         reltag: &usize,
     ) -> HashSet<sharedtypes::DbParentsObj> {
-        self.parents_delete_relate_tag_id_sql(reltag);
-        self._inmemdb.parents_reltagid_remove(reltag)
+        match self._cache {
+            CacheType::Bare => {
+                let out = self.parents_relate_tag_get(reltag);
+
+                self.parents_delete_relate_tag_id_sql(reltag);
+                out
+            }
+            _ => {
+                self.parents_delete_relate_tag_id_sql(reltag);
+                self._inmemdb.parents_reltagid_remove(reltag)
+            }
+        }
     }
 
     pub fn parents_limitto_remove(
         &mut self,
         limit_to: Option<usize>,
     ) -> HashSet<sharedtypes::DbParentsObj> {
-        if let Some(limit_to) = limit_to {
-            self.parents_delete_limit_to_sql(&limit_to);
-            self._inmemdb.parents_limitto_remove(&limit_to)
-        } else {
-            HashSet::new()
+        match self._cache {
+            CacheType::Bare => {
+                let out = if let Some(limit_to) = limit_to {
+                    let temp = self.parents_limitto_tag_get(&limit_to);
+
+                    self.parents_delete_limit_to_sql(&limit_to);
+                    temp
+                } else {
+                    HashSet::new()
+                };
+
+                out
+            }
+            _ => {
+                if let Some(limit_to) = limit_to {
+                    self.parents_delete_limit_to_sql(&limit_to);
+                    self._inmemdb.parents_limitto_remove(&limit_to)
+                } else {
+                    HashSet::new()
+                }
+            }
         }
     }
 
@@ -2297,6 +2339,23 @@ impl Main {
         }
     }
 
+    fn get_starting_tag_id(&self) -> usize {
+        let mut out = None;
+
+        for id in 0..self.tags_max_id() {
+            if self.tag_id_get(&id).is_some() {
+                out = Some(id);
+                break;
+            }
+        }
+
+        if out.is_none() {
+            out = Some(0);
+        }
+
+        out.unwrap()
+    }
+
     ///
     /// Condenses tag ids into a solid column
     ///
@@ -2312,7 +2371,7 @@ impl Main {
         let mut flag = false;
 
         logging::info_log(&"Starting preliminary tags scanning".to_string());
-        for id in 0..tag_max - 1 {
+        for id in self.get_starting_tag_id()..tag_max - 1 {
             if self.tag_id_get(&id).is_none() {
                 logging::info_log(&format!(
                     "Disjointed tags detected. initting fixing badid: {}",
@@ -2331,32 +2390,24 @@ impl Main {
             flag = false;
         }
 
-        let mut cnt: usize = 0;
+        let mut cnt: usize = self.get_starting_tag_id();
+        let mut last_highest: usize = cnt.clone();
         let mut eta = Eta::new(tag_max, TimeAcc::MILLI);
         let count_percent = tag_max.div_ceil(100 / 2);
-        for id in 0..tag_max + 1 {
-            /*if id == 719 {
-                self.transaction_flush();
-                break;
-            }*/
+        for id in self.get_starting_tag_id()..tag_max + 1 {
             let tagnns = self.tag_id_get(&id);
             match tagnns {
                 None => {
                     flag = true;
                 }
                 Some(tag) => {
+                    dbg!(&id, &tag, &flag);
                     if flag {
-                        logging::log(&format!("Moving tagid: {} to {}", &id, &cnt));
-                        self.tag_add(&tag.name.clone(), tag.namespace, true, Some(cnt));
-                        let fileids = self.relationship_get_fileid(&id);
-                        for file_id in fileids {
-                            self.relationship_add(file_id, cnt, true);
-                            self.relationship_remove(&file_id, &id);
-                        }
+                        dbg!(&format!("Moving tagid: {} to {}", &id, &cnt));
 
                         // Removes parent by ID and readds it with the new id
                         for parent in self.parents_tagid_remove(&id) {
-                            logging::log(&format!(
+                            dbg!(&format!(
                                 "T Deleting parent: {} {} {:?}  replacing with {} {} {:?}",
                                 parent.tag_id,
                                 parent.relate_tag_id,
@@ -2375,7 +2426,7 @@ impl Main {
 
                         // Removes parent by ID and readds it with the new id
                         for parent in self.parents_reltagid_remove(&id) {
-                            logging::log(&format!(
+                            dbg!(&format!(
                                 "R Deleting parent: {} {} {:?}  replacing with {} {} {:?}",
                                 parent.tag_id,
                                 parent.relate_tag_id,
@@ -2394,7 +2445,7 @@ impl Main {
                         // Kinda hacky but nothing bad will happen if we have nothing in the limit
                         // slot
                         for parent in self.parents_limitto_remove(Some(id)) {
-                            logging::log(&format!(
+                            dbg!(&format!(
                                 "L Deleting parent: {} {} {:?}  replacing with {} {} {:?}",
                                 parent.tag_id,
                                 parent.relate_tag_id,
@@ -2410,8 +2461,15 @@ impl Main {
                             };
                             self.parents_add(par);
                         }
-
                         self.tag_remove(&id);
+                        self.tag_add(&tag.name.clone(), tag.namespace, true, Some(cnt));
+                        let fileids = self.relationship_get_fileid(&id);
+                        for file_id in fileids {
+                            self.relationship_add(file_id, cnt, true);
+                            self.relationship_remove(&file_id, &id);
+                        }
+
+                        last_highest = cnt;
                     }
                     cnt += 1;
                 }
@@ -2419,6 +2477,14 @@ impl Main {
             eta.step();
             if (cnt % count_percent) == 0 || cnt == 10 || cnt == tag_max {
                 logging::info_log(&format!("{}", &eta));
+            }
+        }
+
+        // Updating internal caches highest tag value
+        match self._cache {
+            CacheType::Bare => {}
+            _ => {
+                self._inmemdb.tag_max_set(last_highest + 1);
             }
         }
 
@@ -2460,7 +2526,7 @@ impl Main {
         self.namespace_get_tagids(namespace_id).contains(tag_id)
     }
 
-    /// Recreates the db with only one ns in it.
+    /*/// Recreates the db with only one ns in it.
     pub fn drop_recreate_ns(&mut self, id: &usize) {
         // self.load_table(&sharedtypes::LoadDBTable::Relationship);
         // self.load_table(&sharedtypes::LoadDBTable::Parents);
@@ -2492,7 +2558,7 @@ impl Main {
 
         // self.condese_relationships_tags();
         self.transaction_flush();
-    }
+    }*/
 
     /// Returns all file id's loaded in db
     pub fn file_get_list_id(&self) -> HashSet<usize> {
@@ -2528,9 +2594,27 @@ pub(crate) mod test_database {
                 db._dbpath = Some("test1.db".into());
             }
             db._cache = cachetype;
-            db.parents_add(1, 2, Some(3));
-            db.parents_add(2, 3, Some(4));
-            db.parents_add(3, 4, Some(5));
+            /* let parents = [
+                sharedtypes::DbParentsObj {
+                    tag_id: 1,
+                    relate_tag_id: 2,
+                    limit_to: Some(3),
+                },
+                sharedtypes::DbParentsObj {
+                    tag_id: 2,
+                    relate_tag_id: 3,
+                    limit_to: Some(4),
+                },
+                sharedtypes::DbParentsObj {
+                    tag_id: 3,
+                    relate_tag_id: 4,
+                    limit_to: Some(5),
+                },
+            ];
+            for parent in parents {
+                db.parents_add(parent);
+            }*/
+
             db.tag_add(&"test".to_string(), 1, false, None);
             db.tag_add(&"test1".to_string(), 1, false, None);
             db.tag_add(&"test2".to_string(), 1, false, None);
@@ -2543,6 +2627,7 @@ pub(crate) mod test_database {
     fn db_relationship() {
         for mut main in setup_default_db() {
             main.relationship_add(0, 0, true);
+            dbg!(&main._cache, main.relationship_get_fileid(&0));
             assert_eq!(main.relationship_get_fileid(&0).len(), 1);
             assert_eq!(main.relationship_get_tagid(&0).len(), 1);
             let mut test_hashset: HashSet<usize> = HashSet::new();
@@ -2556,8 +2641,8 @@ pub(crate) mod test_database {
     fn db_parents_tagid_remove() {
         for mut main in setup_default_db() {
             main.parents_tagid_remove(&1);
-            assert_eq!(main.parents_rel_get(&1), None);
-            assert_eq!(main.parents_tag_get(&1), None);
+            assert_eq!(main.parents_rel_get(&1), HashSet::new());
+            assert_eq!(main.parents_tag_get(&1), HashSet::new());
         }
     }
 
@@ -2578,13 +2663,92 @@ pub(crate) mod test_database {
             assert!(main.tag_id_get(&2).is_some());
         }
     }
+    #[test]
+    fn condense_tags_test() {
+        let test_id = 10;
+        for mut main in setup_default_db() {
+            let max_tag = main.tags_max_id();
+            let id = main.tag_add(&"test3".to_string(), 3, false, Some(test_id));
 
+            main.parents_add(sharedtypes::DbParentsObj {
+                tag_id: id,
+                relate_tag_id: 1,
+                limit_to: None,
+            });
+            main.parents_add(sharedtypes::DbParentsObj {
+                tag_id: 2,
+                relate_tag_id: id,
+                limit_to: None,
+            });
+            main.parents_add(sharedtypes::DbParentsObj {
+                tag_id: 3,
+                relate_tag_id: 1,
+                limit_to: Some(id),
+            });
+
+            dbg!(&main._cache, &max_tag, &id);
+            main.condense_tags();
+
+            for ids in 0..test_id + 1 {
+                dbg!(
+                    &ids,
+                    main.tag_id_get(&ids),
+                    main._conn.lock().unwrap().query_row(
+                        "SELECT * FROM Parents WHERE id = ?",
+                        [ids],
+                        |a| Ok((
+                            a.get::<_, usize>(0).unwrap(),
+                            a.get::<_, usize>(1).unwrap(),
+                            a.get::<_, Option<usize>>(2).unwrap(),
+                        ))
+                    )
+                );
+            }
+
+            dbg!();
+
+            assert!(
+                main.parents_get(&sharedtypes::DbParentsObj {
+                    tag_id: 3,
+                    relate_tag_id: 1,
+                    limit_to: Some(max_tag),
+                })
+                .is_some(),
+            );
+            assert!(
+                main.parents_get(&sharedtypes::DbParentsObj {
+                    tag_id: 2,
+                    relate_tag_id: max_tag,
+                    limit_to: None,
+                })
+                .is_some(),
+            );
+            assert!(
+                main.parents_get(&sharedtypes::DbParentsObj {
+                    tag_id: max_tag,
+                    relate_tag_id: 1,
+                    limit_to: None,
+                })
+                .is_some(),
+            );
+
+            assert_eq!(main.tags_max_id(), max_tag + 1);
+            assert!(main.tag_id_get(&id).is_none());
+            assert!(main.tag_id_get(&(max_tag)).is_some());
+
+            if let Some(tag) = main.tag_id_get(&(max_tag)) {
+                assert_eq!(tag.name, "test3");
+            }
+        }
+    }
     #[test]
     fn db_namespace() {
         for mut main in setup_default_db() {
-            main.namespace_add(&"test".to_string(), &Some("woohoo".into()));
-            main.namespace_add(&"desc".to_string(), &None);
+            dbg!(&main._cache);
+            let testid = main.namespace_add(&"test".to_string(), &Some("woohoo".into()));
+            let descid = main.namespace_add(&"desc".to_string(), &None);
 
+            dbg!(testid, descid);
             assert!(main.namespace_get(&"test".into()).is_some());
             assert!(main.namespace_get(&"desc".into()).is_some());
         }
@@ -2650,6 +2814,31 @@ pub(crate) mod test_database {
 
             assert!(main.check_dead_url(&"test".to_string()));
             assert!(!main.check_dead_url(&"Null".to_string()));
+        }
+    }
+
+    #[test]
+    fn file_add_test() {
+        let mut mains = setup_default_db();
+
+        for mut main in mains {
+            dbg!(&main._cache);
+            let id = main.file_add_db(sharedtypes::DbFileStorage::NoIdExist(
+                sharedtypes::DbFileObjNoId {
+                    hash: "yeet".to_string(),
+                    ext_id: 1,
+                    storage_id: 2,
+                },
+            ));
+            let id1 = main.file_add_db(sharedtypes::DbFileStorage::NoIdExist(
+                sharedtypes::DbFileObjNoId {
+                    hash: "yeet".to_string(),
+                    ext_id: 1,
+                    storage_id: 2,
+                },
+            ));
+
+            assert_eq!(id, id1);
         }
     }
 }

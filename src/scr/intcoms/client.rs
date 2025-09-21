@@ -250,7 +250,7 @@ pub fn namespace_get_tagids(id: usize) -> HashSet<usize> {
 ///
 /// It's basically a 2 way pointer like the Relations table limit_to limits the
 /// exposure of
-pub fn parents_get(parenttype: types::ParentsType, id: usize) -> Option<HashSet<usize>> {
+pub fn parents_get(parenttype: types::ParentsType, id: usize) -> HashSet<usize> {
     init_data_request(&types::SupportedRequests::Database(
         types::SupportedDBRequests::ParentsGet((parenttype, id)),
     ))

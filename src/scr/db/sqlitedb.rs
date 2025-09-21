@@ -32,8 +32,15 @@ impl Main {
     ///
     pub fn jobs_return_count_sql(&self) -> usize {
         let conn = self._conn.lock().unwrap();
-        conn.query_row("SELECT COUNT(*) FROM Jobs", params![], |row| row.get(0))
-            .unwrap_or(0)
+        let max = conn
+            .query_row("SELECT MAX(id) FROM Jobs", params![], |row| row.get(0))
+            .unwrap_or(0);
+
+        let count = conn
+            .query_row("SELECT COUNT(*) FROM Jobs", params![], |row| row.get(0))
+            .unwrap_or(0);
+
+        if max > count { max + 1 } else { count + 1 }
     }
     ///
     /// Returns the total count of the namespace table
@@ -110,6 +117,7 @@ impl Main {
 
     /// Adds a job to sql
     pub fn jobs_add_sql(&mut self, data: &sharedtypes::DbJobsObj) {
+        dbg!(data);
         let inp = "INSERT INTO Jobs VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
         self._conn
             .borrow_mut()
@@ -151,6 +159,149 @@ impl Main {
             ],
         );
         self.db_commit_man();
+    }
+
+    ///
+    /// Returns a list of parents where: relate_tag_id
+    /// exists
+    ///
+    pub fn parents_relate_tag_get(&self, relate_tag: &usize) -> HashSet<sharedtypes::DbParentsObj> {
+        let mut out = HashSet::new();
+
+        let conn = self._conn.lock().unwrap();
+
+        let mut stmt = conn
+            .prepare("SELECT tag_id, relate_tag_id, limit_to FROM Parents WHERE relate_tag_id = ?")
+            .unwrap();
+        let temp = stmt
+            .query_map(params![relate_tag], |row| {
+                let tag_id: usize = row.get(0).unwrap();
+                let relate_tag_id: usize = row.get(1).unwrap();
+                let limit_to: Option<usize> = row.get(2).unwrap();
+
+                Ok(sharedtypes::DbParentsObj {
+                    tag_id,
+                    relate_tag_id,
+                    limit_to,
+                })
+            })
+            .unwrap();
+        for item in temp.flatten() {
+            out.insert(item);
+        }
+        out
+    }
+
+    ///
+    /// Returns a list of parents where: tag_id
+    /// exists
+    ///
+    pub fn parents_tagid_tag_get(&self, tag_id: &usize) -> HashSet<sharedtypes::DbParentsObj> {
+        let mut out = HashSet::new();
+
+        let conn = self._conn.lock().unwrap();
+
+        let mut stmt = conn
+            .prepare("SELECT tag_id, relate_tag_id, limit_to FROM Parents WHERE tag_id = ?")
+            .unwrap();
+        let temp = stmt
+            .query_map(params![tag_id], |row| {
+                let tag_id: usize = row.get(0).unwrap();
+                let relate_tag_id: usize = row.get(1).unwrap();
+                let limit_to: Option<usize> = row.get(2).unwrap();
+
+                Ok(sharedtypes::DbParentsObj {
+                    tag_id,
+                    relate_tag_id,
+                    limit_to,
+                })
+            })
+            .unwrap();
+        for item in temp.flatten() {
+            out.insert(item);
+        }
+        out
+    }
+
+    ///
+    /// Returns a list of relate_tag_ids where: tag_id
+    /// exists
+    ///
+    pub fn parents_tagid_get(&self, relate_tag: &usize) -> HashSet<usize> {
+        let mut out = HashSet::new();
+
+        let conn = self._conn.lock().unwrap();
+
+        let mut stmt = conn
+            .prepare("SELECT tag_id FROM Parents WHERE relate_tag_id = ?")
+            .unwrap();
+        let temp = stmt
+            .query_map(params![relate_tag], |row| {
+                let tag_id: usize = row.get(0).unwrap();
+
+                Ok(tag_id)
+            })
+            .unwrap();
+        for item in temp.flatten() {
+            out.insert(item);
+        }
+        out
+    }
+
+    ///
+    /// Returns a list of relate_tag_ids where: tag_id
+    /// exists
+    ///
+    pub fn parents_relatetagid_get(&self, tag_id: &usize) -> HashSet<usize> {
+        let mut out = HashSet::new();
+
+        let conn = self._conn.lock().unwrap();
+
+        let mut stmt = conn
+            .prepare("SELECT relate_tag_id FROM Parents WHERE tag_id = ?")
+            .unwrap();
+        let temp = stmt
+            .query_map(params![tag_id], |row| {
+                let relate_tag_id: usize = row.get(0).unwrap();
+
+                Ok(relate_tag_id)
+            })
+            .unwrap();
+        for item in temp.flatten() {
+            out.insert(item);
+        }
+        out
+    }
+
+    ///
+    /// Returns a list of parents where: limit_to
+    /// exists
+    ///
+    pub fn parents_limitto_tag_get(&self, limitto: &usize) -> HashSet<sharedtypes::DbParentsObj> {
+        let mut out = HashSet::new();
+
+        let conn = self._conn.lock().unwrap();
+
+        let mut stmt = conn
+            .prepare("SELECT tag_id, relate_tag_id, limit_to FROM Parents WHERE limit_to = ?")
+            .unwrap();
+        let temp = stmt
+            .query_map(params![limitto], |row| {
+                let tag_id: usize = row.get(0).unwrap();
+                let relate_tag_id: usize = row.get(1).unwrap();
+                let limit_to: Option<usize> = row.get(2).unwrap();
+
+                Ok(sharedtypes::DbParentsObj {
+                    tag_id,
+                    relate_tag_id,
+                    limit_to,
+                })
+            })
+            .unwrap();
+        for item in temp.flatten() {
+            out.insert(item);
+        }
+        out
     }
 
     pub fn parents_delete_sql(&mut self, id: &usize) {
@@ -348,6 +499,9 @@ impl Main {
         }
     }
 
+    ///
+    /// Returns the parents
+    ///
     pub fn parents_get_id_list_sql(&self, par: &sharedtypes::DbParentsObj) -> HashSet<usize> {
         let mut out = HashSet::new();
         let limit_to = match par.limit_to {
@@ -369,25 +523,49 @@ impl Main {
         };
 
             if let Ok(mut con) = temp {
-                let parents = con
-                    .query_map(
-                        [
-                            &par.tag_id as &dyn ToSql,
-                            &par.relate_tag_id as &dyn ToSql,
-                            limit_to,
-                        ],
-                        |row| {
-                            let kep: usize = row.get(0).unwrap();
+                match par.limit_to {
+                    None => {
+                        let parents = con
+                            .query_map(
+                                [&par.tag_id as &dyn ToSql, &par.relate_tag_id as &dyn ToSql],
+                                |row| {
+                                    let kep: usize = row.get(0).unwrap();
 
-                            Ok(kep)
-                        },
-                    )
-                    .unwrap();
-                for each in parents.flatten() {
-                    let ear: usize = each.clone();
-                    out.insert(ear);
+                                    Ok(kep)
+                                },
+                            )
+                            .unwrap()
+                            .flatten();
+
+                        for each in parents {
+                            let ear: usize = each;
+                            out.insert(ear);
+                        }
+                    }
+
+                    Some(lim) => {
+                        let parents = con
+                            .query_map(
+                                [
+                                    &par.tag_id as &dyn ToSql,
+                                    &par.relate_tag_id as &dyn ToSql,
+                                    &lim as &dyn ToSql,
+                                ],
+                                |row| {
+                                    let kep: usize = row.get(0).unwrap();
+
+                                    Ok(kep)
+                                },
+                            )
+                            .unwrap()
+                            .flatten();
+                        for each in parents {
+                            let ear: usize = each;
+                            out.insert(ear);
+                        }
+                    }
                 }
-            }
+            };
         }
 
         out
@@ -416,7 +594,7 @@ impl Main {
         conn.query_row("SELECT id FROM File WHERE hash = ?", params![hash], |row| {
             row.get(0)
         })
-        .unwrap()
+        .unwrap_or_default()
     }
 
     ///
@@ -430,7 +608,7 @@ impl Main {
             params![ext],
             |row| row.get(0),
         )
-        .unwrap()
+        .unwrap_or_default()
     }
     ///
     /// Returns if an extension exists get by id
@@ -443,7 +621,7 @@ impl Main {
             params![id],
             |row| row.get(0),
         )
-        .unwrap()
+        .unwrap_or_default()
     }
 
     /// Adds file via SQL
@@ -472,6 +650,10 @@ impl Main {
             sharedtypes::DbFileStorage::NoExistUnknown => {
                 todo!()
             }
+        }
+
+        if let Some(id) = self.file_get_hash(&hash) {
+            return id;
         }
 
         let inp = "INSERT INTO File VALUES(?, ?, ?, ?)";
@@ -612,7 +794,7 @@ impl Main {
             params![db_tag_nns.name, db_tag_nns.namespace],
             |row| row.get(0),
         )
-        .unwrap()
+        .unwrap_or(None)
     }
 
     ///
@@ -752,6 +934,86 @@ impl Main {
             .unwrap()
             .execute("PRAGMA secure_delete = 0;", params![]);
     }
+
+    /// Removes a job from sql table by id
+    pub fn del_from_jobs_table_sql_better(&mut self, id: &usize) {
+        let inp = "DELETE FROM Jobs WHERE id = ?";
+        self._conn
+            .borrow_mut()
+            .lock()
+            .unwrap()
+            .execute(inp, params![id.to_string()])
+            .unwrap();
+    }
+
+    /// Removes a tag from sql table by name and namespace
+    pub fn del_from_tags_by_name_and_namespace(&mut self, name: &String, namespace: &String) {
+        dbg!("Deleting", name, namespace);
+        let inp = "DELETE FROM Tags WHERE name = ? AND namespace = ?";
+        self._conn
+            .borrow_mut()
+            .lock()
+            .unwrap()
+            .execute(inp, params![name, namespace])
+            .unwrap();
+    }
+
+    /// Sqlite wrapper for deleteing a relationship from table.
+    pub fn delete_relationship_sql(&mut self, file_id: &usize, tag_id: &usize) {
+        logging::info_log(&format!(
+            "Removing Relationship where fileid = {} and tagid = {}",
+            file_id, tag_id
+        ));
+
+        let inp = "DELETE FROM Relationship WHERE fileid = ? AND tagid = ?";
+        self._conn
+            .borrow_mut()
+            .lock()
+            .unwrap()
+            .execute(inp, params![file_id.to_string(), tag_id.to_string()])
+            .unwrap();
+        self.db_commit_man();
+    }
+
+    /// Sqlite wrapper for deleteing a parent from table.
+    pub fn delete_parent_sql(&mut self, tag_id: &usize, relate_tag_id: &usize) {
+        let inp = "DELETE FROM Parents WHERE tag_id = ? AND relate_tag_id = ?";
+        let _out = self
+            ._conn
+            .borrow_mut()
+            .lock()
+            .unwrap()
+            .execute(inp, params![tag_id.to_string(), relate_tag_id.to_string()]);
+        self.db_commit_man();
+    }
+
+    /// Sqlite wrapper for deleteing a tag from table.
+    pub fn delete_tag_sql(&mut self, tag_id: &usize) {
+        let inp = "DELETE FROM Tags WHERE id = ?";
+        let _out = self
+            ._conn
+            .borrow_mut()
+            .lock()
+            .unwrap()
+            .execute(inp, params![tag_id.to_string()]);
+        self.db_commit_man();
+    }
+
+    /// Sqlite wrapper for deleteing a tag from table.
+    pub fn delete_namespace_sql(&mut self, namespace_id: &usize) {
+        logging::info_log(&format!(
+            "Deleting namespace with id : {} from db",
+            namespace_id
+        ));
+        let inp = "DELETE FROM Namespace WHERE id = ?";
+        let _out = self
+            ._conn
+            .borrow_mut()
+            .lock()
+            .unwrap()
+            .execute(inp, params![namespace_id.to_string()]);
+        self.db_commit_man();
+    }
 }
 
 #[cfg(test)]
@@ -762,9 +1024,26 @@ mod tests {
 
     fn setup_default_db() -> Main {
         let mut db = Main::new(None, VERS);
-        db.parents_add(1, 2, Some(3));
-        db.parents_add(2, 3, Some(4));
-        db.parents_add(3, 4, Some(5));
+        let parents = [
+            sharedtypes::DbParentsObj {
+                tag_id: 1,
+                relate_tag_id: 2,
+                limit_to: Some(3),
+            },
+            sharedtypes::DbParentsObj {
+                tag_id: 2,
+                relate_tag_id: 3,
+                limit_to: Some(4),
+            },
+            sharedtypes::DbParentsObj {
+                tag_id: 3,
+                relate_tag_id: 4,
+                limit_to: Some(5),
+            },
+        ];
+        for parent in parents {
+            db.parents_add(parent);
+        }
         db
     }
 

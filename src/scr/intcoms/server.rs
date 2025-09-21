@@ -342,12 +342,8 @@ impl DbInteract {
             types::SupportedDBRequests::ParentsGet((parentswitch, id)) => {
                 let unwrappy = self._database.read().unwrap();
                 match parentswitch {
-                    types::ParentsType::Tag => {
-                        Self::option_to_bytes(unwrappy.parents_rel_get(&id).as_ref())
-                    }
-                    types::ParentsType::Rel => {
-                        Self::option_to_bytes(unwrappy.parents_tag_get(&id).as_ref())
-                    }
+                    types::ParentsType::Tag => Self::data_size_to_b(&unwrappy.parents_rel_get(&id)),
+                    types::ParentsType::Rel => Self::data_size_to_b(&unwrappy.parents_tag_get(&id)),
                 }
             }
             types::SupportedDBRequests::ParentsDelete(parentobj) => {

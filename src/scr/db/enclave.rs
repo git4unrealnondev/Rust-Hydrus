@@ -340,11 +340,6 @@ impl Main {
             self.table_create(&"FileExtensions".to_string(), keys, vals);
         }
 
-        // Creates a file table that is for V5
-        let keys = &vec_of_strings!("id", "hash", "extension", "storage_id");
-        let vals = &vec_of_strings!("INTEGER PRIMARY KEY", "TEXT", "INTEGER", "INTEGER");
-        self.table_create(&"File".to_string(), keys, vals);
-
         if !self.check_table_exists("EnclaveAction".to_string()) {
             let keys = &vec_of_strings!("id", "action_name", "action_text");
             let vals = &vec_of_strings!(

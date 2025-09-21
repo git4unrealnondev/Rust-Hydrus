@@ -255,6 +255,7 @@ fn main() {
     // This wait is done for allowing any thread to "complete" Shouldn't be nessisary
     // but hey. :D
     arc.write().unwrap().transaction_flush();
+
     let mills_fifty = time::Duration::from_millis(50);
     std::thread::sleep(mills_fifty);
     logging::info_log(&"UNLOADING".to_string());

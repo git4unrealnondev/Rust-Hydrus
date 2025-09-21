@@ -21,7 +21,7 @@ pub const DEFAULT_SOURCE_TWIT: &str = "x.com";
 pub const DEFAULT_SOURCE_BSKY: &str = "bsky.app";
 
 // Regex to match a url when a tag comes in
-pub const REGEX_COLLECTIONS: &str = r"(http(s)?://)?(fxtwitter|skibidix|fixupx|fxbsky|x|xbsky|bsky|t)\.(com|app|co)[.a-zA-Z///_0-9]+";
+pub const REGEX_COLLECTIONS: &str = r"(http(s)?://)?(fxtwitter|skibidix|fixupx|fxbsky|x|xbsky|bsky|fixvx|cunnyx)\.(com|app|co)|(\.t\.co)[.a-zA-Z///_0-9]+";
 
 // Sources for a url to attach data to
 const SOURCE_FILTER_ARRAY: [(&str, &str, Option<&str>); 1] =
