@@ -286,6 +286,22 @@ pub fn tag_add(tag: String, namespace_id: usize, addtodb: bool, id: Option<usize
         types::SupportedDBRequests::PutTag(tag, namespace_id, addtodb, id),
     ))
 }
+///
+/// Migrates a tag from id to another id
+///
+pub fn tag_migrate(old_tagid: usize, new_tag_id: usize) -> bool {
+    init_data_request(&types::SupportedRequests::Database(
+        types::SupportedDBRequests::MigrateTag((old_tagid, new_tag_id)),
+    ))
+}
+///
+/// Migrates a tag from id to another id
+///
+pub fn file_relationship_migrate(file_id: usize, old_tagid: usize, new_tag_id: usize) -> bool {
+    init_data_request(&types::SupportedRequests::Database(
+        types::SupportedDBRequests::MigrateRelationship((file_id, old_tagid, new_tag_id)),
+    ))
+}
 
 ///
 /// Reloads regex

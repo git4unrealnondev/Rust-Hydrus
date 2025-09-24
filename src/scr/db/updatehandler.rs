@@ -854,8 +854,8 @@ impl Main {
                 "CREATE TABLE File 
             (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, hash TEXT, extension INTEGER, storage_id INTEGER, 
                 CHECK (
-                    (hash IS NOT NULL AND extension IS NOT NULL AND storage_id IS NOT NULL) OR
-                    (hash IS NULL AND extension IS NULL AND storage_id IS NULL)
+                    (hash IS NOT NULL AND extension IS NOT NULL ) OR
+                    (hash IS NULL AND extension IS NULL)
                 )
             )",
                 [],
@@ -883,10 +883,17 @@ impl Main {
             logging::info_log(&"Starting to process Parent Index for DB V8 Upgrade".to_string());
             let conn = self._conn.lock().unwrap();
             conn.execute(
-                "CREATE INDEX idx_parents ON Parents (tag_id, relate_tag_id)",
+                "CREATE INDEX idx_parents ON Parents (tag_id, relate_tag_id, limit_to)",
                 [],
             )
             .unwrap();
+            conn.execute(
+                "CREATE INDEX idx_parents_rel ON Parents (relate_tag_id)",
+                [],
+            )
+            .unwrap();
+            conn.execute("CREATE INDEX idx_parents_lim ON Parents (limit_to)", [])
+                .unwrap();
         }
 
         if self.check_table_exists("Namespace".into()) {

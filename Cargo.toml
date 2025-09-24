@@ -11,7 +11,7 @@ url = "2.3.1"
 ratelimit = "0.10.0"
 async-std = { version = "1", features = ["attributes", "tokio1"] }
 rusqlite = {version = "^0.37.0", features=["modern_sqlite", "bundled", "column_decltype"] }
-fast_log = "1.7.6"
+fast_log = {version="1.7.6", features=["lz4"]}
 bytes = { default-features = false, version = "1.4.0" }
 sha2 = { version = "0.10.6"}
 futures = { features = ["executor"], default-features = false, version = "0.3.31" }

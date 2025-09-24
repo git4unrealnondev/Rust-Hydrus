@@ -758,8 +758,8 @@ impl Main {
                 "CREATE TABLE File 
             (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, hash TEXT, extension INTEGER, storage_id INTEGER, 
                 CHECK (
-                    (hash IS NOT NULL AND extension IS NOT NULL AND storage_id IS NOT NULL) OR
-                    (hash IS NULL AND extension IS NULL AND storage_id IS NULL)
+                    (hash IS NOT NULL AND extension IS NOT NULL) OR
+                    (hash IS NULL AND extension IS NULL)
                 )
             )",
                 [],
@@ -771,6 +771,13 @@ impl Main {
             )
             .unwrap();
             conn.execute("CREATE INDEX idx_namespace ON Namespace (name)", [])
+                .unwrap();
+            conn.execute(
+                "CREATE INDEX idx_parents_rel ON Parents (relate_tag_id)",
+                [],
+            )
+            .unwrap();
+            conn.execute("CREATE INDEX idx_parents_lim ON Parents (limit_to)", [])
                 .unwrap();
         }
 
@@ -2141,25 +2148,81 @@ impl Main {
         self._inmemdb.jobref_remove(id)
     }
 
-    /*/// Removes a job from the sql table
-    fn del_from_jobs_table_sql(&mut self, site: &String, param: &String) {
-        let mut delcommand = "DELETE FROM Jobs".to_string();
+    ///
+    /// Stops the DB from committing. Returns the db setting
+    ///
+    fn halt_commit(&mut self) -> Option<usize> {
+        let commit_storage = self._dbcommitnum_static;
+        self._dbcommitnum_static = None;
+        commit_storage
+    }
 
-        // This is horribly shit code. Opens us up to SQL injection. I should change this
-        // later WARNING
-        delcommand += &format!(" WHERE site LIKE {} AND", site);
-        delcommand += &format!(" WHERE param LIKE {:?};", param.replace("\"", "\'"));
-        logging::info_log(&format!("Deleting job via: {}", &delcommand));
-        self._conn
-            .borrow_mut()
-            .lock()
-            .unwrap()
-            .execute(
-                "DELETE FROM Jobs WHERE site LIKE ?1 AND param LIKE ?2",
-                params![site, param],
-            )
-            .unwrap();
-    }*/
+    ///
+    /// Restores the db commits settings
+    ///
+    fn restore_commit(&mut self, commit_storage: Option<usize>) {
+        self._dbcommitnum_static = commit_storage;
+    }
+
+    ///
+    /// Migrates a tag to a new tag from an old tag
+    ///
+    pub fn migrate_relationship_tag(&mut self, old_tag_id: &usize, new_tag_id: &usize) {
+        match self._cache {
+            CacheType::Bare => {
+                self.migrate_relationship_tag_sql(old_tag_id, new_tag_id);
+            }
+            _ => {
+                let fileids = self.relationship_get_fileid(old_tag_id);
+                for file_id in fileids {
+                    self.relationship_add(file_id, *new_tag_id, true);
+                    self.relationship_remove(&file_id, old_tag_id);
+                }
+            }
+        }
+        self.parents_migration(old_tag_id, new_tag_id);
+    }
+
+    ///
+    /// Migrates one tag per file to a new tagid
+    ///
+    pub fn migrate_relationship_file_tag(
+        &mut self,
+        file_id: &usize,
+        old_tag_id: &usize,
+        new_tag_id: &usize,
+    ) {
+        match self._cache {
+            CacheType::Bare => {
+                self.migrate_relationship_file_tag_sql(file_id, old_tag_id, new_tag_id);
+            }
+            _ => {
+                self.relationship_add(*file_id, *new_tag_id, true);
+                self.relationship_remove(file_id, old_tag_id);
+            }
+        }
+        self.parents_migration(old_tag_id, new_tag_id);
+    }
+
+    ///
+    /// Migrates a tag from one ID to another
+    ///
+    pub fn migrate_tag(&mut self, old_tag_id: &usize, new_tag_id: &usize) {
+        let tag = match self.tag_id_get(old_tag_id) {
+            Some(out) => out,
+            None => {
+                return;
+            }
+        };
+        let commit_storage = self.halt_commit();
+
+        logging::log(&format!("Moving tagid: {} to {}", old_tag_id, new_tag_id));
+        self.parents_migration(old_tag_id, new_tag_id);
+        self.tag_add(&tag.name.clone(), tag.namespace, true, Some(*new_tag_id));
+        self.migrate_relationship_tag(old_tag_id, new_tag_id);
+        self.tag_remove(old_tag_id);
+        self.restore_commit(commit_storage);
+    }
 
     /// Handles transactional pushes.
     pub fn transaction_execute(trans: Transaction, inp: String) {
@@ -2200,6 +2263,68 @@ impl Main {
     }
 
     ///
+    /// Migrates a parent from a old tagid to a new id
+    ///
+    fn parents_migration(&mut self, old_tag_id: &usize, new_tag_id: &usize) {
+        // Removes parent by ID and readds it with the new id
+        for parent in self.parents_tagid_remove(old_tag_id) {
+            logging::log(&format!(
+                "T Deleting parent: {} {} {:?}  replacing with {} {} {:?}",
+                parent.tag_id,
+                parent.relate_tag_id,
+                parent.limit_to,
+                new_tag_id,
+                parent.relate_tag_id,
+                parent.limit_to
+            ));
+            let par = sharedtypes::DbParentsObj {
+                tag_id: *new_tag_id,
+                relate_tag_id: parent.relate_tag_id,
+                limit_to: parent.limit_to,
+            };
+            self.parents_add(par);
+        }
+
+        // Removes parent by ID and readds it with the new id
+        for parent in self.parents_reltagid_remove(old_tag_id) {
+            logging::log(&format!(
+                "R Deleting parent: {} {} {:?}  replacing with {} {} {:?}",
+                parent.tag_id,
+                parent.relate_tag_id,
+                parent.limit_to,
+                parent.tag_id,
+                new_tag_id,
+                parent.limit_to
+            ));
+            let par = sharedtypes::DbParentsObj {
+                tag_id: parent.tag_id,
+                relate_tag_id: *new_tag_id,
+                limit_to: parent.limit_to,
+            };
+            self.parents_add(par);
+        }
+        // Kinda hacky but nothing bad will happen if we have nothing in the limit
+        // slot
+        for parent in self.parents_limitto_remove(Some(*old_tag_id)) {
+            logging::log(&format!(
+                "L Deleting parent: {} {} {:?}  replacing with {} {} {:?}",
+                parent.tag_id,
+                parent.relate_tag_id,
+                parent.limit_to,
+                parent.tag_id,
+                parent.relate_tag_id,
+                new_tag_id
+            ));
+            let par = sharedtypes::DbParentsObj {
+                tag_id: parent.tag_id,
+                relate_tag_id: parent.relate_tag_id,
+                limit_to: Some(*new_tag_id),
+            };
+            self.parents_add(par);
+        }
+    }
+
+    ///
     /// Removes a relationship based on fileid and tagid
     ///
     pub fn relationship_remove(&mut self, file_id: &usize, tag_id: &usize) {
@@ -2213,7 +2338,7 @@ impl Main {
         self.delete_tag_sql(id);
         let rel = &self._inmemdb.parents_remove(id);
         for each in rel {
-            println!("Removing Parent: {} {}", each.0, each.1);
+            //println!("Removing Parent: {} {}", each.0, each.1);
             self.delete_parent_sql(&each.0, &each.1);
         }
     }
@@ -2363,8 +2488,6 @@ impl Main {
         self.load_table(&sharedtypes::LoadDBTable::Tags);
 
         // Stopping automagically updating the db
-        let commit_storage = self._dbcommitnum_static;
-        self._dbcommitnum_static = None;
 
         let tag_max = self.tags_max_id();
 
@@ -2403,72 +2526,7 @@ impl Main {
                 Some(tag) => {
                     dbg!(&id, &tag, &flag);
                     if flag {
-                        dbg!(&format!("Moving tagid: {} to {}", &id, &cnt));
-
-                        // Removes parent by ID and readds it with the new id
-                        for parent in self.parents_tagid_remove(&id) {
-                            dbg!(&format!(
-                                "T Deleting parent: {} {} {:?}  replacing with {} {} {:?}",
-                                parent.tag_id,
-                                parent.relate_tag_id,
-                                parent.limit_to,
-                                cnt,
-                                parent.relate_tag_id,
-                                parent.limit_to
-                            ));
-                            let par = sharedtypes::DbParentsObj {
-                                tag_id: cnt,
-                                relate_tag_id: parent.relate_tag_id,
-                                limit_to: parent.limit_to,
-                            };
-                            self.parents_add(par);
-                        }
-
-                        // Removes parent by ID and readds it with the new id
-                        for parent in self.parents_reltagid_remove(&id) {
-                            dbg!(&format!(
-                                "R Deleting parent: {} {} {:?}  replacing with {} {} {:?}",
-                                parent.tag_id,
-                                parent.relate_tag_id,
-                                parent.limit_to,
-                                parent.tag_id,
-                                cnt,
-                                parent.limit_to
-                            ));
-                            let par = sharedtypes::DbParentsObj {
-                                tag_id: parent.tag_id,
-                                relate_tag_id: cnt,
-                                limit_to: parent.limit_to,
-                            };
-                            self.parents_add(par);
-                        }
-                        // Kinda hacky but nothing bad will happen if we have nothing in the limit
-                        // slot
-                        for parent in self.parents_limitto_remove(Some(id)) {
-                            dbg!(&format!(
-                                "L Deleting parent: {} {} {:?}  replacing with {} {} {:?}",
-                                parent.tag_id,
-                                parent.relate_tag_id,
-                                parent.limit_to,
-                                parent.tag_id,
-                                parent.relate_tag_id,
-                                cnt
-                            ));
-                            let par = sharedtypes::DbParentsObj {
-                                tag_id: parent.tag_id,
-                                relate_tag_id: parent.relate_tag_id,
-                                limit_to: Some(cnt),
-                            };
-                            self.parents_add(par);
-                        }
-                        self.tag_remove(&id);
-                        self.tag_add(&tag.name.clone(), tag.namespace, true, Some(cnt));
-                        let fileids = self.relationship_get_fileid(&id);
-                        for file_id in fileids {
-                            self.relationship_add(file_id, cnt, true);
-                            self.relationship_remove(&file_id, &id);
-                        }
-
+                        self.migrate_tag(&id, &cnt);
                         last_highest = cnt;
                     }
                     cnt += 1;
@@ -2489,7 +2547,6 @@ impl Main {
         }
 
         self.transaction_flush();
-        self._dbcommitnum_static = commit_storage;
     }
 
     pub fn condense_namespace(&mut self) {
@@ -2517,7 +2574,10 @@ impl Main {
 
     /// Gets all tag's assocated a singular namespace
     pub fn namespace_get_tagids(&self, id: &usize) -> HashSet<usize> {
-        self._inmemdb.namespace_get_tagids(id)
+        match self._cache {
+            CacheType::Bare => self.namespace_get_tagids_sql(id),
+            _ => self._inmemdb.namespace_get_tagids(id),
+        }
     }
 
     /// Checks if a tag exists in a namespace

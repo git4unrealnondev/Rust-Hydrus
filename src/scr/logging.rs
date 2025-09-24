@@ -1,5 +1,9 @@
 #![forbid(unsafe_code)]
 
+use fast_log::consts::LogSize;
+use fast_log::plugin::file_split::{KeepType, Rolling};
+use fast_log::plugin::packer::LZ4Packer;
+use fast_log::plugin::packer::LogPacker;
 use log::{LevelFilter, error, info};
 use std::fs;
 use std::path::Path;
@@ -11,7 +15,16 @@ pub fn main(log_location: &String) {
         fs::remove_file(log_location).unwrap();
     }
     let fastlog = fast_log::Config::new()
+        .chan_len(Some(100000))
         .file(log_location)
+        .file_split(
+            "logs/",
+            Rolling::new(fast_log::plugin::file_split::RollingType::BySize(
+                LogSize::GB(2),
+            )),
+            KeepType::KeepNum(2),
+            LZ4Packer {},
+        )
         .level(LevelFilter::Info);
     fast_log::init(fastlog).unwrap();
     info!("Initing Logger.");

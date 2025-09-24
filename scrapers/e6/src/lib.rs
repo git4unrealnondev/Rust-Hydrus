@@ -1,5 +1,6 @@
 use chrono::DateTime;
 use std::collections::BTreeMap;
+use std::collections::HashMap;
 use std::collections::HashSet;
 use std::time::Duration;
 
@@ -23,6 +24,7 @@ pub struct InternalScraper {
     _type: sharedtypes::ScraperType,
 }
 
+#[derive(Debug)]
 pub enum NsIdent {
     PoolCreatedAt,
     PoolCreator,
@@ -50,6 +52,7 @@ pub enum NsIdent {
     Franchise,
 }
 
+#[derive(Debug)]
 pub enum Site {
     E6,
     E6AI,
@@ -387,7 +390,7 @@ pub fn get_global_info() -> Vec<sharedtypes::GlobalPluginScraper> {
         },
     ));
     e6.callbacks = vec![sharedtypes::GlobalCallbacks::Start(
-        sharedtypes::StartupThreadType::SpawnInline,
+        sharedtypes::StartupThreadType::Spawn,
     )];
 
     let mut e6ai = sharedtypes::return_default_globalpluginparser();
@@ -414,7 +417,7 @@ pub fn get_global_info() -> Vec<sharedtypes::GlobalPluginScraper> {
         },
     ));
     e6ai.callbacks = vec![sharedtypes::GlobalCallbacks::Start(
-        sharedtypes::StartupThreadType::SpawnInline,
+        sharedtypes::StartupThreadType::Spawn,
     )];
 
     vec![e6, e6ai]
@@ -1061,122 +1064,115 @@ pub fn db_upgrade_call_3(site: &Site) {
     for (each, _) in file_ids {
         let tids = client::relationship_get_tagid(each);
         for tid in tids.intersection(&pool_table) {
-            if let Some(tag_rels) =
-                client::parents_get(crate::client::types::ParentsType::Tag, *tid)
-            {
-                dbg!(tid, &tag_rels);
-                let mut vec_poolpos = Vec::new();
-                let mut hashset_fileid = HashSet::new();
-                for each in tag_rels {
-                    if let Some(tag_nns) = client::tag_get_id(each) {
-                        // Removes the spare poolid tag as a position that I added for some
-                        // reason. lol
-                        if tag_nns.namespace == poolposition_nsid {
-                            /*client::parents_delete(sharedtypes::DbParentsObj {
-                                tag_id: *tid,
-                                relate_tag_id: each.clone(),
-                                limit_to: None,
-                            });*/
+            dbg!(tid);
+            let mut vec_poolpos = Vec::new();
+            let mut hashset_fileid = HashSet::new();
+            for each in client::parents_get(crate::client::types::ParentsType::Tag, *tid) {
+                if let Some(tag_nns) = client::tag_get_id(each) {
+                    // Removes the spare poolid tag as a position that I added for some
+                    // reason. lol
+                    if tag_nns.namespace == poolposition_nsid {
+                        /*client::parents_delete(sharedtypes::DbParentsObj {
+                            tag_id: *tid,
+                            relate_tag_id: each.clone(),
+                            limit_to: None,
+                        });*/
 
-                            vec_poolpos.push(each);
-                        } else if tag_nns.namespace == fileid_nsid {
-                            hashset_fileid.insert(each);
-                        }
+                        vec_poolpos.push(each);
+                    } else if tag_nns.namespace == fileid_nsid {
+                        hashset_fileid.insert(each);
+                    }
+                }
+            }
+
+            /*for position in vec_poolpos.iter() {
+                /*if let Some(tag_id) =
+                    client::parents_get(crate::client::types::ParentsType::Rel, *position)
+                {
+                }*/
+            }*/
+            for fid in hashset_fileid.iter() {
+                let mut tag_id = client::parents_get(crate::client::types::ParentsType::Rel, *fid);
+
+                // Removes the parents and children from tag_ids
+                for tid_iter in tag_id.clone().iter() {
+                    if parent_table.contains(tid_iter) || children_table.contains(tid_iter) {
+                        tag_id.remove(tid_iter);
                     }
                 }
 
-                /*for position in vec_poolpos.iter() {
-                    /*if let Some(tag_id) =
-                        client::parents_get(crate::client::types::ParentsType::Rel, *position)
-                    {
-                    }*/
-                }*/
-                for fid in hashset_fileid.iter() {
-                    if let Some(mut tag_id) =
-                        client::parents_get(crate::client::types::ParentsType::Rel, *fid)
-                    {
-                        // Removes the parents and children from tag_ids
-                        for tid_iter in tag_id.clone().iter() {
-                            if parent_table.contains(tid_iter) || children_table.contains(tid_iter)
-                            {
-                                tag_id.remove(tid_iter);
+                match tag_id.len().cmp(&2) {
+                    std::cmp::Ordering::Less => {
+                        dbg!("LESS 2 ITEMS IN HERE", tag_id);
+                        dbg!(&fid, tid);
+                    }
+
+                    std::cmp::Ordering::Equal => {
+                        let mut pos = None;
+                        // Updates the pool position.
+                        // Clears out relations not including children and parents
+                        // Adds relation if it exists properly
+                        for tid_iter in tag_id.iter() {
+                            client::parents_delete(sharedtypes::DbParentsObj {
+                                tag_id: *tid_iter,
+                                relate_tag_id: *fid,
+                                limit_to: None,
+                            });
+                            if position_table.contains(tid_iter) {
+                                pos = Some(sharedtypes::DbParentsObj {
+                                    tag_id: *tid_iter,
+                                    relate_tag_id: *fid,
+                                    limit_to: Some(*tid),
+                                });
                             }
                         }
-
-                        match tag_id.len().cmp(&2) {
-                            std::cmp::Ordering::Less => {
-                                dbg!("LESS 2 ITEMS IN HERE", tag_id);
-                                dbg!(&fid, tid);
+                        if let Some(pos) = pos {
+                            client::parents_put(pos);
+                        }
+                        dbg!("FID TO REMOVE FROM TAG_ID", &fid, tid, &tag_id);
+                    }
+                    std::cmp::Ordering::Greater => {
+                        // Clears sub items and add job to db to
+                        // scrape
+                        dbg!("MORE THEN 2 ITEMS IN HERE", &tag_id);
+                        dbg!(&fid, tid);
+                        for tid_iter in tag_id.iter() {
+                            if pool_table.contains(tid_iter) {
+                                let mut job = sharedtypes::return_default_jobsobj();
+                                job.site = site_to_string_prefix(site);
+                                job.param = vec![sharedtypes::ScraperParam::Url(format!(
+                                    "https://{}.net/pools.json?search[id]={}",
+                                    site_to_string(site).to_lowercase(),
+                                    client::tag_get_id(*tid_iter).unwrap().name
+                                ))];
+                                job.jobmanager = sharedtypes::DbJobsManager {
+                                    jobtype: sharedtypes::DbJobType::Scraper,
+                                    recreation: None,
+                                };
+                                client::job_add(job);
+                                /*client::job_add(
+                                    None,
+                                    0,
+                                    0,
+                                    site_to_string_prefix(site),
+                                    vec![sharedtypes::ScraperParam::Url(format!(
+                                        "https://{}.net/pools.json?search[id]={}",
+                                        site_to_string(site).to_lowercase(),
+                                        client::tag_get_id(*tid_iter).unwrap().name
+                                    ))],
+                                    BTreeMap::new(),
+                                    BTreeMap::new(),
+                                    sharedtypes::DbJobsManager {
+                                        jobtype: sharedtypes::DbJobType::Scraper,
+                                        recreation: None,
+                                    },
+                                );*/
                             }
-
-                            std::cmp::Ordering::Equal => {
-                                let mut pos = None;
-                                // Updates the pool position.
-                                // Clears out relations not including children and parents
-                                // Adds relation if it exists properly
-                                for tid_iter in tag_id.iter() {
-                                    client::parents_delete(sharedtypes::DbParentsObj {
-                                        tag_id: *tid_iter,
-                                        relate_tag_id: *fid,
-                                        limit_to: None,
-                                    });
-                                    if position_table.contains(tid_iter) {
-                                        pos = Some(sharedtypes::DbParentsObj {
-                                            tag_id: *tid_iter,
-                                            relate_tag_id: *fid,
-                                            limit_to: Some(*tid),
-                                        });
-                                    }
-                                }
-                                if let Some(pos) = pos {
-                                    client::parents_put(pos);
-                                }
-                                dbg!("FID TO REMOVE FROM TAG_ID", &fid, tid, &tag_id);
-                            }
-                            std::cmp::Ordering::Greater => {
-                                // Clears sub items and add job to db to
-                                // scrape
-                                dbg!("MORE THEN 2 ITEMS IN HERE", &tag_id);
-                                dbg!(&fid, tid);
-                                for tid_iter in tag_id.iter() {
-                                    if pool_table.contains(tid_iter) {
-                                        let mut job = sharedtypes::return_default_jobsobj();
-                                        job.site = site_to_string_prefix(site);
-                                        job.param = vec![sharedtypes::ScraperParam::Url(format!(
-                                            "https://{}.net/pools.json?search[id]={}",
-                                            site_to_string(site).to_lowercase(),
-                                            client::tag_get_id(*tid_iter).unwrap().name
-                                        ))];
-                                        job.jobmanager = sharedtypes::DbJobsManager {
-                                            jobtype: sharedtypes::DbJobType::Scraper,
-                                            recreation: None,
-                                        };
-                                        client::job_add(job);
-                                        /*client::job_add(
-                                            None,
-                                            0,
-                                            0,
-                                            site_to_string_prefix(site),
-                                            vec![sharedtypes::ScraperParam::Url(format!(
-                                                "https://{}.net/pools.json?search[id]={}",
-                                                site_to_string(site).to_lowercase(),
-                                                client::tag_get_id(*tid_iter).unwrap().name
-                                            ))],
-                                            BTreeMap::new(),
-                                            BTreeMap::new(),
-                                            sharedtypes::DbJobsManager {
-                                                jobtype: sharedtypes::DbJobType::Scraper,
-                                                recreation: None,
-                                            },
-                                        );*/
-                                    }
-                                    client::parents_delete(sharedtypes::DbParentsObj {
-                                        tag_id: *tid_iter,
-                                        relate_tag_id: *fid,
-                                        limit_to: None,
-                                    });
-                                }
-                            }
+                            client::parents_delete(sharedtypes::DbParentsObj {
+                                tag_id: *tid_iter,
+                                relate_tag_id: *fid,
+                                limit_to: None,
+                            });
                         }
                     }
                 }
@@ -1224,26 +1220,27 @@ pub fn db_upgrade_call(db_version: &usize, site_struct: &sharedtypes::GlobalPlug
     }
 }
 
+///
+/// Determines what the fileid source is.
+///
 fn determine_site_type(
     file_id: &usize,
     source_url_nsid: &usize,
 ) -> Option<(Site, sharedtypes::DbTagNNS)> {
-    for tagid in
-        client::filter_namespaces_by_id(client::relationship_get_tagid(*file_id), *source_url_nsid)
-    {
+    for tagid in client::relationship_get_tagid(*file_id) {
         if let Some(tag) = client::tag_get_id(tagid) {
-            if tag.name.contains("e621.net") {
-                return Some((Site::E6, tag));
-            }
-            if tag.name.contains("e6ai.net") {
-                return Some((Site::E6AI, tag));
+            if tag.namespace != *source_url_nsid {
+                continue;
+            } else {
+                if tag.name.contains("e621.net") {
+                    return Some((Site::E6, tag));
+                }
+                if tag.name.contains("e6ai.net") {
+                    return Some((Site::E6AI, tag));
+                }
             }
         }
-        dbg!(tagid);
     }
-
-    dbg!(*file_id, client::relationship_get_tagid(*file_id));
-
     None
 }
 
@@ -1273,6 +1270,8 @@ pub fn on_start(site_struct: &sharedtypes::GlobalPluginScraper) {
             }
         }
     }
+
+    //This POS migrates the old generic tags into a namespaced tag system for each site
     if let Some(site) = site_op {
         client::load_table(sharedtypes::LoadDBTable::Namespace);
 
@@ -1283,15 +1282,17 @@ pub fn on_start(site_struct: &sharedtypes::GlobalPluginScraper) {
             }
         };
 
+        let mut legacy_id_id = HashMap::new();
+
         let mut legacy_ns = [
-            ("Pool_Updated_At", NsIdent::PoolUpdatedAt, None),
-            ("Pool_Created_At", NsIdent::PoolCreatedAt, None),
-            ("Pool_Id", NsIdent::PoolId, None),
-            ("Pool_Creator", NsIdent::PoolCreator, None),
-            ("Pool_Creator_Id", NsIdent::PoolCreatorId, None),
-            ("Pool_Name", NsIdent::PoolName, None),
-            ("Pool_Description", NsIdent::PoolDescription, None),
-            ("Pool_Position", NsIdent::PoolPosition, None),
+            //("Pool_Updated_At", NsIdent::PoolUpdatedAt, None),
+            //("Pool_Created_At", NsIdent::PoolCreatedAt, None),
+            //("Pool_Id", NsIdent::PoolId, None),
+            //("Pool_Creator", NsIdent::PoolCreator, None),
+            //("Pool_Creator_Id", NsIdent::PoolCreatorId, None),
+            //("Pool_Name", NsIdent::PoolName, None),
+            //("Pool_Description", NsIdent::PoolDescription, None),
+            //("Pool_Position", NsIdent::PoolPosition, None),
             ("General", NsIdent::General, None),
             ("Species", NsIdent::Species, None),
             ("Character", NsIdent::Character, None),
@@ -1301,19 +1302,26 @@ pub fn on_start(site_struct: &sharedtypes::GlobalPluginScraper) {
             ("Lore", NsIdent::Lore, None),
             ("Meta", NsIdent::Meta, None),
             ("Sources", NsIdent::Sources, None),
-            ("Children", NsIdent::Children, None),
-            ("Parent_id", NsIdent::Parent, None),
+            //("Children", NsIdent::Children, None),
+            //("Parent_id", NsIdent::Parent, None),
             ("Description", NsIdent::Description, None),
             ("Rating", NsIdent::Rating, None),
-            ("Id", NsIdent::FileId, None),
+            //("Id", NsIdent::FileId, None),
             ("franchise", NsIdent::Franchise, None),
             ("Director", NsIdent::Director, None),
         ];
 
         for (nsname, ref nsident, ref mut id) in legacy_ns.iter_mut() {
-            let nso = nsobjplg(&nsident, &site);
-            if client::namespace_get(nsname.to_string()).is_some() {
-                *id = Some(client::namespace_put(nso.name, nso.description));
+            let nso = nsobjplg(nsident, &site);
+            if let Some(old_ns_id) = client::namespace_get(nsname.to_string()) {
+                *id = Some(client::namespace_put(
+                    nso.name.clone(),
+                    nso.description.clone(),
+                ));
+                legacy_id_id.insert(
+                    old_ns_id,
+                    client::namespace_put(nso.name.clone(), nso.description.clone()),
+                );
             }
         }
 
@@ -1322,22 +1330,62 @@ pub fn on_start(site_struct: &sharedtypes::GlobalPluginScraper) {
             if main_nsid.is_none() {
                 continue;
             }
+
+            let mut cnt = 0;
+
+            let max_b4_commit = 3000;
+
+            client::log(format!(
+                "E6-Scraper: Will commit every {max_b4_commit} tag migrations"
+            ));
+
+            //dbg!(ns, nsident, main_nsid);
             if let Some(nsid) = client::namespace_get(ns.to_string()) {
                 client::log(format!("Parsing legacy NS: {ns}"));
                 client::load_table(sharedtypes::LoadDBTable::Tags);
                 client::load_table(sharedtypes::LoadDBTable::All);
                 for tagid in client::namespace_get_tagids(nsid) {
+                    //dbg!(&tagid);
                     let fileids = client::relationship_get_fileid(tagid);
                     for fileid in fileids.iter() {
+                        //dbg!(fileid);
                         if let Some((site, og_tag)) = determine_site_type(fileid, &source_url_nsid)
                         {
-                            let old_tag = client::tag_get_id(tagid).unwrap();
+                            //dbg!(&site, &og_tag);
+                            for tagid in client::relationship_get_tagid(*fileid) {
+                                if let Some(tag) = client::tag_get_id(tagid) {
+                                    if let Some(legacy_ns) = legacy_id_id.get(&tag.namespace) {
+                                        cnt += 1;
+
+                                        if cnt >= max_b4_commit {
+                                            client::log(format!(
+                                                "E6-Scraper: Fileid: {} Moving tag: {} from Namespace: {} to Namespace: {}",
+                                                &fileid, &tag.name, tag.namespace, legacy_ns
+                                            ));
+                                            client::transaction_flush();
+                                            cnt = 0;
+                                        } else {
+                                            client::log_no_print(format!(
+                                                "E6-Scraper: Fileid: {} Moving tag: {} from Namespace: {} to Namespace: {}",
+                                                &fileid, &tag.name, tag.namespace, legacy_ns
+                                            ));
+                                        }
+                                        let tagid_new =
+                                            client::tag_add(tag.name, *legacy_ns, true, None);
+
+                                        client::file_relationship_migrate(
+                                            *fileid, tagid, tagid_new,
+                                        );
+                                    }
+                                }
+                            }
+                            /*let old_tag = client::tag_get_id(tagid).unwrap();
                             let new_tag_id =
                                 client::tag_add(old_tag.name, main_nsid.unwrap(), true, None);
                             client::relationship_add(*fileid, new_tag_id);
-                            client::relationship_remove(*fileid, tagid);
+                            client::relationship_remove(*fileid, tagid);*/
                         } else {
-                            //dbg!(fileid, tagid, nsid);
+                            dbg!(fileid, tagid, nsid);
                         }
                     }
                 }

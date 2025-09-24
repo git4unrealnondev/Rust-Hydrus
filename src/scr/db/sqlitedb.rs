@@ -75,6 +75,28 @@ impl Main {
         })
         .unwrap_or(None)
     }
+    ///
+    /// Get file if it exists by id
+    ///
+    pub fn namespace_get_tagids_sql(&self, ns_id: &usize) -> HashSet<usize> {
+        let mut out = HashSet::new();
+        let conn = self._conn.lock().unwrap();
+        let mut inp = conn
+            .prepare("SELECT id FROM Tags where namespace = ?")
+            .unwrap();
+        let quer = inp
+            .query_map(params![ns_id], |row| {
+                let id = row.get(0).unwrap();
+                Ok(id)
+            })
+            .unwrap();
+
+        for each in quer.flatten() {
+            out.insert(each);
+        }
+
+        out
+    }
 
     ///
     /// Gets a job by id
@@ -439,7 +461,7 @@ impl Main {
     }
     /// Adds tags into sql database
     pub(super) fn tag_add_sql(&mut self, tag_id: &usize, tags: &String, namespace: &usize) {
-        let inp = "INSERT INTO Tags VALUES(?, ?, ?)";
+        let inp = "INSERT INTO Tags (id, name, namespace) VALUES(?, ?, ?) ON CONFLICT(id) DO UPDATE SET name = EXCLUDED.name, namespace = EXCLUDED.namespace";
         let _out = self
             ._conn
             .borrow_mut()
@@ -683,7 +705,7 @@ impl Main {
         logging::info_log(&"Database is Loading: Relationships".to_string());
         let binding = self._conn.clone();
         let temp_test = binding.lock().unwrap();
-        let temp = temp_test.prepare("SELECT * FROM Relationship");
+        let temp = temp_test.prepare("SELECT fileid, tagid FROM Relationship");
         if let Ok(mut con) = temp {
             let relationship = con
                 .query_map([], |row| {
@@ -795,6 +817,34 @@ impl Main {
             |row| row.get(0),
         )
         .unwrap_or(None)
+    }
+
+    ///
+    /// Migrates a relationship's tag id
+    ///
+    pub fn migrate_relationship_tag_sql(&self, old_tag_id: &usize, new_tag_id: &usize) {
+        let conn = self._conn.lock().unwrap();
+        conn.execute(
+            "UPDATE OR REPLACE Relationship SET tagid = ? WHERE tagid = ?",
+            params![new_tag_id, old_tag_id],
+        )
+        .unwrap();
+    }
+    ///
+    /// Migrates a relationship's tag id
+    ///
+    pub fn migrate_relationship_file_tag_sql(
+        &self,
+        file_id: &usize,
+        old_tag_id: &usize,
+        new_tag_id: &usize,
+    ) {
+        let conn = self._conn.lock().unwrap();
+        conn.execute(
+            "UPDATE OR REPLACE Relationship SET tagid = ? WHERE tagid = ? AND fileid=?",
+            params![new_tag_id, old_tag_id, file_id],
+        )
+        .unwrap();
     }
 
     ///
@@ -932,7 +982,44 @@ impl Main {
             .borrow_mut()
             .lock()
             .unwrap()
-            .execute("PRAGMA secure_delete = 0;", params![]);
+            .execute("PRAGMA secure_delete = 0", params![]);
+        let _ = self
+            ._conn
+            .borrow_mut()
+            .lock()
+            .unwrap()
+            .execute("PRAGMA busy_timeout = 5000", params![]);
+
+        /* let _ = self
+            ._conn
+            .borrow_mut()
+            .lock()
+            .unwrap()
+            .execute("PRAGMA journal_mode = OFF", params![]);
+        let _ = self
+            ._conn
+            .borrow_mut()
+            .lock()
+            .unwrap()
+            .execute("PRAGMA synchronous = OFF", params![]);
+        let _ = self._conn.borrow_mut().lock().unwrap().execute(
+            "
+PRAGMA temp_store = MEMORY
+",
+            params![],
+        );*/
+        let _ = self._conn.borrow_mut().lock().unwrap().execute(
+            "
+PRAGMA page_size = 8192
+",
+            params![],
+        );
+        let _ = self._conn.borrow_mut().lock().unwrap().execute(
+            "
+PRAGMA cache_size = 2900000
+",
+            params![],
+        );
     }
 
     /// Removes a job from sql table by id
@@ -960,7 +1047,7 @@ impl Main {
 
     /// Sqlite wrapper for deleteing a relationship from table.
     pub fn delete_relationship_sql(&mut self, file_id: &usize, tag_id: &usize) {
-        logging::info_log(&format!(
+        logging::log(&format!(
             "Removing Relationship where fileid = {} and tagid = {}",
             file_id, tag_id
         ));
@@ -1055,4 +1142,12 @@ mod tests {
     fn sql_parents_del_relate_tag_id() {}
     #[test]
     fn sql_parents_del_limit_to() {}
+
+    #[test]
+    fn tag_retrieve() {
+        let mut db = Main::new(None, VERS);
+        dbg!(&db._cache);
+        db.tag_add(&"te".to_string(), 0, true, None);
+        assert!(db.tag_get_name("te".to_string(), 0).is_some());
+    }
 }

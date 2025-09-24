@@ -100,6 +100,8 @@ pub enum SupportedDBRequests {
     PutFileNoBlock((sharedtypes::FileObject, (u64, std::time::Duration))),
     ReloadRegex,
     GetNamespaceIDsAll,
+    MigrateTag((usize, usize)),
+    MigrateRelationship((usize, usize, usize)),
 }
 
 /// A descriptor for the parents and the type of data that we're sending
