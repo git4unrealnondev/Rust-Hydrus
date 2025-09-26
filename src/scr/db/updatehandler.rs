@@ -418,6 +418,10 @@ impl Main {
             }
         }
 
+        let keys = &vec_of_strings!("id", "hash", "extension", "storage_id");
+        let vals = &vec_of_strings!("INTEGER", "TEXT", "INTEGER", "INTEGER");
+        self.table_create(&"File".to_string(), keys, vals);
+
         {
             let conn = self._conn.lock().unwrap();
 
