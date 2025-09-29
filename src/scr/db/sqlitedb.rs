@@ -102,7 +102,7 @@ impl Main {
     /// Gets a job by id
     ///
     pub fn jobs_get_id_sql(&self, job_id: &usize) -> Option<sharedtypes::DbJobsObj> {
-        let inp = "SELECT * FROM Jobs WHERE id = ?";
+        let inp = "SELECT * FROM Jobs WHERE id = ? LIMIT 1";
         let conn = self._conn.lock().unwrap();
         conn.query_row(inp, params![job_id], |row| {
             let id = row.get(0).unwrap();
