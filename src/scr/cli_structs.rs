@@ -92,6 +92,14 @@ pub enum Reimport {
 }
 
 #[derive(Debug, Subcommand)]
+pub enum CheckFilesEnum {
+    /// Just print the missing files
+    Print,
+    /// Try and redownload missing files
+    Redownload,
+}
+
+#[derive(Debug, Subcommand)]
 pub enum Database {
     #[clap(subcommand)]
     Remove(NamespaceInfo),
@@ -103,7 +111,8 @@ pub enum Database {
     CheckInMemdb,
     /// Checks the files on the filesystem. Warning is hella slow uses multithreading
     /// to make this go faster but still...
-    CheckFiles,
+    #[clap(subcommand)]
+    CheckFiles(CheckFilesEnum),
     /// Backs up the database to a folder defined in settings.
     BackupDB,
 }

@@ -1,13 +1,17 @@
 #![forbid(unsafe_code)]
 use crate::Mutex;
 use crate::RwLock;
+use crate::download::hash_file;
+use crate::file;
 use crate::globalload::GlobalLoad;
+use crate::helpers::getfinpath;
 use crate::logging;
 use crate::sharedtypes;
 use crate::sharedtypes::ScraperParam;
 use eta::{Eta, TimeAcc};
 use log::{error, info};
 use rayon::prelude::*;
+use remove_empty_subdirs::remove_empty_subdirs;
 pub use rusqlite::types::ToSql;
 pub use rusqlite::{Connection, Result, Transaction, params, types::Null};
 use std::borrow::BorrowMut;
@@ -223,6 +227,122 @@ impl Main {
         }
 
         self._cache = temp
+    }
+
+    ///
+    /// Sets up the default location to dump misbehaving files
+    ///
+    pub fn setup_defaut_misplaced_location(&self) -> String {
+        let loc = self.location_get();
+        let outpath = Path::new(&loc);
+        let out = outpath.parent().unwrap().join(Path::new("Files-Dump"));
+        file::folder_make(&out.to_string_lossy().to_string());
+        out.to_string_lossy().to_string()
+    }
+
+    ///
+    /// Correct any weird paths existing inside of the db.
+    ///
+    pub fn check_db_paths(&self) {
+        let db_paths = self.storage_get_all();
+
+        let file_dump = self.setup_defaut_misplaced_location();
+        let file_dump_path = Path::new(&file_dump);
+
+        for db_path in db_paths.iter() {
+            for entry in walkdir::WalkDir::new(db_path).into_iter().flatten() {
+                if entry.path().is_file() {
+                    if let Some(filename) = entry.path().file_name() {
+                        if self
+                            .file_get_hash(&filename.to_string_lossy().to_string())
+                            .is_none()
+                        {
+                            let (hash, _) = hash_file(
+                                &entry.path().to_string_lossy().to_string(),
+                                &sharedtypes::HashesSupported::Sha512("".to_string()),
+                            )
+                            .unwrap();
+                            if self.file_get_hash(&hash).is_some() {
+                                let mut cleaned_filepath = entry.path().to_path_buf();
+                                cleaned_filepath.set_extension("");
+
+                                let cleaned_filename =
+                                    cleaned_filepath.as_path().file_name().unwrap();
+
+                                let test_path = Path::new(&getfinpath(
+                                    db_path,
+                                    &entry
+                                        .path()
+                                        .file_name()
+                                        .unwrap()
+                                        .to_string_lossy()
+                                        .to_string(),
+                                ))
+                                .join(Path::new(&cleaned_filename));
+
+                                logging::error_log(&format!(
+                                    "While checking file paths I found a file path that had the wrong name / extension. {} Moving to: {}",
+                                    &entry.path().display(),
+                                    test_path.as_path().display()
+                                ));
+
+                                file::folder_make(
+                                    &file_dump_path
+                                        .join(entry.path().parent().unwrap())
+                                        .to_string_lossy()
+                                        .to_string(),
+                                );
+                                std::fs::rename(entry.path(), test_path).unwrap();
+                            } else {
+                                logging::error_log(&format!(
+                                    "While checking file paths I found a file path that shouldn't exist. {} Moving to: {}",
+                                    &entry.path().display(),
+                                    file_dump_path.display()
+                                ));
+
+                                file::folder_make(
+                                    &file_dump_path
+                                        .join(entry.path().parent().unwrap())
+                                        .to_string_lossy()
+                                        .to_string(),
+                                );
+                                std::fs::rename(entry.path(), file_dump_path.join(entry.path()))
+                                    .unwrap();
+                            }
+                        } else {
+                            let mut cleaned_filepath = entry.path().to_path_buf();
+                            cleaned_filepath.set_extension("");
+
+                            let cleaned_filename = cleaned_filepath.as_path().file_name().unwrap();
+
+                            let test_path = Path::new(&getfinpath(
+                                db_path,
+                                &entry
+                                    .path()
+                                    .file_name()
+                                    .unwrap()
+                                    .to_string_lossy()
+                                    .to_string(),
+                            ))
+                            .join(Path::new(&cleaned_filename));
+
+                            if entry.path() != &test_path {
+                                logging::error_log(&format!(
+                                    "While checking file paths I found a file path that is incorrect. {} Moving to: {}",
+                                    &entry.path().display(),
+                                    test_path.as_path().display()
+                                ));
+                                std::fs::rename(entry.path(), test_path).unwrap();
+                            }
+                        }
+
+                        //dbg!(&entry.path().file_name());
+                    }
+                }
+            }
+            // Cleaning up empty folders from moving files.
+            remove_empty_subdirs(Path::new(db_path)).unwrap();
+        }
     }
 
     /// Backs up the DB file.
@@ -493,6 +613,21 @@ impl Main {
                 dbg!(format!("File ID: {} Does not exist.", &feach));
             }
         });
+    }
+
+    ///
+    /// Returns all locations currently inside of the db.
+    ///
+    pub fn storage_get_all(&self) -> Vec<String> {
+        let mut out = Vec::new();
+        for id in 1..std::usize::MAX {
+            if let Some(location) = self.storage_get_string(&id) {
+                out.push(location);
+            } else {
+                break;
+            }
+        }
+        out
     }
 
     /// Handles the searching of the DB dynamically. Returns the file id's associated
@@ -1485,6 +1620,7 @@ impl Main {
             sharedtypes::DbFileStorage::NoIdExist(ref noid_obj) => {
                 if self.file_get_hash(&noid_obj.hash).is_none() {
                     let id = self.file_add_db(file.clone());
+                    dbg!(&id);
                     self.file_add_sql(&sharedtypes::DbFileStorage::NoIdExist(
                         sharedtypes::DbFileObjNoId {
                             hash: noid_obj.hash.clone(),
@@ -2630,7 +2766,7 @@ impl Main {
         (self._inmemdb.file_get_list_all()) as _
     }
 
-    /// Returns the location of the DB. Helper function
+    /// Returns the location of the file storage path. Helper function
     pub fn location_get(&self) -> String {
         self.settings_get_name(&"FilesLoc".to_string())
             .unwrap()

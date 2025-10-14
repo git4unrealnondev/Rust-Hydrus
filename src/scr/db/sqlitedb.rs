@@ -674,8 +674,14 @@ impl Main {
             }
         }
 
-        if let Some(id) = self.file_get_hash(&hash) {
-            return id;
+        // Catches issue where a non bare DB would nuke itself
+        match self._cache {
+            CacheType::Bare => {
+                if let Some(id) = self.file_get_hash(&hash) {
+                    return id;
+                }
+            }
+            _ => {}
         }
 
         let inp = "INSERT INTO File VALUES(?, ?, ?, ?)";

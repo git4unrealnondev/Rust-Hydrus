@@ -489,8 +489,10 @@ pub fn main(data: Arc<RwLock<database::Main>>, globalload: Arc<RwLock<GlobalLoad
                         let mut data = data.write().unwrap();
                         data.backup_db();
                     }
-                    cli_structs::Database::CheckFiles => {
+                    cli_structs::Database::CheckFiles(action) => {
                         let mut data = data.write().unwrap();
+
+                        data.check_db_paths();
 
                         // This will check files in the database and will see if they even exist.
                         let db_location = data.location_get();
@@ -518,7 +520,9 @@ pub fn main(data: Arc<RwLock<database::Main>>, globalload: Arc<RwLock<GlobalLoad
                                 .unwrap(),
                         ));
                         let lis = data.file_get_list_all();
-                        println!("Files do not exist:");
+                        logging::info_log(&format!(
+                            "Checking if we have any missing or bad files."
+                        ));
                         let mut nsid: Option<usize> = None;
                         {
                             let nso = data.namespace_get(&"source_url".to_owned());
@@ -553,8 +557,14 @@ pub fn main(data: Arc<RwLock<database::Main>>, globalload: Arc<RwLock<GlobalLoad
                             }
                             let client = &mut download::client_create(vec![], false);
                             if !Path::new(&lispa).exists() {
-                                println!("{}", &file.hash);
-                                if nsid.is_some() {
+                                logging::main(&format!("Cannot find hash: {}", &file.hash));
+                                match action {
+                                    cli_structs::CheckFilesEnum::Redownload => {}
+                                    cli_structs::CheckFilesEnum::Print => {
+                                        return;
+                                    }
+                                }
+                                if let Some(nsid) = nsid {
                                     let rel = data.relationship_get_tagid(fid);
                                     for eachs in rel.iter() {
                                         let dat = data.tag_id_get(eachs).unwrap();
@@ -562,7 +572,7 @@ pub fn main(data: Arc<RwLock<database::Main>>, globalload: Arc<RwLock<GlobalLoad
                                             "Got Tag: {} for fileid: {}",
                                             dat.name, fid
                                         ));
-                                        if dat.namespace == nsid.unwrap() {
+                                        if dat.namespace == nsid {
                                             let mut file = sharedtypes::FileObject {
                                                 source: Some(sharedtypes::FileSource::Url(
                                                     dat.name.clone(),
@@ -598,6 +608,13 @@ pub fn main(data: Arc<RwLock<database::Main>>, globalload: Arc<RwLock<GlobalLoad
                                         "BAD HASH: ID: {}  HASH: {}   2ND HASH: {}",
                                         &file.id, &file.hash, hinfo.0
                                     ));
+                                    match action {
+                                        cli_structs::CheckFilesEnum::Redownload => {}
+                                        cli_structs::CheckFilesEnum::Print => {
+                                            return;
+                                        }
+                                    }
+
                                     if nsid.is_some() {
                                         let rel = data.relationship_get_tagid(fid);
                                         for eachs in rel.iter() {
