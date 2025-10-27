@@ -923,6 +923,15 @@ impl Main {
         keys = vec_of_strings!["id", "dead_url"];
         vals = vec_of_strings!["INTEGER PRIMARY KEY", "TEXT NOT NULL"];
         self.table_create(&name, &keys, &vals);
+        {
+            let conn = self._conn.lock().unwrap();
+
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_file_hash ON File (hash)",
+                [],
+            )
+            .unwrap();
+        }
 
         self.transaction_flush();
     }
@@ -2354,9 +2363,9 @@ impl Main {
 
         logging::log(&format!("Moving tagid: {} to {}", old_tag_id, new_tag_id));
         self.parents_migration(old_tag_id, new_tag_id);
-        self.tag_add(&tag.name.clone(), tag.namespace, true, Some(*new_tag_id));
         self.migrate_relationship_tag(old_tag_id, new_tag_id);
         self.tag_remove(old_tag_id);
+        self.tag_add(&tag.name.clone(), tag.namespace, true, Some(*new_tag_id));
         self.restore_commit(commit_storage);
     }
 
@@ -2662,6 +2671,7 @@ impl Main {
                 Some(tag) => {
                     dbg!(&id, &tag, &flag);
                     if flag {
+                        logging::info_log(&format!("Migrating tag id {id} to {cnt}"));
                         self.migrate_tag(&id, &cnt);
                         last_highest = cnt;
                     }
@@ -2865,6 +2875,14 @@ pub(crate) mod test_database {
         for mut main in setup_default_db() {
             let max_tag = main.tags_max_id();
             let id = main.tag_add(&"test3".to_string(), 3, false, Some(test_id));
+            let parents_id = main.parents_add(sharedtypes::DbParentsObj {
+                tag_id: id,
+                relate_tag_id: 3,
+                limit_to: None,
+            });
+            for i in 0..test_id + 1 {
+                dbg!(&i, main.tag_id_get(&i));
+            }
 
             main.parents_add(sharedtypes::DbParentsObj {
                 tag_id: id,
@@ -2884,24 +2902,6 @@ pub(crate) mod test_database {
 
             dbg!(&main._cache, &max_tag, &id);
             main.condense_tags();
-
-            for ids in 0..test_id + 1 {
-                dbg!(
-                    &ids,
-                    main.tag_id_get(&ids),
-                    main._conn.lock().unwrap().query_row(
-                        "SELECT * FROM Parents WHERE id = ?",
-                        [ids],
-                        |a| Ok((
-                            a.get::<_, usize>(0).unwrap(),
-                            a.get::<_, usize>(1).unwrap(),
-                            a.get::<_, Option<usize>>(2).unwrap(),
-                        ))
-                    )
-                );
-            }
-
-            dbg!();
 
             assert!(
                 main.parents_get(&sharedtypes::DbParentsObj {
@@ -2928,8 +2928,22 @@ pub(crate) mod test_database {
                 .is_some(),
             );
 
+            // Check to see if the parents actually migrated.
+            if let Some(parentid) = main.parents_get(&sharedtypes::DbParentsObj {
+                tag_id: main.tags_max_id(),
+                relate_tag_id: 3,
+                limit_to: None,
+            }) {
+                assert_eq!(parentid, parents_id);
+            }
+
             assert_eq!(main.tags_max_id(), max_tag + 1);
             assert!(main.tag_id_get(&id).is_none());
+
+            for i in 0..max_tag + 1 {
+                dbg!(&i, main.tag_id_get(&i));
+            }
+
             assert!(main.tag_id_get(&(max_tag)).is_some());
 
             if let Some(tag) = main.tag_id_get(&(max_tag)) {
@@ -2958,6 +2972,7 @@ pub(crate) mod test_database {
         for mut main in setup_default_db() {
             dbg!(&main._cache);
             dbg!(main.jobs_get_max());
+            let current_job_max = main.jobs_get_max();
             main.jobs_add(
                 None,
                 0,
@@ -2976,7 +2991,7 @@ pub(crate) mod test_database {
             );
             dbg!(main.jobs_get_max());
             dbg!(main.jobs_get(&0));
-            assert_eq!(main.jobs_get_max(), 1);
+            assert_eq!(main.jobs_get_max(), current_job_max + 1);
             main.jobs_add(
                 None,
                 0,
@@ -2995,8 +3010,12 @@ pub(crate) mod test_database {
             );
             dbg!(main.jobs_get_max());
             dbg!(main.jobs_get_all());
-            assert_eq!(main.jobs_get_max(), 2);
-            assert!(main.jobs_get(&1).is_some());
+            assert_eq!(main.jobs_get_max(), current_job_max + 2);
+
+            // Checks if all jobs exist at current time
+            for i in current_job_max..main.jobs_get_max() {
+                assert!(main.jobs_get(&i).is_some());
+            }
         }
     }
 

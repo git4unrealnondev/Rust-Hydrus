@@ -1,6 +1,5 @@
 use crate::database;
 use crate::database::Main;
-use crate::globalload::GlobalLoad;
 use crate::logging;
 use crate::sharedtypes;
 use crate::time_func;

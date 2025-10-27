@@ -3,7 +3,6 @@
 use fast_log::consts::LogSize;
 use fast_log::plugin::file_split::{KeepType, Rolling};
 use fast_log::plugin::packer::LZ4Packer;
-use fast_log::plugin::packer::LogPacker;
 use log::{LevelFilter, error, info};
 use std::fs;
 use std::path::Path;

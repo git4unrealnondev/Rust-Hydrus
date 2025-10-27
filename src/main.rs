@@ -12,7 +12,7 @@ use tracing_mutex::stdsync::{Mutex, RwLock};
 // use std::sync::{Arc, Mutex};
 use std::{thread, time};
 
-pub const VERS: usize = 8;
+pub const VERS: usize = 9;
 pub const DEFAULT_LOC_PLUGIN: &str = "plugins";
 pub const DEFAULT_LOC_SCRAPER: &str = "scrapers";
 extern crate ratelimit;
@@ -47,8 +47,8 @@ pub mod threading;
 pub mod time_func;
 
 // Needed for the plugin coms system.
-#[path = "./scr/bypasses.rs"]
-pub mod bypasses;
+//#[path = "./scr/bypasses.rs"]
+//pub mod bypasses;
 #[path = "./scr/intcoms/client.rs"]
 pub mod client;
 #[path = "./scr/db/helpers.rs"]

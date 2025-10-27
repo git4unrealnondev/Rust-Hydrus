@@ -8,7 +8,7 @@ use reqwest_websocket::RequestBuilderExt;
 use std::thread;
 use std::time::Duration;
 
-pub fn ddoas_guard_bypass(
+pub fn ddoas_guard_bypaass(
     response_input: &Response,
     cli: &mut Client,
     url: &String,
@@ -138,10 +138,9 @@ pub fn ddoas_guard_bypass(
     //
     //    let site_url = format!("https://{}{}", host, urls[0]);
 
-    /*cli.get(site_url)
-            .header(reqwest::header::REFERER, "kemono.cr")
-            .send();
-    */
+    // cli.get(site_url)
+    //         .header(reqwest::header::REFERER, "kemono.cr")
+    //         .send();
 
     return None;
     if response_input.status().is_client_error() && should_attempt_bypass {

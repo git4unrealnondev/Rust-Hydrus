@@ -478,7 +478,7 @@ impl Main {
         description: &Option<String>,
         name_id: &usize,
     ) {
-        if let Some(id) = self.namespace_get_id_sql(name) {
+        if self.namespace_get_id_sql(name).is_some() {
             return;
         }
 
@@ -613,9 +613,11 @@ impl Main {
     ///
     pub fn file_get_id_sql(&self, hash: &str) -> Option<usize> {
         let conn = self._conn.lock().unwrap();
-        conn.query_row("SELECT id FROM File WHERE hash = ?", params![hash], |row| {
-            row.get(0)
-        })
+        conn.query_row(
+            "SELECT id FROM File WHERE hash = ? LIMIT 1",
+            params![hash],
+            |row| row.get(0),
+        )
         .unwrap_or_default()
     }
 
@@ -666,7 +668,7 @@ impl Main {
                 extension = file.ext_id;
                 storage_id = file.storage_id;
             }
-            sharedtypes::DbFileStorage::NoExist(fid) => {
+            sharedtypes::DbFileStorage::NoExist(_fid) => {
                 todo!()
             }
             sharedtypes::DbFileStorage::NoExistUnknown => {

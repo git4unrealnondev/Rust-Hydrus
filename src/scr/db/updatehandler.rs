@@ -965,4 +965,13 @@ impl Main {
         self.vacuum();
         self.analyze();
     }
+
+    fn db_update_eight_to_nine(&mut self) {
+        let conn = self._conn.lock().unwrap();
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_file_hash ON File (hash)",
+            [],
+        )
+        .unwrap();
+    }
 }
