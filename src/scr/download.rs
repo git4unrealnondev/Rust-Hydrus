@@ -45,7 +45,7 @@ pub fn ratelimiter_create(
     number: u64,
     duration: Duration,
 ) -> Ratelimiter {
-    logging::info_log(&format!(
+    logging::info_log(format!(
         "Worker: {} JobId: {} -- Making ratelimiter with: {} Request Per: {:?}",
         workerid, jobid, &number, &duration
     ));
@@ -195,7 +195,7 @@ pub async fn dltext_new(
         // let futureresult = futures::executor::block_on(ratelimit_object.ready())
         // .unwrap()
         ratelimiter_wait(ratelimiter_obj);
-        logging::info_log(&format!(
+        logging::info_log(format!(
             "Worker: {} -- Spawned web reach to: {}",
             worker_id, &url_string
         ));
@@ -418,7 +418,7 @@ pub fn dlfile_new(
                 };
                 let url = Url::parse(source_url).unwrap();
                 ratelimiter_wait(ratelimiter_obj);
-                logging::info_log(&format!("Downloading: {}", &source_url));
+                logging::info_log(format!("Downloading: {}", &source_url));
                 let mut futureresult = client.get(url.as_ref()).send();
                 loop {
                     match &futureresult {
@@ -514,7 +514,7 @@ pub fn dlfile_new(
             };
         }
     }
-    logging::info_log(&format!("Downloaded hash: {}", &hash));
+    logging::info_log(format!("Downloaded hash: {}", &hash));
 
     if let Some(ref bytes) = bytes {
         let file_ext = FileFormat::from_bytes(bytes).extension().to_string();
@@ -619,7 +619,7 @@ pub fn write_to_disk(
             file_path = file_path_fin;
             break;
         } else {
-            logging::info_log(&format!(
+            logging::info_log(format!(
                 "Cannot create file at path: {} Err: {:?}",
                 &local_location.to_string_lossy(),
                 file_path_res
@@ -633,7 +633,7 @@ pub fn write_to_disk(
 
     // Copies file from memory to disk
     while let Err(err) = std::io::copy(&mut content, &mut file_path) {
-        logging::info_log(&format!(
+        logging::info_log(format!(
             "Cannot copy file at path: {} Err: {:?}",
             &location.to_string_lossy(),
             err

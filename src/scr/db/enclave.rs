@@ -104,7 +104,7 @@ impl Main {
         sha512hash: &String,
         source_url: Option<&String>,
     ) {
-        logging::info_log(&format!(
+        logging::info_log(format!(
             "Enclave FileHash {}: Starting to process",
             &sha512hash
         ));

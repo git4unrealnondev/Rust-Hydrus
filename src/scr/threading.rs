@@ -102,7 +102,7 @@ impl Threads {
         // Checks if a thread is processing data currently
         for (id, threadflag) in &self.worker_control {
             if !threadflag.alive() {
-                logging::info_log(&format!("Removing Worker Thread {}", id));
+                logging::info_log(format!("Removing Worker Thread {}", id));
                 temp.push(*id)
             }
         }
@@ -137,7 +137,7 @@ impl Drop for Worker {
     fn drop(&mut self) {
         if let Some(thread) = self.thread.take() {
             futures::executor::block_on(async { thread.join().unwrap() });
-            info_log(&format!("Shutting Down Worker from Worker: {}", self.id));
+            info_log(format!("Shutting Down Worker from Worker: {}", self.id));
         }
     }
 }
@@ -192,7 +192,7 @@ impl Worker {
                 }
 
                 if jobsstorage.is_empty() {
-                    logging::info_log(&format!(
+                    logging::info_log(format!(
                         "Worker {} -- Stopping loop because we have no jobs.",
                         &id
                     ));
@@ -428,7 +428,7 @@ Worker: {id} JobId: {} -- While trying to parse parameters we got this error: {:
                                         Ok(objectscraper) => objectscraper,
                                         Err(ScraperReturn::Nothing) => {
                                             // job_params.lock().unwrap().remove(&scraper_data);
-                                            logging::info_log(&format!(
+                                            logging::info_log(format!(
                                                 "Worker: {id} JobId: {} -- Exiting loop due to nothing.",
                                                 jobid
                                             ));
@@ -644,13 +644,13 @@ pub fn parse_tags(
                             }
                         }
                         if cnt >= *filter_number {
-                            info_log(&format!(
+                            info_log(format!(
                                 "Not downloading because unique namespace is greater then limit number. {}",
                                 unique_tag.tag
                             ));
                         } else {
                             info_log(
-                                    &"Downloading due to unique namespace not existing or number less then limit number.".to_string(),
+                                    "Downloading due to unique namespace not existing or number less then limit number.".to_string(),
                                 );
                             url_return.insert(jobscraped.clone());
                         }
@@ -674,13 +674,13 @@ pub fn parse_tags(
                             Some(tag_id) => {
                                 let rel_hashset = unwrappy.relationship_get_fileid(tag_id);
                                 if rel_hashset.is_empty() {
-                                    info_log(&format!(
+                                    info_log(format!(
                                         "Worker: {worker_id} JobId: {job_id} -- Will download from {} because tag name {} has no relationship.",
                                         jobscraped.job.site, taginfo.tag
                                     ));
                                     url_return.insert(jobscraped.clone());
                                 } else {
-                                    info_log(&format!(
+                                    info_log(format!(
                                         "Worker: {worker_id} JobId: {job_id} -- Skipping because this already has a relationship. {}",
                                         taginfo.tag
                                     ));
@@ -721,7 +721,7 @@ fn download_add_to_db(
     {
         let unwrappydb = &mut db.read().unwrap();
         if unwrappydb.check_dead_url(source) {
-            logging::info_log(&format!(
+            logging::info_log(format!(
                 "Worker: {worker_id} JobID: {job_id} -- Skipping {} because it's a dead link.",
                 source
             ));
@@ -853,13 +853,13 @@ fn parse_skipif(
                 return None;
             }
             if cnt > *filter_number {
-                info_log(&format!(
+                info_log(format!(
                     "Not downloading because unique namespace is greater then limit number. {}",
                     unique_tag.tag
                 ));
             } else {
                 info_log(
-                    &"Downloading due to unique namespace not existing or number less then limit number.".to_string(),
+                    "Downloading due to unique namespace not existing or number less then limit number.".to_string(),
                 );
                 let vec: Vec<usize> = fids.iter().cloned().collect();
                 return Some(vec[0]);
@@ -870,7 +870,7 @@ fn parse_skipif(
             if let Some(nsid) = unwrappydb.namespace_get(&tag.namespace.name)
                 && unwrappydb.tag_get_name(tag.tag.to_string(), nsid).is_some()
             {
-                info_log(&format!(
+                info_log(format!(
                     "Worker: {worker_id} JobId: {job_id} -- Skipping file: {} Due to skip tag {} already existing in Tags Table.",
                     file_url_source, tag.tag
                 ));
@@ -968,7 +968,7 @@ pub fn main_file_loop(
                         // fixes busted links.
                         match file_id {
                             Some(file_id) => {
-                                info_log(&format!(
+                                info_log(format!(
                                     "Worker: {worker_id} JobId: {job_id} -- Skipping file: {} Due to already existing in Tags Table.",
                                     &source_url
                                 ));

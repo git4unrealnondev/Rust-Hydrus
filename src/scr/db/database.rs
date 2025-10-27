@@ -251,8 +251,8 @@ impl Main {
 
         for db_path in db_paths.iter() {
             for entry in walkdir::WalkDir::new(db_path).into_iter().flatten() {
-                if entry.path().is_file() {
-                    if let Some(filename) = entry.path().file_name() {
+                if entry.path().is_file()
+                    && let Some(filename) = entry.path().file_name() {
                         if self
                             .file_get_hash(&filename.to_string_lossy().to_string())
                             .is_none()
@@ -326,7 +326,7 @@ impl Main {
                             ))
                             .join(Path::new(&cleaned_filename));
 
-                            if entry.path() != &test_path {
+                            if entry.path() != test_path {
                                 logging::error_log(&format!(
                                     "While checking file paths I found a file path that is incorrect. {} Moving to: {}",
                                     &entry.path().display(),
@@ -338,7 +338,6 @@ impl Main {
 
                         //dbg!(&entry.path().file_name());
                     }
-                }
             }
             // Cleaning up empty folders from moving files.
             remove_empty_subdirs(Path::new(db_path)).unwrap();
@@ -428,7 +427,7 @@ impl Main {
 
         // Creates and copies the DB into the backup folder.
         std::fs::create_dir_all(properbackuplocation.clone()).unwrap();
-        logging::info_log(&format!(
+        logging::info_log(format!(
             "Copying db from: {} to: {}",
             &dbloc, &properbackupfile
         ));
@@ -444,7 +443,7 @@ impl Main {
             )
         }
         self.transaction_flush();
-        logging::info_log(&"Finished backing up the DB.".to_string());
+        logging::info_log("Finished backing up the DB.".to_string());
     }
 
     /// Returns a files bytes if the file exists. Note if called from intcom then this
@@ -783,22 +782,22 @@ impl Main {
 
     /// Vacuums database. cleans everything.
     fn vacuum(&mut self) {
-        logging::info_log(&"Starting Vacuum db!".to_string());
+        logging::info_log("Starting Vacuum db!".to_string());
         self.transaction_flush();
         self.transaction_close();
         self.execute("VACUUM;".to_string());
         self.transaction_start();
-        logging::info_log(&"Finishing Vacuum db!".to_string());
+        logging::info_log("Finishing Vacuum db!".to_string());
     }
 
     /// Analyzes the sqlite database. Shouldn't need this but will be nice for indexes
     fn analyze(&mut self) {
-        logging::info_log(&"Starting to analyze db!".to_string());
+        logging::info_log("Starting to analyze db!".to_string());
         self.transaction_flush();
         self.transaction_close();
         self.execute("ANALYZE;".to_string());
         self.transaction_start();
-        logging::info_log(&"Finishing analyze db!".to_string());
+        logging::info_log("Finishing analyze db!".to_string());
     }
 
     /// Sets up first database interaction. Makes tables and does first time setup.
@@ -1241,9 +1240,9 @@ impl Main {
         }
         let mut db_vers = g1[0] as usize;
         self._active_vers = db_vers;
-        logging::info_log(&format!("check_version: Loaded version {}", db_vers));
+        logging::info_log(format!("check_version: Loaded version {}", db_vers));
         if self._active_vers != self._vers {
-            logging::info_log(&format!(
+            logging::info_log(format!(
                 "Starting upgrade from V{} to V{}",
                 db_vers,
                 db_vers + 1
@@ -1273,10 +1272,10 @@ impl Main {
                 self.db_update_eight_to_nine();
             }
 
-            logging::info_log(&format!("Finished upgrade to V{}.", db_vers));
+            logging::info_log(format!("Finished upgrade to V{}.", db_vers));
             self.transaction_flush();
             if db_vers == self._vers {
-                logging::info_log(&format!(
+                logging::info_log(format!(
                     "Successfully updated db to version {}",
                     self._vers
                 ));
@@ -1354,7 +1353,7 @@ impl Main {
         }
         self.load_extensions();
 
-        logging::info_log(&"Database is Loading: Files".to_string());
+        logging::info_log("Database is Loading: Files".to_string());
         let binding = self._conn.clone();
         let temp_test = binding.lock().unwrap();
         let temp = temp_test.prepare("SELECT * FROM File");
@@ -1435,7 +1434,7 @@ impl Main {
 
     /// Loads extensions into db
     fn load_extensions(&mut self) {
-        logging::info_log(&"Database is Loading: File Extensions".to_string());
+        logging::info_log("Database is Loading: File Extensions".to_string());
         let binding = self._conn.clone();
         let temp_test = binding.lock().unwrap();
         let temp = temp_test.prepare("SELECT * FROM FileExtensions");
@@ -1464,7 +1463,7 @@ impl Main {
         }
 
         let mut nses: Vec<sharedtypes::DbNamespaceObj> = vec![];
-        logging::info_log(&"Database is Loading: Namespace".to_string());
+        logging::info_log("Database is Loading: Namespace".to_string());
         {
             let binding = self._conn.clone();
             let temp_test = binding.lock().unwrap();
@@ -1500,7 +1499,7 @@ impl Main {
         if self._cache == CacheType::Bare {
             return;
         }
-        logging::info_log(&"Database is Loading: Jobs".to_string());
+        logging::info_log("Database is Loading: Jobs".to_string());
         let binding = self._conn.clone();
         let temp_test = binding.lock().unwrap();
         let temp = temp_test.prepare("SELECT * FROM Jobs");
@@ -1580,7 +1579,7 @@ impl Main {
         if let Some(static_commit) = self._dbcommitnum_static
             && self._dbcommitnum >= static_commit
         {
-            logging::info_log(&format!("Flushing {} Records into DB.", static_commit));
+            logging::info_log(format!("Flushing {} Records into DB.", static_commit));
 
             self.transaction_flush();
         }
@@ -2201,7 +2200,7 @@ impl Main {
 
         // let namespacetwo_unwrap = self.search_for_namespace(db_search.tag_two);
         if namespaceone_unwrap.is_none() {
-            logging::info_log(&format!(
+            logging::info_log(format!(
                 "Couldn't find namespace from search: {:?} {:?}",
                 db_search.tag_one, namespaceone_unwrap
             ));
@@ -2534,16 +2533,16 @@ impl Main {
     ) -> HashSet<sharedtypes::DbParentsObj> {
         match self._cache {
             CacheType::Bare => {
-                let out = if let Some(limit_to) = limit_to {
+                
+
+                if let Some(limit_to) = limit_to {
                     let temp = self.parents_limitto_tag_get(&limit_to);
 
                     self.parents_delete_limit_to_sql(&limit_to);
                     temp
                 } else {
                     HashSet::new()
-                };
-
-                out
+                }
             }
             _ => {
                 if let Some(limit_to) = limit_to {
@@ -2563,13 +2562,13 @@ impl Main {
 
     /// Deletes namespace by id Removes tags & relationships assocated.
     pub fn namespace_delete_id(&mut self, id: &usize) {
-        logging::info_log(&format!("Starting deletion work on namespace id: {}", id));
+        logging::info_log(format!("Starting deletion work on namespace id: {}", id));
 
         // self.vacuum(); self._conn.lock().unwrap().execute("create index ffid on
         // Relationship(fileid);", []);
         self.transaction_flush();
         if self.namespace_get_string(id).is_none() {
-            logging::info_log(&"Stopping because I cannot get ns string.".to_string());
+            logging::info_log("Stopping because I cannot get ns string.".to_string());
             return;
         }
         let tagids = self.namespace_get_tagids(id);
@@ -2637,10 +2636,10 @@ impl Main {
 
         let mut flag = false;
 
-        logging::info_log(&"Starting preliminary tags scanning".to_string());
+        logging::info_log("Starting preliminary tags scanning".to_string());
         for id in self.get_starting_tag_id()..tag_max - 1 {
             if self.tag_id_get(&id).is_none() {
-                logging::info_log(&format!(
+                logging::info_log(format!(
                     "Disjointed tags detected. initting fixing badid: {}",
                     &id
                 ));
@@ -2650,7 +2649,7 @@ impl Main {
         }
 
         if flag {
-            logging::info_log(&"Started loading files, relationship and parents table".to_string());
+            logging::info_log("Started loading files, relationship and parents table".to_string());
             self.load_table(&sharedtypes::LoadDBTable::Files);
             self.load_table(&sharedtypes::LoadDBTable::Relationship);
             self.load_table(&sharedtypes::LoadDBTable::Parents);
@@ -2658,7 +2657,7 @@ impl Main {
         }
 
         let mut cnt: usize = self.get_starting_tag_id();
-        let mut last_highest: usize = cnt.clone();
+        let mut last_highest: usize = cnt;
         let mut eta = Eta::new(tag_max, TimeAcc::MILLI);
         let count_percent = tag_max.div_ceil(100 / 2);
         for id in self.get_starting_tag_id()..tag_max + 1 {
@@ -2670,7 +2669,7 @@ impl Main {
                 Some(tag) => {
                     dbg!(&id, &tag, &flag);
                     if flag {
-                        logging::info_log(&format!("Migrating tag id {id} to {cnt}"));
+                        logging::info_log(format!("Migrating tag id {id} to {cnt}"));
                         self.migrate_tag(&id, &cnt);
                         last_highest = cnt;
                     }
@@ -2679,7 +2678,7 @@ impl Main {
             }
             eta.step();
             if (cnt % count_percent) == 0 || cnt == 10 || cnt == tag_max {
-                logging::info_log(&format!("{}", &eta));
+                logging::info_log(format!("{}", &eta));
             }
         }
 

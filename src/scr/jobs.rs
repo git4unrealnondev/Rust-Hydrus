@@ -115,7 +115,7 @@ impl Jobs {
                     self.previously_seen.insert(scraper.clone(), temp);
                 }
             }
-            crate::logging::info_log(&format!("Adding job: {:?}", &dbjobsobj));
+            crate::logging::info_log(format!("Adding job: {:?}", &dbjobsobj));
             match self.site_job.get_mut(&scraper) {
                 Some(list) => {
                     list.insert(dbjobsobj);
@@ -183,7 +183,7 @@ impl Jobs {
             let job_list_static = job_list.clone();
             for job in job_list_static {
                 if job.id == data.id && job_list.remove(&job) {
-                    logging::info_log(&format!("Worker: {worker_id} --Removing Job: {:?}", &job));
+                    logging::info_log(format!("Worker: {worker_id} --Removing Job: {:?}", &job));
                     db.del_from_jobs_byid(job.id.as_ref());
                 }
             }
@@ -252,12 +252,12 @@ impl Jobs {
     /// Might add the login info here if I can
     ///
     pub fn jobs_run_new(&mut self) {
-        logging::info_log(&"Checking if we have any Jobs to run.".to_string());
+        logging::info_log("Checking if we have any Jobs to run.".to_string());
         if self.site_job.is_empty() {
-            logging::info_log(&"No jobs to run".to_string());
+            logging::info_log("No jobs to run".to_string());
         } else {
             for (scraper, jobsobj) in self.site_job.iter() {
-                logging::info_log(&format!(
+                logging::info_log(format!(
                     "Scraper: {} has {} jobs to run.",
                     scraper.name,
                     jobsobj.len()

@@ -165,7 +165,7 @@ fn main() {
         for (internal_scraper, scraper_library) in
             globalload_arc.read().unwrap().library_get_raw().iter()
         {
-            logging::info_log(&format!(
+            logging::info_log(format!(
                 "Starting scraper upgrade: {}",
                 internal_scraper.name
             ));
@@ -258,6 +258,6 @@ fn main() {
 
     let mills_fifty = time::Duration::from_millis(50);
     std::thread::sleep(mills_fifty);
-    logging::info_log(&"UNLOADING".to_string());
+    logging::info_log("UNLOADING".to_string());
     log::logger().flush();
 }

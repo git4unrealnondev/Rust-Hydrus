@@ -496,7 +496,7 @@ impl Main {
         if self._cache == CacheType::Bare {
             return;
         }
-        logging::info_log(&"Database is Loading: Parents".to_string());
+        logging::info_log("Database is Loading: Parents".to_string());
         let binding = self._conn.clone();
         let temp_test = binding.lock().unwrap();
         let temp = temp_test.prepare("SELECT tag_id, relate_tag_id, limit_to FROM Parents");
@@ -676,13 +676,10 @@ impl Main {
         }
 
         // Catches issue where a non bare DB would nuke itself
-        match self._cache {
-            CacheType::Bare => {
-                if let Some(id) = self.file_get_hash(&hash) {
-                    return id;
-                }
+        if self._cache == CacheType::Bare {
+            if let Some(id) = self.file_get_hash(&hash) {
+                return id;
             }
-            _ => {}
         }
 
         let inp = "INSERT INTO File VALUES(?, ?, ?, ?)";
@@ -709,7 +706,7 @@ impl Main {
         if self._cache == CacheType::Bare {
             return;
         }
-        logging::info_log(&"Database is Loading: Relationships".to_string());
+        logging::info_log("Database is Loading: Relationships".to_string());
         let binding = self._conn.clone();
         let temp_test = binding.lock().unwrap();
         let temp = temp_test.prepare("SELECT fileid, tagid FROM Relationship");
@@ -775,7 +772,7 @@ impl Main {
 
     /// Loads settings into db
     pub(super) fn load_settings(&mut self) {
-        logging::info_log(&"Database is Loading: Settings".to_string());
+        logging::info_log("Database is Loading: Settings".to_string());
         let binding = self._conn.clone();
         let temp_test = binding.lock().unwrap();
         let temp = temp_test.prepare("SELECT * FROM Settings");
@@ -896,7 +893,7 @@ impl Main {
     /// Loads the DB into memory
     ///
     pub(super) fn load_dead_urls(&mut self) {
-        logging::info_log(&"Database is Loading: dead_source_urls".to_string());
+        logging::info_log("Database is Loading: dead_source_urls".to_string());
 
         let binding = self._conn.clone();
         let temp_test = binding.lock().unwrap();
@@ -936,7 +933,7 @@ impl Main {
         if self._cache == CacheType::Bare {
             return;
         }
-        logging::info_log(&"Database is Loading: Tags".to_string());
+        logging::info_log("Database is Loading: Tags".to_string());
 
         // let mut delete_tags = HashSet::new();
         {
@@ -1093,7 +1090,7 @@ PRAGMA cache_size = 2900000
 
     /// Sqlite wrapper for deleteing a tag from table.
     pub fn delete_namespace_sql(&mut self, namespace_id: &usize) {
-        logging::info_log(&format!(
+        logging::info_log(format!(
             "Deleting namespace with id : {} from db",
             namespace_id
         ));

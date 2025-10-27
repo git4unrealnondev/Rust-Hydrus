@@ -68,7 +68,7 @@ pub fn import_files(
             &sharedtypes::HashesSupported::Sha512("".to_string()),
         ) {
             Err(err) => {
-                logging::info_log(&format!("Cannot hash file {} err: {:?}", &row.path, err));
+                logging::info_log(format!("Cannot hash file {} err: {:?}", &row.path, err));
                 continue;
             }
             Ok(out) => out,

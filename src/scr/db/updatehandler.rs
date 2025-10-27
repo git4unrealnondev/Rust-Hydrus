@@ -16,7 +16,7 @@ impl Main {
         let jobs_cnt = self.db_table_collumn_getnames(&"Jobs".to_string()).len();
         match jobs_cnt {
             5 => {
-                logging::info_log(&"Starting work on Jobs.".to_string());
+                logging::info_log("Starting work on Jobs.".to_string());
                 if !self.check_table_exists("Jobs_Old".to_string()) {
                     self.alter_table(&"Jobs".to_string(), &"Jobs_Old".to_string());
                 }
@@ -87,7 +87,7 @@ impl Main {
                     && !self.check_table_exists("Jobs_Old".to_string())
                 {
                     logging::info_log(
-                        &"DB-Ugrade: Already processed Jobs table moving on.".to_string(),
+                        "DB-Ugrade: Already processed Jobs table moving on.".to_string(),
                     );
                 } else {
                     logging::panic_log(
@@ -114,7 +114,7 @@ impl Main {
                     && !self.check_table_exists("Tags_Old".to_string())
                 {
                     logging::info_log(
-                        &"DB-Ugrade: Already processed Tags table moving on.".to_string(),
+                        "DB-Ugrade: Already processed Tags table moving on.".to_string(),
                     );
                 } else {
                     logging::panic_log(
@@ -124,7 +124,7 @@ impl Main {
                 }
             }
             4 => {
-                logging::info_log(&"Starting work on Tags.".to_string());
+                logging::info_log("Starting work on Tags.".to_string());
                 if !self.check_table_exists("Tags_Old".to_string()) {
                     self.alter_table(&"Tags".to_string(), &"Tags_Old".to_string());
                 }
@@ -178,7 +178,7 @@ impl Main {
                     && !self.check_table_exists("Parents_Old".to_string())
                 {
                     logging::info_log(
-                        &"DB-Ugrade: Already processed Parents table moving on.".to_string(),
+                        "DB-Ugrade: Already processed Parents table moving on.".to_string(),
                     );
                 } else {
                     logging::panic_log(
@@ -188,7 +188,7 @@ impl Main {
                 }
             }
             4 => {
-                logging::info_log(&"Starting work on Parents.".to_string());
+                logging::info_log("Starting work on Parents.".to_string());
                 if !self.check_table_exists("Parents_Old".to_string()) {
                     self.alter_table(&"Parents".to_string(), &"Parents_Old".to_string());
                 }
@@ -245,7 +245,7 @@ impl Main {
         let mut storage = std::collections::HashSet::new();
         match jobs_cnt {
             7 => {
-                logging::info_log(&"Starting work on Jobs.".to_string());
+                logging::info_log("Starting work on Jobs.".to_string());
 
                 // Renames table to Jobs_Old
                 if !self.check_table_exists("Jobs_Old".to_string()) {
@@ -308,7 +308,7 @@ impl Main {
                 self.db_drop_table(&"Jobs_Old".to_string());
             }
             9 => {
-                logging::info_log(&"Already processed jobs. Skipping...".to_string());
+                logging::info_log("Already processed jobs. Skipping...".to_string());
             }
             _ => {}
         }
@@ -320,7 +320,7 @@ impl Main {
     /// Updates the DB from V4 to V5
     ///
     pub fn db_update_four_to_five(&mut self) {
-        logging::info_log(&"Backing up db this could be messy.".to_string());
+        logging::info_log("Backing up db this could be messy.".to_string());
         self.backup_db();
 
         // Puts Files table into proper state
@@ -377,7 +377,7 @@ impl Main {
             }
         }
 
-        logging::info_log(&"Creating tables inside of DB for V5 upgrade".to_string());
+        logging::info_log("Creating tables inside of DB for V5 upgrade".to_string());
         self.enclave_create_database_v5();
 
         // Creating storage location in db
@@ -429,7 +429,7 @@ impl Main {
             // Creates storage id's for them
             // Creates extension id's aswell
             //
-            logging::info_log(&"Starting to process files for DB V5 Upgrade".to_string());
+            logging::info_log("Starting to process files for DB V5 Upgrade".to_string());
             let extension_sqlite_inp = "INSERT INTO FileExtensions VALUES (?, ?)";
             let file_sqlite_inp = "INSERT INTO File VALUES (?, ?, ?, ?)";
             let file_enclave_sqlite_inp = "INSERT INTO FileEnclaveMapping VALUES (?, ?, ?)";
@@ -456,7 +456,7 @@ impl Main {
                     }
                     Some(id) => *id,
                 };
-                logging::info_log(&format!("Adding File: {}", &hash));
+                logging::info_log(format!("Adding File: {}", &hash));
                 let utc = Utc::now();
                 let timestamp = utc.timestamp_millis();
                 let _ = conn.execute(
@@ -494,7 +494,7 @@ impl Main {
             // Creates storage id's for them
             // Creates extension id's aswell
             //
-            logging::info_log(&"Starting to process Tags for DB V5 Upgrade".to_string());
+            logging::info_log("Starting to process Tags for DB V5 Upgrade".to_string());
 
             let tag_sqlite_inp = "INSERT INTO Tags VALUES (?, ?, ?)";
             let mut stmt = conn.prepare("SELECT * FROM Tags_Old").unwrap();
@@ -511,7 +511,7 @@ impl Main {
                 eta.step();
                 cnt += 1;
                 if (cnt % count_five_percent) == 0 {
-                    logging::info_log(&format!("{}", &eta));
+                    logging::info_log(format!("{}", &eta));
                 }
             }
         }
@@ -550,7 +550,7 @@ impl Main {
             // Creates storage id's for them
             // Creates extension id's aswell
             //
-            logging::info_log(&"Starting to process Jobs for DB V5 Upgrade".to_string());
+            logging::info_log("Starting to process Jobs for DB V5 Upgrade".to_string());
 
             let tag_sqlite_inp = "INSERT INTO Jobs VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
             let mut stmt = conn.prepare("SELECT * FROM Jobs_Old").unwrap();
@@ -566,7 +566,7 @@ impl Main {
                 let systemdata: String = row.get(7).unwrap();
                 let userdata: String = row.get(8).unwrap();
 
-                logging::info_log(&format!("Adding JobId: {}", &id));
+                logging::info_log(format!("Adding JobId: {}", &id));
                 let _ = conn.execute(
                     tag_sqlite_inp,
                     params![
@@ -585,7 +585,7 @@ impl Main {
     /// Handles the DB upgrade from five to six
     ///
     pub fn db_update_five_to_six(&mut self) {
-        logging::info_log(&"Backing up db this could be messy.".to_string());
+        logging::info_log("Backing up db this could be messy.".to_string());
         self.backup_db();
 
         // If table does not exist then create the dead source url tables
@@ -639,7 +639,7 @@ impl Main {
             // Creates storage id's for them
             // Creates extension id's aswell
             //
-            logging::info_log(&"Starting to process Jobs for DB V6 Upgrade".to_string());
+            logging::info_log("Starting to process Jobs for DB V6 Upgrade".to_string());
 
             let tag_sqlite_inp = "INSERT INTO Jobs VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
             let mut stmt = conn.prepare("SELECT * FROM Jobs_Old").unwrap();
@@ -654,7 +654,7 @@ impl Main {
                 let systemdata: String = row.get(7).unwrap();
                 let userdata: String = row.get(8).unwrap();
 
-                logging::info_log(&format!("Adding JobId: {}", &id));
+                logging::info_log(format!("Adding JobId: {}", &id));
                 conn.execute(
                     tag_sqlite_inp,
                     params![
@@ -680,7 +680,7 @@ impl Main {
     }
 
     pub fn db_update_six_to_seven(&mut self) {
-        logging::info_log(&"Backing up db this could be messy.".to_string());
+        logging::info_log("Backing up db this could be messy.".to_string());
         self.backup_db();
 
         if self.check_table_exists("Namespace_Old".to_string()) {
@@ -705,7 +705,7 @@ impl Main {
 
             let conn = self._conn.lock().unwrap();
 
-            logging::info_log(&"Starting to process Namespace for DB V7 Upgrade".to_string());
+            logging::info_log("Starting to process Namespace for DB V7 Upgrade".to_string());
 
             let tag_sqlite_inp = "INSERT INTO Namespace (id, name, description) VALUES (?, ?, ?)";
             let mut stmt = conn
@@ -717,7 +717,7 @@ impl Main {
                 let name: String = row.get(1).unwrap();
                 let desc: Option<String> = row.get(2).unwrap();
 
-                logging::info_log(&format!("Adding Namespace: {}", &id));
+                logging::info_log(format!("Adding Namespace: {}", &id));
                 conn.execute(tag_sqlite_inp, params![id, name, desc])
                     .unwrap();
             }
@@ -737,7 +737,7 @@ impl Main {
 
             let conn = self._conn.lock().unwrap();
 
-            logging::info_log(&"Starting to process Parents for DB V7 Upgrade".to_string());
+            logging::info_log("Starting to process Parents for DB V7 Upgrade".to_string());
 
             let tag_sqlite_inp =
                 "INSERT INTO Parents (tag_id, relate_tag_id, limit_to) VALUES (?, ?, ?)";
@@ -769,7 +769,7 @@ impl Main {
             self.table_create(&"Tags".to_string(), keys, vals);
             let conn = self._conn.lock().unwrap();
 
-            logging::info_log(&"Starting to process Tags for DB V7 Upgrade".to_string());
+            logging::info_log("Starting to process Tags for DB V7 Upgrade".to_string());
 
             let tag_sqlite_inp = "INSERT INTO Tags (id, name, namespace) VALUES (?, ?, ?)";
             let mut stmt = conn
@@ -797,7 +797,7 @@ impl Main {
 
             let conn = self._conn.lock().unwrap();
 
-            logging::info_log(&"Starting to process Relationships for DB V8 Upgrade".to_string());
+            logging::info_log("Starting to process Relationships for DB V8 Upgrade".to_string());
             conn.execute(
                 "CREATE TABLE Relationship (fileid INTEGER NOT NULL, tagid INTEGER NOT NULL, PRIMARY KEY (fileid, tagid) ) WITHOUT ROWID",
                 [],
@@ -814,7 +814,7 @@ impl Main {
             .unwrap();
         }
 
-        logging::info_log(&"Starting to process Tags for DB V8 Upgrade".to_string());
+        logging::info_log("Starting to process Tags for DB V8 Upgrade".to_string());
 
         if self.check_table_exists("Tags".into()) {
             self.alter_table(&"Tags".to_string(), &"Tags_Old".to_string());
@@ -849,7 +849,7 @@ impl Main {
         }
 
         if self.check_table_exists("File".into()) {
-            logging::info_log(&"Starting to process Files for DB V8 Upgrade".to_string());
+            logging::info_log("Starting to process Files for DB V8 Upgrade".to_string());
             self.alter_table(&"File".to_string(), &"File_Old".to_string());
 
             let conn = self._conn.lock().unwrap();
@@ -884,7 +884,7 @@ impl Main {
             }*/
         }
         if self.check_table_exists("Parents".into()) {
-            logging::info_log(&"Starting to process Parent Index for DB V8 Upgrade".to_string());
+            logging::info_log("Starting to process Parent Index for DB V8 Upgrade".to_string());
             let conn = self._conn.lock().unwrap();
             conn.execute(
                 "CREATE INDEX idx_parents ON Parents (tag_id, relate_tag_id, limit_to)",
@@ -901,7 +901,7 @@ impl Main {
         }
 
         if self.check_table_exists("Namespace".into()) {
-            logging::info_log(&"Starting to process Namespace for DB V8 Upgrade".to_string());
+            logging::info_log("Starting to process Namespace for DB V8 Upgrade".to_string());
             self.alter_table(&"Namespace".to_string(), &"Namespace_Old".to_string());
             let conn = self._conn.lock().unwrap();
             conn.execute(
@@ -916,7 +916,7 @@ impl Main {
         }
 
         if !self.check_table_exists("Jobs".to_string()) {
-            logging::info_log(&"Starting to process Jobs for DB V8 Upgrade".to_string());
+            logging::info_log("Starting to process Jobs for DB V8 Upgrade".to_string());
             self.alter_table(&"Jobs".to_string(), &"Jobs_Old".to_string());
             let name = "Jobs".to_string();
             let keys = vec_of_strings!(

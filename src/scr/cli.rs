@@ -233,9 +233,9 @@ pub fn main(data: Arc<RwLock<database::Main>>, globalload: Arc<RwLock<GlobalLoad
                 data.load_table(&sharedtypes::LoadDBTable::All);
                 let fids = data.relationship_get_fileid(&id.id);
                 if !fids.is_empty() {
-                    logging::info_log(&"Found Fids:".to_string());
+                    logging::info_log("Found Fids:".to_string());
                     for each in fids {
-                        logging::info_log(&format!("{}", &each));
+                        logging::info_log(format!("{}", &each));
                     }
                 }
             }
@@ -249,22 +249,22 @@ pub fn main(data: Arc<RwLock<database::Main>>, globalload: Arc<RwLock<GlobalLoad
                         let fids = data.relationship_get_fileid(tid);
 
                         if fids.is_empty() {
-                            logging::info_log(&format!(
+                            logging::info_log(format!(
                                 "Cannot find any relationships for tag id: {}",
                                 &tid
                             ));
                         } else {
-                            logging::info_log(&"Found Fids:".to_string());
+                            logging::info_log("Found Fids:".to_string());
                             for each in fids {
-                                logging::info_log(&format!("{}", &each));
+                                logging::info_log(format!("{}", &each));
                             }
                         }
                     } else {
-                        logging::info_log(&"Cannot find tag :C".to_string());
+                        logging::info_log("Cannot find tag :C".to_string());
                     }
                 } else {
-                    logging::info_log(&"Namespace isn't correct or cannot find it".to_string());
-                    logging::info_log(&"Please use a namespace below:".to_string());
+                    logging::info_log("Namespace isn't correct or cannot find it".to_string());
+                    logging::info_log("Please use a namespace below:".to_string());
                 }
             }
             cli_structs::SearchStruct::Hash(hash) => {
@@ -326,7 +326,7 @@ pub fn main(data: Arc<RwLock<database::Main>>, globalload: Arc<RwLock<GlobalLoad
 
                     let search_path = Path::new(&local_file);
                     if !search_path.exists() {
-                        logging::info_log(&format!("Cannot find file or path at: {}", &local_file));
+                        logging::info_log(format!("Cannot find file or path at: {}", &local_file));
                         return;
                     }
 
@@ -342,7 +342,7 @@ pub fn main(data: Arc<RwLock<database::Main>>, globalload: Arc<RwLock<GlobalLoad
                             if !item.path().is_file() {
                                 continue;
                             }
-                            logging::info_log(&format!("Found item: {}", item.path().display()));
+                            logging::info_log(format!("Found item: {}", item.path().display()));
                             files.insert(item.path().to_path_buf(), find_sidecar(item.path()));
                             for sidecar in find_sidecar(item.path()) {
                                 sidecars.insert(sidecar);
@@ -353,7 +353,7 @@ pub fn main(data: Arc<RwLock<database::Main>>, globalload: Arc<RwLock<GlobalLoad
                         files.remove(sidecar);
                     }
 
-                    logging::info_log(&"Starting to process files");
+                    logging::info_log("Starting to process files");
 
                     // Removes any sidecar files from files
                     files.par_iter().for_each(|(file, sidecars)| {
@@ -521,7 +521,7 @@ pub fn main(data: Arc<RwLock<database::Main>>, globalload: Arc<RwLock<GlobalLoad
                         ));
                         let lis = data.file_get_list_all();
                         logging::info_log(
-                            &"Checking if we have any missing or bad files.".to_string(),
+                            "Checking if we have any missing or bad files.".to_string(),
                         );
                         let mut nsid: Option<usize> = None;
                         {
@@ -568,7 +568,7 @@ pub fn main(data: Arc<RwLock<database::Main>>, globalload: Arc<RwLock<GlobalLoad
                                     let rel = data.relationship_get_tagid(fid);
                                     for eachs in rel.iter() {
                                         let dat = data.tag_id_get(eachs).unwrap();
-                                        logging::info_log(&format!(
+                                        logging::info_log(format!(
                                             "Got Tag: {} for fileid: {}",
                                             dat.name, fid
                                         ));
@@ -619,7 +619,7 @@ pub fn main(data: Arc<RwLock<database::Main>>, globalload: Arc<RwLock<GlobalLoad
                                         let rel = data.relationship_get_tagid(fid);
                                         for eachs in rel.iter() {
                                             let dat = data.tag_id_get(eachs).unwrap();
-                                            logging::info_log(&format!(
+                                            logging::info_log(format!(
                                                 "Got Tag: {} for fileid: {}",
                                                 dat.name, fid
                                             ));
@@ -673,7 +673,7 @@ pub fn main(data: Arc<RwLock<database::Main>>, globalload: Arc<RwLock<GlobalLoad
 
                                 match data.namespace_get(&ns.namespace_string) {
                                     None => {
-                                        logging::info_log(&format!(
+                                        logging::info_log(format!(
                                             "Cannot find the tasks remove string in namespace {}",
                                             &ns.namespace_string
                                         ));
@@ -684,7 +684,7 @@ pub fn main(data: Arc<RwLock<database::Main>>, globalload: Arc<RwLock<GlobalLoad
                             }
                             cli_structs::NamespaceInfo::NamespaceId(ns) => ns.namespace_id,
                         };
-                        logging::info_log(&format!(
+                        logging::info_log(format!(
                             "Found Namespace: {} Removing all but id...",
                             &ns_id
                         ));
@@ -711,7 +711,7 @@ pub fn main(data: Arc<RwLock<database::Main>>, globalload: Arc<RwLock<GlobalLoad
 
                                 match data.namespace_get(&ns.namespace_string) {
                                     None => {
-                                        logging::info_log(&format!(
+                                        logging::info_log(format!(
                                             "Cannot find the tasks remove string in namespace {}",
                                             &ns.namespace_string
                                         ));
@@ -722,7 +722,7 @@ pub fn main(data: Arc<RwLock<database::Main>>, globalload: Arc<RwLock<GlobalLoad
                             }
                             cli_structs::NamespaceInfo::NamespaceId(ns) => ns.namespace_id,
                         };
-                        logging::info_log(&format!("Found Namespace: {} Removing...", &ns_id));
+                        logging::info_log(format!("Found Namespace: {} Removing...", &ns_id));
                         data.load_table(&sharedtypes::LoadDBTable::Tags);
                         data.load_table(&sharedtypes::LoadDBTable::Relationship);
                         data.namespace_delete_id(&ns_id);

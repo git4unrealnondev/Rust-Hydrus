@@ -204,7 +204,7 @@ pub fn plugin_on_download(
             > = match lib.get(b"on_download") {
                 Ok(lib) => lib,
                 Err(_) => {
-                    logging::info_log(&format!(
+                    logging::info_log(format!(
                         "Could not find on_download for plugin: {}",
                         lib_path.to_string_lossy()
                     ));
@@ -478,7 +478,7 @@ impl GlobalLoad {
                 > = match lib.get(b"on_import") {
                     Ok(lib) => lib,
                     Err(_) => {
-                        logging::info_log(&format!(
+                        logging::info_log(format!(
                             "Could not find on_download for plugin: {}",
                             lib_path.to_string_lossy()
                         ));

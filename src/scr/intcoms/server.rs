@@ -212,7 +212,7 @@ another process and try again.",
         };
 
         // Stand-in for the syncronization used, if any, between the client and the server.
-        logging::info_log(&format!("IPC Server running at {}", types::SOCKET_NAME));
+        logging::info_log(format!("IPC Server running at {}", types::SOCKET_NAME));
 
         // let _ = notify.send(()); Main Plugin interaction loop
         for conn in listener.incoming().filter_map(handle_error) {

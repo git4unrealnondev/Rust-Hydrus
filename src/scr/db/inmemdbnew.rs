@@ -169,7 +169,7 @@ impl NewinMemDB {
                 self._settings_max += 1;
             }
             Some(setting_id) => {
-                logging::info_log(&format!(
+                logging::info_log(format!(
                     "Updating setting_id: {} with {} {:?} {:?} {:?}.",
                     &setting_id, &name, &pretty, &num, &param
                 ));
@@ -751,7 +751,7 @@ impl NewinMemDB {
         let mut ret: HashSet<(usize, usize)> = HashSet::new();
         let rel_op = self.parents_rel_get(tag_id, None);
         for rel in rel_op {
-            logging::info_log(&format!("Parents_Remove: {} {}", &rel, tag_id));
+            logging::info_log(format!("Parents_Remove: {} {}", &rel, tag_id));
             println!("Parents_Remove: {} {}", &rel, tag_id);
             self._parents_rel_tag.remove(&rel);
             self._parents_tag_rel.remove(tag_id);
