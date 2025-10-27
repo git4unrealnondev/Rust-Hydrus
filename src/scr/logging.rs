@@ -32,20 +32,20 @@ pub fn main(log_location: &String) {
 }
 
 /// Dumps error to log and panics.
-pub fn panic_log(error: &String) {
+pub fn panic_log<T: Display>(error: T) {
     error!("{}", error);
     panic!("{}", error);
 }
 
 /// Dumps error to log and doesn't panic.
-pub fn error_log(error: &String) {
+pub fn error_log<T: Display>(error: T) {
     println!("{}", error);
     error!("{}", error);
 }
 
 /// Dumps error to log and doesn't panic.
 /// Does NOT print anything to the screen
-pub fn error_log_silent(error: &String) {
+pub fn error_log_silent<T: Display>(error: T) {
     error!("{}", error);
 }
 
@@ -56,6 +56,6 @@ pub fn info_log<T: Display>(info: T) {
 }
 
 /// Dumps info to log and DOES NOT prints it.
-pub fn log(info: &String) {
+pub fn log<T: Display>(info: T) {
     info!("{}", info);
 }
