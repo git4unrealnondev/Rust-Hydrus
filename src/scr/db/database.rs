@@ -1269,6 +1269,8 @@ impl Main {
                 self.db_update_six_to_seven();
             } else if db_vers == 7 {
                 self.db_update_seven_to_eight();
+            } else if db_vers == 8 {
+                self.db_update_eight_to_nine();
             }
 
             logging::info_log(&format!("Finished upgrade to V{}.", db_vers));
