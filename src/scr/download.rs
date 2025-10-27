@@ -546,6 +546,15 @@ pub fn process_bytes(
     file: &mut sharedtypes::FileObject,
     source_url: Option<&String>,
 ) {
+    // NOTE run the download / file actions first then run the plugin_on_download second.
+    // That way if theirs any data that needs to get processed then we can do it while theirs a
+    // valid file hash inside of the db
+    {
+        let mut unwrappydb = db.write().unwrap();
+        unwrappydb.create_default_source_url_ns_id();
+        unwrappydb.enclave_determine_processing(file, bytes.clone(), hash, source_url);
+    }
+
     // If the plugin manager is None then don't do anything plugin wise. Useful for if
     // doing something that we CANNOT allow plugins to run.
     {
@@ -558,12 +567,6 @@ pub fn process_bytes(
                 file_ext,
             );
         }
-    }
-    //
-    {
-        let mut unwrappydb = db.write().unwrap();
-        unwrappydb.create_default_source_url_ns_id();
-        unwrappydb.enclave_determine_processing(file, bytes, hash, source_url);
     }
 }
 

@@ -84,12 +84,7 @@ pub fn on_download(
             };
 
             let tag_output = sharedtypes::DBPluginOutput {
-                file: vec![sharedtypes::PluginFileObj {
-                    id: None,
-                    hash: Some(hash_in.to_owned()),
-                    ext: Some(ext_in.to_owned()),
-                    location: None,
-                }],
+                file: vec![],
                 jobs: vec![],
                 setting: vec![],
                 tag: vec![tag],

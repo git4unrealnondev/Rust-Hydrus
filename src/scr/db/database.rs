@@ -1631,7 +1631,6 @@ impl Main {
             sharedtypes::DbFileStorage::NoIdExist(ref noid_obj) => {
                 if self.file_get_hash(&noid_obj.hash).is_none() {
                     let id = self.file_add_db(file.clone());
-                    dbg!(&id);
                     self.file_add_sql(&sharedtypes::DbFileStorage::NoIdExist(
                         sharedtypes::DbFileObjNoId {
                             hash: noid_obj.hash.clone(),
