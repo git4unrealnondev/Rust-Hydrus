@@ -353,7 +353,7 @@ pub fn main(data: Arc<RwLock<database::Main>>, globalload: Arc<RwLock<GlobalLoad
                         files.remove(sidecar);
                     }
 
-                    logging::info_log(&"Starting to process files".into());
+                    logging::info_log(&"Starting to process files");
 
                     // Removes any sidecar files from files
                     files.par_iter().for_each(|(file, sidecars)| {
@@ -520,9 +520,9 @@ pub fn main(data: Arc<RwLock<database::Main>>, globalload: Arc<RwLock<GlobalLoad
                                 .unwrap(),
                         ));
                         let lis = data.file_get_list_all();
-                        logging::info_log(&format!(
-                            "Checking if we have any missing or bad files."
-                        ));
+                        logging::info_log(
+                            &"Checking if we have any missing or bad files.".to_string(),
+                        );
                         let mut nsid: Option<usize> = None;
                         {
                             let nso = data.namespace_get(&"source_url".to_owned());

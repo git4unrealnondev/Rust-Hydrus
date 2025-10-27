@@ -511,7 +511,7 @@ pub enum DbFileStorage {
 }
 
 /// File object Should only be used for parsing data from plugins
-#[derive(Debug, Deserialize, Serialize, bincode::Encode, bincode::Decode)]
+#[derive(Debug, Deserialize, Serialize, bincode::Encode, bincode::Decode, Clone)]
 pub struct PluginFileObj {
     pub id: Option<usize>,
     pub hash: Option<String>,
@@ -701,14 +701,14 @@ pub struct DbSearchQuery {
 }
 
 /// Database Relationship For Plugin passing
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct DbPluginRelationshipObj {
     pub file_hash: String,
     pub tag_name: String,
     pub tag_namespace: String,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum DBPluginOutputEnum {
     Add(Vec<DBPluginOutput>),
     Del(Vec<DBPluginOutput>),
@@ -746,7 +746,7 @@ pub enum FileAction {
 }
 
 /// Plugin output for the passed object
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct DBPluginOutput {
     // Adds a tag to DB
     pub tag: Vec<TagObject>,

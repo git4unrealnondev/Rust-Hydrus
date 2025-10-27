@@ -139,7 +139,6 @@ impl Main {
 
     /// Adds a job to sql
     pub fn jobs_add_sql(&mut self, data: &sharedtypes::DbJobsObj) {
-        dbg!(data);
         let inp = "INSERT INTO Jobs VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
         self._conn
             .borrow_mut()
@@ -950,7 +949,6 @@ impl Main {
                         Ok(out) => out,
                         Err(err) => {
                             let temp: u64 = row.get(1).unwrap();
-                            dbg!(err, temp);
                             panic!();
                         }
                     };
@@ -1043,7 +1041,6 @@ PRAGMA cache_size = 2900000
 
     /// Removes a tag from sql table by name and namespace
     pub fn del_from_tags_by_name_and_namespace(&mut self, name: &String, namespace: &String) {
-        dbg!("Deleting", name, namespace);
         let inp = "DELETE FROM Tags WHERE name = ? AND namespace = ?";
         self._conn
             .borrow_mut()

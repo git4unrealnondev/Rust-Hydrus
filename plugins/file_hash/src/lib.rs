@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
+use std::thread;
 use strum::{EnumIter, IntoEnumIterator};
 
 #[path = "../../../src/scr/sharedtypes.rs"]
@@ -34,7 +35,7 @@ pub fn get_global_info() -> Vec<sharedtypes::GlobalPluginScraper> {
 pub fn on_import(byte_c: &[u8], hash_in: &String) -> Vec<sharedtypes::DBPluginOutputEnum> {
     let mut output = Vec::new();
     for hash in Supset::iter() {
-        let hastring = hash_file(hash, byte_c);
+        let hastring = hash_file(&hash, byte_c);
         if let Some(st) = hastring {
             let tag = sharedtypes::TagObject {
                 tag: st.to_string(),
@@ -70,35 +71,44 @@ pub fn on_import(byte_c: &[u8], hash_in: &String) -> Vec<sharedtypes::DBPluginOu
 pub fn on_download(
     byte_c: &[u8],
     hash_in: &String,
-    ext_in: &String,
+    _ext_in: &String,
 ) -> Vec<sharedtypes::DBPluginOutputEnum> {
-    let mut output = Vec::new();
-    for hash in Supset::iter() {
-        let hastring = hash_file(hash, byte_c);
-        if let Some(st) = hastring {
-            let tag = sharedtypes::TagObject {
-                tag: st.to_string(),
-                tag_type: sharedtypes::TagType::Normal,
-                relates_to: None,
-                namespace: get_set(hash.to_owned()),
-            };
+    let output = Arc::new(Mutex::new(Vec::new()));
 
-            let tag_output = sharedtypes::DBPluginOutput {
-                file: vec![],
-                jobs: vec![],
-                setting: vec![],
-                tag: vec![tag],
-                relationship: vec![sharedtypes::DbPluginRelationshipObj {
-                    file_hash: hash_in.to_owned(),
-                    tag_name: st,
-                    tag_namespace: get_set(hash.to_owned()).name,
-                }],
-            };
-            output.push(sharedtypes::DBPluginOutputEnum::Add(vec![tag_output]));
+    thread::scope(|thread| {
+        for hash in Supset::iter() {
+            let output = output.clone();
+            thread.spawn(move || {
+                let hastring = hash_file(&hash, byte_c);
+                if let Some(st) = hastring {
+                    let tag = sharedtypes::TagObject {
+                        tag: st.to_string(),
+                        tag_type: sharedtypes::TagType::Normal,
+                        relates_to: None,
+                        namespace: get_set(hash.to_owned()),
+                    };
+
+                    let tag_output = sharedtypes::DBPluginOutput {
+                        file: vec![],
+                        jobs: vec![],
+                        setting: vec![],
+                        tag: vec![tag],
+                        relationship: vec![sharedtypes::DbPluginRelationshipObj {
+                            file_hash: hash_in.to_owned(),
+                            tag_name: st,
+                            tag_namespace: get_set(hash.to_owned()).name,
+                        }],
+                    };
+                    output
+                        .lock()
+                        .unwrap()
+                        .push(sharedtypes::DBPluginOutputEnum::Add(vec![tag_output]));
+                }
+            });
         }
-    }
-
-    output
+    });
+    let out = output.lock().unwrap();
+    out.to_vec()
 }
 
 #[no_mangle]
@@ -292,7 +302,7 @@ fn check_existing_db() {
         if let Some(fbyte) = client::get_file(modern.0.id) {
             let byte = std::fs::read(fbyte).unwrap();
             for hashtype in modern.1 {
-                if let Some(hash) = hash_file(*hashtype, &byte) {
+                if let Some(hash) = hash_file(hashtype, &byte) {
                     client::log_no_print(format!(
                         "FileHash - Hashtype: {:?} Hash: {} Fileid: {}",
                         &hashtype, &hash, modern.0.id
@@ -361,7 +371,7 @@ fn check_existing_db() {
 /// Hashes a file with the selected hash type.
 /// outputs has as a string or an option string.
 ///
-fn hash_file(hashtype: Supset, byte: &[u8]) -> Option<String> {
+fn hash_file(hashtype: &Supset, byte: &[u8]) -> Option<String> {
     use md5::Md5;
     use sha1::{Digest, Sha1};
     use sha2::{Sha256, Sha512};

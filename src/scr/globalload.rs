@@ -112,8 +112,8 @@ pub fn download_from(
 /// Tells a scraper that it should handle the "text" downloading
 ///
 pub fn text_scraping(
-    url_output: &String,
-    actual_params: &Vec<sharedtypes::ScraperParam>,
+    url_output: &str,
+    actual_params: &[sharedtypes::ScraperParam],
     scraperdata: &sharedtypes::ScraperData,
     globalload: Arc<RwLock<GlobalLoad>>,
     scraper: &GlobalPluginScraper,
@@ -123,7 +123,7 @@ pub fn text_scraping(
         let temp: libloading::Symbol<
             unsafe extern "C" fn(
                 &str,
-                &Vec<sharedtypes::ScraperParam>,
+                &[sharedtypes::ScraperParam],
                 &sharedtypes::ScraperData,
             )
                 -> Result<sharedtypes::ScraperObject, sharedtypes::ScraperReturn>,
@@ -930,7 +930,7 @@ impl GlobalLoad {
     ///
     pub fn external_plugin_call(
         &mut self,
-        _func_name: &String,
+        _func_name: &str,
         _vers: &usize,
         _input_data: &sharedtypes::CallbackInfoInput,
     ) -> Option<HashMap<String, sharedtypes::CallbackCustomDataReturning>> {

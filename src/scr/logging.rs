@@ -4,6 +4,7 @@ use fast_log::consts::LogSize;
 use fast_log::plugin::file_split::{KeepType, Rolling};
 use fast_log::plugin::packer::LZ4Packer;
 use log::{LevelFilter, error, info};
+use std::fmt::Display;
 use std::fs;
 use std::path::Path;
 
@@ -49,7 +50,7 @@ pub fn error_log_silent(error: &String) {
 }
 
 /// Dumps info to log and prints it.
-pub fn info_log(info: &String) {
+pub fn info_log<T: Display>(info: T) {
     info!("{}", info);
     println!("{}", info);
 }

@@ -620,7 +620,7 @@ impl Main {
     ///
     pub fn storage_get_all(&self) -> Vec<String> {
         let mut out = Vec::new();
-        for id in 1..std::usize::MAX {
+        for id in 1..usize::MAX {
             if let Some(location) = self.storage_get_string(&id) {
                 out.push(location);
             } else {
@@ -947,7 +947,7 @@ impl Main {
         self.setting_add(
             "VERSION".to_string(),
             Some("Version that the database is currently on.".to_string()),
-            Some(self._vers.try_into().unwrap()),
+            Some(self._vers),
             None,
             true,
         );
@@ -2601,12 +2601,10 @@ impl Main {
 
         file_id_list.par_sort_unstable();
 
-        let mut cnt = 0;
-        for key in file_id_list {
+        for (ref cnt, key) in file_id_list.iter().enumerate() {
             if cnt != key {
                 dbg!("mismatch", &key, &cnt);
             }
-            cnt += 1;
         }
     }
 

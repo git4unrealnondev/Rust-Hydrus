@@ -516,8 +516,8 @@ pub fn dlfile_new(
     }
     logging::info_log(&format!("Downloaded hash: {}", &hash));
 
-    if let Some(bytes) = bytes {
-        let file_ext = FileFormat::from_bytes(&bytes).extension().to_string();
+    if let Some(ref bytes) = bytes {
+        let file_ext = FileFormat::from_bytes(bytes).extension().to_string();
         process_bytes(
             bytes,
             globalload,
@@ -538,7 +538,7 @@ pub fn dlfile_new(
 /// Runs external bytes processing and starts enclave work
 ///
 pub fn process_bytes(
-    bytes: Bytes,
+    bytes: &Bytes,
     globalload: Option<Arc<RwLock<GlobalLoad>>>,
     hash: &String,
     file_ext: &String,
@@ -552,20 +552,14 @@ pub fn process_bytes(
     {
         let mut unwrappydb = db.write().unwrap();
         unwrappydb.create_default_source_url_ns_id();
-        unwrappydb.enclave_determine_processing(file, bytes.clone(), hash, source_url);
+        unwrappydb.enclave_determine_processing(file, bytes, hash, source_url);
     }
 
     // If the plugin manager is None then don't do anything plugin wise. Useful for if
     // doing something that we CANNOT allow plugins to run.
     {
         if let Some(globalload) = globalload {
-            crate::globalload::plugin_on_download(
-                globalload,
-                db.clone(),
-                bytes.as_ref(),
-                hash,
-                file_ext,
-            );
+            crate::globalload::plugin_on_download(globalload, db.clone(), bytes, hash, file_ext);
         }
     }
 }

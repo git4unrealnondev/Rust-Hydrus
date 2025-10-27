@@ -100,7 +100,7 @@ impl Main {
     pub fn enclave_determine_processing(
         &mut self,
         file: &mut sharedtypes::FileObject,
-        bytes: Bytes,
+        bytes: &Bytes,
         sha512hash: &String,
         source_url: Option<&String>,
     ) {
@@ -111,7 +111,7 @@ impl Main {
 
         'priorityloop: for priority_id in self.enclave_priority_get().iter() {
             for enclave_id in self.enclave_get_id_from_priority(priority_id).iter() {
-                if self.enclave_run_logic(file, &bytes, sha512hash, source_url, enclave_id) {
+                if self.enclave_run_logic(file, bytes, sha512hash, source_url, enclave_id) {
                     break 'priorityloop;
                 }
             }
