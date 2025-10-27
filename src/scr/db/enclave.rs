@@ -48,7 +48,7 @@ impl Main {
             .enclave_action_order_enclave_get_list_id(enclave_id)
             .iter()
         {
-            logging::log(&format!(
+            logging::log(format!(
                 "Enclave FileHash {}: Pulled condition list id for {}, enclave_id: {}",
                 &sha512hash, condition_list_id, enclave_id
             ));
@@ -66,12 +66,12 @@ impl Main {
                 };
 
                 if let Some(run_action_id) = run_option_action_id {
-                    logging::log(&format!(
+                    logging::log(format!(
                         "Enclave FileHash {}: Running action id: {}",
                         &sha512hash, run_action_id
                     ));
                     if let Some(action_name) = action_name {
-                        logging::log(&format!(
+                        logging::log(format!(
                             "Enclave FileHash {}: Running action name: {:?}",
                             &sha512hash, action_name
                         ));
@@ -135,7 +135,7 @@ impl Main {
         match action {
             sharedtypes::EnclaveAction::PutAtDefault => {
                 let download_location = self.location_get();
-                logging::log(&format!(
+                logging::log(format!(
                     "Enclave FileHash {}: {}",
                     &sha512hash,
                     format!("Putting at Default location {}", &download_location)
@@ -168,7 +168,7 @@ impl Main {
             }
             sharedtypes::EnclaveAction::DownloadToDefault => {
                 let download_location = self.location_get();
-                logging::log(&format!(
+                logging::log(format!(
                     "Enclave FileHash {}: {}",
                     &sha512hash,
                     format!("Downloading to Default location {}", &download_location)

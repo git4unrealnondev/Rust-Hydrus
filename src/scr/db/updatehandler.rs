@@ -91,18 +91,18 @@ impl Main {
                     );
                 } else {
                     logging::panic_log(
-                        &"DB IS IN WEIRD INCONSISTEINT STATE PLEASE ROLLBACK TO LATEST BACKUP."
+                        "DB IS IN WEIRD INCONSISTEINT STATE PLEASE ROLLBACK TO LATEST BACKUP."
                             .to_string(),
                     )
                 }
             }
             _ => {
-                logging::error_log(&format!(
+                logging::error_log(format!(
                     "Weird table loading. Should be 5 or 7 for db upgrade. Pulled {}",
                     &jobs_cnt
                 ));
                 logging::panic_log(
-                    &"DB IS IN WEIRD INCONSISTEINT STATE PLEASE ROLLBACK TO LATEST BACKUP."
+                    "DB IS IN WEIRD INCONSISTEINT STATE PLEASE ROLLBACK TO LATEST BACKUP."
                         .to_string(),
                 );
             }
@@ -118,7 +118,7 @@ impl Main {
                     );
                 } else {
                     logging::panic_log(
-                        &"DB IS IN WEIRD INCONSISTEINT STATE PLEASE ROLLBACK TO LATEST BACKUP."
+                        "DB IS IN WEIRD INCONSISTEINT STATE PLEASE ROLLBACK TO LATEST BACKUP."
                             .to_string(),
                     )
                 }
@@ -161,12 +161,12 @@ impl Main {
                 self.transaction_flush();
             }
             _ => {
-                logging::error_log(&format!(
+                logging::error_log(format!(
                     "Weird tags table loading. Should be 3 or 4 for db upgrade. Was {}",
                     tags_cnt
                 ));
                 logging::panic_log(
-                    &"DB IS IN WEIRD INCONSISTEINT STATE PLEASE ROLLBACK TO LATEST BACKUP."
+                    "DB IS IN WEIRD INCONSISTEINT STATE PLEASE ROLLBACK TO LATEST BACKUP."
                         .to_string(),
                 );
             }
@@ -182,7 +182,7 @@ impl Main {
                     );
                 } else {
                     logging::panic_log(
-                        &"DB IS IN WEIRD INCONSISTEINT STATE PLEASE ROLLBACK TO LATEST BACKUP."
+                        "DB IS IN WEIRD INCONSISTEINT STATE PLEASE ROLLBACK TO LATEST BACKUP."
                             .to_string(),
                     )
                 }
@@ -224,12 +224,12 @@ impl Main {
                 self.transaction_flush();
             }
             _ => {
-                logging::error_log(&format!(
+                logging::error_log(format!(
                     "Weird parents table loading. Should be 3 or 4 for db upgrade. Was {}",
                     tags_cnt
                 ));
                 logging::panic_log(
-                    &"DB IS IN WEIRD INCONSISTEINT STATE PLEASE ROLLBACK TO LATEST BACKUP."
+                    "DB IS IN WEIRD INCONSISTEINT STATE PLEASE ROLLBACK TO LATEST BACKUP."
                         .to_string(),
                 );
             }

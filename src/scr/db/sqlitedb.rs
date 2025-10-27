@@ -676,11 +676,10 @@ impl Main {
         }
 
         // Catches issue where a non bare DB would nuke itself
-        if self._cache == CacheType::Bare {
-            if let Some(id) = self.file_get_hash(&hash) {
+        if self._cache == CacheType::Bare
+            && let Some(id) = self.file_get_hash(&hash) {
                 return id;
             }
-        }
 
         let inp = "INSERT INTO File VALUES(?, ?, ?, ?)";
         let _out = self
@@ -1049,7 +1048,7 @@ PRAGMA cache_size = 2900000
 
     /// Sqlite wrapper for deleteing a relationship from table.
     pub fn delete_relationship_sql(&mut self, file_id: &usize, tag_id: &usize) {
-        logging::log(&format!(
+        logging::log(format!(
             "Removing Relationship where fileid = {} and tagid = {}",
             file_id, tag_id
         ));

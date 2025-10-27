@@ -357,13 +357,13 @@ impl Worker {
                                     }
                                 }
                                 Err(err) => {
-                                    logging::error_log(&format!(
+                                    logging::error_log(format!(
                                         "
 Worker: {id} JobId: {} -- While trying to parse parameters we got this error: {:?}
                                         ",
                                         jobid, err
                                     ));
-                                    logging::error_log(&format!(
+                                    logging::error_log(format!(
                                         "Worker: {} JobId: {} -- Telling system to keep job due to previous error.",
                                         id, jobid
                                     ));
@@ -417,7 +417,7 @@ Worker: {id} JobId: {} -- While trying to parse parameters we got this error: {:
                                             &scraper,
                                         ),
                                         Err(_) => {
-                                            logging::error_log(&format!(
+                                            logging::error_log(format!(
                                                 "Worker: {} -- While processing job {:?} was unable to download text.",
                                                 &id, &job
                                             ));
@@ -440,7 +440,7 @@ Worker: {id} JobId: {} -- While trying to parse parameters we got this error: {:
                                         Err(ScraperReturn::Stop(stop)) => {
                                             // let temp = scraper_data.clone().job;
                                             // job_params.lock().unwrap().remove(&scraper_data);
-                                            logging::error_log(&format!(
+                                            logging::error_log(format!(
                                                 "Stopping job: {:?}",
                                                 stop
                                             ));
@@ -470,7 +470,7 @@ Worker: {id} JobId: {} -- While trying to parse parameters we got this error: {:
                                                     thread::sleep(Duration::from_secs(time))
                                                 }
                                                 _ => {
-                                                    logging::error_log(&format!(
+                                                    logging::error_log(format!(
                                                         "Worker: {} -- While processing job {:?} was unable to download text.",
                                                         &id, &job
                                                     ));

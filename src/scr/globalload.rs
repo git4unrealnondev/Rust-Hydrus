@@ -23,7 +23,7 @@ fn c_run_onstart(path: &Path, global: &sharedtypes::GlobalPluginScraper) {
         > = match liba.get(b"on_start") {
             Ok(good) => good,
             Err(_) => {
-                logging::log(&format!(
+                logging::log(format!(
                     "Cannot find on_start for path: {}",
                     path.to_string_lossy()
                 ));
@@ -184,7 +184,7 @@ pub fn plugin_on_download(
             match libloading::Library::new(lib_path) {
                 Ok(good_lib) => lib = good_lib,
                 Err(_) => {
-                    logging::error_log(&format!(
+                    logging::error_log(format!(
                         "Cannot load library at path: {}",
                         lib_path.to_string_lossy()
                     ));
@@ -238,7 +238,7 @@ pub fn on_start(libloading: &libloading::Library, site_struct: &sharedtypes::Glo
     let temp: libloading::Symbol<unsafe extern "C" fn(&sharedtypes::GlobalPluginScraper)> =
         match unsafe { libloading.get(b"on_start\0") } {
             Err(_) => {
-                logging::error_log_silent(&format!(
+                logging::error_log_silent(format!(
                     "Cannot run on_start for name: {}",
                     site_struct.name
                 ));
@@ -247,7 +247,7 @@ pub fn on_start(libloading: &libloading::Library, site_struct: &sharedtypes::Glo
             Ok(lib) => lib,
         };
 
-    logging::log(&format!(
+    logging::log(format!(
         "Running on_start call for name: {}",
         site_struct.name
     ));
@@ -266,7 +266,7 @@ pub fn db_upgrade_call(
     let temp: libloading::Symbol<unsafe extern "C" fn(&usize, &sharedtypes::GlobalPluginScraper)> =
         match unsafe { libloading.get(b"db_upgrade_call\0") } {
             Err(err) => {
-                logging::error_log(&format!(
+                logging::error_log(format!(
                     "Could not run scraper upgrade for db version {} because of {}.",
                     db_version, err
                 ));
@@ -430,7 +430,7 @@ enum LoadableType {
 
 impl GlobalLoad {
     pub fn new(db: Arc<RwLock<database::Main>>, jobs: Arc<RwLock<Jobs>>) -> Arc<RwLock<Self>> {
-        logging::log(&"Starting IPC Server.".to_string());
+        logging::log("Starting IPC Server.".to_string());
 
         Arc::new(RwLock::new(GlobalLoad {
             db,
@@ -462,7 +462,7 @@ impl GlobalLoad {
                 match libloading::Library::new(lib_path) {
                     Ok(good_lib) => lib = good_lib,
                     Err(_) => {
-                        logging::error_log(&format!(
+                        logging::error_log(format!(
                             "Cannot load library at path: {}",
                             lib_path.to_string_lossy()
                         ));
@@ -636,7 +636,7 @@ impl GlobalLoad {
             > = match liba.get(b"on_regex_match") {
                 Ok(good) => good,
                 Err(_) => {
-                    logging::error_log_silent(&format!(
+                    logging::error_log_silent(format!(
                         "Could not find function on_regex_match for plugin: {}",
                         scraper.name
                     ));
@@ -829,8 +829,8 @@ impl GlobalLoad {
             match ipc_coms.spawn_listener() {
                 Ok(out) => out,
                 Err(err) => {
-                    logging::error_log(&format!("ERROR: {:?}", err));
-                    logging::panic_log(&"Failed to spawn IPC Server".to_string());
+                    logging::error_log(format!("ERROR: {:?}", err));
+                    logging::panic_log("Failed to spawn IPC Server".to_string());
                 }
             }
         });
@@ -1043,7 +1043,7 @@ impl GlobalLoad {
         for (callback, list) in self.callback.iter() {
             if let sharedtypes::GlobalCallbacks::Start(thread_type) = callback {
                 for to_run in list {
-                    logging::log(&format!("Starting Call Start for: {}", &to_run.name));
+                    logging::log(format!("Starting Call Start for: {}", &to_run.name));
                     let file = self.library_path.get(to_run).unwrap().clone();
                     match thread_type {
                         sharedtypes::StartupThreadType::Spawn => {
@@ -1180,7 +1180,7 @@ impl GlobalLoad {
     fn parse_lib(&mut self, lib: Library, path: &Path, unwrappy: &mut database::Main) {
         if let Some(items) = self.get_info(&lib, path) {
             if items.is_empty() {
-                logging::error_log(&format!(
+                logging::error_log(format!(
                     "Was unable to pull any sites from: {}",
                     path.to_string_lossy()
                 ));
@@ -1189,7 +1189,7 @@ impl GlobalLoad {
             for global in items {
                 match global.storage_type {
                     None => {
-                        logging::error_log(&format!(
+                        logging::error_log(format!(
                             "Skipping parsing of name: {} due to storage_type not being set.From {}",
                             global.name,
                             path.to_string_lossy()
@@ -1248,7 +1248,7 @@ impl GlobalLoad {
                                     if let Ok(regex) = regex {
                                         (None, Some(sharedtypes::RegexStorage(regex)))
                                     } else {
-                                        logging::error_log(&format!(
+                                        logging::error_log(format!(
                                             "Cannot load the regex from plugin: {} at path: {}",
                                             &global.name,
                                             path.to_string_lossy()
@@ -1294,7 +1294,7 @@ impl GlobalLoad {
         lib: &Library,
         path: &Path,
     ) -> Option<Vec<sharedtypes::GlobalPluginScraper>> {
-        logging::log(&format!(
+        logging::log(format!(
             "Trying to load library at path: {}",
             path.to_string_lossy()
         ));
@@ -1302,7 +1302,7 @@ impl GlobalLoad {
             unsafe extern "C" fn() -> Vec<sharedtypes::GlobalPluginScraper>,
         > = match unsafe { lib.get(b"get_global_info\0") } {
             Err(_) => {
-                logging::error_log_silent(&format!(
+                logging::error_log_silent(format!(
                     "Could not run global info pull for lib. {}",
                     path.to_string_lossy()
                 ));
@@ -1322,7 +1322,7 @@ impl GlobalLoad {
             match path_check {
                 Ok(_) => (),
                 Err(_) => {
-                    logging::error_log(&format!(
+                    logging::error_log(format!(
                         "CANNOT CREATE FOLDER: {:?} DUE TO PERMISSIONS. STOPPING SEARCH",
                         folder.to_str()
                     ));
@@ -1331,7 +1331,7 @@ impl GlobalLoad {
             }
         }
         if folder.is_file() {
-            logging::error_log(&format!(
+            logging::error_log(format!(
                 "THIS IS A FILE DUM DUM. PATH: {:?}.... STOPPING SEARCH",
                 folder.to_str()
             ));

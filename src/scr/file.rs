@@ -30,8 +30,8 @@ pub fn remove_file(input: String) -> std::io::Result<()> {
 /// Make Folder
 pub fn folder_make(location: &String) {
     if let Err(err) = std::fs::create_dir_all(location) {
-        logging::error_log(&format!("Failed to make folder at path: {}", location));
-        logging::error_log(&format!("folder_make: err {}", err));
+        logging::error_log(format!("Failed to make folder at path: {}", location));
+        logging::error_log(format!("folder_make: err {}", err));
     }
 }
 
@@ -71,7 +71,7 @@ pub fn parse_file(
     );
     match sha512hash {
         Err(err) => {
-            logging::error_log(&format!(
+            logging::error_log(format!(
                 "Cannot parse file: {} due to error: {:?}",
                 file_location.display(),
                 err
@@ -242,7 +242,7 @@ pub fn parse_sidecar(file_location: &Path, sidecar_location: &Path, db: Arc<RwLo
     );
     match sha512hash {
         Err(err) => {
-            logging::error_log(&format!(
+            logging::error_log(format!(
                 "Cannot parse file: {} due to error: {:?}",
                 file_location.display(),
                 err

@@ -221,7 +221,7 @@ another process and try again.",
                 Ok(out) => out,
                 Err(err) => {
                     dbg!(&err);
-                    logging::error_log(&err.to_string());
+                    logging::error_log(err.to_string());
                     return Ok(());
                 }
             };

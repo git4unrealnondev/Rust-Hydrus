@@ -164,7 +164,7 @@ impl Main {
         } else {
             // Database does exist.
             main.transaction_start();
-            logging::log(&format!(
+            logging::log(format!(
                 "Database Exists: {} : Skipping creation.",
                 first_time_load_flag
             ));
@@ -280,7 +280,7 @@ impl Main {
                                 ))
                                 .join(Path::new(&cleaned_filename));
 
-                                logging::error_log(&format!(
+                                logging::error_log(format!(
                                     "While checking file paths I found a file path that had the wrong name / extension. {} Moving to: {}",
                                     &entry.path().display(),
                                     test_path.as_path().display()
@@ -294,7 +294,7 @@ impl Main {
                                 );
                                 std::fs::rename(entry.path(), test_path).unwrap();
                             } else {
-                                logging::error_log(&format!(
+                                logging::error_log(format!(
                                     "While checking file paths I found a file path that shouldn't exist. {} Moving to: {}",
                                     &entry.path().display(),
                                     file_dump_path.display()
@@ -327,7 +327,7 @@ impl Main {
                             .join(Path::new(&cleaned_filename));
 
                             if entry.path() != test_path {
-                                logging::error_log(&format!(
+                                logging::error_log(format!(
                                     "While checking file paths I found a file path that is incorrect. {} Moving to: {}",
                                     &entry.path().display(),
                                     test_path.as_path().display()
@@ -484,7 +484,7 @@ impl Main {
                 } else if cfg!(windows) {
                     out = format!("{}\\{}", folderloc, file.hash);
                 } else {
-                    logging::error_log(&"UNSUPPORTED OS FOR GETFILE CALLING.".to_string());
+                    logging::error_log("UNSUPPORTED OS FOR GETFILE CALLING.".to_string());
                     return None;
                 }
 
@@ -1172,7 +1172,7 @@ impl Main {
 
     /// Sets DB Version
     fn db_version_set(&mut self, version: usize) {
-        logging::log(&format!("Setting DB Version to: {}", &version));
+        logging::log(format!("Setting DB Version to: {}", &version));
         self._active_vers = version;
         self.setting_add(
             "VERSION".to_string(),
@@ -1235,7 +1235,7 @@ impl Main {
                 g1.push(izce)
             }
             logging::panic_log(
-                &"check_version: Could not load DB properly PANICING!!!".to_string(),
+                "check_version: Could not load DB properly PANICING!!!".to_string(),
             );
         }
         let mut db_vers = g1[0] as usize;
@@ -2361,7 +2361,7 @@ impl Main {
         };
         let commit_storage = self.halt_commit();
 
-        logging::log(&format!("Moving tagid: {} to {}", old_tag_id, new_tag_id));
+        logging::log(format!("Moving tagid: {} to {}", old_tag_id, new_tag_id));
         self.parents_migration(old_tag_id, new_tag_id);
         self.migrate_relationship_tag(old_tag_id, new_tag_id);
         self.tag_remove(old_tag_id);
@@ -2382,7 +2382,7 @@ impl Main {
         // Gets list of fileids from internal db.
 
         for _fileids in relationships.iter() {
-            logging::log(&format!(
+            logging::log(format!(
                 "Found {} relationships's effected for tagid: {}.",
                 relationships.len(),
                 tag_id
@@ -2390,18 +2390,18 @@ impl Main {
 
             // let mut sql = String::new();
             for file_id in relationships.clone() {
-                logging::log(&format!(
+                logging::log(format!(
                     "Removing file: {} tagid: {} from db.",
                     file_id, tag_id
                 ));
 
-                logging::log(&"Removing relationship sql".to_string());
+                logging::log("Removing relationship sql".to_string());
 
                 self.relationship_remove(&file_id, tag_id);
             }
 
             // self._conn.lock().unwrap().execute_batch(&sql).unwrap();
-            logging::log(&"Relationship Loop".to_string());
+            logging::log("Relationship Loop".to_string());
             // self.transaction_flush();
             self.db_commit_man();
         }
@@ -2413,7 +2413,7 @@ impl Main {
     fn parents_migration(&mut self, old_tag_id: &usize, new_tag_id: &usize) {
         // Removes parent by ID and readds it with the new id
         for parent in self.parents_tagid_remove(old_tag_id) {
-            logging::log(&format!(
+            logging::log(format!(
                 "T Deleting parent: {} {} {:?}  replacing with {} {} {:?}",
                 parent.tag_id,
                 parent.relate_tag_id,
@@ -2432,7 +2432,7 @@ impl Main {
 
         // Removes parent by ID and readds it with the new id
         for parent in self.parents_reltagid_remove(old_tag_id) {
-            logging::log(&format!(
+            logging::log(format!(
                 "R Deleting parent: {} {} {:?}  replacing with {} {} {:?}",
                 parent.tag_id,
                 parent.relate_tag_id,
@@ -2451,7 +2451,7 @@ impl Main {
         // Kinda hacky but nothing bad will happen if we have nothing in the limit
         // slot
         for parent in self.parents_limitto_remove(Some(*old_tag_id)) {
-            logging::log(&format!(
+            logging::log(format!(
                 "L Deleting parent: {} {} {:?}  replacing with {} {} {:?}",
                 parent.tag_id,
                 parent.relate_tag_id,

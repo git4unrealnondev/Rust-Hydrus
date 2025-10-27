@@ -61,7 +61,7 @@ pub fn ratelimiter_create(
                 return ratelimiter;
             }
             Err(err) => {
-                logging::error_log(&format!("Failed to make ratelimiter with err: {:?}", err));
+                logging::error_log(format!("Failed to make ratelimiter with err: {:?}", err));
                 std::thread::sleep(Duration::from_millis(100));
             }
         }
@@ -184,7 +184,7 @@ pub async fn dltext_new(
         let url = match Url::parse(url_string) {
             Ok(out) => out,
             Err(err) => {
-                logging::error_log(&format!(
+                logging::error_log(format!(
                     "Failed to parse URL: {} with error {:?}",
                     url_string, err
                 ));
@@ -395,7 +395,7 @@ pub fn dlfile_new(
         {
             match globalload::download_from(file, globalload.clone(), scraper) {
                 None => {
-                    logging::log(&format!("Could not pull info for file {:?}", &file));
+                    logging::log(format!("Could not pull info for file {:?}", &file));
                 }
                 Some(filebytes) => {
                     bytes = Some(Bytes::from(filebytes));
@@ -598,7 +598,7 @@ pub fn write_to_disk(
         match std::fs::create_dir_all(&local_location) {
             Ok(_) => {}
             Err(err) => {
-                logging::error_log(&format!("{} {}", sha512hash_str, err));
+                logging::error_log(format!("{} {}", sha512hash_str, err));
             }
         }
 

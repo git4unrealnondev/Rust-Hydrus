@@ -604,7 +604,7 @@ pub fn main(data: Arc<RwLock<database::Main>>, globalload: Arc<RwLock<GlobalLoad
                                     &sharedtypes::HashesSupported::Sha512(file.hash.clone()),
                                 );
                                 if !hinfo.1 {
-                                    logging::error_log(&format!(
+                                    logging::error_log(format!(
                                         "BAD HASH: ID: {}  HASH: {}   2ND HASH: {}",
                                         &file.id, &file.hash, hinfo.0
                                     ));
