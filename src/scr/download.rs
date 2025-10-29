@@ -1,6 +1,7 @@
 use crate::database::Main;
 use crate::globalload;
 use crate::globalload::GlobalLoad;
+use crate::logging::error_log;
 
 // extern crate urlparse;
 use super::sharedtypes;
@@ -209,8 +210,16 @@ pub async fn dltext_new(
 
         // let test = reqwest::get(url).await.unwrap().text(); let futurez =
         // futures::executor::block_on(futureresult); dbg!(&futureresult);
-        if cnt == 3 {
-            return Err(Box::new(futureresult.err().unwrap()));
+        if cnt >= 3 && futureresult.is_err() {
+            if let Some(out) = futureresult.err() {
+                return Err(Box::new(out));
+            } else {
+                // Better error parsing
+                error_log(format!(
+                    "While parsing text for {url_string} we had a goofy error: We had an error with type: None",
+                ));
+                return Err(Box::new(url::ParseError::Overflow));
+            }
         }
         cnt += 1;
         match futureresult {

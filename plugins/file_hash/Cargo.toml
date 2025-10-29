@@ -46,3 +46,9 @@ codegenunits=1
 strip = true
 debug = false
 panic = "abort"
+
+[profile.release-with-debug]
+inherits = "release"
+debug = true
+strip = false
+
