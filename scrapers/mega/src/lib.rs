@@ -131,7 +131,7 @@ fn find_sub_dirs_and_files(
     client: &mega::Client,
     flag: &mut Vec<sharedtypes::Flags>,
     cnt: &mut i32,
-    mod_time: Option<sharedtypes::Tag>,
+    mod_time: sharedtypes::Tag,
 ) -> Vec<MegaDirOrFile> {
     let out = Arc::new(Mutex::new(Vec::new()));
     let file_arc = Arc::new(Mutex::new(HashSet::new()));
@@ -145,14 +145,39 @@ fn find_sub_dirs_and_files(
         if let Some(node) = parent_node.get_node_by_handle(child) {
             match node.kind() {
                 mega::NodeKind::File => {
-                    if let Some(namespace_id) = client::namespace_get("Mega_Handle".into()) {
-                        let mut fpath = parent
-                            .parent
-                            .iter()
-                            .map(|i| format!("/{}", i))
-                            .collect::<String>();
-                        fpath += &format!("/{}", node.name());
+                    let mut fpath = parent
+                        .parent
+                        .iter()
+                        .map(|i| format!("/{}", i))
+                        .collect::<String>();
+                    fpath += &format!("/{}", node.name());
 
+                    let sub_link = sharedtypes::SubTag {
+                        namespace: sharedtypes::GenericNamespaceObj {
+                            name: "Mega_Name".into(),
+                            description: Some("A filepath inside a Mega archive".into()),
+                        },
+                        tag: fpath.clone(),
+                        tag_type: sharedtypes::TagType::Normal,
+                        limit_to: Some(mod_time.clone()),
+                    };
+
+                    let tags = vec![sharedtypes::TagObject {
+                        tag: node.handle().into(),
+                        tag_type: sharedtypes::TagType::Normal,
+                        relates_to: Some(sub_link),
+                        namespace: sharedtypes::GenericNamespaceObj {
+                            name: "Mega_Handle".into(),
+                            description: Some(
+                                "A individual handle that links a file to a dir in mega".into(),
+                            ),
+                        },
+                    }];
+                    for tag in tags {
+                        tag_arc.lock().unwrap().insert(tag);
+                    }
+
+                    if let Some(namespace_id) = client::namespace_get("Mega_Handle".into()) {
                         let mut search = true;
                         if let Some(tid) = client::tag_get_name(node.handle().into(), namespace_id)
                             && !client::relationship_get_fileid(tid).is_empty()
@@ -188,6 +213,7 @@ fn find_sub_dirs_and_files(
                                 url_input,
                                 node,
                                 &fpath,
+                                mod_time.clone(),
                             );
                             client::log(format!("MEGA - Downloaded: {}", &fpath));
                             /*out.lock().unwrap().push(MegaDirOrFile::File(MegaFile {
@@ -201,41 +227,6 @@ fn find_sub_dirs_and_files(
                             }
                             *cnt += 1;*/
                         } else {
-                            let subtag = sharedtypes::SubTag {
-                                namespace: sharedtypes::GenericNamespaceObj {
-                                    name: "Mega_Source".into(),
-                                    description: Some("A mega link.".into()),
-                                },
-                                tag: url_input.into(),
-                                limit_to: mod_time.clone(),
-                                tag_type: sharedtypes::TagType::Normal,
-                            };
-
-                            let tags = vec![
-            sharedtypes::TagObject {
-                tag: node.handle().into(),
-                tag_type: sharedtypes::TagType::Normal,
-                relates_to: Some(subtag.clone()),
-                namespace: sharedtypes::GenericNamespaceObj {
-                    name: "Mega_Handle".into(),
-                    description: Some(
-                        "A individual handle that links a file to a dir in mega".into(),
-                    ),
-                },
-            },
-            sharedtypes::TagObject {
-                tag: fpath,
-                tag_type: sharedtypes::TagType::Normal,
-                relates_to: Some(subtag),
-                namespace: sharedtypes::GenericNamespaceObj {
-                    name: "Mega_Name".into(),
-                    description: Some("A filepath inside a Mega archive".into()),
-                },
-            },
-        ];
-                            for tag in tags {
-                                tag_arc.lock().unwrap().insert(tag);
-                            }
                         }
                     }
                 }
@@ -376,7 +367,8 @@ pub fn text_scraping(
 
     if let Ok(ref nodes) = nref {
         client::log("Got proper logs for the url".to_string());
-        let mod_time = get_last_modification_time(nodes).map(|time| sharedtypes::Tag {
+
+        let modtime = get_last_modification_time(nodes).map(|time| sharedtypes::Tag {
             tag: time.timestamp_millis().to_string(),
             namespace: sharedtypes::GenericNamespaceObj {
                 name: "Mega_Last_Modified".to_string(),
@@ -388,6 +380,46 @@ pub fn text_scraping(
         });
 
         for root in nodes.roots() {
+            // Inserts a master link between the timestamp and the archive
+            let joined_url_time;
+            if let Some(ref mod_time) = modtime {
+                let time = mod_time.tag.clone();
+                joined_url_time = sharedtypes::Tag {
+                    tag: format!("{}:{}", time, url_input),
+                    namespace: sharedtypes::GenericNamespaceObj {
+                        name: "Mega_Timestamp_Url".to_string(),
+                        description: Some(
+                            "A Unique linkage that ties a modification timestamp to a url."
+                                .to_string(),
+                        ),
+                    },
+                };
+
+                let subtag = sharedtypes::SubTag {
+                    namespace: sharedtypes::GenericNamespaceObj {
+                        name: "Mega_Source".into(),
+                        description: Some("A mega link.".into()),
+                    },
+                    tag: url_input.into(),
+                    limit_to: Some(joined_url_time.clone()),
+                    tag_type: sharedtypes::TagType::Normal,
+                };
+
+                tag.insert(sharedtypes::TagObject {
+                    tag: time,
+                    tag_type: sharedtypes::TagType::Normal,
+                    relates_to: Some(subtag.clone()),
+                    namespace: sharedtypes::GenericNamespaceObj {
+                        name: "Mega_Timestamp".into(),
+                        description: Some(
+                            "A unique tmestamp that represents the last time a folder was edited in mega.".into(),
+                        ),
+                    },
+                });
+            } else {
+                return Err(sharedtypes::ScraperReturn::Nothing);
+            }
+
             let rootnew = MegaDir {
                 //        name: root.name().into(),
                 parent: vec![root.name().into()],
@@ -412,7 +444,7 @@ pub fn text_scraping(
                     &client,
                     &mut flag,
                     &mut cnt,
-                    mod_time.clone(),
+                    joined_url_time.clone(),
                 ) {
                     let MegaDirOrFile::Dir(ref dir) = item;
                     rootloop.push(dir.clone());
@@ -430,38 +462,27 @@ pub fn text_scraping(
                 //    file_handle: root.handle().into(),
                 //};
 
-                let subtag = sharedtypes::SubTag {
+                let sub_link = sharedtypes::SubTag {
                     namespace: sharedtypes::GenericNamespaceObj {
-                        name: "Mega_Source".into(),
-                        description: Some("A mega link.".into()),
+                        name: "Mega_Name".into(),
+                        description: Some("A filepath inside a Mega archive".into()),
                     },
-                    tag: url_input.into(),
-                    limit_to: mod_time.clone(),
+                    tag: root.name().into(),
                     tag_type: sharedtypes::TagType::Normal,
+                    limit_to: Some(joined_url_time.clone()),
                 };
 
-                let tagz = vec![
-                    sharedtypes::TagObject {
-                        tag: root.handle().into(),
-                        tag_type: sharedtypes::TagType::Normal,
-                        relates_to: Some(subtag.clone()),
-                        namespace: sharedtypes::GenericNamespaceObj {
-                            name: "Mega_Handle".into(),
-                            description: Some(
-                                "A individual handle that links a file to a dir in mega".into(),
-                            ),
-                        },
+                let tags = vec![sharedtypes::TagObject {
+                    tag: root.handle().into(),
+                    tag_type: sharedtypes::TagType::Normal,
+                    relates_to: Some(sub_link),
+                    namespace: sharedtypes::GenericNamespaceObj {
+                        name: "Mega_Handle".into(),
+                        description: Some(
+                            "A individual handle that links a file to a dir in mega".into(),
+                        ),
                     },
-                    sharedtypes::TagObject {
-                        tag: root.name().into(),
-                        tag_type: sharedtypes::TagType::Normal,
-                        relates_to: Some(subtag),
-                        namespace: sharedtypes::GenericNamespaceObj {
-                            name: "Mega_Name".into(),
-                            description: Some("A filepath inside a Mega archive".into()),
-                        },
-                    },
-                ];
+                }];
 
                 // Weird workaround for if its your first time running this garbage
                 if client::namespace_get("Mega_Handle".into()).is_none() {
@@ -500,7 +521,7 @@ pub fn text_scraping(
 
                         //fileordir.push(MegaDirOrFile::File(megafile));
                     } else {
-                        for tags in tagz {
+                        for tags in tags {
                             tag.insert(tags);
                         }
                     }
@@ -524,28 +545,11 @@ fn download_file(
     url_input: &str,
     node: &Node,
     localpath: &String,
+    mod_time: sharedtypes::Tag,
 ) {
     // Ghetto way to pre-filter if we've already downloaded a file
     if let Some(namespace_id) = client::namespace_get("Mega_Handle".into()) {
-        let limit_tag = sharedtypes::Tag {
-            tag: url_input.into(),
-            namespace: sharedtypes::GenericNamespaceObj {
-                name: "Mega_Source".into(),
-                description: Some("A mega link.".into()),
-            },
-        };
-
-        let subtag = sharedtypes::SubTag {
-            namespace: sharedtypes::GenericNamespaceObj {
-                name: "Mega_Handle".into(),
-                description: Some("A individual handle that links a file to a dir in mega".into()),
-            },
-            tag: node.handle().into(),
-            limit_to: Some(limit_tag),
-            tag_type: sharedtypes::TagType::Normal,
-        };
-
-        let mut tags = vec![sharedtypes::TagObject {
+        let tags = vec![sharedtypes::TagObject {
             tag: node.handle().into(),
             tag_type: sharedtypes::TagType::Normal,
             relates_to: None,
@@ -555,11 +559,14 @@ fn download_file(
             },
         }];
 
+        let mut err_num = 0;
+
         if client::tag_get_name(node.handle().into(), namespace_id).is_none() {
             let mut temp = Vec::new();
-            loop {
+            'errloop: loop {
                 match task::block_on(client.download_node(node, &mut temp)) {
                     Ok(_) => {
+                        err_num = 0;
                         file_list.lock().unwrap().insert(sharedtypes::FileObject {
                             source: Some(sharedtypes::FileSource::Bytes(temp)),
                             hash: sharedtypes::HashesSupported::None,
@@ -578,23 +585,13 @@ fn download_file(
                         break;
                     }
                     Err(err) => {
+                        err_num += 1;
                         dbg!("Got ERROR", err);
+                        if err_num == 3 {
+                            break 'errloop;
+                        }
                     }
                 };
-            }
-        } else {
-            tags.push(sharedtypes::TagObject {
-                tag: localpath.into(),
-                tag_type: sharedtypes::TagType::Normal,
-                relates_to: Some(subtag),
-                namespace: sharedtypes::GenericNamespaceObj {
-                    name: "Mega_Name".into(),
-                    description: Some("A filepath inside a Mega archive".into()),
-                },
-            });
-
-            for tag in tags {
-                tag_list.lock().unwrap().insert(tag);
             }
         }
     }
