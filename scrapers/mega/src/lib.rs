@@ -1,4 +1,7 @@
 use async_std::task;
+use sysinfo::{MemoryRefreshKind, System};
+
+use chrono::{DateTime, Utc};
 use mega::{Node, Nodes};
 use regex::Regex;
 use reqwest_middleware::ClientBuilder;
@@ -100,6 +103,22 @@ pub fn url_dump(
     out
 }
 
+fn get_last_modification_time(nodes: &Nodes) -> Option<DateTime<Utc>> {
+    let mut out = None;
+
+    for node in nodes.iter() {
+        if node.created_at() > out {
+            out = node.created_at();
+        } else if node.modified_at() > out {
+            out = node.modified_at()
+        }
+    }
+
+    dbg!(&out);
+
+    out
+}
+
 ///
 /// Filters out the dirs and files from a node
 ///
@@ -112,12 +131,14 @@ fn find_sub_dirs_and_files(
     client: &mega::Client,
     flag: &mut Vec<sharedtypes::Flags>,
     cnt: &mut i32,
+    mod_time: Option<sharedtypes::Tag>,
 ) -> Vec<MegaDirOrFile> {
     let out = Arc::new(Mutex::new(Vec::new()));
     let file_arc = Arc::new(Mutex::new(HashSet::new()));
     let tag_arc = Arc::new(Mutex::new(HashSet::new()));
 
-    let stop = 10;
+    // Needed to get memory from system
+    let mut sys = System::new_all();
 
     //parent.children.iter().for_each(|child| {
     for child in parent.children.iter() {
@@ -144,6 +165,22 @@ fn find_sub_dirs_and_files(
                         {
                             client::log(format!("MEGA - Downloading: {}", &fpath));
 
+                            sys.refresh_memory_specifics(MemoryRefreshKind::everything());
+
+                            // Check if a files size is greatet then amount of availble system memory.
+                            // Want to leave 1/2 of memory available because I dont want to estop
+                            // the system.
+                            // The node size is in bytes but the sys used memory is in kb.
+
+                            if node.size() * 1000 > sys.used_memory() / 2 {
+                                flag.push(sharedtypes::Flags::Redo);
+                                client::log(format!(
+                                    "Stopping due to Memory being too much: {}",
+                                    cnt
+                                ));
+                                break;
+                            }
+
                             download_file(
                                 client,
                                 file_arc.clone(),
@@ -157,12 +194,12 @@ fn find_sub_dirs_and_files(
                                 file_path: fpath,
                                 file_handle: node.handle().to_string(),
                             }));*/
-                            if *cnt >= stop {
+                            /* if *cnt >= stop {
                                 flag.push(sharedtypes::Flags::Redo);
                                 client::log(format!("Stopping due to cnt: {}", cnt));
                                 break;
                             }
-                            *cnt += 1;
+                            *cnt += 1;*/
                         } else {
                             let subtag = sharedtypes::SubTag {
                                 namespace: sharedtypes::GenericNamespaceObj {
@@ -170,7 +207,7 @@ fn find_sub_dirs_and_files(
                                     description: Some("A mega link.".into()),
                                 },
                                 tag: url_input.into(),
-                                limit_to: None,
+                                limit_to: mod_time.clone(),
                                 tag_type: sharedtypes::TagType::Normal,
                             };
 
@@ -279,45 +316,49 @@ pub fn text_scraping(
 
     client::log("Starting pool init".to_string());
 
-    let config = ProxyPoolConfig::builder()
-        // free socks5 proxy urls, format like `Free-Proxy`
-        .sources(vec![
-            ProxySource::Proxy("socks5://192.241.156.17:1080".to_string()),
-            ProxySource::Proxy("socks5://134.199.159.23:1080".to_string()),
-            ProxySource::Proxy("socks5://142.54.226.214:4145".to_string()),
-            ProxySource::Proxy("socks5://184.178.172.28:15294".to_string()),
-            ProxySource::Proxy("socks5://184.178.172.13:15311".to_string()),
-            ProxySource::Proxy("socks5://98.188.47.132:4145".to_string()),
-            ProxySource::Proxy("socks5://192.169.140.98:45739".to_string()),
-            ProxySource::Proxy("socks5://8.218.217.168:1100".to_string()),
-            ProxySource::Proxy("socks5://47.250.157.116:1100".to_string()),
-            ProxySource::Proxy("socks5://68.191.23.134:9200".to_string()),
-            ProxySource::Proxy("socks5://8.219.119.119:1024".to_string()),
-            ProxySource::Proxy("socks5://94.254.244.251:8192".to_string()),
-            //ProxySource::Proxy("socks5://:".to_string()),
-        ])
-        .health_check_timeout(Duration::from_secs(10))
-        .retry_count(2)
-        .selection_strategy(ProxySelectionStrategy::FastestResponse)
-        // rate limit for each proxy, lower performance but avoid banned
-        .max_requests_per_second(3.0)
-        .build();
+    /* let config = ProxyPoolConfig::builder()
+            // free socks5 proxy urls, format like `Free-Proxy`
+            .sources(
+                /*vec![
+                    ProxySource::Proxy("socks5://192.241.156.17:1080".to_string()),
+                    ProxySource::Proxy("socks5://134.199.159.23:1080".to_string()),
+                    ProxySource::Proxy("socks5://142.54.226.214:4145".to_string()),
+                    ProxySource::Proxy("socks5://184.178.172.28:15294".to_string()),
+                    ProxySource::Proxy("socks5://184.178.172.13:15311".to_string()),
+                    ProxySource::Proxy("socks5://98.188.47.132:4145".to_string()),
+                    ProxySource::Proxy("socks5://192.169.140.98:45739".to_string()),
+                    ProxySource::Proxy("socks5://8.218.217.168:1100".to_string()),
+                    ProxySource::Proxy("socks5://47.250.157.116:1100".to_string()),
+                    ProxySource::Proxy("socks5://68.191.23.134:9200".to_string()),
+                    ProxySource::Proxy("socks5://8.219.119.119:1024".to_string()),
+                    ProxySource::Proxy("socks5://94.254.244.251:8192".to_string()),
+                    //ProxySource::Proxy("socks5://:".to_string()),
+                ]*/
+            )
+            .health_check_timeout(Duration::from_secs(10))
+            .retry_count(2)
+            .selection_strategy(ProxySelectionStrategy::FastestResponse)
+            // rate limit for each proxy, lower performance but avoid banned
+            .max_requests_per_second(3.0)
+            .build();
 
-    let proxy_pool = task::block_on(ProxyPoolMiddleware::new(config)).unwrap();
-
+        let proxy_pool = task::block_on(ProxyPoolMiddleware::new(config)).unwrap();
+    */
     let cli = reqwest::Client::builder()
         .timeout(Duration::from_secs(120))
         .build()
         .unwrap();
 
     let http_client = ClientBuilder::new(cli)
-        //.proxy(Proxy::http("socks5://143.110.217.153:1080").unwrap())
-        .with(proxy_pool)
+        //.with(proxy_pool)
         .build();
 
     //let http_client = Client::builder().proxy().build().unwrap()
 
-    let client = mega::Client::builder().build(http_client).unwrap();
+    let client = mega::Client::builder()
+        .timeout(Some(Duration::from_secs(240)))
+        .build(http_client)
+        .unwrap();
 
     let nodes = client.fetch_public_nodes(url_input);
 
@@ -332,7 +373,20 @@ pub fn text_scraping(
     client::log(format!("Starting processing for {}", url_input));
 
     let nref = task::block_on(nodes);
-    if let Ok(nodes) = nref {
+
+    if let Ok(ref nodes) = nref {
+        client::log("Got proper logs for the url".to_string());
+        let mod_time = get_last_modification_time(nodes).map(|time| sharedtypes::Tag {
+            tag: time.timestamp_millis().to_string(),
+            namespace: sharedtypes::GenericNamespaceObj {
+                name: "Mega_Last_Modified".to_string(),
+                description: Some(
+                    "The last time a file was editied or modified inside of a mega folder."
+                        .to_string(),
+                ),
+            },
+        });
+
         for root in nodes.roots() {
             let rootnew = MegaDir {
                 //        name: root.name().into(),
@@ -350,7 +404,15 @@ pub fn text_scraping(
                 let rootnew = rootloop.pop().unwrap();
 
                 for item in find_sub_dirs_and_files(
-                    &nodes, &rootnew, &mut file, &mut tag, url_input, &client, &mut flag, &mut cnt,
+                    nodes,
+                    &rootnew,
+                    &mut file,
+                    &mut tag,
+                    url_input,
+                    &client,
+                    &mut flag,
+                    &mut cnt,
+                    mod_time.clone(),
                 ) {
                     let MegaDirOrFile::Dir(ref dir) = item;
                     rootloop.push(dir.clone());
@@ -374,7 +436,7 @@ pub fn text_scraping(
                         description: Some("A mega link.".into()),
                     },
                     tag: url_input.into(),
-                    limit_to: None,
+                    limit_to: mod_time.clone(),
                     tag_type: sharedtypes::TagType::Normal,
                 };
 
@@ -445,6 +507,9 @@ pub fn text_scraping(
                 }
             }
         }
+    }
+    if let Err(err) = nref {
+        dbg!(&err);
     }
     for file in file.iter() {
         dbg!(&file.tag_list);

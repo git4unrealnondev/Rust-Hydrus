@@ -14,6 +14,8 @@ async-std = { version = "1", features = ["attributes", "tokio1"] }
 rayon = "1.11.0"
 reqwest-proxy-pool = {path = "./reqwest-proxy-pool"}
 reqwest-middleware = "0.4.2"
+chrono = "0.4.42"
+sysinfo = "0.37.2"
 
 [profile.release-with-debug]
 inherits = "release"

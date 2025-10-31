@@ -440,10 +440,7 @@ Worker: {id} JobId: {} -- While trying to parse parameters we got this error: {:
                                         Err(ScraperReturn::Stop(stop)) => {
                                             // let temp = scraper_data.clone().job;
                                             // job_params.lock().unwrap().remove(&scraper_data);
-                                            logging::error_log(format!(
-                                                "Stopping job: {:?}",
-                                                stop
-                                            ));
+                                            logging::error_log(format!("Stopping job: {:?}", stop));
                                             continue;
                                         }
                                         Err(ScraperReturn::Timeout(time)) => {
@@ -958,7 +955,7 @@ pub fn main_file_loop(
                         let file_id;
                         {
                             // We've already got a valid relationship
-                            let unwrappydb = &mut db.read().unwrap();
+                            let unwrappydb = db.read().unwrap();
                             file_id = unwrappydb.relationship_get_one_fileid(&url_id);
                             /*if let Some(fid) = file_id {
                                 unwrappydb.file_get_id(&fid).unwrap();

@@ -136,9 +136,8 @@ impl Main {
             sharedtypes::EnclaveAction::PutAtDefault => {
                 let download_location = self.location_get();
                 logging::log(format!(
-                    "Enclave FileHash {}: {}",
-                    &sha512hash,
-                    format!("Putting at Default location {}", &download_location)
+                    "Enclave FileHash {} Putting at Default location {}",
+                    &sha512hash, &download_location
                 ));
                 let _ = self.download_and_do_parsing(
                     bytes,
@@ -203,8 +202,6 @@ impl Main {
         download_location: &String,
         file: &mut sharedtypes::FileObject,
     ) -> usize {
-        //let loc = self.location_get();
-
         self.storage_put(download_location);
 
         // error checking. We should have all dirs needed but hey if we're missing
@@ -218,10 +215,8 @@ impl Main {
         let download_loc = std::path::Path::new(&download_location)
             .canonicalize()
             .unwrap();
-        //dbg!(&download_loc, &download_loc.file_name());
 
         download::write_to_disk(download_loc, bytes, sha512hash);
-        //download::write_to_disk(download_loc, file, bytes, sha512hash);
 
         let storage_id = self.storage_get_id(download_location).unwrap();
 

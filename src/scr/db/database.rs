@@ -252,64 +252,18 @@ impl Main {
         for db_path in db_paths.iter() {
             for entry in walkdir::WalkDir::new(db_path).into_iter().flatten() {
                 if entry.path().is_file()
-                    && let Some(filename) = entry.path().file_name() {
-                        if self
-                            .file_get_hash(&filename.to_string_lossy().to_string())
-                            .is_none()
-                        {
-                            let (hash, _) = hash_file(
-                                &entry.path().to_string_lossy().to_string(),
-                                &sharedtypes::HashesSupported::Sha512("".to_string()),
-                            )
-                            .unwrap();
-                            if self.file_get_hash(&hash).is_some() {
-                                let mut cleaned_filepath = entry.path().to_path_buf();
-                                cleaned_filepath.set_extension("");
-
-                                let cleaned_filename =
-                                    cleaned_filepath.as_path().file_name().unwrap();
-
-                                let test_path = Path::new(&getfinpath(
-                                    db_path,
-                                    &entry
-                                        .path()
-                                        .file_name()
-                                        .unwrap()
-                                        .to_string_lossy()
-                                        .to_string(),
-                                ))
-                                .join(Path::new(&cleaned_filename));
-
-                                logging::error_log(format!(
-                                    "While checking file paths I found a file path that had the wrong name / extension. {} Moving to: {}",
-                                    &entry.path().display(),
-                                    test_path.as_path().display()
-                                ));
-
-                                file::folder_make(
-                                    &file_dump_path
-                                        .join(entry.path().parent().unwrap())
-                                        .to_string_lossy()
-                                        .to_string(),
-                                );
-                                std::fs::rename(entry.path(), test_path).unwrap();
-                            } else {
-                                logging::error_log(format!(
-                                    "While checking file paths I found a file path that shouldn't exist. {} Moving to: {}",
-                                    &entry.path().display(),
-                                    file_dump_path.display()
-                                ));
-
-                                file::folder_make(
-                                    &file_dump_path
-                                        .join(entry.path().parent().unwrap())
-                                        .to_string_lossy()
-                                        .to_string(),
-                                );
-                                std::fs::rename(entry.path(), file_dump_path.join(entry.path()))
-                                    .unwrap();
-                            }
-                        } else {
+                    && let Some(filename) = entry.path().file_name()
+                {
+                    if self
+                        .file_get_hash(&filename.to_string_lossy().to_string())
+                        .is_none()
+                    {
+                        let (hash, _) = hash_file(
+                            &entry.path().to_string_lossy().to_string(),
+                            &sharedtypes::HashesSupported::Sha512("".to_string()),
+                        )
+                        .unwrap();
+                        if self.file_get_hash(&hash).is_some() {
                             let mut cleaned_filepath = entry.path().to_path_buf();
                             cleaned_filepath.set_extension("");
 
@@ -326,18 +280,64 @@ impl Main {
                             ))
                             .join(Path::new(&cleaned_filename));
 
-                            if entry.path() != test_path {
-                                logging::error_log(format!(
-                                    "While checking file paths I found a file path that is incorrect. {} Moving to: {}",
-                                    &entry.path().display(),
-                                    test_path.as_path().display()
-                                ));
-                                std::fs::rename(entry.path(), test_path).unwrap();
-                            }
-                        }
+                            logging::error_log(format!(
+                                "While checking file paths I found a file path that had the wrong name / extension. {} Moving to: {}",
+                                &entry.path().display(),
+                                test_path.as_path().display()
+                            ));
 
-                        //dbg!(&entry.path().file_name());
+                            file::folder_make(
+                                &file_dump_path
+                                    .join(entry.path().parent().unwrap())
+                                    .to_string_lossy()
+                                    .to_string(),
+                            );
+                            std::fs::rename(entry.path(), test_path).unwrap();
+                        } else {
+                            logging::error_log(format!(
+                                "While checking file paths I found a file path that shouldn't exist. {} Moving to: {}",
+                                &entry.path().display(),
+                                file_dump_path.display()
+                            ));
+
+                            file::folder_make(
+                                &file_dump_path
+                                    .join(entry.path().parent().unwrap())
+                                    .to_string_lossy()
+                                    .to_string(),
+                            );
+                            std::fs::rename(entry.path(), file_dump_path.join(entry.path()))
+                                .unwrap();
+                        }
+                    } else {
+                        let mut cleaned_filepath = entry.path().to_path_buf();
+                        cleaned_filepath.set_extension("");
+
+                        let cleaned_filename = cleaned_filepath.as_path().file_name().unwrap();
+
+                        let test_path = Path::new(&getfinpath(
+                            db_path,
+                            &entry
+                                .path()
+                                .file_name()
+                                .unwrap()
+                                .to_string_lossy()
+                                .to_string(),
+                        ))
+                        .join(Path::new(&cleaned_filename));
+
+                        if entry.path() != test_path {
+                            logging::error_log(format!(
+                                "While checking file paths I found a file path that is incorrect. {} Moving to: {}",
+                                &entry.path().display(),
+                                test_path.as_path().display()
+                            ));
+                            std::fs::rename(entry.path(), test_path).unwrap();
+                        }
                     }
+
+                    //dbg!(&entry.path().file_name());
+                }
             }
             // Cleaning up empty folders from moving files.
             remove_empty_subdirs(Path::new(db_path)).unwrap();
@@ -1234,9 +1234,7 @@ impl Main {
                 let izce = ver.parse().unwrap();
                 g1.push(izce)
             }
-            logging::panic_log(
-                "check_version: Could not load DB properly PANICING!!!".to_string(),
-            );
+            logging::panic_log("check_version: Could not load DB properly PANICING!!!".to_string());
         }
         let mut db_vers = g1[0] as usize;
         self._active_vers = db_vers;
@@ -1275,10 +1273,7 @@ impl Main {
             logging::info_log(format!("Finished upgrade to V{}.", db_vers));
             self.transaction_flush();
             if db_vers == self._vers {
-                logging::info_log(format!(
-                    "Successfully updated db to version {}",
-                    self._vers
-                ));
+                logging::info_log(format!("Successfully updated db to version {}", self._vers));
                 return true;
             }
         } else {
@@ -1565,6 +1560,13 @@ impl Main {
             namespace,
         };
 
+        self.tag_get_name_tagobject(tagobj)
+    }
+
+    ///
+    /// Gets a tagid from a tagobject
+    ///
+    pub fn tag_get_name_tagobject(&self, tagobj: &sharedtypes::DbTagNNS) -> Option<usize> {
         match self._cache {
             CacheType::Bare => self.tags_get_id_sql(tagobj),
             _ => self._inmemdb.tags_get_id(tagobj).copied(),
@@ -2533,8 +2535,6 @@ impl Main {
     ) -> HashSet<sharedtypes::DbParentsObj> {
         match self._cache {
             CacheType::Bare => {
-                
-
                 if let Some(limit_to) = limit_to {
                     let temp = self.parents_limitto_tag_get(&limit_to);
 
