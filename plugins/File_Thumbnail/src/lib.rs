@@ -1,8 +1,8 @@
 static PLUGIN_NAME: &str = "file_thumbnailer";
 static PLUGIN_DESCRIPTION: &str = "Generates thumbnails for image files";
 static LOCATION_THUMBNAILS: &str = "thumbnails";
-static SIZE_THUMBNAIL_X: u32 = 100;
-static SIZE_THUMBNAIL_Y: u32 = 100;
+static SIZE_THUMBNAIL_X: u32 = 250;
+static SIZE_THUMBNAIL_Y: u32 = 250;
 static DEFAULT_VIDEO_SETTINGS: VideoDefaults = VideoDefaults {
     frames: 50,
     duration: VideoSpacing::Duration(1000),
@@ -297,12 +297,12 @@ pub fn on_start() {
 
     // Gets the tags inside a namespace
     let nids = client::namespace_get_tagids(utable);
-    // Removes fileid if it contains our tag if it has the namespace for it.
+
+    //Clears our DB of old entries
+
     for each in nids {
-        let tag_id = client::relationship_get_fileid(each);
-        for tag in tag_id {
-            file_ids.remove(&tag);
-        }
+        dbg!(&each);
+        client::tag_remove(each);
     }
 
     // Logs info to screen

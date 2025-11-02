@@ -264,6 +264,12 @@ pub fn parents_delete(parentobj: sharedtypes::DbParentsObj) -> bool {
     ))
 }
 
+pub fn tag_remove(tag_id: usize) -> bool {
+    init_data_request(&types::SupportedRequests::Database(
+        types::SupportedDBRequests::TagDelete(tag_id),
+    ))
+}
+
 /// Adds a parent into the db returns the cantor pair of the parent inserted
 pub fn parents_put(parentobj: sharedtypes::DbParentsObj) -> usize {
     init_data_request(&types::SupportedRequests::Database(

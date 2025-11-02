@@ -262,6 +262,11 @@ impl DbInteract {
     /// pretty mint.
     pub fn dbactions_to_function(&mut self, dbaction: types::SupportedDBRequests) -> Vec<u8> {
         match dbaction {
+            types::SupportedDBRequests::TagDelete(tag_id) => {
+                let mut unwrappy = self._database.write().unwrap();
+                unwrappy.tag_remove(&tag_id);
+                Self::data_size_to_b(&true)
+            }
             types::SupportedDBRequests::MigrateRelationship((file_id, old_tag_id, new_tag_id)) => {
                 let mut unwrappy = self._database.write().unwrap();
                 unwrappy.migrate_relationship_file_tag(&file_id, &old_tag_id, &new_tag_id);

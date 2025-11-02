@@ -96,6 +96,7 @@ pub enum SupportedDBRequests {
     ParentsPut(sharedtypes::DbParentsObj),
     PutJob(sharedtypes::DbJobsObj),
     GetJob(usize),
+    TagDelete(usize),
     PutFile((sharedtypes::FileObject, (u64, std::time::Duration))),
     PutFileNoBlock((sharedtypes::FileObject, (u64, std::time::Duration))),
     ReloadRegex,
