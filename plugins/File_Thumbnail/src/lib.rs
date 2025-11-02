@@ -35,10 +35,10 @@ use std::{
     path::{Path, PathBuf},
 };
 use strum_macros::EnumIter;
-use thumbnailer::{create_thumbnails_unknown_type, error::ThumbError, Thumbnail, ThumbnailSize};
+use thumbnailer::{Thumbnail, ThumbnailSize, create_thumbnails_unknown_type, error::ThumbError};
 use webp_animation::EncodingConfig;
 use webp_animation::EncodingType;
-#[no_mangle]
+/*#[no_mangle]
 pub fn return_info() -> sharedtypes::PluginInfo {
     let callbackvec = vec![
         sharedtypes::PluginCallback::Download,
@@ -77,6 +77,27 @@ pub fn return_info() -> sharedtypes::PluginInfo {
             )),
         }),
     }
+}*/
+
+#[no_mangle]
+pub fn get_global_info() -> Vec<sharedtypes::GlobalPluginScraper> {
+    let mut main = sharedtypes::return_default_globalpluginparser();
+    main.name = PLUGIN_NAME.to_string();
+    main.version = 0;
+    main.storage_type = Some(sharedtypes::ScraperOrPlugin::Plugin(
+        sharedtypes::PluginInfo2 {
+            com_channel: true,
+            redirect: None,
+        },
+    ));
+    main.callbacks = vec![
+        sharedtypes::GlobalCallbacks::Start(sharedtypes::StartupThreadType::SpawnInline),
+        sharedtypes::GlobalCallbacks::Download,
+        sharedtypes::GlobalCallbacks::Import,
+    ];
+    let out = vec![main];
+
+    out
 }
 
 ///
@@ -269,24 +290,18 @@ pub fn on_start() {
             None => client::namespace_put(
                 PLUGIN_NAME.to_string(),
                 Some(PLUGIN_DESCRIPTION.to_string()),
-                true,
             ),
             Some(id) => id,
         }
     }
 
     // Gets the tags inside a namespace
-    let nids = match client::namespace_get_tagids(utable) {
-        None => HashSet::new(),
-        Some(set) => set,
-    };
-
+    let nids = client::namespace_get_tagids(utable);
     // Removes fileid if it contains our tag if it has the namespace for it.
     for each in nids {
-        if let Some(tag_id) = client::relationship_get_fileid(each) {
-            for tag in tag_id {
-                file_ids.remove(&tag);
-            }
+        let tag_id = client::relationship_get_fileid(each);
+        for tag in tag_id {
+            file_ids.remove(&tag);
         }
     }
 
@@ -351,13 +366,13 @@ fn generate_thumbnail_u8(inp: Vec<u8>) -> Result<Vec<u8>, std::io::Error> {
                 return Err(Error::new(
                     ErrorKind::Unsupported,
                     format!("Cannot Parse file with format: {:?}.", fformat.kind()),
-                ))
+                ));
             }
             _ => {
                 return Err(Error::new(
                     ErrorKind::Other,
                     format!("Failed to match err - 190 {:?}", err),
-                ))
+                ));
             }
         },
     };
@@ -646,29 +661,30 @@ pub fn on_download(
                     ));
 
                     let plugin_output = sharedtypes::DBPluginOutput {
-                        file: Some(vec![sharedtypes::PluginFileObj {
+                        file: vec![sharedtypes::PluginFileObj {
                             id: None,
                             hash: Some(hash_in.to_string()),
                             ext: Some(ext_in.to_string()),
                             location: None,
-                        }]),
-                        jobs: None,
-                        namespace: Some(vec![sharedtypes::DbPluginNamespace {
-                            name: PLUGIN_NAME.to_string(),
-                            description: Some(PLUGIN_DESCRIPTION.to_string()),
-                        }]),
-                        parents: None,
-                        setting: None,
-                        tag: Some(vec![sharedtypes::DBPluginTagOut {
-                            name: thumb_hash.to_string(),
-                            namespace: PLUGIN_NAME.to_string(),
-                            parents: None,
-                        }]),
-                        relationship: Some(vec![sharedtypes::DbPluginRelationshipObj {
+                        }],
+                        jobs: vec![],
+                        setting: vec![],
+                        tag: vec![sharedtypes::TagObject {
+                            tag: thumb_hash.to_string(),
+                            namespace: sharedtypes::GenericNamespaceObj {
+                                name: PLUGIN_NAME.to_string(),
+                                description: Some(
+                                    "A hash of a picture or image for a thumbnail".into(),
+                                ),
+                            },
+                            relates_to: None,
+                            tag_type: sharedtypes::TagType::Normal,
+                        }],
+                        relationship: vec![sharedtypes::DbPluginRelationshipObj {
                             file_hash: hash_in.to_string(),
                             tag_name: thumb_hash,
                             tag_namespace: PLUGIN_NAME.to_string(),
-                        }]),
+                        }],
                     };
 
                     output.push(sharedtypes::DBPluginOutputEnum::Add(vec![plugin_output]));
