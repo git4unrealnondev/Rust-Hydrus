@@ -23,7 +23,6 @@ files/
 test*/
 ./File*
 /target
-thumbnails
 e6poolsgen
 import*
 File*
