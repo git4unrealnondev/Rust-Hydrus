@@ -301,7 +301,6 @@ pub fn on_start() {
     //Clears our DB of old entries
 
     for each in nids {
-        dbg!(&each);
         client::tag_remove(each);
     }
 
