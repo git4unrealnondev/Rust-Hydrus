@@ -350,9 +350,9 @@ pub fn stringto_commit_type(into: &String) -> CommitType {
 #[derive(Debug, PartialEq, Serialize, bincode::Encode, bincode::Decode, Deserialize)]
 #[cfg_attr(feature = "clap", derive(EnumIter))]
 pub enum SearchHolder {
-    And((usize, usize)),
-    Or((usize, usize)),
-    Not((usize, usize)),
+    And(Vec<usize>),
+    Or(Vec<usize>),
+    Not(Vec<usize>),
 }
 /// Allows searching inside the db. search_relate relates the item in the vec with
 /// eachother the IDs in search relate correspond to the id's in searches. IE: if 0

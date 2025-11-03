@@ -641,7 +641,7 @@ impl Main {
         let mut fin: HashSet<usize> = HashSet::new();
         let mut fin_temp: HashMap<usize, HashSet<usize>> = HashMap::new();
         let mut searched: Vec<(usize, usize)> = Vec::with_capacity(search.searches.len());
-        if search.search_relate.is_none() {
+        /*if search.search_relate.is_none() {
             if search.searches.len() == 1 {
                 stor.push(sharedtypes::SearchHolder::And((0, 0)));
             } else {
@@ -652,47 +652,74 @@ impl Main {
             }
         } else {
             stor = search.search_relate.unwrap();
-        }
+        }*/
         for (cnt, un) in search.searches.into_iter().enumerate() {
             match un {
-                sharedtypes::SearchHolder::Not((a, b)) => {
-                    let fa = self.relationship_get_fileid(&a);
+                sharedtypes::SearchHolder::Not(tag_ids) => {
+                    /* let fa = self.relationship_get_fileid(&a);
                     let fb = self.relationship_get_fileid(&b);
                     fin_temp.insert(cnt, fa.difference(&fb).cloned().collect());
                     searched.push((cnt, a));
-                    searched.push((cnt, b));
+                    searched.push((cnt, b));*/
                 }
-                sharedtypes::SearchHolder::And((a, b)) => {
-                    let fa = self.relationship_get_fileid(&a);
+                sharedtypes::SearchHolder::And(tag_ids) => {
+                    let mut temp = Vec::new();
+
+                    let mut tag_ids = tag_ids.clone();
+
+                    //Size check for if we get only one tag to search
+                    if tag_ids.len() == 1 {
+                        tag_ids.push(tag_ids[0]);
+                    }
+
+                    // Collects all the file ids that are related to this
+                    for tag_id in tag_ids.iter() {
+                        temp.push(self.relationship_get_fileid(tag_id));
+                    }
+
+                    // Intersects everything together
+                    let mut iter = temp.iter();
+                    let i = iter.next().map(|set| {
+                        iter.fold(set.clone(), |set1, set2| {
+                            set1.intersection(&set2).cloned().collect()
+                        })
+                    });
+                    if let Some(out) = i {
+                        fin_temp.insert(cnt, out);
+                    }
+
+                    /*let fa = self.relationship_get_fileid(&a);
                     let fb = self.relationship_get_fileid(&b);
                     fin_temp.insert(cnt, fa.intersection(&fb).cloned().collect());
 
                     searched.push((cnt, a));
-                    searched.push((cnt, b));
+                    searched.push((cnt, b));*/
                 }
-                sharedtypes::SearchHolder::Or((a, b)) => {
-                    let fa = self.relationship_get_fileid(&a);
+                sharedtypes::SearchHolder::Or(tag_ids) => {
+                    /*let fa = self.relationship_get_fileid(&a);
                     let fb = self.relationship_get_fileid(&b);
                     fin_temp.insert(cnt, fa.union(&fb).cloned().collect());
                     searched.push((cnt, a));
-                    searched.push((cnt, b));
+                    searched.push((cnt, b));*/
                 }
             }
         }
-        for each in stor {
-            match each {
-                sharedtypes::SearchHolder::Or((_a, _b)) => {}
-                sharedtypes::SearchHolder::And((a, b)) => {
-                    let fa = fin_temp.get(&a).unwrap();
-                    let fb = fin_temp.get(&b).unwrap();
-                    let tem = fa.intersection(fb);
-                    for each in tem {
-                        fin.insert(*each);
+
+        match search.search_relate {
+            None => {
+                let mut out = HashSet::new();
+                for item in fin_temp.values() {
+                    for item in item {
+                        out.insert(*item);
                     }
                 }
-                sharedtypes::SearchHolder::Not((_a, _b)) => {}
+                return Some(out);
+            }
+            Some(search_temp) => {
+                panic!();
             }
         }
+
         if !fin.is_empty() {
             return Some(fin);
         }
