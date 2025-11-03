@@ -449,6 +449,23 @@ impl Main {
     }
 
     ///
+    /// Gets a list of tag ids
+    ///
+    pub fn file_get_list_id_sql(&self) -> HashSet<usize> {
+        let inp = "SELECT id FROM File";
+        let conn = self._conn.lock().unwrap();
+
+        let mut stmt = conn.prepare(inp).unwrap();
+        let temp = stmt.query_map([], |row| Ok(row.get(0).unwrap())).unwrap();
+
+        let mut out = HashSet::new();
+        for item in temp {
+            out.insert(item.unwrap());
+        }
+        out
+    }
+
+    ///
     /// Gets a string from the ID of the storage location
     ///
     pub fn storage_get_string(&self, id: &usize) -> Option<String> {

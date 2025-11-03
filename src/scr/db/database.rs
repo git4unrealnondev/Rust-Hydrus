@@ -2796,7 +2796,10 @@ impl Main {
 
     /// Returns all file id's loaded in db
     pub fn file_get_list_id(&self) -> HashSet<usize> {
-        self._inmemdb.file_get_list_id()
+        match self._cache {
+            CacheType::Bare => self.file_get_list_id_sql(),
+            _ => self._inmemdb.file_get_list_id(),
+        }
     }
 
     /// Returns all file objects in db.
