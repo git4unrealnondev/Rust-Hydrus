@@ -98,14 +98,14 @@ pub fn filter_namespaces_by_id(tags: HashSet<usize>, namespaceid: usize) -> Hash
     ))
 }
 
-/// See the database reference for this function. I'm a lazy turd just check it
-/// their
+/// Logs to the log and prints
 pub fn log(log: String) -> bool {
     init_data_request(&types::SupportedRequests::Database(
         types::SupportedDBRequests::Logging(log),
     ))
 }
 
+/// Logs but doesn't print
 pub fn log_no_print(log: String) -> bool {
     init_data_request(&types::SupportedRequests::Database(
         types::SupportedDBRequests::LoggingNoPrint(log),

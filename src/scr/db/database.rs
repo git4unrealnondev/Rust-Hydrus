@@ -2614,7 +2614,10 @@ impl Main {
 
     /// Retuns namespace id's
     pub fn namespace_keys(&self) -> Vec<usize> {
-        self._inmemdb.namespace_keys()
+        match self._cache {
+            CacheType::Bare => self.namespace_keys_sql(),
+            _ => self._inmemdb.namespace_keys(),
+        }
     }
 
     ///

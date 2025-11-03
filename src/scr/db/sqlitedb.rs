@@ -75,6 +75,23 @@ impl Main {
         })
         .unwrap_or(None)
     }
+
+    ///
+    /// Returns all namespace keys
+    ///
+    pub fn namespace_keys_sql(&self) -> Vec<usize> {
+        let mut out = Vec::new();
+        let conn = self._conn.lock().unwrap();
+        let mut inp = conn.prepare("SELECT id FROM Namespace").unwrap();
+        let quer = inp.query_map(params![], |row| row.get(0)).unwrap();
+
+        for each in quer.flatten() {
+            out.push(each);
+        }
+
+        out
+    }
+
     ///
     /// Get file if it exists by id
     ///
@@ -677,9 +694,10 @@ impl Main {
 
         // Catches issue where a non bare DB would nuke itself
         if self._cache == CacheType::Bare
-            && let Some(id) = self.file_get_hash(&hash) {
-                return id;
-            }
+            && let Some(id) = self.file_get_hash(&hash)
+        {
+            return id;
+        }
 
         let inp = "INSERT INTO File VALUES(?, ?, ?, ?)";
         let _out = self
