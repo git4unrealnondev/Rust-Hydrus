@@ -2509,6 +2509,10 @@ impl Main {
 
     /// Removes tag from inmemdb and sql database.
     pub fn tag_remove(&mut self, id: &usize) {
+        for fid in self.relationship_get_fileid(id).iter() {
+            self.relationship_remove(fid, id);
+        }
+
         self._inmemdb.tag_remove(id);
         self.delete_tag_sql(id);
         let rel = &self._inmemdb.parents_remove(id);
