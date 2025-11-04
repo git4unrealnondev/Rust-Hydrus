@@ -311,31 +311,33 @@ pub fn on_start() {
     ));
 
     if let Some(location) = setup_thumbnail_location() {
-        file_ids.par_iter().for_each(|fid| {
+        for fid in file_ids {
             let _ = std::panic::catch_unwind(|| {
-                match generate_thumbnail(*fid.0) {
+                dbg!(&fid);
+                match generate_thumbnail(fid) {
                     Ok(thumb_file) => {
-                        client::log_no_print(format!("Starting work on fid: {}", fid.0));
+                        client::log(format!("FileThumbnailer - Starting work on fid: {}", fid));
                         let (thumb_path, thumb_hash) = make_thumbnail_path(&location, &thumb_file);
                         let thpath = thumb_path.join(thumb_hash.clone());
                         let pa = thpath.to_string_lossy().to_string();
                         /*client::log(format!(
                             "{}: Writing fileid: {} thumbnail to {}",
-                            PLUGIN_NAME, fid.0, &pa
+                            PLUGIN_NAME, fid, &pa
                         ));*/
                         let _ = std::fs::write(pa, thumb_file);
-                        let _ = client::relationship_file_tag_add(
-                            *fid.0, thumb_hash, utable, true, None,
-                        );
+                        let _ =
+                            client::relationship_file_tag_add(fid, thumb_hash, utable, true, None);
                     }
-                    //let wri = std::fs::write(format!("./test/out-{}.webp", fid.0), thumb_file);
+                    //let wri = std::fs::write(format!("./test/out-{}.webp", fid), thumb_file);
                     //dbg!(format!("Writing out: {:?}", thumb_path));
                     Err(st) => {
-                        client::log(format!("FileThumbnailer Fid: {} ERR- {}", &fid.0, st));
+                        client::log(format!("FileThumbnailer Fid: {} ERR- {}", &fid, st));
                     }
                 }
             });
-        });
+        }
+        //file_ids.par_iter().for_each(|fid| {
+        //           });
     }
     client::log(format!("File-Thumbnailer generation done"));
     client::setting_add(
@@ -426,6 +428,7 @@ fn generate_thumbnail_u8(inp: Vec<u8>) -> Result<Vec<u8>, std::io::Error> {
 pub fn generate_thumbnail(fid: usize) -> Result<Vec<u8>, std::io::Error> {
     use std::io::{Error, ErrorKind};
     if let Some(fbyte) = client::get_file(fid) {
+        dbg!(&fbyte);
         let byte = std::fs::read(fbyte)?;
         generate_thumbnail_u8(byte)
     } else {

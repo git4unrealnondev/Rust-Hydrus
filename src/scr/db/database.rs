@@ -478,6 +478,7 @@ impl Main {
                     each.to_string()
                 };
                 let folderloc = helpers::getfinpath(&loc, &file.hash);
+
                 let out;
                 if cfg!(unix) {
                     out = format!("{}/{}", folderloc, file.hash);
@@ -1429,7 +1430,7 @@ impl Main {
     ///
     pub fn extension_get_string(&self, ext_id: &usize) -> Option<String> {
         match self._cache {
-            CacheType::Bare => self.extension_get_string(ext_id),
+            CacheType::Bare => self.extension_get_string_sql(ext_id),
             _ => self._inmemdb.extension_get_string(ext_id).cloned(),
         }
     }

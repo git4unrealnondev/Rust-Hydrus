@@ -530,8 +530,8 @@ impl DbInteract {
             }
             types::SupportedDBRequests::GetFileListAll() => {
                 let unwrappy = self._database.read().unwrap();
-                let tmep = unwrappy.file_get_list_all();
-                Self::data_size_to_b(tmep)
+                let tmep = unwrappy.file_get_list_id();
+                Self::data_size_to_b(&tmep)
                 //bincode::serialize(&tmep).unwrap()
             }
             types::SupportedDBRequests::ReloadRegex => {
