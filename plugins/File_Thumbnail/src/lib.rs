@@ -329,9 +329,11 @@ pub fn on_start() {
                             "{}: Writing fileid: {} thumbnail to {}",
                             PLUGIN_NAME, fid, &pa
                         ));*/
-                        let _ = std::fs::write(pa, thumb_file);
-                        let _ =
-                            client::relationship_file_tag_add(*fid, thumb_hash, utable, true, None);
+                        if let OK(_) = std::fs::write(pa, thumb_file) {
+                            let _ = client::relationship_file_tag_add(
+                                *fid, thumb_hash, utable, true, None,
+                            );
+                        }
                     }
                     //let wri = std::fs::write(format!("./test/out-{}.webp", fid), thumb_file);
                     //dbg!(format!("Writing out: {:?}", thumb_path));
