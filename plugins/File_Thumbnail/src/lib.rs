@@ -311,11 +311,14 @@ pub fn on_start() {
     ));
 
     if let Some(location) = setup_thumbnail_location() {
-        for fid in file_ids {
+        file_ids.par_iter().for_each(|fid| {
             let _ = std::panic::catch_unwind(|| {
-                match generate_thumbnail(fid) {
+                match generate_thumbnail(*fid) {
                     Ok(thumb_file) => {
-                        client::log(format!("FileThumbnailer - Starting work on fid: {}", fid));
+                        client::log_no_print(format!(
+                            "FileThumbnailer - Starting work on fid: {}",
+                            fid
+                        ));
                         let (thumb_path, thumb_hash) = make_thumbnail_path(&location, &thumb_file);
                         let thpath = thumb_path.join(thumb_hash.clone());
                         let pa = thpath.to_string_lossy().to_string();
@@ -325,7 +328,7 @@ pub fn on_start() {
                         ));*/
                         let _ = std::fs::write(pa, thumb_file);
                         let _ =
-                            client::relationship_file_tag_add(fid, thumb_hash, utable, true, None);
+                            client::relationship_file_tag_add(*fid, thumb_hash, utable, true, None);
                     }
                     //let wri = std::fs::write(format!("./test/out-{}.webp", fid), thumb_file);
                     //dbg!(format!("Writing out: {:?}", thumb_path));
@@ -334,9 +337,7 @@ pub fn on_start() {
                     }
                 }
             });
-        }
-        //file_ids.par_iter().for_each(|fid| {
-        //           });
+        });
     }
     client::log(format!("File-Thumbnailer generation done"));
     client::setting_add(
