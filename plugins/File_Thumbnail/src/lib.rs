@@ -329,7 +329,7 @@ pub fn on_start() {
                             "{}: Writing fileid: {} thumbnail to {}",
                             PLUGIN_NAME, fid, &pa
                         ));*/
-                        if let OK(_) = std::fs::write(pa, thumb_file) {
+                        if let Ok(_) = std::fs::write(pa, thumb_file) {
                             let _ = client::relationship_file_tag_add(
                                 *fid, thumb_hash, utable, true, None,
                             );
