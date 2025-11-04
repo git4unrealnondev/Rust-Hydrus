@@ -313,7 +313,6 @@ pub fn on_start() {
     if let Some(location) = setup_thumbnail_location() {
         for fid in file_ids {
             let _ = std::panic::catch_unwind(|| {
-                dbg!(&fid);
                 match generate_thumbnail(fid) {
                     Ok(thumb_file) => {
                         client::log(format!("FileThumbnailer - Starting work on fid: {}", fid));
@@ -428,7 +427,6 @@ fn generate_thumbnail_u8(inp: Vec<u8>) -> Result<Vec<u8>, std::io::Error> {
 pub fn generate_thumbnail(fid: usize) -> Result<Vec<u8>, std::io::Error> {
     use std::io::{Error, ErrorKind};
     if let Some(fbyte) = client::get_file(fid) {
-        dbg!(&fbyte);
         let byte = std::fs::read(fbyte)?;
         generate_thumbnail_u8(byte)
     } else {
