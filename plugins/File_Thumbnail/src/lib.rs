@@ -30,6 +30,7 @@ pub enum VideoSpacing {
 mod client;
 #[path = "../../../src/scr/sharedtypes.rs"]
 mod sharedtypes;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::{
     collections::{HashMap, HashSet},
     path::{Path, PathBuf},
@@ -277,6 +278,13 @@ pub fn on_start() {
         client::log(format!("{} - Running main processing job", PLUGIN_NAME));
     }
 
+    if should_run == "Clear" {
+        client::log(format!(
+            "{} - Will delete previous file_thumbnails from the system",
+            PLUGIN_NAME
+        ));
+    }
+
     let table_temp = sharedtypes::LoadDBTable::Files;
     client::load_table(table_temp);
     let mut file_ids = client::file_get_list_all();
@@ -300,28 +308,27 @@ pub fn on_start() {
 
     // Removes the fileids that already have thumbnails
     for each in nids {
-        let tag_id = client::relationship_get_fileid(each);
-
-        for tag in tag_id {
-            file_ids.remove(&tag);
+        if should_run == "Clear" {
+            client::tag_remove(each);
+        } else {
+            for file_id in client::relationship_get_fileid(each).iter() {
+                file_ids.remove(file_id);
+            }
         }
     }
 
     // Logs info to screen
     client::log(format!(
-        "FileThumbnailer - We've got {} files to parse.",
+        "{} - We've got {} files to parse.",
+        PLUGIN_NAME,
         file_ids.len()
     ));
-
+    let counter = AtomicUsize::new(0);
     if let Some(location) = setup_thumbnail_location() {
         file_ids.par_iter().for_each(|fid| {
             let _ = std::panic::catch_unwind(|| {
                 match generate_thumbnail(*fid) {
                     Ok(thumb_file) => {
-                        client::log_no_print(format!(
-                            "FileThumbnailer - Starting work on fid: {}",
-                            fid
-                        ));
                         let (thumb_path, thumb_hash) = make_thumbnail_path(&location, &thumb_file);
                         let thpath = thumb_path.join(thumb_hash.clone());
                         let pa = thpath.to_string_lossy().to_string();
@@ -330,25 +337,33 @@ pub fn on_start() {
                             PLUGIN_NAME, fid, &pa
                         ));*/
                         if let Ok(_) = std::fs::write(pa, thumb_file) {
+                            let cnt = counter.fetch_add(1, Ordering::SeqCst);
+                            client::log_no_print(format!(
+                                "Plugin: {} -- fid {fid} Wrote: {} to {:?}",
+                                PLUGIN_NAME, &thumb_hash, &thumb_path,
+                            ));
+
                             let _ = client::relationship_file_tag_add(
                                 *fid, thumb_hash, utable, true, None,
                             );
+                            if cnt == 1000 {
+                                client::transaction_flush();
+                                counter.store(0, Ordering::SeqCst);
+                            }
                         }
                     }
-                    //let wri = std::fs::write(format!("./test/out-{}.webp", fid), thumb_file);
-                    //dbg!(format!("Writing out: {:?}", thumb_path));
                     Err(st) => {
-                        client::log(format!("FileThumbnailer Fid: {} ERR- {}", &fid, st));
+                        client::log(format!("{} Fid: {} ERR- {}", PLUGIN_NAME, &fid, st));
                     }
                 }
             });
         });
     }
-    client::log(format!("File-Thumbnailer generation done"));
+    client::log(format!("{} - generation done", PLUGIN_NAME));
     client::setting_add(
         format!("{}-shouldrun", PLUGIN_NAME).into(),
         format!(
-            "From plugin {} {} Determines if we should run",
+            "From plugin {} - {} Determines if we should run",
             PLUGIN_NAME, PLUGIN_DESCRIPTION
         )
         .into(),
@@ -371,19 +386,22 @@ fn generate_thumbnail_u8(inp: Vec<u8>) -> Result<Vec<u8>, std::io::Error> {
             ThumbError::Unsupported(fformat) => {
                 return Err(Error::new(
                     ErrorKind::Unsupported,
-                    format!("Cannot Parse file with format: {:?}.", fformat.kind()),
+                    format!(
+                        "{PLUGIN_NAME} - Cannot Parse file with format: {:?}.",
+                        fformat.kind()
+                    ),
                 ));
             }
             _ => {
                 return Err(Error::new(
                     ErrorKind::Other,
-                    format!("Failed to match err - 190 {:?}", err),
+                    format!("{PLUGIN_NAME} - Failed to match err - 190 {:?}", err),
                 ));
             }
         },
     };
     let thumb = &thumbvec[0];
-    return match thumb.return_fileformat().kind() {
+    match thumb.return_fileformat().kind() {
         Kind::Image => match thumb.return_fileformat() {
             FileFormat::GraphicsInterchangeFormat => {
                 match make_animated_img(
@@ -424,7 +442,7 @@ fn generate_thumbnail_u8(inp: Vec<u8>) -> Result<Vec<u8>, std::io::Error> {
             ErrorKind::Unsupported,
             "Returning fileformat not valid",
         )),
-    };
+    }
 }
 
 ///
