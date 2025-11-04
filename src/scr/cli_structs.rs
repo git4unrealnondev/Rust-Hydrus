@@ -109,6 +109,8 @@ pub enum Database {
     CompressDatabase,
     /// Checks the in memory DB
     CheckInMemdb,
+    /// Checks the consistency of the database
+    ConsistencyCheck,
     /// Checks the files on the filesystem. Warning is hella slow uses multithreading
     /// to make this go faster but still...
     #[clap(subcommand)]

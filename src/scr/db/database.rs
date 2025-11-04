@@ -241,6 +241,37 @@ impl Main {
     }
 
     ///
+    /// Checks the relationships table for any dead tagids
+    ///
+    pub fn check_relationship_tag_relations(&mut self) {
+        self.load_table(&sharedtypes::LoadDBTable::Files);
+        self.load_table(&sharedtypes::LoadDBTable::Relationship);
+        self.load_table(&sharedtypes::LoadDBTable::Tags);
+        let mut flag = false;
+        logging::info_log(format!("Relationship-Tag-Relations checker starting check"));
+
+        for fid in self.file_get_list_id().iter() {
+            for tid in self.relationship_get_tagid(fid).iter() {
+                if self.tag_id_get(tid).is_none() {
+                    flag = true;
+                    logging::info_log(format!(
+                        "Relationship-Tag-Relations checker found bad tid {tid} relating to fid: {fid} deleting empty relationship"
+                    ));
+                    self.relationship_remove(fid, tid);
+                }
+            }
+        }
+
+        if flag {
+            logging::info_log(format!(
+                "Relationship-Tag-Relations checker condensing tags"
+            ));
+            self.condense_tags();
+        }
+        logging::info_log(format!("Relationship-Tag-Relations checker ending check"));
+    }
+
+    ///
     /// Correct any weird paths existing inside of the db.
     ///
     pub fn check_db_paths(&self) {

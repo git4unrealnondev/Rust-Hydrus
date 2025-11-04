@@ -484,6 +484,10 @@ pub fn main(data: Arc<RwLock<database::Main>>, globalload: Arc<RwLock<GlobalLoad
 
                 let dbstore = data.clone();
                 match db {
+                    cli_structs::Database::ConsistencyCheck => {
+                        let mut data = data.write().unwrap();
+                        data.check_relationship_tag_relations();
+                    }
                     cli_structs::Database::BackupDB => {
                         // backs up the db. check the location in setting or code if I change anything lol
                         let mut data = data.write().unwrap();
