@@ -298,10 +298,13 @@ pub fn on_start() {
     // Gets the tags inside a namespace
     let nids = client::namespace_get_tagids(utable);
 
-    //Clears our DB of old entries
-
+    // Removes the fileids that already have thumbnails
     for each in nids {
-        client::tag_remove(each);
+        let tag_id = client::relationship_get_fileid(each);
+
+        for tag in tag_id {
+            file_ids.remove(&tag);
+        }
     }
 
     // Logs info to screen
