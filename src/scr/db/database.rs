@@ -242,13 +242,14 @@ impl Main {
 
     ///
     /// Checks the relationships table for any dead tagids
+    /// Only cleans the tags where they are linked to a fileid
     ///
     pub fn check_relationship_tag_relations(&mut self) {
         self.load_table(&sharedtypes::LoadDBTable::Files);
         self.load_table(&sharedtypes::LoadDBTable::Relationship);
         self.load_table(&sharedtypes::LoadDBTable::Tags);
         let mut flag = false;
-        logging::info_log(format!("Relationship-Tag-Relations checker starting check"));
+        logging::info_log("Relationship-Tag-Relations checker starting check");
 
         for fid in self.file_get_list_id().iter() {
             for tid in self.relationship_get_tagid(fid).iter() {
@@ -263,12 +264,10 @@ impl Main {
         }
 
         if flag {
-            logging::info_log(format!(
-                "Relationship-Tag-Relations checker condensing tags"
-            ));
+            logging::info_log("Relationship-Tag-Relations checker condensing tags");
             self.condense_tags();
         }
-        logging::info_log(format!("Relationship-Tag-Relations checker ending check"));
+        logging::info_log("Relationship-Tag-Relations checker ending check");
     }
 
     ///
