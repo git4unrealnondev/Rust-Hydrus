@@ -12,6 +12,53 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 impl Main {
     ///
+    /// Searches for a list of fileids from a list of tagids
+    ///
+    pub fn relationship_get_fileid_search_sql(&self, tag_ids: &[usize]) -> Vec<usize> {
+        if tag_ids.is_empty() {
+            return vec![];
+        }
+        // Build placeholders like "?, ?, ?" dynamically
+        let placeholders = std::iter::repeat_n("?", tag_ids.len())
+            .collect::<Vec<_>>()
+            .join(", ");
+
+        // SQL: select fileid where tagid in (...) group by fileid having count(distinct tagid) = <n>
+        let sql = format!(
+            "SELECT fileid
+         FROM Relationship
+         WHERE tagid IN ({placeholders})
+         GROUP BY fileid
+         HAVING COUNT(tagid) = ?",
+            placeholders = placeholders
+        );
+        // Build boxed parameter vector so we can pass a slice of &dyn ToSql
+        let mut params_boxed: Vec<Box<dyn ToSql>> = tag_ids
+            .iter()
+            .map(|&t| Box::new(t) as Box<dyn ToSql>)
+            .collect();
+        // push the required count (number of tags) as the final parameter
+        params_boxed.push(Box::new(tag_ids.len()));
+
+        // Create a Vec<&dyn ToSql> to pass to query_map
+        let params_refs: Vec<&dyn ToSql> =
+            params_boxed.iter().map(|b| &**b as &dyn ToSql).collect();
+
+        let result = {
+            let conn = self._conn.lock().unwrap();
+            let mut stmt = conn.prepare(&sql).unwrap();
+
+            stmt.query_map(&params_refs[..], |row| row.get::<_, usize>(0))
+                .unwrap()
+                .collect::<Result<Vec<usize>, _>>()
+                .unwrap()
+        };
+
+        // Convert to Vec<usize>
+        result
+    }
+
+    ///
     /// Gets all jobs from the sql tables
     ///
     pub fn jobs_get_all_sql(&self) -> HashMap<usize, sharedtypes::DbJobsObj> {

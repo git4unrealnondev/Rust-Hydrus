@@ -404,7 +404,7 @@ impl DbInteract {
             }
             types::SupportedDBRequests::Search((search, limit, offset)) => {
                 let unwrappy = self._database.read().unwrap();
-                let tmep = unwrappy.search_db_files(search);
+                let tmep = unwrappy.search_db_files(search, limit);
                 //let tmep = unwrappy.search_db_files(search, limit, offset);
                 Self::data_size_to_b(&tmep)
             }

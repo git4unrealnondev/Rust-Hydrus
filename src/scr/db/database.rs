@@ -255,7 +255,7 @@ impl Main {
             for tid in self.relationship_get_tagid(fid).iter() {
                 if self.tag_id_get(tid).is_none() {
                     flag = true;
-                    logging::info_log(format!(
+                    logging::log(format!(
                         "Relationship-Tag-Relations checker found bad tid {tid} relating to fid: {fid} deleting empty relationship"
                     ));
                     self.relationship_remove(fid, tid);
@@ -266,6 +266,7 @@ impl Main {
         if flag {
             logging::info_log("Relationship-Tag-Relations checker condensing tags");
             self.condense_tags();
+            self.vacuum();
         }
         logging::info_log("Relationship-Tag-Relations checker ending check");
     }
@@ -665,12 +666,12 @@ impl Main {
     pub fn search_db_files(
         &self,
         search: sharedtypes::SearchObj,
-        //limit: Option<usize>,
+        limit: Option<usize>,
         //offset: Option<usize>,
-    ) -> Option<HashSet<usize>> {
+    ) -> Option<Vec<usize>> {
         let mut stor: Vec<sharedtypes::SearchHolder> = Vec::with_capacity(search.searches.len());
-        let mut fin: HashSet<usize> = HashSet::new();
-        let mut fin_temp: HashMap<usize, HashSet<usize>> = HashMap::new();
+        let mut fin: Vec<usize> = Vec::new();
+        let mut fin_temp: HashMap<usize, Vec<usize>> = HashMap::new();
         let mut searched: Vec<(usize, usize)> = Vec::with_capacity(search.searches.len());
         /*if search.search_relate.is_none() {
             if search.searches.len() == 1 {
@@ -694,12 +695,14 @@ impl Main {
                     searched.push((cnt, b));*/
                 }
                 sharedtypes::SearchHolder::And(tag_ids) => {
-                    let mut temp = Vec::new();
+                    let file_ids = self.relationship_get_fileid_search_sql(&tag_ids);
 
-                    let mut tag_ids = tag_ids.clone();
+                    fin_temp.insert(cnt, file_ids);
+
+                    //let mut tag_ids = tag_ids.clone();
 
                     //Size check for if we get only one tag to search
-                    if tag_ids.len() == 1 {
+                    /*if tag_ids.len() == 1 {
                         tag_ids.push(tag_ids[0]);
                     }
 
@@ -717,7 +720,7 @@ impl Main {
                     });
                     if let Some(out) = i {
                         fin_temp.insert(cnt, out);
-                    }
+                    }*/
 
                     /*let fa = self.relationship_get_fileid(&a);
                     let fb = self.relationship_get_fileid(&b);
@@ -738,11 +741,14 @@ impl Main {
 
         match search.search_relate {
             None => {
-                let mut out = HashSet::new();
+                let mut out = Vec::new();
                 for item in fin_temp.values() {
                     for item in item {
-                        out.insert(*item);
+                        out.push(*item);
                     }
+                }
+                if let Some(limit) = limit {
+                    out.truncate(limit);
                 }
                 return Some(out);
             }
@@ -2661,7 +2667,7 @@ impl Main {
     pub fn condense_file_locations(&mut self) {
         self.load_table(&sharedtypes::LoadDBTable::Files);
 
-        let mut file_id_list: Vec<usize> = self.file_get_list_all().clone().into_keys().collect();
+        let mut file_id_list: Vec<usize> = self.file_get_list_id().into_iter().collect();
 
         file_id_list.par_sort_unstable();
 
@@ -2732,7 +2738,6 @@ impl Main {
                     flag = true;
                 }
                 Some(tag) => {
-                    dbg!(&id, &tag, &flag);
                     if flag {
                         logging::info_log(format!("Migrating tag id {id} to {cnt}"));
                         self.migrate_tag(&id, &cnt);
