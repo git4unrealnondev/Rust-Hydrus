@@ -32,7 +32,7 @@ mod client;
 mod sharedtypes;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     path::{Path, PathBuf},
 };
 use strum_macros::EnumIter;
@@ -583,7 +583,7 @@ fn setup_default_path(path: &Path) -> String {
     match fpath {
         Ok(_) => {}
         Err(_) => {
-            std::fs::create_dir_all(path.join(LOCATION_THUMBNAILS.to_string()));
+            let _ = std::fs::create_dir_all(path.join(LOCATION_THUMBNAILS.to_string()));
         }
     }
     std::fs::canonicalize(path.join(LOCATION_THUMBNAILS.to_string()))
