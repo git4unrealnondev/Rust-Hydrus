@@ -978,7 +978,7 @@ pub fn db_upgrade_call_3(site: &Site) {
     client::load_table(sharedtypes::LoadDBTable::All);
 
     // Loads all fileids into memory
-    let mut file_ids = client::file_get_list_all();
+    let mut file_ids = client::file_get_list_id();
 
     // Gets namespace id from poolid
     let pool_nsid = match client::namespace_get(nsobjplg(&NsIdent::PoolId, site).name) {
