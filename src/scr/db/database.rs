@@ -2797,7 +2797,10 @@ impl Main {
     /// Checks if a tag exists in a namespace
     //pub fn namespace_contains_id(&self, namespace_id: &usize) -> bool {
     pub fn namespace_contains_id(&self, namespace_id: &usize, tag_id: &usize) -> bool {
-        self.namespace_get_tagids(namespace_id).contains(tag_id)
+        match self._cache {
+            CacheType::Bare => self.namespace_contains_id_sql(tag_id, namespace_id),
+            _ => self.namespace_get_tagids(namespace_id).contains(tag_id),
+        }
     }
 
     /*/// Recreates the db with only one ns in it.

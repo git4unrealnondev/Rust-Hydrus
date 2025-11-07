@@ -395,11 +395,27 @@ impl Main {
         self.parents_delete_limit_to_sql(id);
     }
 
+    ///
+    /// Checks if a dead source exists
+    ///
     pub fn does_dead_source_exist(&self, url: &String) -> bool {
         let conn = self._conn.lock().unwrap();
         conn.query_row(
             "SELECT id from dead_source_urls WHERE dead_url = ?",
             params![url],
+            |row| Ok(row.get(0).unwrap_or(false)),
+        )
+        .unwrap_or(false)
+    }
+
+    ///
+    /// Does namespace contains tagid. A more optimizes sqlite version
+    ///
+    pub fn namespace_contains_id_sql(&self, tid: &usize, nsid: &usize) -> bool {
+        let conn = self._conn.lock().unwrap();
+        conn.query_row(
+            "SELECT id FROM Tags WHERE id = ? AND namespace = ?",
+            params![tid, nsid],
             |row| Ok(row.get(0).unwrap_or(false)),
         )
         .unwrap_or(false)

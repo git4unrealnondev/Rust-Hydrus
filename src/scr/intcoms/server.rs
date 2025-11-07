@@ -208,7 +208,7 @@ another process and try again.",
             x => x?,
         };
 
-        let num_threads = match thread::available_parallelism() {
+        /*let mut num_threads = match thread::available_parallelism() {
             Ok(thread_num) => thread_num,
             Err(err) => {
                 error_log(
@@ -216,7 +216,8 @@ another process and try again.",
                 );
                 return Err(err.into());
             }
-        };
+        };*/
+        let num_threads = 200;
 
         // Stand-in for the syncronization used, if any, between the client and the server.
         logging::info_log(format!(
@@ -233,6 +234,7 @@ another process and try again.",
         // NOTE due to the nature of this POS if the number of requests coming in exceed the number
         // of cpu threads we could softlock and I can't trace it.
         // But for now this seems to work.
+        //for i in 0..2 {
         for i in 0..num_threads.into() {
             let listener = Arc::clone(&listener);
             let db_interface = db_interface.clone();
