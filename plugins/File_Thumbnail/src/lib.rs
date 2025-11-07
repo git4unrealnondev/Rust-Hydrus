@@ -249,7 +249,7 @@ pub fn on_start() {
 
     let table_temp = sharedtypes::LoadDBTable::Files;
     client::load_table(table_temp);
-    let mut file_ids = client::file_get_list_all();
+    let mut file_ids = client::file_get_list_id();
     let table_temp = sharedtypes::LoadDBTable::All;
     client::load_table(table_temp);
 
