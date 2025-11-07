@@ -6,19 +6,17 @@ use crate::download;
 use crate::globalload::GlobalLoad;
 use crate::jobs::Jobs;
 use crate::logging;
+use crate::logging::error_log;
 use crate::sharedtypes;
 use crate::threading;
 use anyhow::Context;
 
-// use interprocess::local_socket::traits::tokio::Listener;
+use crate::RwLock;
 use interprocess::local_socket::{GenericNamespaced, ListenerOptions, prelude::*};
 use std::collections::HashSet;
 use std::sync::Arc;
-//use std::sync::Mutex;
-use crate::RwLock;
 use std::thread;
 
-// use std::sync::{Arc, Mutex};
 use std::{
     io::{self, BufReader, prelude::*},
     sync::mpsc::Sender,
@@ -156,7 +154,6 @@ impl PluginIpcInteract {
                 _database: main_db.clone(),
                 globalload,
                 jobmanager: jobs.clone(),
-                threads: Vec::new(),
             },
         }
     }
@@ -211,39 +208,77 @@ another process and try again.",
             x => x?,
         };
 
-        // Stand-in for the syncronization used, if any, between the client and the server.
-        logging::info_log(format!("IPC Server running at {}", types::SOCKET_NAME));
-
-        // let _ = notify.send(()); Main Plugin interaction loop
-        for conn in listener.incoming().filter_map(handle_error) {
-            let mut conn = BufReader::new(conn);
-            let plugin_supportedrequests = match types::recieve(&mut conn) {
-                Ok(out) => out,
-                Err(err) => {
-                    dbg!(&err);
-                    logging::error_log(err.to_string());
-                    return Ok(());
-                }
-            };
-
-            // Default
-            match plugin_supportedrequests {
-                types::SupportedRequests::Database(db_actions) => {
-                    let data = self.db_interface.dbactions_to_function(db_actions);
-                    types::send_preserialize(&data, &mut conn);
-                }
-                types::SupportedRequests::PluginCross(_plugindata) => {}
+        let num_threads = match thread::available_parallelism() {
+            Ok(thread_num) => thread_num,
+            Err(err) => {
+                error_log(
+                    "IPC Server could not spawn because it couldn't find the number of CPU threads to use",
+                );
+                return Err(err.into());
             }
+        };
+
+        // Stand-in for the syncronization used, if any, between the client and the server.
+        logging::info_log(format!(
+            "IPC Server running at {} with {} threads",
+            types::SOCKET_NAME,
+            num_threads
+        ));
+
+        let listener = Arc::new(listener);
+        let db_interface = self.db_interface.clone();
+
+        let mut handles = Vec::new();
+
+        // NOTE due to the nature of this POS if the number of requests coming in exceed the number
+        // of cpu threads we could softlock and I can't trace it.
+        // But for now this seems to work.
+        for i in 0..num_threads.into() {
+            let listener = Arc::clone(&listener);
+            let db_interface = db_interface.clone();
+            let handle = thread::spawn(move || {
+                //format!("Worker thread {} started", i);
+                for stream in listener.incoming().flatten() {
+                    // info_ format!("Worker {} got a connection", i);
+                    handle_client(stream, db_interface.clone());
+                }
+            });
+            handles.push(handle);
+        }
+
+        for handle in handles {
+            handle.join().unwrap();
         }
         Ok(())
     }
 }
+fn handle_client(mut stream: LocalSocketStream, db_interface: DbInteract) {
+    let mut buffer = [0u8; 1024];
+    let mut conn = BufReader::new(stream);
+    let plugin_supportedrequests = match types::recieve(&mut conn) {
+        Ok(out) => out,
+        Err(err) => {
+            dbg!(&err);
+            logging::error_log(err.to_string());
+            return;
+        }
+    };
 
+    // Default
+    match plugin_supportedrequests {
+        types::SupportedRequests::Database(db_actions) => {
+            let data = db_interface.dbactions_to_function(db_actions);
+            types::send_preserialize(&data, &mut conn);
+        }
+        types::SupportedRequests::PluginCross(_plugindata) => {}
+    }
+}
+
+#[derive(Clone)]
 struct DbInteract {
     _database: Arc<RwLock<database::Main>>,
     globalload: Arc<RwLock<GlobalLoad>>,
     jobmanager: Arc<RwLock<Jobs>>,
-    threads: Vec<thread::JoinHandle<()>>,
 }
 
 /// Storage object for database interactions with the plugin system
@@ -260,7 +295,7 @@ impl DbInteract {
     /// Packages functions from the DB into their self owned versions before packaging
     /// them as bytes to get sent accross IPC to the other software. So far things are
     /// pretty mint.
-    pub fn dbactions_to_function(&mut self, dbaction: types::SupportedDBRequests) -> Vec<u8> {
+    pub fn dbactions_to_function(&self, dbaction: types::SupportedDBRequests) -> Vec<u8> {
         match dbaction {
             types::SupportedDBRequests::TagDelete(tag_id) => {
                 let mut unwrappy = self._database.write().unwrap();
@@ -299,14 +334,6 @@ impl DbInteract {
                         &0,
                     );
                 });
-                let thread_max = 1000;
-                if self.threads.len() >= thread_max {
-                    let threads = self.threads.drain(0..thread_max / 100);
-                    for thread in threads {
-                        let _ = thread.join();
-                    }
-                }
-                self.threads.push(thread);
 
                 Self::data_size_to_b(&true)
             }
@@ -393,7 +420,7 @@ impl DbInteract {
                 Self::data_size_to_b(&tmep)
             }
             types::SupportedDBRequests::PluginCallback(func_name, version, input_data) => {
-                let mut plugin = self.globalload.write().unwrap();
+                let mut plugin = self.globalload.read().unwrap();
                 let out = plugin.external_plugin_call(&func_name, &version, &input_data);
                 Self::data_size_to_b(&out)
             }

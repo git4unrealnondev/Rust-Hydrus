@@ -39,46 +39,6 @@ use strum_macros::EnumIter;
 use thumbnailer::{Thumbnail, ThumbnailSize, create_thumbnails_unknown_type, error::ThumbError};
 use webp_animation::EncodingConfig;
 use webp_animation::EncodingType;
-/*#[no_mangle]
-pub fn return_info() -> sharedtypes::PluginInfo {
-    let callbackvec = vec![
-        sharedtypes::PluginCallback::Download,
-        sharedtypes::PluginCallback::Start(sharedtypes::StartupThreadType::SpawnInline),
-        sharedtypes::PluginCallback::Callback(sharedtypes::CallbackInfo {
-            name: format!("{}", PLUGIN_NAME),
-            func: format!("{}_generate_thumbnail_u8", PLUGIN_NAME),
-            vers: 0,
-            data_name: [format!("image")].to_vec(),
-            data: Some([sharedtypes::CallbackCustomData::U8].to_vec()),
-        }),
-        sharedtypes::PluginCallback::Callback(sharedtypes::CallbackInfo {
-            name: format!("{}", PLUGIN_NAME),
-            func: format!("{}_give_thumbnail_location", PLUGIN_NAME),
-            vers: 0,
-            data_name: [format!("image"), format!("db_location")].to_vec(),
-            data: Some(
-                [
-                    sharedtypes::CallbackCustomData::U8,
-                    sharedtypes::CallbackCustomData::String,
-                ]
-                .to_vec(),
-            ),
-        }),
-    ];
-    sharedtypes::PluginInfo {
-        name: PLUGIN_NAME.to_string(),
-        description: PLUGIN_DESCRIPTION.to_string(),
-        version: 1.00,
-        api_version: 1.00,
-        callbacks: callbackvec,
-        communication: Some(sharedtypes::PluginSharedData {
-            thread: sharedtypes::PluginThreadType::Inline,
-            com_channel: Some(sharedtypes::PluginCommunicationChannel::Pipe(
-                "beans".to_string(),
-            )),
-        }),
-    }
-}*/
 
 #[no_mangle]
 pub fn get_global_info() -> Vec<sharedtypes::GlobalPluginScraper> {
@@ -95,6 +55,12 @@ pub fn get_global_info() -> Vec<sharedtypes::GlobalPluginScraper> {
         sharedtypes::GlobalCallbacks::Start(sharedtypes::StartupThreadType::Spawn),
         sharedtypes::GlobalCallbacks::Download,
         sharedtypes::GlobalCallbacks::Import,
+        sharedtypes::GlobalCallbacks::Callback(sharedtypes::CallbackInfo {
+            func: format!("{}_generate_thumbnail_fid", PLUGIN_NAME),
+            vers: 0,
+            data_name: vec!["file_id".into()],
+            data: vec![sharedtypes::CallbackCustomData::Usize],
+        }),
     ];
     let out = vec![main];
 
@@ -128,27 +94,25 @@ pub fn file_thumbnailer_give_thumbnail_location(
             .position(|r| *r == "thumbnail_location".to_string())
             .unwrap();
 
-        if let Some(data) = &callback.data {
-            if let Some(cdreturning) = data.get(i) {
-                if let Some(dbloc) = data.get(j) {
-                    match cdreturning {
-                        sharedtypes::CallbackCustomDataReturning::U8(imgdata) => match dbloc {
-                            sharedtypes::CallbackCustomDataReturning::String(dbloc) => {
-                                let (finpath, outhash) =
-                                    make_thumbnail_path(&Path::new(dbloc).to_path_buf(), imgdata);
-                                let mut out = HashMap::new();
-                                out.insert(
-                                    "path".to_string(),
-                                    sharedtypes::CallbackCustomDataReturning::String(
-                                        finpath.join(outhash).to_string_lossy().to_string(),
-                                    ),
-                                );
-                                return Some(out);
-                            }
-                            _ => {}
-                        },
+        if let Some(cdreturning) = callback.data.get(i) {
+            if let Some(dbloc) = callback.data.get(j) {
+                match cdreturning {
+                    sharedtypes::CallbackCustomDataReturning::U8(imgdata) => match dbloc {
+                        sharedtypes::CallbackCustomDataReturning::String(dbloc) => {
+                            let (finpath, outhash) =
+                                make_thumbnail_path(&Path::new(dbloc).to_path_buf(), imgdata);
+                            let mut out = HashMap::new();
+                            out.insert(
+                                "path".to_string(),
+                                sharedtypes::CallbackCustomDataReturning::String(
+                                    finpath.join(outhash).to_string_lossy().to_string(),
+                                ),
+                            );
+                            return Some(out);
+                        }
                         _ => {}
-                    }
+                    },
+                    _ => {}
                 }
             }
         }
@@ -194,21 +158,19 @@ pub fn file_thumbnailer_generate_thumbnail_u8(
             .iter()
             .position(|r| *r == "image".to_string())
             .unwrap();
-        if let Some(data) = &callback.data {
-            if let Some(cdreturning) = data.get(i) {
-                match cdreturning {
-                    sharedtypes::CallbackCustomDataReturning::U8(imgdata) => {
-                        if let Ok(thumbnail) = generate_thumbnail_u8(imgdata.to_vec()) {
-                            let mut out = HashMap::new();
-                            out.insert(
-                                "image".to_string(),
-                                sharedtypes::CallbackCustomDataReturning::U8(thumbnail),
-                            );
-                            return Some(out);
-                        }
+        if let Some(cdreturning) = callback.data.get(i) {
+            match cdreturning {
+                sharedtypes::CallbackCustomDataReturning::U8(imgdata) => {
+                    if let Ok(thumbnail) = generate_thumbnail_u8(imgdata.to_vec()) {
+                        let mut out = HashMap::new();
+                        out.insert(
+                            "image".to_string(),
+                            sharedtypes::CallbackCustomDataReturning::U8(thumbnail),
+                        );
+                        return Some(out);
                     }
-                    _ => {}
                 }
+                _ => {}
             }
         }
     }
@@ -327,35 +289,7 @@ pub fn on_start() {
     if let Some(location) = setup_thumbnail_location() {
         file_ids.par_iter().for_each(|fid| {
             let _ = std::panic::catch_unwind(|| {
-                match generate_thumbnail(*fid) {
-                    Ok(thumb_file) => {
-                        let (thumb_path, thumb_hash) = make_thumbnail_path(&location, &thumb_file);
-                        let thpath = thumb_path.join(thumb_hash.clone());
-                        let pa = thpath.to_string_lossy().to_string();
-                        /*client::log(format!(
-                            "{}: Writing fileid: {} thumbnail to {}",
-                            PLUGIN_NAME, fid, &pa
-                        ));*/
-                        if let Ok(_) = std::fs::write(pa, thumb_file) {
-                            let cnt = counter.fetch_add(1, Ordering::SeqCst);
-                            client::log_no_print(format!(
-                                "Plugin: {} -- fid {fid} Wrote: {} to {:?}",
-                                PLUGIN_NAME, &thumb_hash, &thumb_path,
-                            ));
-
-                            let _ = client::relationship_file_tag_add(
-                                *fid, thumb_hash, utable, true, None,
-                            );
-                            if cnt == 1000 {
-                                client::transaction_flush();
-                                counter.store(0, Ordering::SeqCst);
-                            }
-                        }
-                    }
-                    Err(st) => {
-                        client::log(format!("{} Fid: {} ERR- {}", PLUGIN_NAME, &fid, st));
-                    }
-                }
+                process_fid(fid, &location, &counter, &utable);
             });
         });
     }
@@ -372,6 +306,74 @@ pub fn on_start() {
         true,
     );
     client::transaction_flush();
+}
+
+fn process_fid(fid: &usize, location: &PathBuf, counter: &AtomicUsize, utable: &usize) {
+    match generate_thumbnail(*fid) {
+        Ok(thumb_file) => {
+            let (thumb_path, thumb_hash) = make_thumbnail_path(&location, &thumb_file);
+            let thpath = thumb_path.join(thumb_hash.clone());
+            let pa = thpath.to_string_lossy().to_string();
+            /*client::log(format!(
+                "{}: Writing fileid: {} thumbnail to {}",
+                PLUGIN_NAME, fid, &pa
+            ));*/
+            if let Ok(_) = std::fs::write(pa, thumb_file) {
+                let cnt = counter.fetch_add(1, Ordering::SeqCst);
+                client::log_no_print(format!(
+                    "Plugin: {} -- fid {fid} Wrote: {} to {:?}",
+                    PLUGIN_NAME, &thumb_hash, &thumb_path,
+                ));
+
+                let _ = client::relationship_file_tag_add(*fid, thumb_hash, *utable, true, None);
+                if cnt == 1000 {
+                    client::transaction_flush();
+                    counter.store(0, Ordering::SeqCst);
+                }
+            }
+        }
+        Err(st) => {
+            client::log(format!("{} Fid: {} ERR- {}", PLUGIN_NAME, &fid, st));
+        }
+    }
+}
+
+///
+/// Hashes a file based on a fid
+///
+#[no_mangle]
+pub fn file_thumbnailer_generate_thumbnail_fid(
+    callback: &sharedtypes::CallbackInfoInput,
+) -> Option<HashMap<String, sharedtypes::CallbackCustomDataReturning>> {
+    let index = callback.data_name.iter().position(|x| x == "file_id");
+    if let Some(index) = index {
+        if callback.data.len() >= index {
+            if let Some(custom_data) = callback.data.get(index) {
+                match custom_data {
+                    sharedtypes::CallbackCustomDataReturning::Usize(inp) => {
+                        let counter = &AtomicUsize::new(0);
+                        if let Some(location) = &setup_thumbnail_location() {
+                            // Gets namespace id if it doesn't exist then recreate
+                            let utable;
+                            {
+                                utable = match client::namespace_get(PLUGIN_NAME.to_string()) {
+                                    None => client::namespace_put(
+                                        PLUGIN_NAME.to_string(),
+                                        Some(PLUGIN_DESCRIPTION.to_string()),
+                                    ),
+                                    Some(id) => id,
+                                }
+                            }
+
+                            process_fid(&inp, location, counter, &utable);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+    None
 }
 
 ///
@@ -598,7 +600,6 @@ fn setup_thumbnail_location() -> Option<PathBuf> {
     let storage = client::location_get();
     let path = Path::new(&storage);
     let finpath = setup_default_path(path);
-
     // If we don't have a setting setup for this then make one
     let location = match client::settings_get_name(format!("{}-location", PLUGIN_NAME)) {
         None => {

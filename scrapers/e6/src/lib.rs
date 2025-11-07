@@ -1061,7 +1061,7 @@ pub fn db_upgrade_call_3(site: &Site) {
         site_to_string(site),
         cnt
     ));
-    for (each, _) in file_ids {
+    for each in file_ids {
         let tids = client::relationship_get_tagid(each);
         for tid in tids.intersection(&pool_table) {
             dbg!(tid);
@@ -1393,5 +1393,6 @@ pub fn on_start(site_struct: &sharedtypes::GlobalPluginScraper) {
             }
         }
         client::transaction_flush();
+        client::log_no_print("E6-Scraper: Finished processing migrations".to_string());
     }
 }

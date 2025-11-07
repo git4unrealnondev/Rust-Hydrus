@@ -982,17 +982,17 @@ pub enum GlobalCallbacks {
 /// Callback info for live plugins Gets sent to plugins
 #[derive(Debug, PartialEq, Eq, Hash, Serialize, bincode::Encode, bincode::Decode, Deserialize)]
 pub struct CallbackInfoInput {
+    // Version of the expected call. Its on the plugin to handle this properly
+    pub vers: usize,
     // Name of variable
     pub data_name: Vec<String>,
     // Data for variable of data_name
-    pub data: Option<Vec<CallbackCustomDataReturning>>,
+    pub data: Vec<CallbackCustomDataReturning>,
 }
 
 /// Callback info for live plugins
 #[derive(Debug, PartialEq, Clone, Eq, Hash)]
 pub struct CallbackInfo {
-    // Name of registered plugin to call
-    pub name: String,
     // Name of plugin's function
     pub func: String,
     // Version of plugin
@@ -1000,7 +1000,7 @@ pub struct CallbackInfo {
     // Name of variable
     pub data_name: Vec<String>,
     // Data for variable of data_name
-    pub data: Option<Vec<CallbackCustomData>>,
+    pub data: Vec<CallbackCustomData>,
 }
 
 /// Data that's to be recieved to a plugin

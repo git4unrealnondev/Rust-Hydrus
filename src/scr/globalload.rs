@@ -403,6 +403,8 @@ pub struct GlobalLoad {
     db: Arc<RwLock<Main>>,
     callback: HashMap<sharedtypes::GlobalCallbacks, Vec<sharedtypes::GlobalPluginScraper>>,
     callback_cross: HashMap<sharedtypes::GlobalPluginScraper, Vec<sharedtypes::CallbackInfo>>,
+    callback_storage:
+        HashMap<String, Vec<(sharedtypes::CallbackInfo, sharedtypes::GlobalPluginScraper)>>,
     sites: HashMap<sharedtypes::GlobalPluginScraper, Vec<String>>,
     library_path: HashMap<sharedtypes::GlobalPluginScraper, PathBuf>,
     library_lib: HashMap<sharedtypes::GlobalPluginScraper, RwLock<libloading::Library>>,
@@ -436,6 +438,7 @@ impl GlobalLoad {
             db,
             callback: HashMap::new(),
             callback_cross: HashMap::new(),
+            callback_storage: HashMap::new(),
             sites: HashMap::new(),
             library_path: HashMap::new(),
             library_lib: HashMap::new(),
@@ -929,11 +932,33 @@ impl GlobalLoad {
     /// Calls a plugin from another plugin
     ///
     pub fn external_plugin_call(
-        &mut self,
-        _func_name: &str,
-        _vers: &usize,
-        _input_data: &sharedtypes::CallbackInfoInput,
+        &self,
+        func_name: &str,
+        vers: &usize,
+        input_data: &sharedtypes::CallbackInfoInput,
     ) -> Option<HashMap<String, sharedtypes::CallbackCustomDataReturning>> {
+        if let Some(callback_list) = self.callback_storage.get(func_name) {
+            for (callback, global_plugin) in callback_list {
+                if *vers == callback.vers {
+                    if let Some(plugin_lib) = self.library_lib.get(global_plugin) {
+                        let plugin_lib = plugin_lib.read().unwrap();
+                        let plugininfo;
+                        unsafe {
+                            let plugindatafunc: libloading::Symbol<
+                                unsafe extern "C" fn(
+                                    &sharedtypes::CallbackInfoInput,
+                                ) -> Option<
+                                    HashMap<String, sharedtypes::CallbackCustomDataReturning>,
+                                >,
+                            > = plugin_lib.get(func_name.as_bytes()).unwrap();
+                            plugininfo = plugindatafunc(input_data);
+                        }
+                        return plugininfo;
+                    }
+                }
+            }
+        }
+
         /*if let Some(valid_func) = self.callbackstorage.get_mut(func_name) {
             for each in valid_func.iter() {
                 if *vers == each.vers {
@@ -953,8 +978,7 @@ impl GlobalLoad {
                 }
             }
         }*/
-        // None
-        todo!();
+        None
     }
 
     ///
@@ -1069,48 +1093,6 @@ impl GlobalLoad {
                 }
             }
         }
-
-        /* if let Some(pluginscraper_list) = self.callback.get(&sharedtypes::GlobalCallbacks::Start(_))
-        {
-            for to_run in pluginscraper_list {
-                if !self.library_path.contains_key(to_run) {
-                    logging::error_log(&format!(
-                        "Skipping plugin: {} due to library reference not having it loaded?",
-                        to_run.name
-                    ));
-                    continue;
-                }
-                if let Some(stored_info) = &to_run.storage_type {
-                    logging::log(&format!("Starting to run: {}", to_run.name));
-
-                    match stored_info {
-                        sharedtypes::ScraperOrPlugin::Plugin(plugin_info) => {
-                            // Runs the onstart
-
-                            let file = self.library_path.get(to_run).unwrap().clone();
-                            /*match plugin_info.com_type {
-                                sharedtypes::PluginThreadType::Spawn => {
-                                    let thread = thread::spawn(move || {
-                                        c_run_onstart(&file);
-                                    });
-                                    self.thread.insert(to_run.clone(), thread);
-                                }
-                                sharedtypes::PluginThreadType::SpawnInline => {
-                                    let thread = thread::spawn(move || {
-                                        c_run_onstart(&file);
-                                    });
-                                    self.thread.insert(to_run.clone(), thread);
-                                }
-                                sharedtypes::PluginThreadType::Inline => {
-                                    c_run_onstart(&file);
-                                }
-                            }*/
-                        }
-                        sharedtypes::ScraperOrPlugin::Scraper(_) => {}
-                    }
-                }
-            }
-        }*/
     }
 
     ///
@@ -1208,6 +1190,20 @@ impl GlobalLoad {
                 for callbacks in global.callbacks.iter() {
                     match callbacks {
                         sharedtypes::GlobalCallbacks::Callback(callback_info) => {
+                            // Stores the callbacks pertaining to externals
+                            match self.callback_storage.get_mut(&callback_info.func) {
+                                None => {
+                                    self.callback_storage.insert(
+                                        callback_info.func.to_string(),
+                                        vec![(callback_info.clone(), global.clone())],
+                                    );
+                                }
+                                Some(vec) => {
+                                    vec.push((callback_info.clone(), global.clone()));
+                                }
+                            }
+
+                            // Some sort of goofy regex callback maybe not used
                             match self.callback_cross.get_mut(&global) {
                                 None => {
                                     self.callback_cross
