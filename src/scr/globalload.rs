@@ -392,11 +392,9 @@ fn parse_plugin_output_andmain(
                         }
                     }
                     let mut unwrappy = db.write().unwrap();
-                    unwrappy.transaction_flush();
                     for (file_id, tag_id) in temp_vec {
                         unwrappy.relationship_add(file_id.unwrap(), tag_id.unwrap(), true);
                     }
-                    unwrappy.transaction_flush();
                 }
             }
             sharedtypes::DBPluginOutputEnum::Del(name) => for _names in name {},

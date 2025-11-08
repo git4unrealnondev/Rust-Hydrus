@@ -1233,7 +1233,7 @@ impl Main {
         let _ = wait_until_sqlite_ok!(conn.execute("PRAGMA journal_mode = WAL", params![]));
         let _ = wait_until_sqlite_ok!(conn.execute("PRAGMA synchronous = NORMAL", params![]));
         let _ = wait_until_sqlite_ok!(conn.execute("PRAGMA page_size = 8192", params![]));
-        let _ = wait_until_sqlite_ok!(conn.execute("PRAGMA cache_size = -4096000", params![]));
+        let _ = wait_until_sqlite_ok!(conn.execute("PRAGMA cache_size = -5000000", params![]));
         let _ = wait_until_sqlite_ok!(conn.execute("PRAGMA wal_autocheckpoint = 10000", params![]));
     }
 

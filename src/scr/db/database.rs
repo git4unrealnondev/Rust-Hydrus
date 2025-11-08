@@ -118,7 +118,7 @@ impl Main {
                 };
                 let pool = r2d2::Builder::new()
                     .idle_timeout(Some(Duration::from_secs(1)))
-                    .max_size(5)
+                    .max_size(1)
                     .build(manager)
                     .unwrap();
                 main.conn = pool;
