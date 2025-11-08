@@ -2,14 +2,42 @@ use crate::database::CacheType;
 use crate::database::Main;
 use crate::error;
 use crate::logging;
+use crate::logging::error_log;
 use crate::sharedtypes;
 use rusqlite::OptionalExtension;
 use rusqlite::ToSql;
 use rusqlite::params;
 use rusqlite::types::Null;
-use std::borrow::BorrowMut;
 use std::collections::HashMap;
 use std::collections::HashSet;
+use std::thread;
+use std::time::Duration;
+
+const DEFAULT_DURATION_BACKOFF: Duration = Duration::from_millis(100);
+
+/// Waits until the calling function is OK then returns it
+#[macro_export]
+macro_rules! wait_until_sqlite_ok {
+    ($expr:expr) => {{
+        loop {
+            match $expr {
+                Ok(val) => break Ok(val),
+                Err(err) => {
+                    // Retry only on "database is locked"
+                    if let rusqlite::Error::SqliteFailure(_, Some(ref msg)) = err {
+                        if msg.contains("database is locked") {
+                            std::thread::sleep(std::time::Duration::from_millis(50));
+                            continue;
+                        }
+                    }
+                    // Any other error — return it
+                    break Err(err);
+                }
+            }
+        }
+    }};
+}
+
 impl Main {
     ///
     /// Searches for a list of fileids from a list of tagids
@@ -44,18 +72,16 @@ impl Main {
         let params_refs: Vec<&dyn ToSql> =
             params_boxed.iter().map(|b| &**b as &dyn ToSql).collect();
 
-        let result = {
-            let conn = self._conn.lock().unwrap();
-            let mut stmt = conn.prepare(&sql).unwrap();
-
+        let conn = self.conn.get().unwrap();
+        let mut stmt = conn.prepare(&sql).unwrap();
+        wait_until_sqlite_ok!(
             stmt.query_map(&params_refs[..], |row| row.get::<_, usize>(0))
                 .unwrap()
                 .collect::<Result<Vec<usize>, _>>()
-                .unwrap()
-        };
+        )
+        .unwrap_or(vec![])
 
         // Convert to Vec<usize>
-        result
     }
 
     ///
@@ -78,25 +104,42 @@ impl Main {
     /// Returns the total count of the jobs table
     ///
     pub fn jobs_return_count_sql(&self) -> usize {
-        let conn = self._conn.lock().unwrap();
-        let max = conn
-            .query_row("SELECT MAX(id) FROM Jobs", params![], |row| row.get(0))
-            .unwrap_or(0);
+        let conn = self.conn.get().unwrap();
+        let mut max: Option<usize> =
+            wait_until_sqlite_ok!(
+                conn.query_row("SELECT MAX(id) FROM Jobs", params![], |row| row.get(0))
+            )
+            .unwrap_or(Some(0));
+        let mut count =
+            wait_until_sqlite_ok!(
+                conn.query_row("SELECT COUNT(*) FROM Jobs", params![], |row| row.get(0))
+            )
+            .unwrap_or(Some(0));
 
-        let count = conn
-            .query_row("SELECT COUNT(*) FROM Jobs", params![], |row| row.get(0))
-            .unwrap_or(0);
+        if max.is_none() {
+            max = Some(0);
+        }
 
-        if max > count { max + 1 } else { count + 1 }
+        if count.is_none() {
+            count = Some(0);
+        }
+
+        if let (Some(max), Some(count)) = (max, count) {
+            if max > count { max + 1 } else { count + 1 }
+        } else {
+            0
+        }
     }
     ///
     /// Returns the total count of the namespace table
     ///
     pub fn namespace_return_count_sql(&self) -> usize {
-        let conn = self._conn.lock().unwrap();
-        conn.query_row("SELECT COUNT(*) FROM Namespace", params![], |row| {
-            row.get(0)
-        })
+        let conn = self.conn.get().unwrap();
+        wait_until_sqlite_ok!(
+            conn.query_row("SELECT COUNT(*) FROM Namespace", params![], |row| {
+                row.get(0)
+            })
+        )
         .unwrap_or(0)
     }
 
@@ -104,9 +147,9 @@ impl Main {
     /// Get file if it exists by id
     ///
     pub fn files_get_id_sql(&self, file_id: &usize) -> Option<sharedtypes::DbFileStorage> {
-        let conn = self._conn.lock().unwrap();
+        let conn = self.conn.get().unwrap();
         let inp = "SELECT * FROM File where id = ?";
-        conn.query_row(inp, params![file_id], |row| {
+        wait_until_sqlite_ok!(conn.query_row(inp, params![file_id], |row| {
             let id = row.get(0).unwrap();
             let hash = row.get(1).unwrap();
             let ext_id = row.get(2).unwrap();
@@ -119,7 +162,7 @@ impl Main {
                     storage_id,
                 },
             )))
-        })
+        }))
         .unwrap_or(None)
     }
 
@@ -128,7 +171,7 @@ impl Main {
     ///
     pub fn namespace_keys_sql(&self) -> Vec<usize> {
         let mut out = Vec::new();
-        let conn = self._conn.lock().unwrap();
+        let conn = self.conn.get().unwrap();
         let mut inp = conn.prepare("SELECT id FROM Namespace").unwrap();
         let quer = inp.query_map(params![], |row| row.get(0)).unwrap();
 
@@ -144,16 +187,15 @@ impl Main {
     ///
     pub fn namespace_get_tagids_sql(&self, ns_id: &usize) -> HashSet<usize> {
         let mut out = HashSet::new();
-        let conn = self._conn.lock().unwrap();
+        let conn = self.conn.get().unwrap();
         let mut inp = conn
             .prepare("SELECT id FROM Tags where namespace = ?")
             .unwrap();
-        let quer = inp
-            .query_map(params![ns_id], |row| {
-                let id = row.get(0).unwrap();
-                Ok(id)
-            })
-            .unwrap();
+        let quer = wait_until_sqlite_ok!(inp.query_map(params![ns_id], |row| {
+            let id = row.get(0).unwrap();
+            Ok(id)
+        }))
+        .unwrap();
 
         for each in quer.flatten() {
             out.insert(each);
@@ -167,8 +209,8 @@ impl Main {
     ///
     pub fn jobs_get_id_sql(&self, job_id: &usize) -> Option<sharedtypes::DbJobsObj> {
         let inp = "SELECT * FROM Jobs WHERE id = ? LIMIT 1";
-        let conn = self._conn.lock().unwrap();
-        conn.query_row(inp, params![job_id], |row| {
+        let conn = self.conn.get().unwrap();
+        wait_until_sqlite_ok!(conn.query_row(inp, params![job_id], |row| {
             let id = row.get(0).unwrap();
             let time = row.get(1).unwrap();
             let reptime = row.get(2).unwrap();
@@ -197,34 +239,31 @@ impl Main {
                 user_data,
                 system_data,
             }))
-        })
+        }))
         .unwrap_or(None)
     }
 
     /// Adds a job to sql
     pub fn jobs_add_sql(&mut self, data: &sharedtypes::DbJobsObj) {
         let inp = "INSERT INTO Jobs VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
-        self._conn
-            .borrow_mut()
-            .lock()
-            .unwrap()
-            .execute(
-                inp,
-                params![
-                    data.id.unwrap().to_string(),
-                    data.time.to_string(),
-                    data.reptime.unwrap().to_string(),
-                    data.priority.to_string(),
-                    serde_json::to_string(&data.cachetime).unwrap(),
-                    serde_json::to_string(&data.cachechecktype).unwrap(),
-                    serde_json::to_string(&data.jobmanager).unwrap(),
-                    data.site,
-                    serde_json::to_string(&data.param).unwrap(),
-                    serde_json::to_string(&data.system_data).unwrap(),
-                    serde_json::to_string(&data.user_data).unwrap(),
-                ],
-            )
-            .unwrap();
+        let conn = self.conn.get().unwrap();
+        wait_until_sqlite_ok!(conn.execute(
+            inp,
+            params![
+                data.id.unwrap().to_string(),
+                data.time.to_string(),
+                data.reptime.unwrap().to_string(),
+                data.priority.to_string(),
+                serde_json::to_string(&data.cachetime).unwrap(),
+                serde_json::to_string(&data.cachechecktype).unwrap(),
+                serde_json::to_string(&data.jobmanager).unwrap(),
+                data.site,
+                serde_json::to_string(&data.param).unwrap(),
+                serde_json::to_string(&data.system_data).unwrap(),
+                serde_json::to_string(&data.user_data).unwrap(),
+            ],
+        ))
+        .unwrap();
         self.db_commit_man();
     }
 
@@ -235,14 +274,17 @@ impl Main {
             None => &Null as &dyn ToSql,
             Some(out) => &out.to_string(),
         };
-        let _out = self._conn.borrow_mut().lock().unwrap().execute(
-            inp,
-            params![
-                parent.tag_id.to_string(),
-                parent.relate_tag_id.to_string(),
-                limit_to
-            ],
-        );
+        {
+            let conn = self.conn.get().unwrap();
+            let _ = wait_until_sqlite_ok!(conn.execute(
+                inp,
+                params![
+                    parent.tag_id.to_string(),
+                    parent.relate_tag_id.to_string(),
+                    limit_to
+                ],
+            ));
+        }
         self.db_commit_man();
     }
 
@@ -253,24 +295,23 @@ impl Main {
     pub fn parents_relate_tag_get(&self, relate_tag: &usize) -> HashSet<sharedtypes::DbParentsObj> {
         let mut out = HashSet::new();
 
-        let conn = self._conn.lock().unwrap();
+        let conn = self.conn.get().unwrap();
 
         let mut stmt = conn
             .prepare("SELECT tag_id, relate_tag_id, limit_to FROM Parents WHERE relate_tag_id = ?")
             .unwrap();
-        let temp = stmt
-            .query_map(params![relate_tag], |row| {
-                let tag_id: usize = row.get(0).unwrap();
-                let relate_tag_id: usize = row.get(1).unwrap();
-                let limit_to: Option<usize> = row.get(2).unwrap();
+        let temp = wait_until_sqlite_ok!(stmt.query_map(params![relate_tag], |row| {
+            let tag_id: usize = row.get(0).unwrap();
+            let relate_tag_id: usize = row.get(1).unwrap();
+            let limit_to: Option<usize> = row.get(2).unwrap();
 
-                Ok(sharedtypes::DbParentsObj {
-                    tag_id,
-                    relate_tag_id,
-                    limit_to,
-                })
+            Ok(sharedtypes::DbParentsObj {
+                tag_id,
+                relate_tag_id,
+                limit_to,
             })
-            .unwrap();
+        }))
+        .unwrap();
         for item in temp.flatten() {
             out.insert(item);
         }
@@ -284,24 +325,23 @@ impl Main {
     pub fn parents_tagid_tag_get(&self, tag_id: &usize) -> HashSet<sharedtypes::DbParentsObj> {
         let mut out = HashSet::new();
 
-        let conn = self._conn.lock().unwrap();
+        let conn = self.conn.get().unwrap();
 
         let mut stmt = conn
             .prepare("SELECT tag_id, relate_tag_id, limit_to FROM Parents WHERE tag_id = ?")
             .unwrap();
-        let temp = stmt
-            .query_map(params![tag_id], |row| {
-                let tag_id: usize = row.get(0).unwrap();
-                let relate_tag_id: usize = row.get(1).unwrap();
-                let limit_to: Option<usize> = row.get(2).unwrap();
+        let temp = wait_until_sqlite_ok!(stmt.query_map(params![tag_id], |row| {
+            let tag_id: usize = row.get(0).unwrap();
+            let relate_tag_id: usize = row.get(1).unwrap();
+            let limit_to: Option<usize> = row.get(2).unwrap();
 
-                Ok(sharedtypes::DbParentsObj {
-                    tag_id,
-                    relate_tag_id,
-                    limit_to,
-                })
+            Ok(sharedtypes::DbParentsObj {
+                tag_id,
+                relate_tag_id,
+                limit_to,
             })
-            .unwrap();
+        }))
+        .unwrap();
         for item in temp.flatten() {
             out.insert(item);
         }
@@ -315,18 +355,17 @@ impl Main {
     pub fn parents_tagid_get(&self, relate_tag: &usize) -> HashSet<usize> {
         let mut out = HashSet::new();
 
-        let conn = self._conn.lock().unwrap();
+        let conn = self.conn.get().unwrap();
 
         let mut stmt = conn
             .prepare("SELECT tag_id FROM Parents WHERE relate_tag_id = ?")
             .unwrap();
-        let temp = stmt
-            .query_map(params![relate_tag], |row| {
-                let tag_id: usize = row.get(0).unwrap();
+        let temp = wait_until_sqlite_ok!(stmt.query_map(params![relate_tag], |row| {
+            let tag_id: usize = row.get(0).unwrap();
 
-                Ok(tag_id)
-            })
-            .unwrap();
+            Ok(tag_id)
+        }))
+        .unwrap();
         for item in temp.flatten() {
             out.insert(item);
         }
@@ -340,18 +379,17 @@ impl Main {
     pub fn parents_relatetagid_get(&self, tag_id: &usize) -> HashSet<usize> {
         let mut out = HashSet::new();
 
-        let conn = self._conn.lock().unwrap();
+        let conn = self.conn.get().unwrap();
 
         let mut stmt = conn
             .prepare("SELECT relate_tag_id FROM Parents WHERE tag_id = ?")
             .unwrap();
-        let temp = stmt
-            .query_map(params![tag_id], |row| {
-                let relate_tag_id: usize = row.get(0).unwrap();
+        let temp = wait_until_sqlite_ok!(stmt.query_map(params![tag_id], |row| {
+            let relate_tag_id: usize = row.get(0).unwrap();
 
-                Ok(relate_tag_id)
-            })
-            .unwrap();
+            Ok(relate_tag_id)
+        }))
+        .unwrap();
         for item in temp.flatten() {
             out.insert(item);
         }
@@ -365,24 +403,23 @@ impl Main {
     pub fn parents_limitto_tag_get(&self, limitto: &usize) -> HashSet<sharedtypes::DbParentsObj> {
         let mut out = HashSet::new();
 
-        let conn = self._conn.lock().unwrap();
+        let conn = self.conn.get().unwrap();
 
         let mut stmt = conn
             .prepare("SELECT tag_id, relate_tag_id, limit_to FROM Parents WHERE limit_to = ?")
             .unwrap();
-        let temp = stmt
-            .query_map(params![limitto], |row| {
-                let tag_id: usize = row.get(0).unwrap();
-                let relate_tag_id: usize = row.get(1).unwrap();
-                let limit_to: Option<usize> = row.get(2).unwrap();
+        let temp = wait_until_sqlite_ok!(stmt.query_map(params![limitto], |row| {
+            let tag_id: usize = row.get(0).unwrap();
+            let relate_tag_id: usize = row.get(1).unwrap();
+            let limit_to: Option<usize> = row.get(2).unwrap();
 
-                Ok(sharedtypes::DbParentsObj {
-                    tag_id,
-                    relate_tag_id,
-                    limit_to,
-                })
+            Ok(sharedtypes::DbParentsObj {
+                tag_id,
+                relate_tag_id,
+                limit_to,
             })
-            .unwrap();
+        }))
+        .unwrap();
         for item in temp.flatten() {
             out.insert(item);
         }
@@ -399,12 +436,12 @@ impl Main {
     /// Checks if a dead source exists
     ///
     pub fn does_dead_source_exist(&self, url: &String) -> bool {
-        let conn = self._conn.lock().unwrap();
-        conn.query_row(
+        let conn = self.conn.get().unwrap();
+        wait_until_sqlite_ok!(conn.query_row(
             "SELECT id from dead_source_urls WHERE dead_url = ?",
             params![url],
             |row| Ok(row.get(0).unwrap_or(false)),
-        )
+        ))
         .unwrap_or(false)
     }
 
@@ -412,12 +449,12 @@ impl Main {
     /// Does namespace contains tagid. A more optimizes sqlite version
     ///
     pub fn namespace_contains_id_sql(&self, tid: &usize, nsid: &usize) -> bool {
-        let conn = self._conn.lock().unwrap();
-        conn.query_row(
+        let conn = self.conn.get().unwrap();
+        wait_until_sqlite_ok!(conn.query_row(
             "SELECT id FROM Tags WHERE id = ? AND namespace = ?",
             params![tid, nsid],
             |row| Ok(row.get(0).unwrap_or(false)),
-        )
+        ))
         .unwrap_or(false)
     }
 
@@ -425,39 +462,43 @@ impl Main {
     /// Removes ALL of a tag_id from the parents collumn
     ///
     pub fn parents_delete_tag_id_sql(&mut self, tag_id: &usize) {
-        let conn = self._conn.lock().unwrap();
-        let _ = conn.execute("DELETE FROM Parents WHERE tag_id = ?", params![tag_id]);
-    }
-
-    ///
-    /// Removes ALL of a relate_tag_id from the parents collumn
-    ///
-    pub fn parents_delete_relate_tag_id_sql(&mut self, relate_tag_id: &usize) {
-        let conn = self._conn.lock().unwrap();
-        let _ = conn.execute(
-            "DELETE FROM Parents WHERE relate_tag_id = ?",
-            params![relate_tag_id],
+        let conn = self.conn.get().unwrap();
+        let _ = wait_until_sqlite_ok!(
+            conn.execute("DELETE FROM Parents WHERE tag_id = ?", params![tag_id])
         );
     }
 
     ///
     /// Removes ALL of a relate_tag_id from the parents collumn
     ///
+    pub fn parents_delete_relate_tag_id_sql(&mut self, relate_tag_id: &usize) {
+        let conn = self.conn.get().unwrap();
+        let _ = wait_until_sqlite_ok!(conn.execute(
+            "DELETE FROM Parents WHERE relate_tag_id = ?",
+            params![relate_tag_id],
+        ));
+    }
+
+    ///
+    /// Removes ALL of a relate_tag_id from the parents collumn
+    ///
     pub fn parents_delete_limit_to_sql(&mut self, limit_to: &usize) {
-        let conn = self._conn.lock().unwrap();
-        let _ = conn.execute("DELETE FROM Parents WHERE limit_to = ?", params![limit_to]);
+        let conn = self.conn.get().unwrap();
+        let _ = wait_until_sqlite_ok!(
+            conn.execute("DELETE FROM Parents WHERE limit_to = ?", params![limit_to])
+        );
     }
 
     ///
     /// Gets a file storage location id
     ///
     pub fn storage_get_id(&self, location: &String) -> Option<usize> {
-        let conn = self._conn.lock().unwrap();
-        conn.query_row(
+        let conn = self.conn.get().unwrap();
+        wait_until_sqlite_ok!(conn.query_row(
             "SELECT id from FileStorageLocations where location = ?",
             params![location],
             |row| row.get(0),
-        )
+        ))
         .optional()
         .unwrap_or_default()
     }
@@ -468,9 +509,11 @@ impl Main {
     /// starts at zero but the stupid actual count starts at 1
     ///
     pub fn tags_max_return_sql(&self) -> usize {
-        let conn = self._conn.lock().unwrap();
-        conn.query_row("SELECT MAX(id) FROM Tags", params![], |row| row.get(0))
-            .unwrap_or(0)
+        let conn = self.conn.get().unwrap();
+        wait_until_sqlite_ok!(
+            conn.query_row("SELECT MAX(id) FROM Tags", params![], |row| row.get(0))
+        )
+        .unwrap_or(0)
             + 1
     }
 
@@ -478,8 +521,8 @@ impl Main {
     /// Gets a tag by id
     ///
     pub fn tags_get_dbtagnns_sql(&self, tag_id: &usize) -> Option<sharedtypes::DbTagNNS> {
-        let conn = self._conn.lock().unwrap();
-        conn.query_row(
+        let conn = self.conn.get().unwrap();
+        wait_until_sqlite_ok!(conn.query_row(
             "SELECT name, namespace from Tags where id = ?",
             params![tag_id],
             |row| match (row.get(0), row.get(1)) {
@@ -489,7 +532,7 @@ impl Main {
                 })),
                 _ => Ok(None),
             },
-        )
+        ))
         .optional()
         .unwrap()?
     }
@@ -499,10 +542,11 @@ impl Main {
     ///
     pub fn tags_get_id_list_sql(&self) -> HashSet<usize> {
         let inp = "SELECT id FROM Tags";
-        let conn = self._conn.lock().unwrap();
+        let conn = self.conn.get().unwrap();
 
         let mut stmt = conn.prepare(inp).unwrap();
-        let temp = stmt.query_map([], |row| Ok(row.get(0).unwrap())).unwrap();
+        let temp =
+            wait_until_sqlite_ok!(stmt.query_map([], |row| Ok(row.get(0).unwrap()))).unwrap();
 
         let mut out = HashSet::new();
         for item in temp {
@@ -516,10 +560,11 @@ impl Main {
     ///
     pub fn file_get_list_id_sql(&self) -> HashSet<usize> {
         let inp = "SELECT id FROM File";
-        let conn = self._conn.lock().unwrap();
+        let conn = self.conn.get().unwrap();
 
         let mut stmt = conn.prepare(inp).unwrap();
-        let temp = stmt.query_map([], |row| Ok(row.get(0).unwrap())).unwrap();
+        let temp =
+            wait_until_sqlite_ok!(stmt.query_map([], |row| Ok(row.get(0).unwrap()))).unwrap();
 
         let mut out = HashSet::new();
         for item in temp {
@@ -532,12 +577,12 @@ impl Main {
     /// Gets a string from the ID of the storage location
     ///
     pub fn storage_get_string(&self, id: &usize) -> Option<String> {
-        let conn = self._conn.lock().unwrap();
-        conn.query_row(
+        let conn = self.conn.get().unwrap();
+        wait_until_sqlite_ok!(conn.query_row(
             "SELECT location from FileStorageLocations where id = ?",
             params![id],
             |row| row.get(0),
-        )
+        ))
         .optional()
         .unwrap_or_default()
     }
@@ -549,21 +594,22 @@ impl Main {
         if self.storage_get_id(location).is_some() {
             return;
         }
-        let conn = self._conn.lock().unwrap();
+        let conn = self.conn.get().unwrap();
         let mut prep = conn
             .prepare("INSERT OR REPLACE INTO FileStorageLocations (location) VALUES (?)")
             .unwrap();
-        let _ = prep.insert(params![location]);
+
+        loop {
+            if wait_until_sqlite_ok!(prep.insert(params![location])).is_ok() {
+                break;
+            }
+        }
     }
     /// Adds tags into sql database
     pub(super) fn tag_add_sql(&mut self, tag_id: &usize, tags: &String, namespace: &usize) {
         let inp = "INSERT INTO Tags (id, name, namespace) VALUES(?, ?, ?) ON CONFLICT(id) DO UPDATE SET name = EXCLUDED.name, namespace = EXCLUDED.namespace";
-        let _out = self
-            ._conn
-            .borrow_mut()
-            .lock()
-            .unwrap()
-            .execute(inp, params![tag_id, tags, namespace]);
+        let conn = self.conn.get().unwrap();
+        let _ = wait_until_sqlite_ok!(conn.execute(inp, params![tag_id, tags, namespace]));
         self.db_commit_man();
     }
 
@@ -572,19 +618,13 @@ impl Main {
         &mut self,
         name: &String,
         description: &Option<String>,
-        name_id: &usize,
+        name_id: Option<usize>,
     ) {
-        if self.namespace_get_id_sql(name).is_some() {
-            return;
+        let inp = "INSERT INTO Namespace (id, name, description) VALUES(?, ?, ?)";
+        {
+            let conn = self.conn.get().unwrap();
+            let _ = wait_until_sqlite_ok!(conn.execute(inp, params![name_id, name, description]));
         }
-
-        let inp = "INSERT INTO Namespace VALUES(?, ?, ?)";
-        let _out = self
-            ._conn
-            .borrow_mut()
-            .lock()
-            .unwrap()
-            .execute(inp, params![name_id, name, description]);
         self.db_commit_man();
     }
 
@@ -594,19 +634,17 @@ impl Main {
             return;
         }
         logging::info_log("Database is Loading: Parents".to_string());
-        let binding = self._conn.clone();
-        let temp_test = binding.lock().unwrap();
+        let temp_test = self.conn.get().unwrap();
         let temp = temp_test.prepare("SELECT tag_id, relate_tag_id, limit_to FROM Parents");
         if let Ok(mut con) = temp {
-            let parents = con
-                .query_map([], |row| {
-                    Ok(sharedtypes::DbParentsObj {
-                        tag_id: row.get(0).unwrap(),
-                        relate_tag_id: row.get(1).unwrap(),
-                        limit_to: row.get(2).unwrap(),
-                    })
+            let parents = wait_until_sqlite_ok!(con.query_map([], |row| {
+                Ok(sharedtypes::DbParentsObj {
+                    tag_id: row.get(0).unwrap(),
+                    relate_tag_id: row.get(1).unwrap(),
+                    limit_to: row.get(2).unwrap(),
                 })
-                .unwrap();
+            }))
+            .unwrap();
             for each in parents {
                 if let Ok(res) = each {
                     self.parents_add_db(res);
@@ -628,8 +666,7 @@ impl Main {
         };
 
         {
-            let binding = self._conn.clone();
-            let temp_test = binding.lock().unwrap();
+            let temp_test = self.conn.get().unwrap();
 
             let temp = match par.limit_to {
             None => {
@@ -643,17 +680,16 @@ impl Main {
             if let Ok(mut con) = temp {
                 match par.limit_to {
                     None => {
-                        let parents = con
-                            .query_map(
-                                [&par.tag_id as &dyn ToSql, &par.relate_tag_id as &dyn ToSql],
-                                |row| {
-                                    let kep: usize = row.get(0).unwrap();
+                        let parents = wait_until_sqlite_ok!(con.query_map(
+                            [&par.tag_id as &dyn ToSql, &par.relate_tag_id as &dyn ToSql],
+                            |row| {
+                                let kep: usize = row.get(0).unwrap();
 
-                                    Ok(kep)
-                                },
-                            )
-                            .unwrap()
-                            .flatten();
+                                Ok(kep)
+                            },
+                        ))
+                        .unwrap()
+                        .flatten();
 
                         for each in parents {
                             let ear: usize = each;
@@ -662,21 +698,20 @@ impl Main {
                     }
 
                     Some(lim) => {
-                        let parents = con
-                            .query_map(
-                                [
-                                    &par.tag_id as &dyn ToSql,
-                                    &par.relate_tag_id as &dyn ToSql,
-                                    &lim as &dyn ToSql,
-                                ],
-                                |row| {
-                                    let kep: usize = row.get(0).unwrap();
+                        let parents = wait_until_sqlite_ok!(con.query_map(
+                            [
+                                &par.tag_id as &dyn ToSql,
+                                &par.relate_tag_id as &dyn ToSql,
+                                &lim as &dyn ToSql,
+                            ],
+                            |row| {
+                                let kep: usize = row.get(0).unwrap();
 
-                                    Ok(kep)
-                                },
-                            )
-                            .unwrap()
-                            .flatten();
+                                Ok(kep)
+                            },
+                        ))
+                        .unwrap()
+                        .flatten();
                         for each in parents {
                             let ear: usize = each;
                             out.insert(ear);
@@ -694,12 +729,11 @@ impl Main {
     ///
     pub fn extension_put_id_ext_sql(&mut self, id: Option<usize>, ext: &str) -> usize {
         {
-            let conn = self._conn.lock().unwrap();
-            conn.execute(
+            let conn = self.conn.get().unwrap();
+            let _ = wait_until_sqlite_ok!(conn.execute(
                 "insert or ignore into FileExtensions(id, extension) VALUES (?,?)",
                 params![id, ext],
-            )
-            .unwrap();
+            ));
         }
 
         self.extension_get_id_sql(ext).unwrap()
@@ -708,12 +742,12 @@ impl Main {
     /// Returns id if a hash exists
     ///
     pub fn file_get_id_sql(&self, hash: &str) -> Option<usize> {
-        let conn = self._conn.lock().unwrap();
-        conn.query_row(
+        let conn = self.conn.get().unwrap();
+        wait_until_sqlite_ok!(conn.query_row(
             "SELECT id FROM File WHERE hash = ? LIMIT 1",
             params![hash],
             |row| row.get(0),
-        )
+        ))
         .unwrap_or_default()
     }
 
@@ -721,27 +755,26 @@ impl Main {
     /// Returns if an extension exists gey by ext string
     ///
     pub fn extension_get_id_sql(&self, ext: &str) -> Option<usize> {
-        let conn = self._conn.lock().unwrap();
-
-        conn.query_row(
-            "select id from FileExtensions where extension = ?",
+        let conn = self.conn.get().unwrap();
+        wait_until_sqlite_ok!(conn.query_row(
+            "SELECT id FROM FileExtensions WHERE extension = ?",
             params![ext],
             |row| row.get(0),
-        )
-        .unwrap_or_default()
+        ))
+        .unwrap_or(None)
     }
     ///
     /// Returns if an extension exists get by id
     ///
     pub fn extension_get_string_sql(&self, id: &usize) -> Option<String> {
-        let conn = self._conn.lock().unwrap();
+        let conn = self.conn.get().unwrap();
 
-        conn.query_row(
+        wait_until_sqlite_ok!(conn.query_row(
             "select extension from FileExtensions where id = ?",
             params![id],
             |row| row.get(0),
-        )
-        .unwrap_or_default()
+        ))
+        .unwrap_or(None)
     }
 
     /// Adds file via SQL
@@ -780,13 +813,12 @@ impl Main {
         }
 
         let inp = "INSERT INTO File VALUES(?, ?, ?, ?)";
-        let _out = self
-            ._conn
-            .borrow_mut()
-            .lock()
-            .unwrap()
-            .execute(inp, params![file_id, hash, extension, storage_id]);
-
+        {
+            let conn = self.conn.get().unwrap();
+            let _ = wait_until_sqlite_ok!(
+                conn.execute(inp, params![file_id, hash, extension, storage_id])
+            );
+        }
         if let Some(id) = file_id {
             out_file_id = id;
         } else {
@@ -804,18 +836,16 @@ impl Main {
             return;
         }
         logging::info_log("Database is Loading: Relationships".to_string());
-        let binding = self._conn.clone();
-        let temp_test = binding.lock().unwrap();
+        let temp_test = self.conn.get().unwrap();
         let temp = temp_test.prepare("SELECT fileid, tagid FROM Relationship");
         if let Ok(mut con) = temp {
-            let relationship = con
-                .query_map([], |row| {
-                    Ok(sharedtypes::DbRelationshipObj {
-                        fileid: row.get(0).unwrap(),
-                        tagid: row.get(1).unwrap(),
-                    })
+            let relationship = wait_until_sqlite_ok!(con.query_map([], |row| {
+                Ok(sharedtypes::DbRelationshipObj {
+                    fileid: row.get(0).unwrap(),
+                    tagid: row.get(1).unwrap(),
                 })
-                .unwrap();
+            }))
+            .unwrap();
             for each in relationship {
                 match each {
                     Ok(res) => {
@@ -838,12 +868,13 @@ impl Main {
     pub fn relationship_get_fileid_sql(&self, tag_id: &usize) -> HashSet<usize> {
         let mut out = HashSet::new();
 
-        let conn = self._conn.lock().unwrap();
+        let conn = self.conn.get().unwrap();
 
         let mut stmt = conn
             .prepare("SELECT fileid from Relationship where tagid = ?")
             .unwrap();
-        let temp = stmt.query_map(params![tag_id], |row| row.get(0)).unwrap();
+        let temp =
+            wait_until_sqlite_ok!(stmt.query_map(params![tag_id], |row| row.get(0))).unwrap();
         for item in temp.flatten() {
             out.insert(item);
         }
@@ -855,36 +886,158 @@ impl Main {
     pub fn relationship_get_tagid_sql(&self, file_id: &usize) -> HashSet<usize> {
         let mut out = HashSet::new();
 
-        let conn = self._conn.lock().unwrap();
+        let conn = self.conn.get().unwrap();
 
         let mut stmt = conn
             .prepare("SELECT tagid from Relationship where fileid = ?")
             .unwrap();
-        let temp = stmt.query_map(params![file_id], |row| row.get(0)).unwrap();
+        let temp =
+            wait_until_sqlite_ok!(stmt.query_map(params![file_id], |row| row.get(0))).unwrap();
         for item in temp.flatten() {
             out.insert(item);
         }
         out
     }
 
+    /// Starts a transaction for bulk inserts.
+    pub fn transaction_start(&mut self) {
+        let conn = self.conn.get().unwrap();
+        wait_until_sqlite_ok!(conn.execute("BEGIN", []));
+    }
+
+    ///
+    /// Determines if the DB has pending actions.
+    /// Was having a weird edge case where I was flushing over 6k tags at once and the db vomited
+    /// on itself. Hopefully this fixes it
+    ///
+    pub fn determine_if_busy(&self) -> bool {
+        let conn = self.conn.get().unwrap();
+        conn.is_busy()
+    }
+
+    /// Flushes to disk.
+    pub fn transaction_flush(&mut self) {
+        self._dbcommitnum = 0;
+
+        // If were busy doing a transaction then do nothing
+        while self.determine_if_busy() {
+            std::thread::sleep(Duration::from_millis(100));
+        }
+        let conn = self.conn.get().unwrap();
+        wait_until_sqlite_ok!(conn.execute("COMMIT", []));
+        wait_until_sqlite_ok!(conn.execute("BEGIN", []));
+
+        //self.execute("COMMIT".to_string());
+        //self.execute("BEGIN".to_string());
+    }
+
+    // Closes a transaction for bulk inserts.
+    pub fn transaction_close(&mut self) {
+        let conn = self.conn.get().unwrap();
+        wait_until_sqlite_ok!(conn.execute("COMMIT", []));
+        self._dbcommitnum = 0;
+    }
+    /// Querys the db use this for select statements. NOTE USE THIS ONY FOR RESULTS
+    /// THAT RETURN STRINGS
+    /*pub fn quer_stra(&mut self, inp: String) -> Result<Vec<String>> {
+        let binding = self.conn.get().unwrap();
+        let mut toexec = binding.prepare(&inp).unwrap();
+        let rows = wait_until_sqlite_ok!(toexec.query_map([], |row| row.get(0))).unwrap();
+        let mut out = Vec::new();
+        for each in rows {
+            out.push(each.unwrap());
+        }
+        Ok(out)
+    }*/
+    /// Querys the db use this for select statements. NOTE USE THIS ONY FOR RESULTS
+    /// THAT RETURN INTS
+    pub fn quer_int(&mut self, inp: String) -> Vec<isize> {
+        let conmut = self.conn.get().unwrap();
+        let mut toexec = conmut.prepare(&inp).unwrap();
+        let rows = wait_until_sqlite_ok!(toexec.query_map([], |row| row.get(0))).unwrap();
+        let mut out: Vec<isize> = Vec::new();
+        for each in rows {
+            match each {
+                Ok(temp) => {
+                    out.push(temp);
+                }
+                Err(errer) => {
+                    error!("Could not load {} Due to error: {:?}", &inp, errer);
+                }
+            }
+        }
+        out
+    }
+
+    ///
+    /// Adds a setting into the db
+    ///
+    ///
+    pub fn setting_add_sql(
+        &mut self,
+        name: String,
+        pretty: &Option<String>,
+        num: Option<usize>,
+        param: &Option<String>,
+    ) {
+        let _ex =
+            wait_until_sqlite_ok!( self
+                .conn.get()
+                .unwrap()
+                .execute(
+                    "INSERT INTO Settings(name, pretty, num, param) VALUES (?1, ?2, ?3, ?4) ON CONFLICT(name) DO UPDATE SET pretty=?2, num=?3, param=?4 ;",
+                    params![
+                        &name,
+                        // Hella jank workaround. can only pass 1 type into a function without doing
+                        // workaround. This makes it work should be fine for one offs.
+                        if pretty.is_none() {
+                            &Null as &dyn ToSql
+                        } else {
+                            &pretty
+                        },
+                        if num.is_none() {
+                            &Null as &dyn ToSql
+                        } else {
+                            &num
+                        },
+                        if param.is_none() {
+                            &Null as &dyn ToSql
+                        } else {
+                            &param
+                        }
+                    ],
+                ));
+        match _ex {
+            Err(_ex) => {
+                println!(
+                    "setting_add: Their was an error with inserting {} into db. {}",
+                    &name, &_ex
+                );
+                error!(
+                    "setting_add: Their was an error with inserting {} into db. {}",
+                    &name, &_ex
+                );
+            }
+            Ok(_ex) => self.db_commit_man(),
+        }
+    }
+
     /// Loads settings into db
     pub(super) fn load_settings(&mut self) {
         logging::info_log("Database is Loading: Settings".to_string());
-        let binding = self._conn.clone();
-        let temp_test = binding.lock().unwrap();
+        let temp_test = self.conn.get().unwrap();
         let temp = temp_test.prepare("SELECT * FROM Settings");
         match temp {
             Ok(mut con) => {
-                let settings = con
-                    .query_map([], |row| {
-                        Ok(sharedtypes::DbSettingObj {
-                            name: row.get(0)?,
-                            pretty: row.get(1)?,
-                            num: row.get(2)?,
-                            param: row.get(3)?,
-                        })
+                let settings = wait_until_sqlite_ok!(con.query_map([], |row| {
+                    Ok(sharedtypes::DbSettingObj {
+                        name: row.get(0)?,
+                        pretty: row.get(1)?,
+                        num: row.get(2)?,
+                        param: row.get(3)?,
                     })
-                    .unwrap();
+                }))
+                .unwrap();
                 for each in settings {
                     if let Ok(res) = each {
                         self.setting_add_db(res.name, res.pretty, res.num, res.param);
@@ -899,24 +1052,23 @@ impl Main {
     }
 
     pub(super) fn add_dead_url_sql(&mut self, url: &String) {
-        let conn = self._conn.lock().unwrap();
-        let _ = conn
-            .execute(
-                "INSERT INTO dead_source_urls(dead_url) VALUES (?)",
-                params![url],
-            )
-            .unwrap();
+        let conn = self.conn.get().unwrap();
+        let _ = wait_until_sqlite_ok!(conn.execute(
+            "INSERT INTO dead_source_urls(dead_url) VALUES (?)",
+            params![url],
+        ))
+        .unwrap();
     }
     ///
     /// Returns id if a tag exists
     ///
     pub fn tags_get_id_sql(&self, db_tag_nns: &sharedtypes::DbTagNNS) -> Option<usize> {
-        let conn = self._conn.lock().unwrap();
-        conn.query_row(
+        let conn = self.conn.get().unwrap();
+        wait_until_sqlite_ok!(conn.query_row(
             "SELECT id FROM Tags WHERE name = ? AND namespace = ?",
             params![db_tag_nns.name, db_tag_nns.namespace],
             |row| row.get(0),
-        )
+        ))
         .unwrap_or(None)
     }
 
@@ -924,11 +1076,11 @@ impl Main {
     /// Migrates a relationship's tag id
     ///
     pub fn migrate_relationship_tag_sql(&self, old_tag_id: &usize, new_tag_id: &usize) {
-        let conn = self._conn.lock().unwrap();
-        conn.execute(
+        let conn = self.conn.get().unwrap();
+        wait_until_sqlite_ok!(conn.execute(
             "UPDATE OR REPLACE Relationship SET tagid = ? WHERE tagid = ?",
             params![new_tag_id, old_tag_id],
-        )
+        ))
         .unwrap();
     }
     ///
@@ -940,11 +1092,11 @@ impl Main {
         old_tag_id: &usize,
         new_tag_id: &usize,
     ) {
-        let conn = self._conn.lock().unwrap();
-        conn.execute(
+        let conn = self.conn.get().unwrap();
+        wait_until_sqlite_ok!(conn.execute(
             "UPDATE OR REPLACE Relationship SET tagid = ? WHERE tagid = ? AND fileid=?",
             params![new_tag_id, old_tag_id, file_id],
-        )
+        ))
         .unwrap();
     }
 
@@ -952,12 +1104,12 @@ impl Main {
     /// Returns id if a namespace exists
     ///
     pub fn namespace_get_id_sql(&self, namespace: &String) -> Option<usize> {
-        let conn = self._conn.lock().unwrap();
-        conn.query_row(
+        let conn = self.conn.get().unwrap();
+        wait_until_sqlite_ok!(conn.query_row(
             "SELECT id FROM Namespace WHERE name = ?",
             params![namespace],
             |row| row.get(0),
-        )
+        ))
         .unwrap_or(None)
     }
     ///
@@ -967,8 +1119,8 @@ impl Main {
         &self,
         ns_id: &usize,
     ) -> Option<sharedtypes::DbNamespaceObj> {
-        let conn = self._conn.lock().unwrap();
-        conn.query_row(
+        let conn = self.conn.get().unwrap();
+        wait_until_sqlite_ok!(conn.query_row(
             "SELECT * FROM Namespace WHERE id = ?",
             params![ns_id],
             |row| {
@@ -982,7 +1134,7 @@ impl Main {
                     Ok(None)
                 }
             },
-        )
+        ))
         .unwrap()
     }
 
@@ -992,15 +1144,14 @@ impl Main {
     pub(super) fn load_dead_urls(&mut self) {
         logging::info_log("Database is Loading: dead_source_urls".to_string());
 
-        let binding = self._conn.clone();
-        let temp_test = binding.lock().unwrap();
+        let temp_test = self.conn.get().unwrap();
         let temp = temp_test.prepare("SELECT * FROM dead_source_urls");
 
         if let Ok(mut con) = temp {
-            let tag = con.query_map([], |row| {
+            let tag = wait_until_sqlite_ok!(con.query_map([], |row| {
                 let url: String = row.get(0).unwrap();
                 Ok(url)
-            });
+            }));
             match tag {
                 Ok(tags) => {
                     for each in tags {
@@ -1034,11 +1185,10 @@ impl Main {
 
         // let mut delete_tags = HashSet::new();
         {
-            let binding = self._conn.clone();
-            let temp_test = binding.lock().unwrap();
+            let temp_test = self.conn.get().unwrap();
             let temp = temp_test.prepare("SELECT * FROM Tags");
             if let Ok(mut con) = temp {
-                let tag = con.query_map([], |row| {
+                let tag = wait_until_sqlite_ok!(con.query_map([], |row| {
                     let name: String = match row.get(1) {
                         Ok(out) => out,
                         Err(err) => {
@@ -1052,7 +1202,7 @@ impl Main {
                         name,
                         namespace: row.get(2).unwrap(),
                     })
-                });
+                }));
                 match tag {
                     Ok(tags) => {
                         for each in tags {
@@ -1077,71 +1227,27 @@ impl Main {
 
     /// Sets advanced settings for journaling. NOTE Experimental badness
     pub fn db_open(&mut self) {
-        let _ = self
-            ._conn
-            .borrow_mut()
-            .lock()
-            .unwrap()
-            .execute("PRAGMA secure_delete = 0", params![]);
-        let _ = self
-            ._conn
-            .borrow_mut()
-            .lock()
-            .unwrap()
-            .execute("PRAGMA busy_timeout = 5000", params![]);
-
-        /* let _ = self
-            ._conn
-            .borrow_mut()
-            .lock()
-            .unwrap()
-            .execute("PRAGMA journal_mode = OFF", params![]);
-        let _ = self
-            ._conn
-            .borrow_mut()
-            .lock()
-            .unwrap()
-            .execute("PRAGMA synchronous = OFF", params![]);
-        let _ = self._conn.borrow_mut().lock().unwrap().execute(
-            "
-PRAGMA temp_store = MEMORY
-",
-            params![],
-        );*/
-        let _ = self._conn.borrow_mut().lock().unwrap().execute(
-            "
-PRAGMA page_size = 8192
-",
-            params![],
-        );
-        let _ = self._conn.borrow_mut().lock().unwrap().execute(
-            "
-PRAGMA cache_size = 2900000
-",
-            params![],
-        );
+        let conn = self.conn.get().unwrap();
+        let _ = wait_until_sqlite_ok!(conn.execute("PRAGMA secure_delete = 0", params![]));
+        let _ = wait_until_sqlite_ok!(conn.execute("PRAGMA busy_timeout = 5000", params![]));
+        let _ = wait_until_sqlite_ok!(conn.execute("PRAGMA journal_mode = WAL", params![]));
+        let _ = wait_until_sqlite_ok!(conn.execute("PRAGMA synchronous = NORMAL", params![]));
+        let _ = wait_until_sqlite_ok!(conn.execute("PRAGMA page_size = 8192", params![]));
+        let _ = wait_until_sqlite_ok!(conn.execute("PRAGMA cache_size = 2900000", params![]));
     }
 
     /// Removes a job from sql table by id
     pub fn del_from_jobs_table_sql_better(&mut self, id: &usize) {
         let inp = "DELETE FROM Jobs WHERE id = ?";
-        self._conn
-            .borrow_mut()
-            .lock()
-            .unwrap()
-            .execute(inp, params![id.to_string()])
-            .unwrap();
+        let conn = self.conn.get().unwrap();
+        let _ = wait_until_sqlite_ok!(conn.execute(inp, params![id.to_string()]));
     }
 
     /// Removes a tag from sql table by name and namespace
     pub fn del_from_tags_by_name_and_namespace(&mut self, name: &String, namespace: &String) {
         let inp = "DELETE FROM Tags WHERE name = ? AND namespace = ?";
-        self._conn
-            .borrow_mut()
-            .lock()
-            .unwrap()
-            .execute(inp, params![name, namespace])
-            .unwrap();
+        let conn = self.conn.get().unwrap();
+        wait_until_sqlite_ok!(conn.execute(inp, params![name, namespace])).unwrap();
     }
 
     /// Sqlite wrapper for deleteing a relationship from table.
@@ -1152,36 +1258,35 @@ PRAGMA cache_size = 2900000
         ));
 
         let inp = "DELETE FROM Relationship WHERE fileid = ? AND tagid = ?";
-        self._conn
-            .borrow_mut()
-            .lock()
-            .unwrap()
-            .execute(inp, params![file_id.to_string(), tag_id.to_string()])
+        {
+            let conn = self.conn.get().unwrap();
+            wait_until_sqlite_ok!(
+                conn.execute(inp, params![file_id.to_string(), tag_id.to_string()])
+            )
             .unwrap();
+        }
         self.db_commit_man();
     }
 
     /// Sqlite wrapper for deleteing a parent from table.
     pub fn delete_parent_sql(&mut self, tag_id: &usize, relate_tag_id: &usize) {
         let inp = "DELETE FROM Parents WHERE tag_id = ? AND relate_tag_id = ?";
-        let _out = self
-            ._conn
-            .borrow_mut()
-            .lock()
-            .unwrap()
-            .execute(inp, params![tag_id.to_string(), relate_tag_id.to_string()]);
+        {
+            let conn = self.conn.get().unwrap();
+            let _ = wait_until_sqlite_ok!(
+                conn.execute(inp, params![tag_id.to_string(), relate_tag_id.to_string()])
+            );
+        }
         self.db_commit_man();
     }
 
     /// Sqlite wrapper for deleteing a tag from table.
     pub fn delete_tag_sql(&mut self, tag_id: &usize) {
         let inp = "DELETE FROM Tags WHERE id = ?";
-        let _out = self
-            ._conn
-            .borrow_mut()
-            .lock()
-            .unwrap()
-            .execute(inp, params![tag_id.to_string()]);
+        {
+            let conn = self.conn.get().unwrap();
+            let _ = wait_until_sqlite_ok!(conn.execute(inp, params![tag_id.to_string()]));
+        }
         self.db_commit_man();
     }
 
@@ -1192,12 +1297,10 @@ PRAGMA cache_size = 2900000
             namespace_id
         ));
         let inp = "DELETE FROM Namespace WHERE id = ?";
-        let _out = self
-            ._conn
-            .borrow_mut()
-            .lock()
-            .unwrap()
-            .execute(inp, params![namespace_id.to_string()]);
+        {
+            let conn = self.conn.get().unwrap();
+            let _ = wait_until_sqlite_ok!(conn.execute(inp, params![namespace_id.to_string()]));
+        }
         self.db_commit_man();
     }
 }

@@ -893,6 +893,13 @@ pub fn main_file_loop(
     job_id: &usize,
 ) {
     let fileid;
+
+    // Gets the source url namespace id
+    let source_url_id = {
+        let mut unwrappydb = db.write().unwrap();
+        unwrappydb.create_default_source_url_ns_id()
+    };
+
     match file.source.clone() {
         Some(source) => match source {
             sharedtypes::FileSource::Url(source_url) => {
@@ -914,12 +921,6 @@ pub fn main_file_loop(
                         return;
                     }
                 }
-
-                // Gets the source url namespace id
-                let source_url_id = {
-                    let mut unwrappydb = db.write().unwrap();
-                    unwrappydb.create_default_source_url_ns_id()
-                };
 
                 let location = {
                     let unwrappydb = db.read().unwrap();

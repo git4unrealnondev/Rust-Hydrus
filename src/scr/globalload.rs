@@ -291,13 +291,13 @@ fn parse_plugin_output_andmain(
                 for names in name {
                     // Loops through the namespace objects and selects the last one that's valid.
                     // IF ONE IS NOT VALID THEN THEIR WILL NOT BE ONE ADDED INTO THE DB
-                    for files in names.file {
+                    for files in names.file.iter() {
                         if files.id.is_none() && files.hash.is_some() && files.ext.is_some() {
                             // Gets the extension id
                             let mut unwrappy = db.write().unwrap();
-                            let ext_id = unwrappy.extension_put_string(&files.ext.unwrap());
+                            let ext_id = unwrappy.extension_put_string(&files.ext.clone().unwrap());
 
-                            let storage_id = match files.location {
+                            let storage_id = match &files.location {
                                 Some(exists) => {
                                     unwrappy.storage_put(&exists);
                                     unwrappy.storage_get_id(&exists).unwrap()
@@ -311,17 +311,17 @@ fn parse_plugin_output_andmain(
 
                             let file =
                                 sharedtypes::DbFileStorage::NoIdExist(sharedtypes::DbFileObjNoId {
-                                    hash: files.hash.unwrap(),
+                                    hash: files.hash.clone().unwrap(),
                                     ext_id,
                                     storage_id,
                                 });
                             unwrappy.file_add(file);
                         }
                     }
-                    for tag in names.tag {
+                    for tag in names.tag.iter() {
                         {
                             let mut unwrappy = db.write().unwrap();
-                            unwrappy.tag_add_tagobject(&tag, true);
+                            unwrappy.tag_add_tagobject(tag, true);
                         }
                         manager.read().unwrap().plugin_on_tag(&tag);
                         /*let namespace_id;
@@ -351,21 +351,21 @@ fn parse_plugin_output_andmain(
                             }
                         }*/
                     }
-                    for settings in names.setting {
+                    for settings in names.setting.iter() {
                         let mut unwrappy = db.write().unwrap();
                         unwrappy.setting_add(
-                            settings.name,
-                            settings.pretty,
+                            settings.name.clone(),
+                            settings.pretty.clone(),
                             settings.num,
-                            settings.param,
+                            settings.param.clone(),
                             true,
                         );
                     }
 
-                    for job in names.jobs {
+                    for job in names.jobs.iter() {
                         jobmanager.write().unwrap().jobs_add_nolock(
                             scraper.clone(),
-                            job,
+                            job.clone(),
                             db.clone(),
                         );
                         //db.jobs_add_new(job);
@@ -374,11 +374,15 @@ fn parse_plugin_output_andmain(
                     let mut temp_vec: Vec<(Option<usize>, Option<usize>)> = Vec::new();
                     {
                         let unwrappy = db.read().unwrap();
-                        for relations in names.relationship {
+                        for relations in names.relationship.iter() {
                             let file_id = unwrappy.file_get_hash(&relations.file_hash);
                             let namespace_id = unwrappy.namespace_get(&relations.tag_namespace);
                             let tag_id = unwrappy
                                 .tag_get_name(relations.tag_name.clone(), namespace_id.unwrap());
+                            if file_id.is_none() || tag_id.is_none() {
+                                dbg!(&file_id, &tag_id, &names);
+                            }
+
                             temp_vec.push((file_id, tag_id));
                             /*println!(
                                 "plugins356 relating: file id {:?} to {:?}",

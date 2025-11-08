@@ -202,8 +202,9 @@ impl Main {
         download_location: &String,
         file: &mut sharedtypes::FileObject,
     ) -> usize {
-        self.storage_put(download_location);
-
+        {
+            self.storage_put(download_location);
+        }
         // error checking. We should have all dirs needed but hey if we're missing
         std::fs::create_dir_all(download_location).unwrap();
 
@@ -232,6 +233,9 @@ impl Main {
         }
 
         self.enclave_file_mapping_add(&fileid, enclave_id);
+
+        self.transaction_flush();
+
         fileid
     }
 
@@ -283,7 +287,7 @@ impl Main {
         let timestamp = utc.timestamp_millis();
 
         if self.enclave_file_mapping_get(file_id, enclave_id).is_some() {
-            let conn = self._conn.lock().unwrap();
+            let conn = self.conn.get().unwrap();
             let mut prep = conn
             .prepare(
                 "UPDATE FileEnclaveMapping SET timestamp = ? WHERE file_id = ? AND enclave_id = ?",
@@ -294,7 +298,7 @@ impl Main {
             return;
         }
 
-        let conn = self._conn.lock().unwrap();
+        let conn = self.conn.get().unwrap();
         let mut prep = conn
             .prepare(
                 "INSERT INTO FileEnclaveMapping (file_id, enclave_id, timestamp) VALUES (?, ?, ?)",
@@ -307,7 +311,7 @@ impl Main {
     /// Checks if a file mapping pair exists
     ///
     fn enclave_file_mapping_get(&self, file_id: &usize, enclave_id: &usize) -> Option<usize> {
-        let conn = self._conn.lock().unwrap();
+        let conn = self.conn.get().unwrap();
         conn.query_row(
             "SELECT file_id from FileEnclaveMapping where file_id = ? AND enclave_id = ? LIMIT 1",
             params![file_id, enclave_id],
@@ -511,7 +515,7 @@ impl Main {
             return;
         }
 
-        let conn = self._conn.lock().unwrap();
+        let conn = self.conn.get().unwrap();
         let mut prep = conn
             .prepare("INSERT OR REPLACE INTO Enclave (enclave_name, priority) VALUES (?, ?) ON CONFLICT DO NOTHING")
             .unwrap();
@@ -523,7 +527,7 @@ impl Main {
     /// Gets the enclave name from the enclave id
     ///
     fn enclave_name_get_name(&self, id: &usize) -> Option<String> {
-        let conn = self._conn.lock().unwrap();
+        let conn = self.conn.get().unwrap();
         conn.query_row(
             "SELECT enclave_name from Enclave where id = ?",
             params![id],
@@ -537,7 +541,7 @@ impl Main {
     /// Gets the enclave id from the enclave name
     ///
     pub fn enclave_name_get_id(&self, name: &str) -> Option<usize> {
-        let conn = self._conn.lock().unwrap();
+        let conn = self.conn.get().unwrap();
         conn.query_row(
             "SELECT id from Enclave where enclave_name = ?",
             params![name],
@@ -552,7 +556,7 @@ impl Main {
     ///
     fn enclave_get_id_from_priority(&self, priority_id: &usize) -> Vec<usize> {
         let mut out: Vec<usize> = Vec::new();
-        let conn = self._conn.lock().unwrap();
+        let conn = self.conn.get().unwrap();
         let mut stmt = conn
             .prepare("SELECT id from Enclave WHERE priority = ?")
             .unwrap();
@@ -582,7 +586,7 @@ impl Main {
     ///
     fn enclave_priority_get(&self) -> Vec<usize> {
         let mut out: Vec<usize> = Vec::new();
-        let conn = self._conn.lock().unwrap();
+        let conn = self.conn.get().unwrap();
         let mut stmt = conn
             .prepare("SELECT priority from Enclave ORDER BY priority DESC")
             .unwrap();
@@ -617,7 +621,7 @@ impl Main {
             return;
         }
 
-        let conn = self._conn.lock().unwrap();
+        let conn = self.conn.get().unwrap();
         let mut prep = conn
             .prepare("INSERT OR REPLACE INTO EnclaveCondition (action_name, action_condition) VALUES (?, ?)")
             .unwrap();
@@ -627,7 +631,7 @@ impl Main {
         ]);
     }
     pub fn enclave_condition_get_id(&self, name: &sharedtypes::EnclaveAction) -> Option<usize> {
-        let conn = self._conn.lock().unwrap();
+        let conn = self.conn.get().unwrap();
         conn.query_row(
             "SELECT id from EnclaveCondition where action_name = ?",
             params![serde_json::to_string(name).unwrap()],
@@ -644,7 +648,7 @@ impl Main {
         &self,
         condition_id: &usize,
     ) -> Option<(sharedtypes::EnclaveAction, sharedtypes::EnclaveCondition)> {
-        let conn = self._conn.lock().unwrap();
+        let conn = self.conn.get().unwrap();
         if let Ok(out) = conn
             .query_row(
                 "SELECT action_name, action_condition from EnclaveCondition where id = ?",
@@ -682,7 +686,7 @@ impl Main {
             return;
         }
 
-        let conn = self._conn.lock().unwrap();
+        let conn = self.conn.get().unwrap();
         let mut prep = conn
             .prepare("INSERT OR REPLACE INTO EnclaveActionOrderList (enclave_id,enclave_conditional_list_id, enclave_action_position) VALUES (? ,? ,?)")
             .unwrap();
@@ -700,7 +704,7 @@ impl Main {
         enclave_id: &usize,
         enclave_conditional_list_id: &usize,
     ) -> Option<usize> {
-        let conn = self._conn.lock().unwrap();
+        let conn = self.conn.get().unwrap();
         conn
             .query_row(
                 "SELECT id from EnclaveActionOrderList where enclave_id = ? AND enclave_conditional_list_id = ?",
@@ -715,7 +719,7 @@ impl Main {
     ///
     fn enclave_action_order_enclave_get_list_id(&self, enclave_id: &usize) -> Vec<usize> {
         let mut out: Vec<usize> = Vec::new();
-        let conn = self._conn.lock().unwrap();
+        let conn = self.conn.get().unwrap();
         let mut stmt = conn
             .prepare("SELECT enclave_conditional_list_id from EnclaveActionOrderList where enclave_id = ? ORDER BY enclave_action_position DESC")
             .unwrap();
@@ -756,7 +760,7 @@ impl Main {
             return;
         }
 
-        let conn = self._conn.lock().unwrap();
+        let conn = self.conn.get().unwrap();
         let mut prep = conn
             .prepare("INSERT OR REPLACE INTO EnclaveConditionList (enclave_action_id,failed_enclave_action_id,condition_id) VALUES (? ,? ,?)")
             .unwrap();
@@ -771,7 +775,7 @@ impl Main {
         condition_id: &usize,
         action_id: &usize,
     ) -> Option<usize> {
-        let conn = self._conn.lock().unwrap();
+        let conn = self.conn.get().unwrap();
         conn.query_row(
             "SELECT id from EnclaveConditionList where enclave_action_id = ? AND condition_id = ?",
             params![action_id, condition_id],
@@ -788,7 +792,7 @@ impl Main {
         &mut self,
         condition_list_id: &usize,
     ) -> Option<(usize, Option<usize>, usize)> {
-        let conn = self._conn.lock().unwrap();
+        let conn = self.conn.get().unwrap();
 
         if let Ok(out) = conn
             .query_row(
@@ -813,7 +817,7 @@ impl Main {
             return;
         }
 
-        let conn = self._conn.lock().unwrap();
+        let conn = self.conn.get().unwrap();
         let mut prep = conn
             .prepare(
                 "INSERT OR REPLACE INTO EnclaveAction (action_name, action_text) VALUES (?, ?)",
@@ -826,7 +830,7 @@ impl Main {
     /// Gets an action's ID based on name
     ///
     fn enclave_action_get_id(&self, name: &String) -> Option<usize> {
-        let conn = self._conn.lock().unwrap();
+        let conn = self.conn.get().unwrap();
         conn.query_row(
             "SELECT id from EnclaveAction where action_name = ?",
             params![name],

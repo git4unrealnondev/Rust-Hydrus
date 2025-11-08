@@ -452,12 +452,20 @@ fn generate_thumbnail_u8(inp: Vec<u8>) -> Result<Vec<u8>, std::io::Error> {
 ///
 pub fn generate_thumbnail(fid: usize) -> Result<Vec<u8>, std::io::Error> {
     use std::io::{Error, ErrorKind};
+    let max_cnt = 5;
     if let Some(fbyte) = client::get_file(fid) {
-        let byte = std::fs::read(fbyte)?;
-        generate_thumbnail_u8(byte)
+        for _ in 0..5 {
+            if let Ok(byte) = std::fs::read(&fbyte) {
+                return generate_thumbnail_u8(byte);
+            }
+        }
     } else {
-        Err(Error::new(ErrorKind::Other, "Err  get_file is none"))
+        return Err(Error::new(ErrorKind::Other, "Err  get_file is none"));
     }
+    Err(std::io::Error::other(format!(
+        "Could not load the filter after {}",
+        max_cnt
+    )))
 }
 
 ///
@@ -516,18 +524,17 @@ fn make_animated_img(
                 },
             )
             .unwrap();
-            //let mut encoder = Encoder::new((SIZE_THUMBNAIL_X, SIZE_THUMBNAIL_Y)).unwrap();
             let mut cnt = 0;
             for each in ve {
                 let mut pixelbuf =
                     Vec::with_capacity((each.width() * each.height() * 4).try_into().unwrap());
                 for each in each.into_rgba8().pixels() {
                     for test in each.channels() {
-                        pixelbuf.push(test.clone());
+                        pixelbuf.push(*test);
                     }
                 }
 
-                let _ = encoder.add_frame(&*pixelbuf, (cnt * frate).try_into().unwrap());
+                let _ = encoder.add_frame(&pixelbuf, (cnt * frate).try_into().unwrap());
                 cnt += 1;
             }
             let out = match encoder.finalize(((cnt + 1) * frate).try_into().unwrap()) {
@@ -538,7 +545,7 @@ fn make_animated_img(
         }
         Err(err) => {
             dbg!("err", err);
-            return None;
+            None
         }
     }
 }
@@ -546,12 +553,12 @@ fn make_animated_img(
 fn setup_thumbnail_default() -> PathBuf {
     let storage = client::location_get();
     let path = Path::new(&storage);
-    let finpath = std::fs::canonicalize(path.join(LOCATION_THUMBNAILS.to_string()))
+    let finpath = std::fs::canonicalize(path.join(LOCATION_THUMBNAILS))
         .unwrap()
         .to_string_lossy()
         .to_string();
     client::setting_add(
-        format!("{}-location", PLUGIN_NAME).into(),
+        format!("{}-location", PLUGIN_NAME),
         format!("From plugin {} {}", PLUGIN_NAME, PLUGIN_DESCRIPTION).into(),
         None,
         Some(finpath.clone()),
@@ -566,7 +573,7 @@ fn setup_thumbnail_default() -> PathBuf {
 /// Gets the location to put thumbnails in
 ///
 fn thumbnail_location_get() -> PathBuf {
-    match client::settings_get_name(format!("{}-location", PLUGIN_NAME).into()) {
+    match client::settings_get_name(format!("{}-location", PLUGIN_NAME)) {
         Some(setting) => {
             let locpath = match setting.param {
                 Some(loc) => Path::new(&loc).to_path_buf(),
@@ -579,14 +586,14 @@ fn thumbnail_location_get() -> PathBuf {
 }
 
 fn setup_default_path(path: &Path) -> String {
-    let fpath = std::fs::canonicalize(path.join(LOCATION_THUMBNAILS.to_string()));
+    let fpath = std::fs::canonicalize(path.join(LOCATION_THUMBNAILS));
     match fpath {
         Ok(_) => {}
         Err(_) => {
-            let _ = std::fs::create_dir_all(path.join(LOCATION_THUMBNAILS.to_string()));
+            let _ = std::fs::create_dir_all(path.join(LOCATION_THUMBNAILS));
         }
     }
-    std::fs::canonicalize(path.join(LOCATION_THUMBNAILS.to_string()))
+    std::fs::canonicalize(path.join(LOCATION_THUMBNAILS))
         .unwrap()
         .to_string_lossy()
         .to_string()
@@ -604,7 +611,7 @@ fn setup_thumbnail_location() -> Option<PathBuf> {
     let location = match client::settings_get_name(format!("{}-location", PLUGIN_NAME)) {
         None => {
             client::setting_add(
-                format!("{}-location", PLUGIN_NAME).into(),
+                format!("{}-location", PLUGIN_NAME),
                 format!("From plugin {} {}", PLUGIN_NAME, PLUGIN_DESCRIPTION).into(),
                 None,
                 Some(finpath.clone()),
@@ -616,7 +623,7 @@ fn setup_thumbnail_location() -> Option<PathBuf> {
         Some(loc) => match loc.param {
             None => {
                 client::setting_add(
-                    format!("{}-location", PLUGIN_NAME).into(),
+                    format!("{}-location", PLUGIN_NAME),
                     format!("From plugin {} {}", PLUGIN_NAME, PLUGIN_DESCRIPTION).into(),
                     None,
                     Some(finpath.clone()),
@@ -633,23 +640,23 @@ fn setup_thumbnail_location() -> Option<PathBuf> {
         Ok(metadata) => {
             // Checks if the folder exists if it doesn't exist then it tries to create it
             if metadata.is_dir() {
-                return Some(final_location);
+                Some(final_location)
             } else {
                 // Tries to create a folder
-                return match std::fs::create_dir_all(&final_location) {
+                match std::fs::create_dir_all(&final_location) {
                     Ok(_) => Some(final_location),
                     Err(_) => None,
-                };
+                }
             }
         }
         Err(_) => {
             // Tries to create a folder
-            return match std::fs::create_dir_all(&final_location) {
+            match std::fs::create_dir_all(&final_location) {
                 Ok(_) => Some(final_location),
                 Err(_) => None,
-            };
+            }
         }
-    };
+    }
 }
 
 ///

@@ -10,6 +10,8 @@ use crate::sharedtypes;
 use crate::sharedtypes::ScraperParam;
 use eta::{Eta, TimeAcc};
 use log::{error, info};
+use r2d2::Pool;
+use r2d2_sqlite::SqliteConnectionManager;
 use rayon::prelude::*;
 use remove_empty_subdirs::remove_empty_subdirs;
 pub use rusqlite::types::ToSql;
@@ -56,7 +58,7 @@ pub enum CacheType {
 /// Holder of database self variables
 pub struct Main {
     _dbpath: Option<String>,
-    pub _conn: Arc<Mutex<Connection>>,
+    conn: Pool<SqliteConnectionManager>,
     _vers: usize,
     _active_vers: usize,
     _inmemdb: NewinMemDB,
@@ -80,11 +82,12 @@ impl Main {
         let mut main = match path {
             Some(ref file_path) => {
                 first_time_load_flag = Path::new(&file_path).exists();
-                let connection = dbinit(file_path);
                 let memdb = NewinMemDB::new();
+                let manager = SqliteConnectionManager::memory();
+                let pool = r2d2::Builder::new().max_size(20).build(manager).unwrap();
                 let memdbmain = Main {
                     _dbpath: path.clone(),
-                    _conn: Arc::new(Mutex::new(Connection::open_in_memory().unwrap())),
+                    conn: pool,
                     _vers: vers,
                     _active_vers: 0,
                     _inmemdb: memdb,
@@ -96,9 +99,12 @@ impl Main {
                     globalload: None,
                     localref: None,
                 };
+                let manager = SqliteConnectionManager::memory();
+                let pool = r2d2::Builder::new().max_size(20).build(manager).unwrap();
+                let manager = SqliteConnectionManager::file(&file_path);
                 let mut main = Main {
                     _dbpath: path,
-                    _conn: Arc::new(Mutex::new(Connection::open_in_memory().unwrap())),
+                    conn: pool,
                     _vers: vers,
                     _active_vers: 0,
                     _inmemdb: memdbmain._inmemdb,
@@ -110,14 +116,21 @@ impl Main {
                     globalload: None,
                     localref: None,
                 };
-                main._conn = Arc::new(Mutex::new(connection));
+                let pool = r2d2::Builder::new()
+                    .idle_timeout(Some(Duration::from_secs(1)))
+                    .max_size(20)
+                    .build(manager)
+                    .unwrap();
+                main.conn = pool;
                 main
             }
             None => {
                 let memdb = NewinMemDB::new();
+                let manager = SqliteConnectionManager::memory();
+                let pool = r2d2::Builder::new().max_size(20).build(manager).unwrap();
                 let memdbmain = Main {
                     _dbpath: None,
-                    _conn: Arc::new(Mutex::new(Connection::open_in_memory().unwrap())),
+                    conn: pool,
                     _vers: vers,
                     _active_vers: 0,
                     _inmemdb: memdb,
@@ -129,9 +142,11 @@ impl Main {
                     globalload: None,
                     localref: None,
                 };
+                let manager = SqliteConnectionManager::memory();
+                let pool = r2d2::Builder::new().max_size(20).build(manager).unwrap();
                 let mut main = Main {
                     _dbpath: None,
-                    _conn: Arc::new(Mutex::new(Connection::open_in_memory().unwrap())),
+                    conn: pool,
                     _vers: vers,
                     _active_vers: 0,
                     _inmemdb: memdbmain._inmemdb,
@@ -143,7 +158,9 @@ impl Main {
                     globalload: None,
                     localref: None,
                 };
-                main._conn = Arc::new(Mutex::new(Connection::open_in_memory().unwrap()));
+                let manager = SqliteConnectionManager::memory();
+                let pool = r2d2::Builder::new().max_size(20).build(manager).unwrap();
+                main.conn = pool;
                 main
             }
         };
@@ -849,7 +866,10 @@ impl Main {
         logging::info_log("Starting Vacuum db!".to_string());
         self.transaction_flush();
         self.transaction_close();
-        self.execute("VACUUM;".to_string());
+        {
+            let conn = self.conn.get().unwrap();
+            conn.execute("VACUUM", []);
+        }
         self.transaction_start();
         logging::info_log("Finishing Vacuum db!".to_string());
     }
@@ -859,7 +879,10 @@ impl Main {
         logging::info_log("Starting to analyze db!".to_string());
         self.transaction_flush();
         self.transaction_close();
-        self.execute("ANALYZE;".to_string());
+        {
+            let conn = self.conn.get().unwrap();
+            conn.execute("ANALYZE", []);
+        }
         self.transaction_start();
         logging::info_log("Finishing analyze db!".to_string());
     }
@@ -868,7 +891,7 @@ impl Main {
     pub fn first_db(&mut self) {
         // Making Relationship Table
         {
-            let conn = self._conn.lock().unwrap();
+            let conn = self.conn.get().unwrap();
             conn.execute(
                 "CREATE TABLE Relationship (fileid INTEGER NOT NULL, tagid INTEGER NOT NULL, PRIMARY KEY (fileid, tagid) ) WITHOUT ROWID",
                 [],
@@ -950,7 +973,7 @@ impl Main {
         self.table_create(&name, &keys, &vals);
 
         {
-            let conn = self._conn.lock().unwrap();
+            let conn = self.conn.get().unwrap();
 
             conn.execute(
                 "CREATE TABLE File 
@@ -987,7 +1010,7 @@ impl Main {
         vals = vec_of_strings!["INTEGER PRIMARY KEY", "TEXT NOT NULL"];
         self.table_create(&name, &keys, &vals);
         {
-            let conn = self._conn.lock().unwrap();
+            let conn = self.conn.get().unwrap();
 
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_file_hash ON File (hash)",
@@ -1049,6 +1072,8 @@ impl Main {
 
         self.enclave_create_default_file_download(self.location_get());
 
+        self.create_default_source_url_ns_id();
+
         self.transaction_flush();
     }
 
@@ -1060,7 +1085,7 @@ impl Main {
             "dbcachemode".to_string(),
             Some("The database caching options. Supports: Bare, InMemdb and InMemory".to_string()),
             None,
-            Some("InMemdb".to_string()),
+            Some("Bare".to_string()),
             true,
         );
     }
@@ -1189,7 +1214,7 @@ impl Main {
         ]
         .concat();
         info!("Creating table as: {}", endresult);
-        let conn = self._conn.lock().unwrap();
+        let conn = self.conn.get().unwrap();
         let _ = conn.execute_batch(&endresult);
         //stocat = endresult;
         //self.execute(stocat);
@@ -1197,10 +1222,11 @@ impl Main {
 
     /// Alters a tables name
     fn alter_table(&mut self, original_table: &String, new_table: &String) {
-        self.execute(format!(
-            "ALTER TABLE {} RENAME TO {};",
-            original_table, new_table
-        ));
+        let conn = self.conn.get().unwrap();
+        conn.execute(
+            "ALTER TABLE ? RENAME TO ?",
+            params![original_table, new_table],
+        );
     }
 
     /// Checks if table exists in DB if it do then delete.
@@ -1210,7 +1236,7 @@ impl Main {
             "SELECT * FROM sqlite_master WHERE type='table' AND name='{}';",
             table
         );
-        let binding = self._conn.lock().unwrap();
+        let binding = self.conn.get().unwrap();
         let mut toexec = binding.prepare(&query_string).unwrap();
         let mut rows = toexec.query(params![]).unwrap();
         if let Some(_each) = rows.next().unwrap() {
@@ -1223,7 +1249,7 @@ impl Main {
     fn db_table_collumn_getnames(&mut self, table: &String) -> Vec<String> {
         let mut out: Vec<String> = Vec::new();
         {
-            let conn = self._conn.lock().unwrap();
+            let conn = self.conn.get().unwrap();
             let stmt = conn
                 .prepare(&format!("SELECT * FROM {} LIMIT 1", table))
                 .unwrap();
@@ -1249,7 +1275,7 @@ impl Main {
 
     fn db_drop_table(&mut self, table: &String) {
         let query_string = format!("DROP TABLE IF EXISTS {};", table);
-        let binding = self._conn.lock().unwrap();
+        let binding = self.conn.get().unwrap();
         let mut toexec = binding.prepare(&query_string).unwrap();
         toexec.execute(params![]).unwrap();
     }
@@ -1259,7 +1285,7 @@ impl Main {
     pub fn check_version(&mut self) -> bool {
         let mut query_string = "SELECT num FROM Settings WHERE name='VERSION';";
         let query_string_manual = "SELECT num FROM Settings_Old WHERE name='VERSION';";
-        let mut g1 = self.quer_int(query_string.to_string()).unwrap();
+        let mut g1 = self.quer_int(query_string.to_string());
         if g1.len() != 1 {
             error!(
                 "Could not check_version due to length of recieved version being less then one. Trying manually!!!"
@@ -1267,7 +1293,7 @@ impl Main {
 
             // let out = self.execute("SELECT num from Settings WHERE
             // name='VERSION';".to_string());
-            let binding = self._conn.lock().unwrap();
+            let binding = self.conn.get().unwrap();
             let mut toexec = binding.prepare(query_string).unwrap();
             let mut rows = toexec.query(params![]).unwrap();
             g1.clear();
@@ -1287,7 +1313,7 @@ impl Main {
             error!("Manual loading failed. Trying from old table.");
             println!("Manual loading failed. Trying from old table.");
             query_string = query_string_manual;
-            let binding = self._conn.lock().unwrap();
+            let binding = self.conn.get().unwrap();
             let mut toexec = binding.prepare(query_string).unwrap();
             let mut rows = toexec.query(params![]).unwrap();
             g1.clear();
@@ -1413,8 +1439,8 @@ impl Main {
         self.load_extensions();
 
         logging::info_log("Database is Loading: Files".to_string());
-        let binding = self._conn.clone();
-        let temp_test = binding.lock().unwrap();
+        let binding = self.conn.clone();
+        let temp_test = binding.get().unwrap();
         let temp = temp_test.prepare("SELECT * FROM File");
         if let Ok(mut con) = temp {
             let files = con
@@ -1476,7 +1502,7 @@ impl Main {
     ///
     pub fn extension_put_string(&mut self, ext: &String) -> usize {
         match self.extension_get_id(ext) {
-            Some(id) => self.extension_put_id_ext_sql(Some(id), ext),
+            Some(id) => id,
             None => self.extension_put_id_ext_sql(None, ext),
         }
     }
@@ -1494,8 +1520,8 @@ impl Main {
     /// Loads extensions into db
     fn load_extensions(&mut self) {
         logging::info_log("Database is Loading: File Extensions".to_string());
-        let binding = self._conn.clone();
-        let temp_test = binding.lock().unwrap();
+        let binding = self.conn.clone();
+        let temp_test = binding.get().unwrap();
         let temp = temp_test.prepare("SELECT * FROM FileExtensions");
 
         if let Ok(mut con) = temp {
@@ -1524,8 +1550,8 @@ impl Main {
         let mut nses: Vec<sharedtypes::DbNamespaceObj> = vec![];
         logging::info_log("Database is Loading: Namespace".to_string());
         {
-            let binding = self._conn.clone();
-            let temp_test = binding.lock().unwrap();
+            let binding = self.conn.clone();
+            let temp_test = binding.get().unwrap();
             let temp = temp_test.prepare("SELECT * FROM Namespace");
             if let Ok(mut con) = temp {
                 let namespaces = con
@@ -1559,8 +1585,8 @@ impl Main {
             return;
         }
         logging::info_log("Database is Loading: Jobs".to_string());
-        let binding = self._conn.clone();
-        let temp_test = binding.lock().unwrap();
+        let binding = self.conn.clone();
+        let temp_test = binding.get().unwrap();
         let temp = temp_test.prepare("SELECT * FROM Jobs");
         if let Ok(mut con) = temp {
             let jobs = con
@@ -1750,9 +1776,8 @@ impl Main {
 
         match self._cache {
             CacheType::Bare => {
-                let id = self.namespace_return_count_sql();
-                self.namespace_add_sql(name, description, &id);
-                id
+                self.namespace_add_sql(name, description, None);
+                self.namespace_get(name).unwrap()
             }
             _ => self.namespace_add_inmemdb(name.clone(), description.clone()),
         }
@@ -1764,7 +1789,7 @@ impl Main {
     pub fn namespace_add_id_exists(&mut self, ns: sharedtypes::DbNamespaceObj) -> usize {
         match self._cache {
             CacheType::Bare => {
-                self.namespace_add_sql(&ns.name, &ns.description, &ns.id);
+                self.namespace_add_sql(&ns.name, &ns.description, Some(ns.id));
 
                 self.namespace_get(&ns.name).unwrap()
             }
@@ -1787,7 +1812,7 @@ impl Main {
             description,
         };
         if namespace_grab.is_none() {
-            self.namespace_add_sql(&ns.name, &ns.description, &ns_id);
+            self.namespace_add_sql(&ns.name, &ns.description, Some(ns_id));
         }
         //self.namespace_add_db(ns)
         self._inmemdb.namespace_put(ns)
@@ -1987,12 +2012,7 @@ impl Main {
     /// Adds relationship to SQL db.
     fn relationship_add_sql(&mut self, file: &usize, tag: &usize) {
         let inp = "INSERT OR IGNORE INTO Relationship VALUES(?, ?)";
-        let _out = self
-            ._conn
-            .borrow_mut()
-            .lock()
-            .unwrap()
-            .execute(inp, params![file, tag]);
+        let _out = self.conn.get().unwrap().execute(inp, params![file, tag]);
         self.db_commit_man();
     }
 
@@ -2040,7 +2060,7 @@ impl Main {
     /// Updates job by id
     fn jobs_update_by_id(&mut self, data: &sharedtypes::DbJobsObj) {
         let inp = "UPDATE Jobs SET id=?, time=?, reptime=?, Manager=?, priority=?,cachetime=?,cachechecktype=?, site=?, param=?, SystemData=?, UserData=? WHERE id = ?";
-        let _out = self._conn.borrow_mut().lock().unwrap().execute(
+        let _out = self.conn.get().unwrap().execute(
             inp,
             params![
                 data.id.unwrap().to_string(),
@@ -2120,7 +2140,6 @@ impl Main {
             None => self.jobs_get_max(),
             Some(id) => id,
         };
-        dbg!(&id);
 
         for each in self.jobs_get_all() {
             if dbjobsobj.time == each.1.time
@@ -2151,57 +2170,6 @@ impl Main {
         self._inmemdb.settings_add(name, pretty, num, param);
     }
 
-    fn setting_add_sql(
-        &mut self,
-        name: String,
-        pretty: &Option<String>,
-        num: Option<usize>,
-        param: &Option<String>,
-    ) {
-        let _ex =
-            self
-                ._conn
-                .borrow_mut()
-                .lock()
-                .unwrap()
-                .execute(
-                    "INSERT INTO Settings(name, pretty, num, param) VALUES (?1, ?2, ?3, ?4) ON CONFLICT(name) DO UPDATE SET pretty=?2, num=?3, param=?4 ;",
-                    params![
-                        &name,
-                        // Hella jank workaround. can only pass 1 type into a function without doing
-                        // workaround. This makes it work should be fine for one offs.
-                        if pretty.is_none() {
-                            &Null as &dyn ToSql
-                        } else {
-                            &pretty
-                        },
-                        if num.is_none() {
-                            &Null as &dyn ToSql
-                        } else {
-                            &num
-                        },
-                        if param.is_none() {
-                            &Null as &dyn ToSql
-                        } else {
-                            &param
-                        }
-                    ],
-                );
-        match _ex {
-            Err(_ex) => {
-                println!(
-                    "setting_add: Their was an error with inserting {} into db. {}",
-                    &name, &_ex
-                );
-                error!(
-                    "setting_add: Their was an error with inserting {} into db. {}",
-                    &name, &_ex
-                );
-            }
-            Ok(_ex) => self.db_commit_man(),
-        }
-    }
-
     /// Adds a setting to the Settings Table. name: str   , Setting name pretty: str ,
     /// Fancy Flavor text optional num: u64    , unsigned u64 largest int is
     /// 18446744073709551615 smallest is 0 param: str  , Parameter to allow (value)
@@ -2220,39 +2188,6 @@ impl Main {
         // Adds setting into memdbb
         self.setting_add_db(name, pretty, num, param);
         self.transaction_flush();
-    }
-
-    /// Starts a transaction for bulk inserts.
-    pub fn transaction_start(&mut self) {
-        self.execute("BEGIN".to_string());
-    }
-
-    ///
-    /// Determines if the DB has pending actions.
-    /// Was having a weird edge case where I was flushing over 6k tags at once and the db vomited
-    /// on itself. Hopefully this fixes it
-    ///
-    fn determine_if_busy(&self) -> bool {
-        let conn = self._conn.lock().unwrap();
-        conn.is_busy()
-    }
-
-    /// Flushes to disk.
-    pub fn transaction_flush(&mut self) {
-        self._dbcommitnum = 0;
-
-        // If were busy doing a transaction then do nothing
-        while self.determine_if_busy() {
-            std::thread::sleep(Duration::from_millis(100));
-        }
-        self.execute("COMMIT".to_string());
-        self.execute("BEGIN".to_string());
-    }
-
-    // Closes a transaction for bulk inserts.
-    pub fn transaction_close(&mut self) {
-        self.execute("COMMIT".to_string());
-        self._dbcommitnum = 0;
     }
 
     /// Returns db location as String refernce.
@@ -2284,52 +2219,13 @@ impl Main {
         }
     }
 
-    /// Querys the db use this for select statements. NOTE USE THIS ONY FOR RESULTS
-    /// THAT RETURN STRINGS
-    pub fn quer_str(&mut self, inp: String) -> Result<Vec<String>> {
-        let conmut = self._conn.borrow_mut();
-        let binding = conmut.lock().unwrap();
-        let mut toexec = binding.prepare(&inp).unwrap();
-        let rows = toexec.query_map([], |row| row.get(0)).unwrap();
-        let mut out = Vec::new();
-        for each in rows {
-            out.push(each.unwrap());
-        }
-        Ok(out)
-    }
-
-    /// Querys the db use this for select statements. NOTE USE THIS ONY FOR RESULTS
-    /// THAT RETURN INTS
-    pub fn quer_int(&mut self, inp: String) -> Result<Vec<isize>> {
-        let conmut = self._conn.borrow_mut();
-        let binding = conmut.lock().unwrap();
-        let mut toexec = binding.prepare(&inp).unwrap();
-        let rows = toexec.query_map([], |row| row.get(0)).unwrap();
-        let mut out: Vec<isize> = Vec::new();
-        for each in rows {
-            match each {
-                Ok(temp) => {
-                    out.push(temp);
-                }
-                Err(errer) => {
-                    error!("Could not load {} Due to error: {:?}", &inp, errer);
-                }
-            }
-        }
-        Ok(out)
-    }
-
-    /// Raw Call to database. Try to only use internally to this file only. Doesn't
+    /*/// Raw Call to database. Try to only use internally to this file only. Doesn't
     /// support params nativly. Will not write changes to DB. Have to call write().
     /// Panics to help issues.
     fn execute(&mut self, inp: String) -> usize {
-        let _out = self
-            ._conn
-            .borrow_mut()
-            .lock()
-            .unwrap()
-            .execute(&inp, params![]);
-        match _out {
+        let conn = self.conn.get().unwrap();
+        let out = conn.execute(&inp, params![]);
+        match out {
             Err(_out) => {
                 println!("SQLITE STRING:: {}", inp);
                 println!("BAD CALL {}", _out);
@@ -2338,7 +2234,7 @@ impl Main {
             }
             Ok(_out) => _out,
         }
-    }
+    }*/
 
     /*/// Deletes an item from jobs table. critera is the searchterm and collumn is the
     /// collumn to target. Doesn't remove from inmemory database
@@ -2466,7 +2362,7 @@ impl Main {
                 self.relationship_remove(&file_id, tag_id);
             }
 
-            // self._conn.lock().unwrap().execute_batch(&sql).unwrap();
+            // self.conn.get().unwrap().execute_batch(&sql).unwrap();
             logging::log("Relationship Loop".to_string());
             // self.transaction_flush();
             self.db_commit_man();
@@ -2632,7 +2528,7 @@ impl Main {
     pub fn namespace_delete_id(&mut self, id: &usize) {
         logging::info_log(format!("Starting deletion work on namespace id: {}", id));
 
-        // self.vacuum(); self._conn.lock().unwrap().execute("create index ffid on
+        // self.vacuum(); self.conn.get().unwrap().execute("create index ffid on
         // Relationship(fileid);", []);
         self.transaction_flush();
         if self.namespace_get_string(id).is_none() {
@@ -2647,7 +2543,7 @@ impl Main {
             self.delete_tag_relationship(each);
         }
 
-        // elf._conn.lock().unwrap().execute_batch(&tag_sql).unwrap();
+        // elf.conn.get().unwrap().execute_batch(&tag_sql).unwrap();
         // self.transaction_flush();
         self._inmemdb.namespace_delete(id);
         self.delete_namespace_sql(id);

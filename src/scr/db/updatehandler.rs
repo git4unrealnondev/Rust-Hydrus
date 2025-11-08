@@ -22,7 +22,7 @@ impl Main {
                 }
                 let mut storage = std::collections::HashSet::new();
                 {
-                    let conn = self._conn.lock().unwrap();
+                    let conn = self.conn.get().unwrap();
                     let mut stmt = conn.prepare("SELECT * FROM Jobs_Old").unwrap();
                     let mut rows = stmt.query([]).unwrap();
                     let mut cnt = 0;
@@ -68,7 +68,7 @@ impl Main {
                 // Putting blank parenthesis forces rust to drop conn which is locking our
                 // reference to self
                 {
-                    let conn = self._conn.lock().unwrap();
+                    let conn = self.conn.get().unwrap();
                     let mut stmt =
                         conn
                             .prepare(
@@ -130,7 +130,7 @@ impl Main {
                 }
                 let mut storage = std::collections::HashSet::new();
                 {
-                    let conn = self._conn.lock().unwrap();
+                    let conn = self.conn.get().unwrap();
                     let mut stmt = conn.prepare("SELECT * FROM Tags_Old").unwrap();
                     let mut rows = stmt.query([]).unwrap();
 
@@ -149,7 +149,7 @@ impl Main {
                 // Putting blank parenthesis forces rust to drop conn which is locking our
                 // reference to self
                 {
-                    let conn = self._conn.lock().unwrap();
+                    let conn = self.conn.get().unwrap();
                     let mut stmt = conn
                         .prepare("INSERT INTO Tags (id,name,namespace) VALUES (?1,?2,?3)")
                         .unwrap();
@@ -194,7 +194,7 @@ impl Main {
                 }
                 let mut storage = std::collections::HashSet::new();
                 {
-                    let conn = self._conn.lock().unwrap();
+                    let conn = self.conn.get().unwrap();
                     let mut stmt = conn.prepare("SELECT * FROM Parents_Old").unwrap();
                     let mut rows = stmt.query([]).unwrap();
 
@@ -212,7 +212,7 @@ impl Main {
                 // Putting blank parenthesis forces rust to drop conn which is locking our
                 // reference to self
                 {
-                    let conn = self._conn.lock().unwrap();
+                    let conn = self.conn.get().unwrap();
                     let mut stmt = conn
                         .prepare("INSERT INTO Parents (tag_id,relate_tag_id) VALUES (?1,?2)")
                         .unwrap();
@@ -252,7 +252,7 @@ impl Main {
                     self.alter_table(&"Jobs".to_string(), &"Jobs_Old".to_string());
                 }
                 {
-                    let conn = self._conn.lock().unwrap();
+                    let conn = self.conn.get().unwrap();
                     let mut stmt = conn.prepare("SELECT * FROM Jobs_Old").unwrap();
                     let mut rows = stmt.query([]).unwrap();
 
@@ -294,7 +294,7 @@ impl Main {
                 );
                 self.table_create(&"Jobs".to_string(), keys, vals);
                 {
-                    let conn = self._conn.lock().unwrap();
+                    let conn = self.conn.get().unwrap();
                     let mut stmt =
                         conn
                             .prepare(
@@ -383,7 +383,7 @@ impl Main {
         // Creating storage location in db
         let mut location_storage = std::collections::HashMap::new();
         {
-            let conn = self._conn.lock().unwrap();
+            let conn = self.conn.get().unwrap();
 
             let mut stmt = conn.prepare("SELECT location FROM File_Old").unwrap();
             let mut rows = stmt.query([]).unwrap();
@@ -423,7 +423,7 @@ impl Main {
         self.table_create(&"File".to_string(), keys, vals);
 
         {
-            let conn = self._conn.lock().unwrap();
+            let conn = self.conn.get().unwrap();
 
             // Loads the Files into memory
             // Creates storage id's for them
@@ -475,7 +475,7 @@ impl Main {
         }
 
         {
-            let conn = self._conn.lock().unwrap();
+            let conn = self.conn.get().unwrap();
 
             // Worst that can happen is that we cant pull numbers of items and we default to 1
             let mut row_count: usize = 1;
@@ -544,7 +544,7 @@ impl Main {
         }
 
         {
-            let conn = self._conn.lock().unwrap();
+            let conn = self.conn.get().unwrap();
 
             // Loads the Files into memory
             // Creates storage id's for them
@@ -633,7 +633,7 @@ impl Main {
 
             self.table_create(&"Jobs".to_string(), keys, vals);
 
-            let conn = self._conn.lock().unwrap();
+            let conn = self.conn.get().unwrap();
 
             // Loads the Files into memory
             // Creates storage id's for them
@@ -703,7 +703,7 @@ impl Main {
 
             self.table_create(&"Namespace".to_string(), keys, vals);
 
-            let conn = self._conn.lock().unwrap();
+            let conn = self.conn.get().unwrap();
 
             logging::info_log("Starting to process Namespace for DB V7 Upgrade".to_string());
 
@@ -735,7 +735,7 @@ impl Main {
 
             self.table_create(&"Parents".to_string(), keys, vals);
 
-            let conn = self._conn.lock().unwrap();
+            let conn = self.conn.get().unwrap();
 
             logging::info_log("Starting to process Parents for DB V7 Upgrade".to_string());
 
@@ -767,7 +767,7 @@ impl Main {
             );
 
             self.table_create(&"Tags".to_string(), keys, vals);
-            let conn = self._conn.lock().unwrap();
+            let conn = self.conn.get().unwrap();
 
             logging::info_log("Starting to process Tags for DB V7 Upgrade".to_string());
 
@@ -795,7 +795,7 @@ impl Main {
         if self.check_table_exists("Relationship".into()) {
             self.alter_table(&"Relationship".to_string(), &"Relationship_Old".to_string());
 
-            let conn = self._conn.lock().unwrap();
+            let conn = self.conn.get().unwrap();
 
             logging::info_log("Starting to process Relationships for DB V8 Upgrade".to_string());
             conn.execute(
@@ -819,7 +819,7 @@ impl Main {
         if self.check_table_exists("Tags".into()) {
             self.alter_table(&"Tags".to_string(), &"Tags_Old".to_string());
 
-            let conn = self._conn.lock().unwrap();
+            let conn = self.conn.get().unwrap();
 
             conn.execute(
                 "CREATE TABLE Tags (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, namespace INTEGER NOT NULL, UNIQUE(name, namespace) )",
@@ -852,7 +852,7 @@ impl Main {
             logging::info_log("Starting to process Files for DB V8 Upgrade".to_string());
             self.alter_table(&"File".to_string(), &"File_Old".to_string());
 
-            let conn = self._conn.lock().unwrap();
+            let conn = self.conn.get().unwrap();
 
             conn.execute(
                 "CREATE TABLE File 
@@ -885,7 +885,7 @@ impl Main {
         }
         if self.check_table_exists("Parents".into()) {
             logging::info_log("Starting to process Parent Index for DB V8 Upgrade".to_string());
-            let conn = self._conn.lock().unwrap();
+            let conn = self.conn.get().unwrap();
             conn.execute(
                 "CREATE INDEX idx_parents ON Parents (tag_id, relate_tag_id, limit_to)",
                 [],
@@ -903,7 +903,7 @@ impl Main {
         if self.check_table_exists("Namespace".into()) {
             logging::info_log("Starting to process Namespace for DB V8 Upgrade".to_string());
             self.alter_table(&"Namespace".to_string(), &"Namespace_Old".to_string());
-            let conn = self._conn.lock().unwrap();
+            let conn = self.conn.get().unwrap();
             conn.execute(
                 "CREATE TABLE Namespace (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, name TEXT NOT NULL UNIQUE, description TEXT )",
                 [],
@@ -949,7 +949,7 @@ impl Main {
             self.table_create(&name, &keys, &vals);
 
             {
-                let conn = self._conn.lock().unwrap();
+                let conn = self.conn.get().unwrap();
                 conn.execute("INSERT INTO Jobs (id, time, reptime, priority, cachetime, cachechecktype, Manager, site, param, SystemData, UserData) SELECT  id, time, reptime, priority, cachetime, cachechecktype, Manager, site, param, SystemData, UserData FROM Jobs_Old", []).unwrap();
             }
         }
@@ -968,7 +968,7 @@ impl Main {
 
     pub fn db_update_eight_to_nine(&mut self) {
         {
-            let conn = self._conn.lock().unwrap();
+            let conn = self.conn.get().unwrap();
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_file_hash ON File (hash)",
                 [],
