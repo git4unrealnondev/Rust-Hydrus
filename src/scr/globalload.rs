@@ -391,8 +391,9 @@ fn parse_plugin_output_andmain(
                             //unwrappy.relationship_add(file, tag, addtodb)
                         }
                     }
+                    let mut unwrappy = db.write().unwrap();
+                    unwrappy.transaction_flush();
                     for (file_id, tag_id) in temp_vec {
-                        let mut unwrappy = db.write().unwrap();
                         unwrappy.relationship_add(file_id.unwrap(), tag_id.unwrap(), true);
                     }
                 }
