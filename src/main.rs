@@ -116,70 +116,86 @@ fn main() {
 
     // Inits Database.
     let mut data = makedb(dbloc);
-    data.load_table(&sharedtypes::LoadDBTable::Settings);
 
     let arc = Arc::new(RwLock::new(data));
 
     let jobmanager = Arc::new(RwLock::new(jobs::Jobs::new(arc.clone())));
 
     let globalload_arc = globalload::GlobalLoad::new(arc.clone(), jobmanager.clone());
+    {
+        let mut conn = arc.read().unwrap().get_database_connection();
+        let tn = conn.transaction().unwrap();
+        arc.write()
+            .unwrap()
+            .load_table(&tn, &sharedtypes::LoadDBTable::Settings);
+        arc.write()
+            .unwrap()
+            .load_table(&tn, &sharedtypes::LoadDBTable::Jobs);
 
-    //let mut globalload_arc =
-    //    plugins::globalload_arc::new(plugin_loc.to_string(), arc.clone(), jobmanager.clone());
+        //let mut globalload_arc =
+        //    plugins::globalload_arc::new(plugin_loc.to_string(), arc.clone(), jobmanager.clone());
 
-    // Adds plugin and scraper callback capability from inside the db
-    // Things like callbacks and the like
-    arc.write()
-        .unwrap()
-        .setup_globalload(globalload_arc.clone());
-    arc.write().unwrap().setup_localref(arc.clone());
+        // Adds plugin and scraper callback capability from inside the db
+        // Things like callbacks and the like
+        arc.write()
+            .unwrap()
+            .setup_globalload(globalload_arc.clone());
+        arc.write().unwrap().setup_localref(arc.clone());
 
-    globalload_arc.write().unwrap().setup_ipc(
-        globalload_arc.clone(),
-        arc.clone(),
-        jobmanager.clone(),
-    );
+        globalload_arc.write().unwrap().setup_ipc(
+            globalload_arc.clone(),
+            arc.clone(),
+            jobmanager.clone(),
+        );
 
-    // Putting this down here after plugin manager because that's when the IPC server
-    // starts and we can then inside of the scraper start calling IPC functions
+        // Putting this down here after plugin manager because that's when the IPC server
+        // starts and we can then inside of the scraper start calling IPC functions
 
-    let mut upgradeversvec = Vec::new();
+        let mut upgradeversvec = Vec::new();
 
-    // Upgrades the DB by geting version differences.
-    // Waits for the entire DB to be upgraded before running scraper upgrades.
-    'upgradeloop: loop {
-        let repeat;
-        {
-            repeat = arc.write().unwrap().check_version();
+        // Upgrades the DB by geting version differences.
+        // Waits for the entire DB to be upgraded before running scraper upgrades.
+        'upgradeloop: loop {
+            let repeat;
+            {
+                repeat = arc.write().unwrap().check_version(&tn);
+            }
+            if !repeat {
+                let lck = arc.read().unwrap();
+                upgradeversvec.push(lck.db_vers_get());
+            } else {
+                break 'upgradeloop;
+            }
         }
-        if !repeat {
-            let lck = arc.read().unwrap();
-            upgradeversvec.push(lck.db_vers_get());
-        } else {
-            break 'upgradeloop;
+
+        arc.write().unwrap().transaction_flush(tn);
+        let mut conn = arc.read().unwrap().get_database_connection();
+        let tn = conn.transaction().unwrap();
+
+        // Actually upgrades the DB from scraper calls
+        for db_version in upgradeversvec {
+            for (internal_scraper, scraper_library) in
+                globalload_arc.read().unwrap().library_get_raw().iter()
+            {
+                logging::info_log(format!(
+                    "Starting scraper upgrade: {}",
+                    internal_scraper.name
+                ));
+                globalload::db_upgrade_call(scraper_library, &db_version, internal_scraper);
+            }
         }
+
+        // Processes any CLI input here
+        //cli::main(arc.clone(), globalload_arc.clone());
+        cli::main(arc.clone(), globalload_arc.clone());
+
+        arc.write().unwrap().transaction_flush(tn);
     }
-
-    // Actually upgrades the DB from scraper calls
-    for db_version in upgradeversvec {
-        for (internal_scraper, scraper_library) in
-            globalload_arc.read().unwrap().library_get_raw().iter()
-        {
-            logging::info_log(format!(
-                "Starting scraper upgrade: {}",
-                internal_scraper.name
-            ));
-            globalload::db_upgrade_call(scraper_library, &db_version, internal_scraper);
-        }
+    {
+        globalload_arc.write().unwrap().reload_regex();
+        // Calls the on_start func for the plugins
+        globalload_arc.write().unwrap().pluginscraper_on_start();
     }
-    globalload_arc.write().unwrap().reload_regex();
-
-    // Processes any CLI input here
-    //cli::main(arc.clone(), globalload_arc.clone());
-    cli::main(arc.clone(), globalload_arc.clone());
-
-    // Calls the on_start func for the plugins
-    globalload_arc.write().unwrap().pluginscraper_on_start();
 
     // A way to get around a mutex lock but it works lol
     let one_sec = time::Duration::from_millis(100);
@@ -196,19 +212,24 @@ fn main() {
     }
 
     {
-        let globalload_sites = globalload_arc.read().unwrap().return_all_sites();
+        //let globalload_sites = ;
         // Checks if we need to load any jobs
-        jobmanager.write().unwrap().jobs_load(globalload_sites);
+        jobmanager
+            .write()
+            .unwrap()
+            .jobs_load(globalload_arc.read().unwrap().return_all_sites());
     }
 
     // One flush after all the on_start unless needed
-    arc.write().unwrap().transaction_flush();
+    //arc.write().unwrap().transaction_flush();
 
     // Creates a threadhandler that manages callable threads.
     let mut threadhandler = threading::Threads::new();
 
+    //let mut conn = arc.read().unwrap().get_database_connection();
+    //let tn = conn.transaction().unwrap();
     // just determines if we have any loaded jobs
-    jobmanager.write().unwrap().jobs_run_new();
+    jobmanager.read().unwrap().jobs_run_new();
 
     {
         for scraper in jobmanager.read().unwrap().job_scrapers_get() {
@@ -232,8 +253,10 @@ fn main() {
         }
 
         {
-            let globalload_sites = globalload_arc.read().unwrap().return_all_sites();
-            jobmanager.write().unwrap().jobs_load(globalload_sites);
+            jobmanager
+                .write()
+                .unwrap()
+                .jobs_load(globalload_arc.read().unwrap().return_all_sites());
         }
 
         for scraper in jobmanager.read().unwrap().job_scrapers_get() {
@@ -254,7 +277,7 @@ fn main() {
 
     // This wait is done for allowing any thread to "complete" Shouldn't be nessisary
     // but hey. :D
-    arc.write().unwrap().transaction_flush();
+    //arc.write().unwrap().transaction_flush(tn);
 
     let mills_fifty = time::Duration::from_millis(50);
     std::thread::sleep(mills_fifty);

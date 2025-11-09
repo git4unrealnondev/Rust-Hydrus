@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 #![allow(unused_variables)]
 
+use crate::client::transaction_flush;
 use crate::database;
 use crate::download;
 use crate::globalload::GlobalLoad;
@@ -10,6 +11,8 @@ use crate::logging::error_log;
 use crate::sharedtypes;
 use crate::threading;
 use anyhow::Context;
+use r2d2::PooledConnection;
+use r2d2_sqlite::SqliteConnectionManager;
 
 use crate::RwLock;
 use interprocess::local_socket::{GenericNamespaced, ListenerOptions, prelude::*};
@@ -298,24 +301,39 @@ impl DbInteract {
     /// them as bytes to get sent accross IPC to the other software. So far things are
     /// pretty mint.
     pub fn dbactions_to_function(&self, dbaction: types::SupportedDBRequests) -> Vec<u8> {
-        match dbaction {
+        let mut conn;
+        {
+            let unwrappy = self._database.read().unwrap();
+            conn = unwrappy.get_database_connection();
+        }
+        let tn;
+        let mut unwrappy = self._database.write().unwrap();
+
+        let out = match dbaction {
             types::SupportedDBRequests::TagDelete(tag_id) => {
-                let mut unwrappy = self._database.write().unwrap();
-                unwrappy.tag_remove(&tag_id);
+                tn = conn
+                    .transaction_with_behavior(rusqlite::TransactionBehavior::Exclusive)
+                    .unwrap();
+                unwrappy.tag_remove(&tn, &tag_id);
                 Self::data_size_to_b(&true)
             }
             types::SupportedDBRequests::MigrateRelationship((file_id, old_tag_id, new_tag_id)) => {
-                let mut unwrappy = self._database.write().unwrap();
-                unwrappy.migrate_relationship_file_tag(&file_id, &old_tag_id, &new_tag_id);
+                tn = conn
+                    .transaction_with_behavior(rusqlite::TransactionBehavior::Exclusive)
+                    .unwrap();
+                unwrappy.migrate_relationship_file_tag(&tn, &file_id, &old_tag_id, &new_tag_id);
                 Self::data_size_to_b(&true)
             }
 
             types::SupportedDBRequests::MigrateTag((old_tag_id, new_tag_id)) => {
-                let mut unwrappy = self._database.write().unwrap();
-                unwrappy.migrate_tag(&old_tag_id, &new_tag_id);
+                tn = conn
+                    .transaction_with_behavior(rusqlite::TransactionBehavior::Exclusive)
+                    .unwrap();
+                unwrappy.migrate_tag(&tn, &old_tag_id, &new_tag_id);
                 Self::data_size_to_b(&true)
             }
             types::SupportedDBRequests::PutFileNoBlock((mut file, ratelimit)) => {
+                tn = conn.transaction().unwrap();
                 let mut global_pluginscraper = sharedtypes::return_default_globalpluginparser();
                 global_pluginscraper.name = "InternalFileAdd".to_string();
                 let ratelimiter_obj = threading::create_ratelimiter(ratelimit, &0, &0);
@@ -341,6 +359,7 @@ impl DbInteract {
             }
 
             types::SupportedDBRequests::PutFile((mut file, ratelimit)) => {
+                tn = conn.transaction().unwrap();
                 let mut global_pluginscraper = sharedtypes::return_default_globalpluginparser();
                 global_pluginscraper.name = "InternalFileAdd".to_string();
 
@@ -363,107 +382,115 @@ impl DbInteract {
                 Self::data_size_to_b(&true)
             }
             types::SupportedDBRequests::PutJob(job) => {
-                let mut unwrappy = self._database.write().unwrap();
-                let _ = &unwrappy.jobs_add_new(job);
+                tn = conn.transaction().unwrap();
+                let _ = &unwrappy.jobs_add_new(&tn, job);
                 Self::data_size_to_b(&true)
             }
             types::SupportedDBRequests::GetNamespaceIDsAll => {
-                let unwrappy = self._database.read().unwrap();
-                Self::data_size_to_b(&unwrappy.namespace_keys())
+                tn = conn.transaction().unwrap();
+                Self::data_size_to_b(&unwrappy.namespace_keys(&tn))
             }
 
             types::SupportedDBRequests::GetFileExt(ext_id) => {
-                let unwrappy = self._database.read().unwrap();
-                Self::option_to_bytes(unwrappy.extension_get_string(&ext_id).as_ref())
+                tn = conn.transaction().unwrap();
+                Self::option_to_bytes(unwrappy.extension_get_string(&tn, &ext_id).as_ref())
             }
             types::SupportedDBRequests::GetJob(id) => {
-                let unwrappy = self._database.read().unwrap();
-                Self::option_to_bytes(unwrappy.jobs_get(&id).as_ref())
+                tn = conn.transaction().unwrap();
+                Self::option_to_bytes(unwrappy.jobs_get(&tn, &id).as_ref())
             }
             types::SupportedDBRequests::ParentsPut(parent) => {
-                let mut unwrappy = self._database.write().unwrap();
-                Self::data_size_to_b(&unwrappy.parents_add(parent))
+                tn = conn.transaction().unwrap();
+                Self::data_size_to_b(&unwrappy.parents_add(&tn, parent))
             }
             types::SupportedDBRequests::ParentsGet((parentswitch, id)) => {
-                let unwrappy = self._database.read().unwrap();
+                tn = conn.transaction().unwrap();
                 match parentswitch {
-                    types::ParentsType::Tag => Self::data_size_to_b(&unwrappy.parents_rel_get(&id)),
-                    types::ParentsType::Rel => Self::data_size_to_b(&unwrappy.parents_tag_get(&id)),
+                    types::ParentsType::Tag => {
+                        Self::data_size_to_b(&unwrappy.parents_rel_get(&tn, &id))
+                    }
+                    types::ParentsType::Rel => {
+                        Self::data_size_to_b(&unwrappy.parents_tag_get(&tn, &id))
+                    }
                 }
             }
             types::SupportedDBRequests::ParentsDelete(parentobj) => {
-                let mut unwrappy = self._database.write().unwrap();
+                tn = conn.transaction().unwrap();
                 unwrappy.parents_selective_remove(&parentobj);
                 Self::data_size_to_b(&true)
             }
             types::SupportedDBRequests::GetFileLocation(id) => {
-                let unwrappy = self._database.read().unwrap();
-                let tmep = unwrappy.get_file(&id);
+                tn = conn.transaction().unwrap();
+                let tmep = unwrappy.get_file(&tn, &id);
                 Self::option_to_bytes(tmep.as_ref())
             }
             types::SupportedDBRequests::FilterNamespaceById((ids, namespace_id)) => {
+                tn = conn.transaction().unwrap();
                 let mut out: HashSet<usize> = HashSet::new();
-                let unwrappy = self._database.read().unwrap();
                 for each in ids.iter() {
-                    if unwrappy.namespace_contains_id(&namespace_id, each) {
+                    if unwrappy.namespace_contains_id(&tn, &namespace_id, each) {
                         out.insert(*each);
                     }
                 }
                 Self::data_size_to_b(&out)
             }
             types::SupportedDBRequests::ReloadLoadedPlugins() => {
+                tn = conn.transaction().unwrap();
                 //let mut plugin = self.globalload.write().unwrap();
                 //plugin.reload_loaded_plugins();
                 Self::data_size_to_b(&true)
             }
             types::SupportedDBRequests::NamespaceContainsId(namespaceid, tagid) => {
-                let unwrappy = self._database.read().unwrap();
-                let tmep = unwrappy.namespace_contains_id(&namespaceid, &tagid);
+                tn = conn.transaction().unwrap();
+                let tmep = unwrappy.namespace_contains_id(&tn, &namespaceid, &tagid);
                 Self::data_size_to_b(&tmep)
             }
             types::SupportedDBRequests::PluginCallback(func_name, version, input_data) => {
-                let mut plugin = self.globalload.read().unwrap();
+                tn = conn.transaction().unwrap();
+                let plugin = self.globalload.read().unwrap();
                 let out = plugin.external_plugin_call(&func_name, &version, &input_data);
                 Self::data_size_to_b(&out)
             }
             types::SupportedDBRequests::GetFileByte(id) => {
-                let unwrappy = self._database.read().unwrap();
-                let tmep = unwrappy.get_file_bytes(&id);
+                tn = conn.transaction().unwrap();
+                let tmep = unwrappy.get_file_bytes(&tn, &id);
                 Self::option_to_bytes(tmep.as_ref())
             }
             types::SupportedDBRequests::Search((search, limit, offset)) => {
-                let unwrappy = self._database.read().unwrap();
-                let tmep = unwrappy.search_db_files(search, limit);
+                tn = conn.transaction().unwrap();
+                let tmep = unwrappy.search_db_files(&tn, search, limit);
                 //let tmep = unwrappy.search_db_files(search, limit, offset);
                 Self::data_size_to_b(&tmep)
             }
             types::SupportedDBRequests::GetTagId(id) => {
-                let unwrappy = self._database.read().unwrap();
-                let tmep = unwrappy.tag_id_get(&id);
+                tn = conn.transaction().unwrap();
+                let tmep = unwrappy.tag_id_get(&tn, &id);
                 Self::option_to_bytes(tmep.as_ref())
             }
             types::SupportedDBRequests::Logging(log) => {
+                tn = conn.transaction().unwrap();
                 logging::info_log(&log);
                 Self::data_size_to_b(&true)
             }
             types::SupportedDBRequests::LoggingNoPrint(log) => {
+                tn = conn.transaction().unwrap();
                 logging::log(&log);
                 Self::data_size_to_b(&true)
             }
             types::SupportedDBRequests::RelationshipAdd(file, tag) => {
-                let mut unwrappy = self._database.write().unwrap();
-                unwrappy.relationship_add(file, tag, true);
+                tn = conn.transaction().unwrap();
+                unwrappy.relationship_add(&tn, file, tag, true);
                 Self::data_size_to_b(&true)
             }
             types::SupportedDBRequests::RelationshipRemove(file, tag) => {
-                let mut unwrappy = self._database.write().unwrap();
-                unwrappy.relationship_remove(&file, &tag);
+                tn = conn.transaction().unwrap();
+                unwrappy.relationship_remove(&tn, &file, &tag);
                 Self::data_size_to_b(&true)
             }
 
             types::SupportedDBRequests::PutTag(tags, namespace_id, addtodb, id) => {
-                let mut unwrappy = self._database.write().unwrap();
-                let tmep = unwrappy.tag_add(&tags, namespace_id, addtodb, id);
+                tn = conn.transaction().unwrap();
+                let tmep = unwrappy.tag_add(&tn, &tags, namespace_id, addtodb, id);
                 Self::data_size_to_b(&tmep)
             }
             types::SupportedDBRequests::PutTagRelationship(
@@ -473,100 +500,100 @@ impl DbInteract {
                 addtodb,
                 id,
             ) => {
-                let mut unwrappy = self._database.write().unwrap();
-                let tmep = unwrappy.tag_add(&tags, namespace_id, addtodb, id);
-                unwrappy.relationship_add(fid, tmep, addtodb);
+                tn = conn.transaction().unwrap();
+                let tmep = unwrappy.tag_add(&tn, &tags, namespace_id, addtodb, id);
+                unwrappy.relationship_add(&tn, fid, tmep, addtodb);
                 Self::data_size_to_b(&true)
             }
             types::SupportedDBRequests::GetDBLocation() => {
-                let unwrappy = self._database.read().unwrap();
-                let tmep = unwrappy.location_get();
+                tn = conn.transaction().unwrap();
+                let tmep = unwrappy.location_get(&tn);
                 Self::data_size_to_b(&tmep)
             }
             types::SupportedDBRequests::SettingsSet(name, pretty, num, param, addtodb) => {
-                let mut unwrappy = self._database.write().unwrap();
-                unwrappy.setting_add(name, pretty, num, param, addtodb);
+                tn = conn.transaction().unwrap();
+                unwrappy.setting_add(&tn, name, pretty, num, param, addtodb);
                 Self::data_size_to_b(&true)
             }
             types::SupportedDBRequests::RelationshipGetTagid(id) => {
-                let unwrappy = self._database.read().unwrap();
-                let tmep = unwrappy.relationship_get_tagid(&id);
+                tn = conn.transaction().unwrap();
+                let tmep = unwrappy.relationship_get_tagid(&tn, &id);
                 Self::data_size_to_b(&tmep)
             }
             types::SupportedDBRequests::GetFile(id) => {
-                let unwrappy = self._database.read().unwrap();
-                let tmep = unwrappy.file_get_id(&id);
+                tn = conn.transaction().unwrap();
+                let tmep = unwrappy.file_get_id(&tn, &id);
                 Self::option_to_bytes(tmep.as_ref())
             }
             types::SupportedDBRequests::RelationshipGetFileid(id) => {
-                let unwrappy = self._database.read().unwrap();
-                let tmep = unwrappy.relationship_get_fileid(&id);
+                tn = conn.transaction().unwrap();
+                let tmep = unwrappy.relationship_get_fileid(&tn, &id);
                 Self::data_size_to_b(&tmep)
             }
             types::SupportedDBRequests::SettingsGetName(id) => {
-                let unwrappy = self._database.read().unwrap();
+                tn = conn.transaction().unwrap();
                 let tmep = unwrappy.settings_get_name(&id);
                 Self::option_to_bytes(tmep)
             }
             types::SupportedDBRequests::GetTagName((name, namespace)) => {
-                let unwrappy = self._database.read().unwrap();
-                let tmep = unwrappy.tag_get_name(name, namespace);
+                tn = conn.transaction().unwrap();
+                let tmep = unwrappy.tag_get_name(&tn, name, namespace);
                 Self::option_to_bytes(tmep.as_ref())
             }
             types::SupportedDBRequests::GetFileHash(name) => {
-                let unwrappy = self._database.read().unwrap();
-                let tmep = unwrappy.file_get_hash(&name);
+                tn = conn.transaction().unwrap();
+                let tmep = unwrappy.file_get_hash(&tn, &name);
                 Self::option_to_bytes(tmep.as_ref())
             }
             types::SupportedDBRequests::CreateNamespace(name, description) => {
-                let mut unwrappy = self._database.write().unwrap();
-                let out = unwrappy.namespace_add(&name, &description);
+                tn = conn.transaction().unwrap();
+                let out = unwrappy.namespace_add(&tn, &name, &description);
                 Self::data_size_to_b(&out)
             }
             types::SupportedDBRequests::GetNamespace(name) => {
-                let unwrappy = self._database.read().unwrap();
-                let tmep = unwrappy.namespace_get(&name);
+                tn = conn.transaction().unwrap();
+                let tmep = unwrappy.namespace_get(&tn, &name);
                 Self::option_to_bytes(tmep.as_ref())
             }
             types::SupportedDBRequests::TestUsize() => {
+                tn = conn.transaction().unwrap();
                 let test: usize = 32;
                 Self::data_size_to_b(&test)
             }
             types::SupportedDBRequests::GetNamespaceString(id) => {
-                let unwrappy = self._database.read().unwrap();
-                let tmep = unwrappy.namespace_get_string(&id);
+                tn = conn.transaction().unwrap();
+                let tmep = unwrappy.namespace_get_string(&tn, &id);
                 Self::option_to_bytes(tmep.as_ref())
             }
             types::SupportedDBRequests::LoadTable(table) => {
-                let mut unwrappy = self._database.write().unwrap();
-                unwrappy.load_table(&table);
+                tn = conn.transaction().unwrap();
+                unwrappy.load_table(&tn, &table);
                 Self::data_size_to_b(&true)
             }
             types::SupportedDBRequests::TransactionFlush() => {
-                let mut unwrappy = self._database.write().unwrap();
-                unwrappy.transaction_flush();
+                tn = conn.transaction().unwrap();
                 Self::data_size_to_b(&true)
             }
             types::SupportedDBRequests::GetNamespaceTagIDs(id) => {
-                let unwrappy = self._database.read().unwrap();
-                let tmep = unwrappy.namespace_get_tagids(&id);
+                tn = conn.transaction().unwrap();
+                let tmep = unwrappy.namespace_get_tagids(&tn, &id);
                 Self::data_size_to_b(&tmep)
             }
             types::SupportedDBRequests::GetFileListId() => {
-                let unwrappy = self._database.read().unwrap();
-                let tmep = unwrappy.file_get_list_id();
+                tn = conn.transaction().unwrap();
+                let tmep = unwrappy.file_get_list_id(&tn);
                 Self::data_size_to_b(&tmep)
             }
             types::SupportedDBRequests::GetFileListAll() => {
-                let unwrappy = self._database.read().unwrap();
-                let tmep = unwrappy.file_get_list_all();
+                tn = conn.transaction().unwrap();
+                let tmep = unwrappy.file_get_list_all(&tn);
                 Self::data_size_to_b(&tmep)
                 //bincode::serialize(&tmep).unwrap()
             }
             types::SupportedDBRequests::ReloadRegex => {
+                tn = conn.transaction().unwrap();
                 let globalload;
                 {
-                    let unwrappy = self._database.write().unwrap();
                     if let Some(globalload_arc) = unwrappy.globalload.clone() {
                         globalload = globalload_arc.clone();
                     } else {
@@ -578,7 +605,11 @@ impl DbInteract {
 
                 Self::data_size_to_b(&true)
             }
-        }
+        };
+
+        // Commits to the db
+        unwrappy.transaction_flush(tn);
+        out
     }
 
     /// Turns an Option<&T> into a bytes object.

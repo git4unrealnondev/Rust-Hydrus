@@ -1,4 +1,5 @@
 use crate::database::Main;
+use crate::database::Transaction;
 use crate::logging;
 use crate::sharedtypes;
 use crate::sharedtypes::{DEFAULT_CACHECHECK, DEFAULT_CACHETIME, DEFAULT_PRIORITY};
@@ -9,21 +10,20 @@ use rusqlite::params;
 use std::collections::BTreeMap;
 impl Main {
     /// Migrates from version 2 to version 3 SQLITE Only bb
-    pub fn db_update_two_to_three(&mut self) {
-        dbg!("db update");
-
+    pub fn db_update_two_to_three(&mut self, tn: &Transaction<'_>) {
         // self.backup_db();
-        let jobs_cnt = self.db_table_collumn_getnames(&"Jobs".to_string()).len();
+        let jobs_cnt = self
+            .db_table_collumn_getnames(tn, &"Jobs".to_string())
+            .len();
         match jobs_cnt {
             5 => {
                 logging::info_log("Starting work on Jobs.".to_string());
-                if !self.check_table_exists("Jobs_Old".to_string()) {
-                    self.alter_table(&"Jobs".to_string(), &"Jobs_Old".to_string());
+                if !self.check_table_exists(tn, "Jobs_Old".to_string()) {
+                    self.alter_table(tn, &"Jobs".to_string(), &"Jobs_Old".to_string());
                 }
                 let mut storage = std::collections::HashSet::new();
                 {
-                    let conn = self.conn.get().unwrap();
-                    let mut stmt = conn.prepare("SELECT * FROM Jobs_Old").unwrap();
+                    let mut stmt = tn.prepare("SELECT * FROM Jobs_Old").unwrap();
                     let mut rows = stmt.query([]).unwrap();
                     let mut cnt = 0;
 
@@ -63,14 +63,13 @@ impl Main {
                 let vals = &vec_of_strings!(
                     "INTEGER", "INTEGER", "INTEGER", "TEXT", "TEXT", "TEXT", "TEXT"
                 );
-                self.table_create(&"Jobs".to_string(), keys, vals);
+                self.table_create(tn, &"Jobs".to_string(), keys, vals);
 
-                // Putting blank parenthesis forces rust to drop conn which is locking our
+                // Putting blank parenthesis forces rust to drop tn which is locking our
                 // reference to self
                 {
-                    let conn = self.conn.get().unwrap();
                     let mut stmt =
-                        conn
+                        tn
                             .prepare(
                                 "INSERT INTO Jobs (id,time,reptime,Manager,site,param,CommitType) VALUES (?1,?2,?3,?4,?5,?6,?7)",
                             )
@@ -79,12 +78,11 @@ impl Main {
                         stmt.execute(item).unwrap();
                     }
                 }
-                self.db_drop_table(&"Jobs_Old".to_string());
-                self.transaction_flush();
+                self.db_drop_table(tn, &"Jobs_Old".to_string());
             }
             7 => {
-                if self.check_table_exists("Jobs".to_string())
-                    && !self.check_table_exists("Jobs_Old".to_string())
+                if self.check_table_exists(tn, "Jobs".to_string())
+                    && !self.check_table_exists(tn, "Jobs_Old".to_string())
                 {
                     logging::info_log(
                         "DB-Ugrade: Already processed Jobs table moving on.".to_string(),
@@ -107,11 +105,13 @@ impl Main {
                 );
             }
         }
-        let tags_cnt = self.db_table_collumn_getnames(&"Tags".to_string()).len();
+        let tags_cnt = self
+            .db_table_collumn_getnames(tn, &"Tags".to_string())
+            .len();
         match tags_cnt {
             3 => {
-                if self.check_table_exists("Tags".to_string())
-                    && !self.check_table_exists("Tags_Old".to_string())
+                if self.check_table_exists(tn, "Tags".to_string())
+                    && !self.check_table_exists(tn, "Tags_Old".to_string())
                 {
                     logging::info_log(
                         "DB-Ugrade: Already processed Tags table moving on.".to_string(),
@@ -125,13 +125,12 @@ impl Main {
             }
             4 => {
                 logging::info_log("Starting work on Tags.".to_string());
-                if !self.check_table_exists("Tags_Old".to_string()) {
-                    self.alter_table(&"Tags".to_string(), &"Tags_Old".to_string());
+                if !self.check_table_exists(tn, "Tags_Old".to_string()) {
+                    self.alter_table(tn, &"Tags".to_string(), &"Tags_Old".to_string());
                 }
                 let mut storage = std::collections::HashSet::new();
                 {
-                    let conn = self.conn.get().unwrap();
-                    let mut stmt = conn.prepare("SELECT * FROM Tags_Old").unwrap();
+                    let mut stmt = tn.prepare("SELECT * FROM Tags_Old").unwrap();
                     let mut rows = stmt.query([]).unwrap();
 
                     // Loads the V2 jobs into memory
@@ -144,21 +143,19 @@ impl Main {
                 }
                 let keys = &vec_of_strings!("id", "name", "namespace");
                 let vals = &vec_of_strings!("INTEGER", "TEXT", "INTEGER");
-                self.table_create(&"Tags".to_string(), keys, vals);
+                self.table_create(tn, &"Tags".to_string(), keys, vals);
 
-                // Putting blank parenthesis forces rust to drop conn which is locking our
+                // Putting blank parenthesis forces rust to drop tn which is locking our
                 // reference to self
                 {
-                    let conn = self.conn.get().unwrap();
-                    let mut stmt = conn
+                    let mut stmt = tn
                         .prepare("INSERT INTO Tags (id,name,namespace) VALUES (?1,?2,?3)")
                         .unwrap();
                     for item in storage.into_iter() {
                         stmt.execute(item).unwrap();
                     }
                 }
-                self.db_drop_table(&"Tags_Old".to_string());
-                self.transaction_flush();
+                self.db_drop_table(tn, &"Tags_Old".to_string());
             }
             _ => {
                 logging::error_log(format!(
@@ -171,11 +168,13 @@ impl Main {
                 );
             }
         }
-        let tags_cnt = self.db_table_collumn_getnames(&"Parents".to_string()).len();
+        let tags_cnt = self
+            .db_table_collumn_getnames(tn, &"Parents".to_string())
+            .len();
         match tags_cnt {
             3 => {
-                if self.check_table_exists("Parents".to_string())
-                    && !self.check_table_exists("Parents_Old".to_string())
+                if self.check_table_exists(tn, "Parents".to_string())
+                    && !self.check_table_exists(tn, "Parents_Old".to_string())
                 {
                     logging::info_log(
                         "DB-Ugrade: Already processed Parents table moving on.".to_string(),
@@ -189,13 +188,12 @@ impl Main {
             }
             4 => {
                 logging::info_log("Starting work on Parents.".to_string());
-                if !self.check_table_exists("Parents_Old".to_string()) {
-                    self.alter_table(&"Parents".to_string(), &"Parents_Old".to_string());
+                if !self.check_table_exists(tn, "Parents_Old".to_string()) {
+                    self.alter_table(tn, &"Parents".to_string(), &"Parents_Old".to_string());
                 }
                 let mut storage = std::collections::HashSet::new();
                 {
-                    let conn = self.conn.get().unwrap();
-                    let mut stmt = conn.prepare("SELECT * FROM Parents_Old").unwrap();
+                    let mut stmt = tn.prepare("SELECT * FROM Parents_Old").unwrap();
                     let mut rows = stmt.query([]).unwrap();
 
                     // Loads the V2 jobs into memory
@@ -207,21 +205,19 @@ impl Main {
                 }
                 let keys = &vec_of_strings!("tag_id", "relate_tag_id", "limit_to");
                 let vals = &vec_of_strings!("INTEGER", "INTEGER", "INTEGER");
-                self.table_create(&"Parents".to_string(), keys, vals);
+                self.table_create(tn, &"Parents".to_string(), keys, vals);
 
-                // Putting blank parenthesis forces rust to drop conn which is locking our
+                // Putting blank parenthesis forces rust to drop tn which is locking our
                 // reference to self
                 {
-                    let conn = self.conn.get().unwrap();
-                    let mut stmt = conn
+                    let mut stmt = tn
                         .prepare("INSERT INTO Parents (tag_id,relate_tag_id) VALUES (?1,?2)")
                         .unwrap();
                     for item in storage.into_iter() {
                         stmt.execute(item).unwrap();
                     }
                 }
-                self.db_drop_table(&"Parents_Old".to_string());
-                self.transaction_flush();
+                self.db_drop_table(tn, &"Parents_Old".to_string());
             }
             _ => {
                 logging::error_log(format!(
@@ -234,26 +230,25 @@ impl Main {
                 );
             }
         }
-        self.db_version_set(3);
-        self.transaction_flush();
+        self.db_version_set(tn, 3);
     }
 
     /// Manages the upgrading process from V3 to V4.
-    pub fn db_update_three_to_four(&mut self) {
-        let jobs_cnt = self.db_table_collumn_getnames(&"Jobs".to_string()).len();
-        dbg!(&jobs_cnt);
+    pub fn db_update_three_to_four(&mut self, tn: &Transaction<'_>) {
+        let jobs_cnt = self
+            .db_table_collumn_getnames(tn, &"Jobs".to_string())
+            .len();
         let mut storage = std::collections::HashSet::new();
         match jobs_cnt {
             7 => {
                 logging::info_log("Starting work on Jobs.".to_string());
 
                 // Renames table to Jobs_Old
-                if !self.check_table_exists("Jobs_Old".to_string()) {
-                    self.alter_table(&"Jobs".to_string(), &"Jobs_Old".to_string());
+                if !self.check_table_exists(tn, "Jobs_Old".to_string()) {
+                    self.alter_table(tn, &"Jobs".to_string(), &"Jobs_Old".to_string());
                 }
                 {
-                    let conn = self.conn.get().unwrap();
-                    let mut stmt = conn.prepare("SELECT * FROM Jobs_Old").unwrap();
+                    let mut stmt = tn.prepare("SELECT * FROM Jobs_Old").unwrap();
                     let mut rows = stmt.query([]).unwrap();
 
                     // Loads the V3 jobs into memory
@@ -292,11 +287,10 @@ impl Main {
                 let vals = &vec_of_strings!(
                     "INTEGER", "INTEGER", "INTEGER", "TEXT", "TEXT", "TEXT", "TEXT", "TEXT", "TEXT"
                 );
-                self.table_create(&"Jobs".to_string(), keys, vals);
+                self.table_create(tn, &"Jobs".to_string(), keys, vals);
                 {
-                    let conn = self.conn.get().unwrap();
                     let mut stmt =
-                        conn
+                        tn
                             .prepare(
                                 "INSERT INTO Jobs (id,time,reptime,Manager,site,param,CommitType,SystemData,UserData) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)",
                             )
@@ -305,28 +299,26 @@ impl Main {
                         stmt.execute(item).unwrap();
                     }
                 }
-                self.db_drop_table(&"Jobs_Old".to_string());
+                self.db_drop_table(tn, &"Jobs_Old".to_string());
             }
             9 => {
                 logging::info_log("Already processed jobs. Skipping...".to_string());
             }
             _ => {}
         }
-        self.db_version_set(4);
-        self.transaction_flush();
+        self.db_version_set(tn, 4);
     }
 
     ///
     /// Updates the DB from V4 to V5
     ///
-    pub fn db_update_four_to_five(&mut self) {
+    pub fn db_update_four_to_five(&mut self, tn: &Transaction<'_>) {
         logging::info_log("Backing up db this could be messy.".to_string());
-        self.backup_db();
 
         // Puts Files table into proper state
         match (
-            self.check_table_exists("File_Old".to_string()),
-            self.check_table_exists("File".to_string()),
+            self.check_table_exists(tn, "File_Old".to_string()),
+            self.check_table_exists(tn, "File".to_string()),
         ) {
             (true, true) => {}
             (false, false) => {
@@ -336,15 +328,15 @@ impl Main {
             }
             (true, false) => {}
             (false, true) => {
-                self.alter_table(&"File".to_string(), &"File_Old".to_string());
+                self.alter_table(tn, &"File".to_string(), &"File_Old".to_string());
                 //self.transaction_flush();
             }
         }
 
         // Puts Tags table into proper state
         match (
-            self.check_table_exists("Tags_Old".to_string()),
-            self.check_table_exists("Tags".to_string()),
+            self.check_table_exists(tn, "Tags_Old".to_string()),
+            self.check_table_exists(tn, "Tags".to_string()),
         ) {
             (true, true) => {}
             (false, false) => {
@@ -354,15 +346,15 @@ impl Main {
             }
             (true, false) => {}
             (false, true) => {
-                self.alter_table(&"Tags".to_string(), &"Tags_Old".to_string());
+                self.alter_table(tn, &"Tags".to_string(), &"Tags_Old".to_string());
                 //self.transaction_flush();
             }
         }
 
         // Puts Jobs table into proper state
         match (
-            self.check_table_exists("Jobs_Old".to_string()),
-            self.check_table_exists("Jobs".to_string()),
+            self.check_table_exists(tn, "Jobs_Old".to_string()),
+            self.check_table_exists(tn, "Jobs".to_string()),
         ) {
             (true, true) => {}
             (false, false) => {
@@ -372,20 +364,18 @@ impl Main {
             }
             (true, false) => {}
             (false, true) => {
-                self.alter_table(&"Jobs".to_string(), &"Jobs_Old".to_string());
+                self.alter_table(tn, &"Jobs".to_string(), &"Jobs_Old".to_string());
                 //self.transaction_flush();
             }
         }
 
         logging::info_log("Creating tables inside of DB for V5 upgrade".to_string());
-        self.enclave_create_database_v5();
+        self.enclave_create_database_v5(tn);
 
         // Creating storage location in db
         let mut location_storage = std::collections::HashMap::new();
         {
-            let conn = self.conn.get().unwrap();
-
-            let mut stmt = conn.prepare("SELECT location FROM File_Old").unwrap();
+            let mut stmt = tn.prepare("SELECT location FROM File_Old").unwrap();
             let mut rows = stmt.query([]).unwrap();
             while let Some(row) = rows.next().unwrap() {
                 let location_string: String = row.get(0).unwrap();
@@ -399,32 +389,32 @@ impl Main {
 
         // Adds storage locations into db
         for (location, id) in location_storage.iter_mut() {
-            self.storage_put(location);
-            *id = self.storage_get_id(location);
+            self.storage_put(tn, location);
+            *id = self.storage_get_id(tn, location);
         }
 
         // Sets up missing enclave location
-        self.enclave_create_default_file_download(self.location_get());
+        self.enclave_create_default_file_download(tn, self.location_get(tn));
 
         // Super dirty way of getting around the borrow checker
         let mut location_to_enclave = std::collections::HashMap::new();
         {
             for (location_string, storage_id) in location_storage.iter() {
-                self.enclave_create_default_file_download(location_string.clone());
+                self.enclave_create_default_file_download(tn, location_string.clone());
 
                 let file_enclave = format!("File_Download_location_{}", location_string);
-                location_to_enclave
-                    .insert(storage_id.unwrap(), self.enclave_name_get_id(&file_enclave));
+                location_to_enclave.insert(
+                    storage_id.unwrap(),
+                    self.enclave_name_get_id(tn, &file_enclave),
+                );
             }
         }
 
         let keys = &vec_of_strings!("id", "hash", "extension", "storage_id");
         let vals = &vec_of_strings!("INTEGER", "TEXT", "INTEGER", "INTEGER");
-        self.table_create(&"File".to_string(), keys, vals);
+        self.table_create(tn, &"File".to_string(), keys, vals);
 
         {
-            let conn = self.conn.get().unwrap();
-
             // Loads the Files into memory
             // Creates storage id's for them
             // Creates extension id's aswell
@@ -436,7 +426,7 @@ impl Main {
 
             let mut extension_cnt = 0;
             let mut extension_storage = std::collections::HashMap::new();
-            let mut stmt = conn.prepare("SELECT * FROM File_Old").unwrap();
+            let mut stmt = tn.prepare("SELECT * FROM File_Old").unwrap();
             let mut rows = stmt.query([]).unwrap();
             while let Some(row) = rows.next().unwrap() {
                 let id: usize = row.get(0).unwrap();
@@ -450,7 +440,7 @@ impl Main {
                     None => {
                         let original = extension_cnt;
                         extension_cnt += 1;
-                        let _ = conn.execute(extension_sqlite_inp, params![original, extension]);
+                        let _ = tn.execute(extension_sqlite_inp, params![original, extension]);
                         extension_storage.insert(extension, original);
                         original
                     }
@@ -459,29 +449,27 @@ impl Main {
                 logging::info_log(format!("Adding File: {}", &hash));
                 let utc = Utc::now();
                 let timestamp = utc.timestamp_millis();
-                let _ = conn.execute(
+                let _ = tn.execute(
                     file_enclave_sqlite_inp,
                     params![id, location_to_enclave.get(&storage_id).unwrap(), timestamp],
                 );
-                let _ = conn.execute(file_sqlite_inp, params![id, hash, extension_id, storage_id]);
+                let _ = tn.execute(file_sqlite_inp, params![id, hash, extension_id, storage_id]);
             }
         }
-        self.db_drop_table(&"File_Old".to_string());
+        self.db_drop_table(tn, &"File_Old".to_string());
 
-        if !self.check_table_exists("Tags".to_string()) {
+        if !self.check_table_exists(tn, "Tags".to_string()) {
             let keys = &vec_of_strings!("id", "name", "namespace");
             let vals = &vec_of_strings!("INTEGER PRIMARY KEY", "TEXT NOT NULL", "INTEGER NOT NULL");
-            self.table_create(&"Tags".to_string(), keys, vals);
+            self.table_create(tn, &"Tags".to_string(), keys, vals);
         }
 
         {
-            let conn = self.conn.get().unwrap();
-
             // Worst that can happen is that we cant pull numbers of items and we default to 1
             let mut row_count: usize = 1;
             {
                 let sqlite_count = "select count(*) from Tags_Old";
-                let mut stmt = conn.prepare(sqlite_count).unwrap();
+                let mut stmt = tn.prepare(sqlite_count).unwrap();
                 let mut rows = stmt.query([]).unwrap();
                 while let Some(row) = rows.next().unwrap() {
                     row_count = row.get(0).unwrap();
@@ -497,7 +485,7 @@ impl Main {
             logging::info_log("Starting to process Tags for DB V5 Upgrade".to_string());
 
             let tag_sqlite_inp = "INSERT INTO Tags VALUES (?, ?, ?)";
-            let mut stmt = conn.prepare("SELECT * FROM Tags_Old").unwrap();
+            let mut stmt = tn.prepare("SELECT * FROM Tags_Old").unwrap();
             let mut rows = stmt.query([]).unwrap();
 
             let mut eta = Eta::new(row_count, TimeAcc::MILLI);
@@ -507,7 +495,7 @@ impl Main {
                 let name: String = row.get(1).unwrap();
                 let namespace: usize = row.get(2).unwrap();
 
-                let _ = conn.execute(tag_sqlite_inp, params![id, name, namespace]);
+                let _ = tn.execute(tag_sqlite_inp, params![id, name, namespace]);
                 eta.step();
                 cnt += 1;
                 if (cnt % count_five_percent) == 0 {
@@ -515,8 +503,8 @@ impl Main {
                 }
             }
         }
-        self.db_drop_table(&"Tags_Old".to_string());
-        if !self.check_table_exists("Jobs".to_string()) {
+        self.db_drop_table(tn, &"Tags_Old".to_string());
+        if !self.check_table_exists(tn, "Jobs".to_string()) {
             let keys = &vec_of_strings!(
                 "id",
                 "time",
@@ -540,12 +528,10 @@ impl Main {
                 "TEXT NOT NULL"
             );
 
-            self.table_create(&"Jobs".to_string(), keys, vals);
+            self.table_create(tn, &"Jobs".to_string(), keys, vals);
         }
 
         {
-            let conn = self.conn.get().unwrap();
-
             // Loads the Files into memory
             // Creates storage id's for them
             // Creates extension id's aswell
@@ -553,7 +539,7 @@ impl Main {
             logging::info_log("Starting to process Jobs for DB V5 Upgrade".to_string());
 
             let tag_sqlite_inp = "INSERT INTO Jobs VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
-            let mut stmt = conn.prepare("SELECT * FROM Jobs_Old").unwrap();
+            let mut stmt = tn.prepare("SELECT * FROM Jobs_Old").unwrap();
             let mut rows = stmt.query([]).unwrap();
             while let Some(row) = rows.next().unwrap() {
                 let id: usize = row.get(0).unwrap();
@@ -567,7 +553,7 @@ impl Main {
                 let userdata: String = row.get(8).unwrap();
 
                 logging::info_log(format!("Adding JobId: {}", &id));
-                let _ = conn.execute(
+                let _ = tn.execute(
                     tag_sqlite_inp,
                     params![
                         id, time, reptime, manager, site, param, committype, systemdata, userdata
@@ -575,34 +561,34 @@ impl Main {
                 );
             }
         }
-        self.db_drop_table(&"Jobs_Old".to_string());
+        self.db_drop_table(tn, &"Jobs_Old".to_string());
 
-        self.db_version_set(5);
+        self.db_version_set(tn, 5);
         //self.vacuum();
     }
 
     ///
     /// Handles the DB upgrade from five to six
     ///
-    pub fn db_update_five_to_six(&mut self) {
+    pub fn db_update_five_to_six(&mut self, tn: &Transaction<'_>) {
         logging::info_log("Backing up db this could be messy.".to_string());
-        self.backup_db();
 
         // If table does not exist then create the dead source url tables
-        if !self.check_table_exists("dead_source_urls".to_string()) {
+        if !self.check_table_exists(tn, "dead_source_urls".to_string()) {
             self.table_create(
+                tn,
                 &"dead_source_urls".to_string(),
                 &vec_of_strings!("id", "dead_url"),
                 &vec_of_strings!("INTEGER PRIMARY KEY", "TEXT NOT NULL"),
             );
         }
 
-        if self.check_table_exists("Jobs_Old".to_string()) {
-            self.db_drop_table(&"Jobs_Old".to_string());
+        if self.check_table_exists(tn, "Jobs_Old".to_string()) {
+            self.db_drop_table(tn, &"Jobs_Old".to_string());
         }
 
-        if self.check_table_exists("Jobs".to_string()) {
-            self.alter_table(&"Jobs".to_string(), &"Jobs_Old".to_string());
+        if self.check_table_exists(tn, "Jobs".to_string()) {
+            self.alter_table(tn, &"Jobs".to_string(), &"Jobs_Old".to_string());
 
             let keys = &vec_of_strings!(
                 "id",
@@ -631,9 +617,7 @@ impl Main {
                 "TEXT NOT NULL"
             );
 
-            self.table_create(&"Jobs".to_string(), keys, vals);
-
-            let conn = self.conn.get().unwrap();
+            self.table_create(tn, &"Jobs".to_string(), keys, vals);
 
             // Loads the Files into memory
             // Creates storage id's for them
@@ -642,7 +626,7 @@ impl Main {
             logging::info_log("Starting to process Jobs for DB V6 Upgrade".to_string());
 
             let tag_sqlite_inp = "INSERT INTO Jobs VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
-            let mut stmt = conn.prepare("SELECT * FROM Jobs_Old").unwrap();
+            let mut stmt = tn.prepare("SELECT * FROM Jobs_Old").unwrap();
             let mut rows = stmt.query([]).unwrap();
             while let Some(row) = rows.next().unwrap() {
                 let id: usize = row.get(0).unwrap();
@@ -655,7 +639,7 @@ impl Main {
                 let userdata: String = row.get(8).unwrap();
 
                 logging::info_log(format!("Adding JobId: {}", &id));
-                conn.execute(
+                tn.execute(
                     tag_sqlite_inp,
                     params![
                         id,
@@ -675,40 +659,37 @@ impl Main {
             }
         }
 
-        self.db_drop_table(&"Jobs_Old".to_string());
-        self.db_version_set(6);
+        self.db_drop_table(tn, &"Jobs_Old".to_string());
+        self.db_version_set(tn, 6);
     }
 
-    pub fn db_update_six_to_seven(&mut self) {
+    pub fn db_update_six_to_seven(&mut self, tn: &Transaction<'_>) {
         logging::info_log("Backing up db this could be messy.".to_string());
-        self.backup_db();
 
-        if self.check_table_exists("Namespace_Old".to_string()) {
-            self.db_drop_table(&"Namespace_Old".to_string());
+        if self.check_table_exists(tn, "Namespace_Old".to_string()) {
+            self.db_drop_table(tn, &"Namespace_Old".to_string());
         }
 
-        if self.check_table_exists("Parents_Old".to_string()) {
-            self.db_drop_table(&"Parents_Old".to_string());
+        if self.check_table_exists(tn, "Parents_Old".to_string()) {
+            self.db_drop_table(tn, &"Parents_Old".to_string());
         }
 
-        if self.check_table_exists("Tags_Old".to_string()) {
-            self.db_drop_table(&"Tags_Old".to_string());
+        if self.check_table_exists(tn, "Tags_Old".to_string()) {
+            self.db_drop_table(tn, &"Tags_Old".to_string());
         }
 
-        if self.check_table_exists("Namespace".into()) {
-            self.alter_table(&"Namespace".to_string(), &"Namespace_Old".to_string());
+        if self.check_table_exists(tn, "Namespace".into()) {
+            self.alter_table(tn, &"Namespace".to_string(), &"Namespace_Old".to_string());
 
             let keys = &vec_of_strings!("id", "name", "description");
             let vals = &vec_of_strings!("INTEGER PRIMARY KEY NOT NULL", "TEXT NOT NULL", "TEXT");
 
-            self.table_create(&"Namespace".to_string(), keys, vals);
-
-            let conn = self.conn.get().unwrap();
+            self.table_create(tn, &"Namespace".to_string(), keys, vals);
 
             logging::info_log("Starting to process Namespace for DB V7 Upgrade".to_string());
 
             let tag_sqlite_inp = "INSERT INTO Namespace (id, name, description) VALUES (?, ?, ?)";
-            let mut stmt = conn
+            let mut stmt = tn
                 .prepare("SELECT id, name, description FROM Namespace_Old")
                 .unwrap();
             let mut rows = stmt.query([]).unwrap();
@@ -718,12 +699,11 @@ impl Main {
                 let desc: Option<String> = row.get(2).unwrap();
 
                 logging::info_log(format!("Adding Namespace: {}", &id));
-                conn.execute(tag_sqlite_inp, params![id, name, desc])
-                    .unwrap();
+                tn.execute(tag_sqlite_inp, params![id, name, desc]).unwrap();
             }
         }
-        if self.check_table_exists("Parents".into()) {
-            self.alter_table(&"Parents".to_string(), &"Parents_Old".to_string());
+        if self.check_table_exists(tn, "Parents".into()) {
+            self.alter_table(tn, &"Parents".to_string(), &"Parents_Old".to_string());
 
             let keys = &vec_of_strings!("id", "tag_id", "relate_tag_id", "limit_to");
             let vals = &vec_of_strings!(
@@ -733,15 +713,13 @@ impl Main {
                 "INTEGER"
             );
 
-            self.table_create(&"Parents".to_string(), keys, vals);
-
-            let conn = self.conn.get().unwrap();
+            self.table_create(tn, &"Parents".to_string(), keys, vals);
 
             logging::info_log("Starting to process Parents for DB V7 Upgrade".to_string());
 
             let tag_sqlite_inp =
                 "INSERT INTO Parents (tag_id, relate_tag_id, limit_to) VALUES (?, ?, ?)";
-            let mut stmt = conn
+            let mut stmt = tn
                 .prepare("SELECT tag_id, relate_tag_id, limit_to FROM Parents_Old")
                 .unwrap();
             let mut rows = stmt.query([]).unwrap();
@@ -750,15 +728,13 @@ impl Main {
                 let relatetagid: usize = row.get(1).unwrap();
                 let limitto: Option<usize> = row.get(2).unwrap();
 
-                conn.execute(tag_sqlite_inp, params![tagid, relatetagid, limitto])
+                tn.execute(tag_sqlite_inp, params![tagid, relatetagid, limitto])
                     .unwrap();
             }
         }
 
-        self.transaction_flush();
-
-        if self.check_table_exists("Tags".into()) {
-            self.alter_table(&"Tags".to_string(), &"Tags_Old".to_string());
+        if self.check_table_exists(tn, "Tags".into()) {
+            self.alter_table(tn, &"Tags".to_string(), &"Tags_Old".to_string());
             let keys = &vec_of_strings!("id", "name", "namespace");
             let vals = &vec_of_strings!(
                 "INTEGER PRIMARY KEY NOT NULL",
@@ -766,13 +742,12 @@ impl Main {
                 "INTEGER NOT NULL"
             );
 
-            self.table_create(&"Tags".to_string(), keys, vals);
-            let conn = self.conn.get().unwrap();
+            self.table_create(tn, &"Tags".to_string(), keys, vals);
 
             logging::info_log("Starting to process Tags for DB V7 Upgrade".to_string());
 
             let tag_sqlite_inp = "INSERT INTO Tags (id, name, namespace) VALUES (?, ?, ?)";
-            let mut stmt = conn
+            let mut stmt = tn
                 .prepare("SELECT id, name, namespace FROM Tags_Old")
                 .unwrap();
             let mut rows = stmt.query([]).unwrap();
@@ -781,33 +756,35 @@ impl Main {
                 let name: String = row.get(1).unwrap();
                 let namespace: usize = row.get(2).unwrap();
 
-                conn.execute(tag_sqlite_inp, params![id, name, namespace])
+                tn.execute(tag_sqlite_inp, params![id, name, namespace])
                     .unwrap();
             }
         }
-        self.db_drop_table(&"Namespace_Old".to_string());
-        self.db_drop_table(&"Parents_Old".to_string());
-        self.db_drop_table(&"Tags_Old".to_string());
-        self.db_version_set(7);
+        self.db_drop_table(tn, &"Namespace_Old".to_string());
+        self.db_drop_table(tn, &"Parents_Old".to_string());
+        self.db_drop_table(tn, &"Tags_Old".to_string());
+        self.db_version_set(tn, 7);
     }
 
-    pub fn db_update_seven_to_eight(&mut self) {
-        if self.check_table_exists("Relationship".into()) {
-            self.alter_table(&"Relationship".to_string(), &"Relationship_Old".to_string());
-
-            let conn = self.conn.get().unwrap();
+    pub fn db_update_seven_to_eight(&mut self, tn: &Transaction<'_>) {
+        if self.check_table_exists(tn, "Relationship".into()) {
+            self.alter_table(
+                tn,
+                &"Relationship".to_string(),
+                &"Relationship_Old".to_string(),
+            );
 
             logging::info_log("Starting to process Relationships for DB V8 Upgrade".to_string());
-            conn.execute(
+            tn.execute(
                 "CREATE TABLE Relationship (fileid INTEGER NOT NULL, tagid INTEGER NOT NULL, PRIMARY KEY (fileid, tagid) ) WITHOUT ROWID",
                 [],
             )
             .unwrap();
 
-            conn.execute("INSERT OR IGNORE INTO Relationship (fileid, tagid) SELECT fileid, tagid FROM Relationship_Old WHERE fileid IS NOT NULL AND tagid IS NOT NULL;", []).unwrap();
+            tn.execute("INSERT OR IGNORE INTO Relationship (fileid, tagid) SELECT fileid, tagid FROM Relationship_Old WHERE fileid IS NOT NULL AND tagid IS NOT NULL;", []).unwrap();
 
             // Not needed because the unique key already makes it
-            conn.execute(
+            tn.execute(
                 "CREATE INDEX idx_tagid_fileid ON Relationship(tagid, fileid);",
                 [],
             )
@@ -816,25 +793,23 @@ impl Main {
 
         logging::info_log("Starting to process Tags for DB V8 Upgrade".to_string());
 
-        if self.check_table_exists("Tags".into()) {
-            self.alter_table(&"Tags".to_string(), &"Tags_Old".to_string());
+        if self.check_table_exists(tn, "Tags".into()) {
+            self.alter_table(tn, &"Tags".to_string(), &"Tags_Old".to_string());
 
-            let conn = self.conn.get().unwrap();
-
-            conn.execute(
+            tn.execute(
                 "CREATE TABLE Tags (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, namespace INTEGER NOT NULL, UNIQUE(name, namespace) )",
                 [],
             )
             .unwrap();
 
-            conn.execute(
+            tn.execute(
                 "INSERT INTO Tags (id, name, namespace) SELECT id, name, namespace FROM Tags_Old",
                 [],
             )
             .unwrap();
 
             /*let tag_sqlite_inp = "INSERT INTO Tags (id, name, namespace) VALUES (?, ?, ?)";
-            let mut stmt = conn
+            let mut stmt = tn
                 .prepare("SELECT id, name, namespace FROM Tags_Old")
                 .unwrap();
             let mut rows = stmt.query([]).unwrap();
@@ -843,18 +818,16 @@ impl Main {
                 let name: String = row.get(1).unwrap();
                 let namespace: usize = row.get(2).unwrap();
 
-                conn.execute(tag_sqlite_inp, params![id, name, namespace])
+                tn.execute(tag_sqlite_inp, params![id, name, namespace])
                     .unwrap();
             }*/
         }
 
-        if self.check_table_exists("File".into()) {
+        if self.check_table_exists(tn, "File".into()) {
             logging::info_log("Starting to process Files for DB V8 Upgrade".to_string());
-            self.alter_table(&"File".to_string(), &"File_Old".to_string());
+            self.alter_table(tn, &"File".to_string(), &"File_Old".to_string());
 
-            let conn = self.conn.get().unwrap();
-
-            conn.execute(
+            tn.execute(
                 "CREATE TABLE File 
             (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, hash TEXT, extension INTEGER, storage_id INTEGER, 
                 CHECK (
@@ -866,10 +839,10 @@ impl Main {
             )
             .unwrap();
 
-            conn.execute("INSERT INTO File (id, hash, extension, storage_id) SELECT id, hash, extension, storage_id FROM File_Old", []).unwrap();
+            tn.execute("INSERT INTO File (id, hash, extension, storage_id) SELECT id, hash, extension, storage_id FROM File_Old", []).unwrap();
             /*let tag_sqlite_inp =
                 "INSERT INTO File (id, hash, extension, storage_id) VALUES (?, ?, ?, ?)";
-            let mut stmt = conn
+            let mut stmt = tn
                 .prepare("SELECT id, hash, extension, storage_id FROM File_Old")
                 .unwrap();
             let mut rows = stmt.query([]).unwrap();
@@ -879,45 +852,43 @@ impl Main {
                 let exts: usize = row.get(2).unwrap();
                 let stor: usize = row.get(3).unwrap();
 
-                conn.execute(tag_sqlite_inp, params![id, hash, exts, stor])
+                tn.execute(tag_sqlite_inp, params![id, hash, exts, stor])
                     .unwrap();
             }*/
         }
-        if self.check_table_exists("Parents".into()) {
+        if self.check_table_exists(tn, "Parents".into()) {
             logging::info_log("Starting to process Parent Index for DB V8 Upgrade".to_string());
-            let conn = self.conn.get().unwrap();
-            conn.execute(
+            tn.execute(
                 "CREATE INDEX idx_parents ON Parents (tag_id, relate_tag_id, limit_to)",
                 [],
             )
             .unwrap();
-            conn.execute(
+            tn.execute(
                 "CREATE INDEX idx_parents_rel ON Parents (relate_tag_id)",
                 [],
             )
             .unwrap();
-            conn.execute("CREATE INDEX idx_parents_lim ON Parents (limit_to)", [])
+            tn.execute("CREATE INDEX idx_parents_lim ON Parents (limit_to)", [])
                 .unwrap();
         }
 
-        if self.check_table_exists("Namespace".into()) {
+        if self.check_table_exists(tn, "Namespace".into()) {
             logging::info_log("Starting to process Namespace for DB V8 Upgrade".to_string());
-            self.alter_table(&"Namespace".to_string(), &"Namespace_Old".to_string());
-            let conn = self.conn.get().unwrap();
-            conn.execute(
+            self.alter_table(tn, &"Namespace".to_string(), &"Namespace_Old".to_string());
+            tn.execute(
                 "CREATE TABLE Namespace (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, name TEXT NOT NULL UNIQUE, description TEXT )",
                 [],
             )
             .unwrap();
 
-            conn.execute("CREATE INDEX idx_namespace ON Namespace (name)", [])
+            tn.execute("CREATE INDEX idx_namespace ON Namespace (name)", [])
                 .unwrap();
-            conn.execute("INSERT INTO Namespace (id, name, description) SELECT id, name, description FROM Namespace_Old", []).unwrap();
+            tn.execute("INSERT INTO Namespace (id, name, description) SELECT id, name, description FROM Namespace_Old", []).unwrap();
         }
 
-        if !self.check_table_exists("Jobs".to_string()) {
+        if !self.check_table_exists(tn, "Jobs".to_string()) {
             logging::info_log("Starting to process Jobs for DB V8 Upgrade".to_string());
-            self.alter_table(&"Jobs".to_string(), &"Jobs_Old".to_string());
+            self.alter_table(tn, &"Jobs".to_string(), &"Jobs_Old".to_string());
             let name = "Jobs".to_string();
             let keys = vec_of_strings!(
                 "id",
@@ -946,35 +917,33 @@ impl Main {
                 "TEXT NOT NULL"
             );
 
-            self.table_create(&name, &keys, &vals);
+            self.table_create(tn, &name, &keys, &vals);
 
             {
-                let conn = self.conn.get().unwrap();
-                conn.execute("INSERT INTO Jobs (id, time, reptime, priority, cachetime, cachechecktype, Manager, site, param, SystemData, UserData) SELECT  id, time, reptime, priority, cachetime, cachechecktype, Manager, site, param, SystemData, UserData FROM Jobs_Old", []).unwrap();
+                tn.execute("INSERT INTO Jobs (id, time, reptime, priority, cachetime, cachechecktype, Manager, site, param, SystemData, UserData) SELECT  id, time, reptime, priority, cachetime, cachechecktype, Manager, site, param, SystemData, UserData FROM Jobs_Old", []).unwrap();
             }
         }
 
-        //self.db_drop_table(&"Relationship_Old".to_string());
-        self.db_drop_table(&"Tags_Old".to_string());
-        self.db_drop_table(&"File_Old".to_string());
-        self.db_drop_table(&"Relationship_Old".to_string());
-        self.db_drop_table(&"Namespace_Old".to_string());
-        self.db_drop_table(&"Jobs_Old".to_string());
+        //self.db_drop_table(tn,&"Relationship_Old".to_string());
+        self.db_drop_table(tn, &"Tags_Old".to_string());
+        self.db_drop_table(tn, &"File_Old".to_string());
+        self.db_drop_table(tn, &"Relationship_Old".to_string());
+        self.db_drop_table(tn, &"Namespace_Old".to_string());
+        self.db_drop_table(tn, &"Jobs_Old".to_string());
 
-        self.db_version_set(8);
-        self.vacuum();
-        self.analyze();
+        self.db_version_set(tn, 8);
+        self.vacuum(tn);
+        self.analyze(tn);
     }
 
-    pub fn db_update_eight_to_nine(&mut self) {
+    pub fn db_update_eight_to_nine(&mut self, tn: &Transaction<'_>) {
         {
-            let conn = self.conn.get().unwrap();
-            conn.execute(
+            tn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_file_hash ON File (hash)",
                 [],
             )
             .unwrap();
         }
-        self.db_version_set(9);
+        self.db_version_set(tn, 9);
     }
 }

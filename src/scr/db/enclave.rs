@@ -21,14 +21,15 @@ const DEFAULT_PRIORITY_LOWEST: usize = 0;
 impl Main {
     pub fn enclave_run_process(
         &mut self,
+        tn: &rusqlite::Transaction<'_>,
         file: &mut sharedtypes::FileObject,
         bytes: &Bytes,
         sha512hash: &String,
         source_url: Option<&String>,
         enclave_name: &str,
     ) -> bool {
-        if let Some(enclave_id) = self.enclave_name_get_id(enclave_name) {
-            return self.enclave_run_logic(file, bytes, sha512hash, source_url, &enclave_id);
+        if let Some(enclave_id) = self.enclave_name_get_id(tn, enclave_name) {
+            return self.enclave_run_logic(tn, file, bytes, sha512hash, source_url, &enclave_id);
         }
         false
     }
@@ -38,6 +39,7 @@ impl Main {
     ///
     fn enclave_run_logic(
         &mut self,
+        tn: &rusqlite::Transaction<'_>,
         file: &mut sharedtypes::FileObject,
         bytes: &Bytes,
         sha512hash: &String,
@@ -45,7 +47,7 @@ impl Main {
         enclave_id: &usize,
     ) -> bool {
         for condition_list_id in self
-            .enclave_action_order_enclave_get_list_id(enclave_id)
+            .enclave_action_order_enclave_get_list_id(tn, enclave_id)
             .iter()
         {
             logging::log(format!(
@@ -53,11 +55,12 @@ impl Main {
                 &sha512hash, condition_list_id, enclave_id
             ));
 
-            for (enclave_action_id, failed_enclave_action_id, condition_id) in
-                self.enclave_condition_list_get(condition_list_id).iter()
+            for (enclave_action_id, failed_enclave_action_id, condition_id) in self
+                .enclave_condition_list_get(tn, condition_list_id)
+                .iter()
             {
                 let (action_bool, action_name) =
-                    self.enclave_condition_evaluate(condition_id, file, bytes);
+                    self.enclave_condition_evaluate(tn, condition_id, file, bytes);
 
                 let run_option_action_id = if action_bool {
                     Some(enclave_action_id)
@@ -75,8 +78,9 @@ impl Main {
                             "Enclave FileHash {}: Running action name: {:?}",
                             &sha512hash, action_name
                         ));
-                        let source_url_ns_id = self.create_default_source_url_ns_id();
+                        let source_url_ns_id = self.create_default_source_url_ns_id(tn);
                         if !self.enclave_run_action(
+                            tn,
                             &action_name,
                             file,
                             bytes,
@@ -99,6 +103,7 @@ impl Main {
     ///
     pub fn enclave_determine_processing(
         &mut self,
+        tn: &rusqlite::Transaction<'_>,
         file: &mut sharedtypes::FileObject,
         bytes: &Bytes,
         sha512hash: &String,
@@ -109,9 +114,9 @@ impl Main {
             &sha512hash
         ));
 
-        'priorityloop: for priority_id in self.enclave_priority_get().iter() {
-            for enclave_id in self.enclave_get_id_from_priority(priority_id).iter() {
-                if self.enclave_run_logic(file, bytes, sha512hash, source_url, enclave_id) {
+        'priorityloop: for priority_id in self.enclave_priority_get(tn).iter() {
+            for enclave_id in self.enclave_get_id_from_priority(tn, priority_id).iter() {
+                if self.enclave_run_logic(tn, file, bytes, sha512hash, source_url, enclave_id) {
                     break 'priorityloop;
                 }
             }
@@ -124,6 +129,7 @@ impl Main {
     ///
     fn enclave_run_action(
         &mut self,
+        tn: &rusqlite::Transaction<'_>,
         action: &sharedtypes::EnclaveAction,
         file: &mut sharedtypes::FileObject,
         bytes: &Bytes,
@@ -134,12 +140,13 @@ impl Main {
     ) -> bool {
         match action {
             sharedtypes::EnclaveAction::PutAtDefault => {
-                let download_location = self.location_get();
+                let download_location = self.location_get(tn);
                 logging::log(format!(
                     "Enclave FileHash {} Putting at Default location {}",
                     &sha512hash, &download_location
                 ));
                 let _ = self.download_and_do_parsing(
+                    tn,
                     bytes,
                     sha512hash,
                     source_url,
@@ -166,13 +173,14 @@ impl Main {
                 //None
             }
             sharedtypes::EnclaveAction::DownloadToDefault => {
-                let download_location = self.location_get();
+                let download_location = self.location_get(tn);
                 logging::log(format!(
                     "Enclave FileHash {}: {}",
                     &sha512hash,
                     format!("Downloading to Default location {}", &download_location)
                 ));
                 let _ = self.download_and_do_parsing(
+                    tn,
                     bytes,
                     sha512hash,
                     source_url,
@@ -194,6 +202,7 @@ impl Main {
     ///
     fn download_and_do_parsing(
         &mut self,
+        tn: &rusqlite::Transaction<'_>,
         bytes: &Bytes,
         sha512hash: &String,
         source_url: Option<&String>,
@@ -203,7 +212,7 @@ impl Main {
         file: &mut sharedtypes::FileObject,
     ) -> usize {
         {
-            self.storage_put(download_location);
+            self.storage_put(tn, download_location);
         }
         // error checking. We should have all dirs needed but hey if we're missing
         std::fs::create_dir_all(download_location).unwrap();
@@ -211,7 +220,7 @@ impl Main {
         // Gives file extension
         let file_ext = FileFormat::from_bytes(bytes).extension().to_string();
 
-        let ext_id = self.extension_put_string(&file_ext);
+        let ext_id = self.extension_put_string(tn, &file_ext);
 
         let download_loc = std::path::Path::new(&download_location)
             .canonicalize()
@@ -219,22 +228,20 @@ impl Main {
 
         download::write_to_disk(download_loc, bytes, sha512hash);
 
-        let storage_id = self.storage_get_id(download_location).unwrap();
+        let storage_id = self.storage_get_id(tn, download_location).unwrap();
 
         let filestorage = sharedtypes::DbFileStorage::NoIdExist(sharedtypes::DbFileObjNoId {
             hash: sha512hash.to_string(),
             ext_id,
             storage_id,
         });
-        let fileid = self.file_add(filestorage);
+        let fileid = self.file_add(tn, filestorage);
         if let Some(source_url) = source_url {
-            let tagid = self.tag_add(source_url, source_url_ns_id, true, None);
-            self.relationship_add(fileid, tagid, true);
+            let tagid = self.tag_add(tn, source_url, source_url_ns_id, true, None);
+            self.relationship_add(tn, fileid, tagid, true);
         }
 
-        self.enclave_file_mapping_add(&fileid, enclave_id);
-
-        self.transaction_flush();
+        self.enclave_file_mapping_add(tn, &fileid, enclave_id);
 
         fileid
     }
@@ -244,11 +251,12 @@ impl Main {
     ///
     fn enclave_condition_evaluate(
         &self,
+        tn: &rusqlite::Transaction<'_>,
         condition_id: &usize,
         file: &sharedtypes::FileObject,
         bytes: &Bytes,
     ) -> (bool, Option<sharedtypes::EnclaveAction>) {
-        if let Some((action, condition)) = self.enclave_condition_get_data(condition_id) {
+        if let Some((action, condition)) = self.enclave_condition_get_data(tn, condition_id) {
             (
                 match condition {
                     sharedtypes::EnclaveCondition::Any => true,
@@ -282,13 +290,21 @@ impl Main {
     ///
     /// Adds a filemapping if it doesn't exist
     ///
-    fn enclave_file_mapping_add(&mut self, file_id: &usize, enclave_id: &usize) {
+    fn enclave_file_mapping_add(
+        &mut self,
+
+        tn: &rusqlite::Transaction<'_>,
+        file_id: &usize,
+        enclave_id: &usize,
+    ) {
         let utc = Utc::now();
         let timestamp = utc.timestamp_millis();
 
-        if self.enclave_file_mapping_get(file_id, enclave_id).is_some() {
-            let conn = self.conn.get().unwrap();
-            let mut prep = conn
+        if self
+            .enclave_file_mapping_get(tn, file_id, enclave_id)
+            .is_some()
+        {
+            let mut prep = tn
             .prepare(
                 "UPDATE FileEnclaveMapping SET timestamp = ? WHERE file_id = ? AND enclave_id = ?",
             )
@@ -298,8 +314,7 @@ impl Main {
             return;
         }
 
-        let conn = self.conn.get().unwrap();
-        let mut prep = conn
+        let mut prep = tn
             .prepare(
                 "INSERT INTO FileEnclaveMapping (file_id, enclave_id, timestamp) VALUES (?, ?, ?)",
             )
@@ -310,9 +325,13 @@ impl Main {
     ///
     /// Checks if a file mapping pair exists
     ///
-    fn enclave_file_mapping_get(&self, file_id: &usize, enclave_id: &usize) -> Option<usize> {
-        let conn = self.conn.get().unwrap();
-        conn.query_row(
+    fn enclave_file_mapping_get(
+        &self,
+        tn: &rusqlite::Transaction<'_>,
+        file_id: &usize,
+        enclave_id: &usize,
+    ) -> Option<usize> {
+        tn.query_row(
             "SELECT file_id from FileEnclaveMapping where file_id = ? AND enclave_id = ? LIMIT 1",
             params![file_id, enclave_id],
             |row| row.get(0),
@@ -324,51 +343,51 @@ impl Main {
     ///
     /// Creates tje database tables for a V5 upgrade
     ///
-    pub fn enclave_create_database_v5(&mut self) {
+    pub fn enclave_create_database_v5(&mut self, tn: &rusqlite::Transaction<'_>) {
         // Creates a location to store the location of files
-        if !self.check_table_exists("FileStorageLocations".to_string()) {
+        if !self.check_table_exists(tn, "FileStorageLocations".to_string()) {
             let keys = &vec_of_strings!("id", "location");
             let vals = &vec_of_strings!("INTEGER PRIMARY KEY", "TEXT NOT NULL");
-            self.table_create(&"FileStorageLocations".to_string(), keys, vals);
+            self.table_create(tn, &"FileStorageLocations".to_string(), keys, vals);
         }
 
         // Creates a location to store the location of the extension of a file
-        if !self.check_table_exists("FileExtensions".to_string()) {
+        if !self.check_table_exists(tn, "FileExtensions".to_string()) {
             let keys = &vec_of_strings!("id", "extension");
             let vals = &vec_of_strings!("INTEGER PRIMARY KEY", "TEXT NOT NULL UNIQUE");
-            self.table_create(&"FileExtensions".to_string(), keys, vals);
+            self.table_create(tn, &"FileExtensions".to_string(), keys, vals);
         }
 
-        if !self.check_table_exists("EnclaveAction".to_string()) {
+        if !self.check_table_exists(tn, "EnclaveAction".to_string()) {
             let keys = &vec_of_strings!("id", "action_name", "action_text");
             let vals = &vec_of_strings!(
                 "INTEGER PRIMARY KEY NOT NULL",
                 "TEXT NOT NULL",
                 "TEXT NOT NULL"
             );
-            self.table_create(&"EnclaveAction".to_string(), keys, vals);
+            self.table_create(tn, &"EnclaveAction".to_string(), keys, vals);
         }
 
         // Maps enclave id's to file ids
-        if !self.check_table_exists("FileEnclaveMapping".to_string()) {
+        if !self.check_table_exists(tn, "FileEnclaveMapping".to_string()) {
             let keys = &vec_of_strings!("file_id", "enclave_id", "timestamp");
             let vals = &vec_of_strings!("INTEGER NOT NULL", "INTEGER NOT NULL", "INTEGER NOT NULL");
-            self.table_create(&"FileEnclaveMapping".to_string(), keys, vals);
+            self.table_create(tn, &"FileEnclaveMapping".to_string(), keys, vals);
         }
 
         // Enclave condition
-        if !self.check_table_exists("EnclaveCondition".to_string()) {
+        if !self.check_table_exists(tn, "EnclaveCondition".to_string()) {
             let keys = &vec_of_strings!("id", "action_name", "action_condition");
             let vals = &vec_of_strings!(
                 "INTEGER NOT NULL PRIMARY KEY",
                 "TEXT NOT NULL",
                 "TEXT NOT NULL"
             );
-            self.table_create(&"EnclaveCondition".to_string(), keys, vals);
+            self.table_create(tn, &"EnclaveCondition".to_string(), keys, vals);
         }
 
         // Lists of conditions if X do Y
-        if !self.check_table_exists("EnclaveConditionList".to_string()) {
+        if !self.check_table_exists(tn, "EnclaveConditionList".to_string()) {
             let keys = &vec_of_strings!(
                 "id",
                 "enclave_action_id",
@@ -381,11 +400,11 @@ impl Main {
                 "INTEGER",
                 "INTEGER NOT NULL"
             );
-            self.table_create(&"EnclaveConditionList".to_string(), keys, vals);
+            self.table_create(tn, &"EnclaveConditionList".to_string(), keys, vals);
         }
 
         // Intermedidate table
-        if !self.check_table_exists("EnclaveActionOrderList".to_string()) {
+        if !self.check_table_exists(tn, "EnclaveActionOrderList".to_string()) {
             let keys = &vec_of_strings!(
                 "id",
                 "enclave_id",
@@ -398,53 +417,59 @@ impl Main {
                 "INTEGER NOT NULL",
                 "INTEGER NOT NULL"
             );
-            self.table_create(&"EnclaveActionOrderList".to_string(), keys, vals);
+            self.table_create(tn, &"EnclaveActionOrderList".to_string(), keys, vals);
         }
 
-        if !self.check_table_exists("Enclave".to_string()) {
+        if !self.check_table_exists(tn, "Enclave".to_string()) {
             let keys = &vec_of_strings!("id", "enclave_name", "priority");
             let vals = &vec_of_strings!("INTEGER PRIMARY KEY", "TEXT NOT NULL", "INTEGER NOT NULL");
-            self.table_create(&"Enclave".to_string(), keys, vals);
+            self.table_create(tn, &"Enclave".to_string(), keys, vals);
         }
     }
 
-    pub fn enclave_create_default_file_import(&mut self) {
+    pub fn enclave_create_default_file_import(&mut self, tn: &rusqlite::Transaction<'_>) {
         self.enclave_action_put(
+            tn,
             &DEFAULT_PUT_DISK.into(),
             sharedtypes::EnclaveAction::PutAtDefault,
         );
         self.enclave_condition_put(
+            tn,
             &sharedtypes::EnclaveAction::PutAtDefault,
             &sharedtypes::EnclaveCondition::Any,
         );
-        self.enclave_name_put(DEFAULT_PUT_DISK.into(), &DEFAULT_PRIORITY_PUT);
+        self.enclave_name_put(tn, DEFAULT_PUT_DISK.into(), &DEFAULT_PRIORITY_PUT);
 
-        let enclave_id = self.enclave_name_get_id(DEFAULT_PUT_DISK).unwrap();
+        let enclave_id = self.enclave_name_get_id(tn, DEFAULT_PUT_DISK).unwrap();
         let condition_id = self
-            .enclave_condition_get_id(&sharedtypes::EnclaveAction::PutAtDefault)
+            .enclave_condition_get_id(tn, &sharedtypes::EnclaveAction::PutAtDefault)
             .unwrap();
         let action_id = self
-            .enclave_action_get_id(&DEFAULT_PUT_DISK.into())
+            .enclave_action_get_id(tn, &DEFAULT_PUT_DISK.into())
             .unwrap();
-        self.enclave_condition_link_put(&condition_id, &action_id, None);
+        self.enclave_condition_link_put(tn, &condition_id, &action_id, None);
         let condition_link_id = self
-            .enclave_condition_link_get_id(&condition_id, &action_id)
+            .enclave_condition_link_get_id(tn, &condition_id, &action_id)
             .unwrap();
 
-        self.enclave_action_order_link_put(&enclave_id, &condition_link_id, &0);
+        self.enclave_action_order_link_put(tn, &enclave_id, &condition_link_id, &0);
     }
 
     ///
     /// Creates a enclave that is for downloading files
     /// Default behaviour is to download to the specified folder unless the input is false
     ///
-    pub fn enclave_create_default_file_download(&mut self, location: String) {
+    pub fn enclave_create_default_file_download(
+        &mut self,
+        tn: &rusqlite::Transaction<'_>,
+        location: String,
+    ) {
         // Makes the default file download location
         {
             folder_make(&location);
         }
 
-        let is_default_location = location == self.location_get();
+        let is_default_location = location == self.location_get(tn);
 
         let default_or_alternative_location = if is_default_location {
             DEFAULT_DOWNLOAD_DEFAULT
@@ -475,7 +500,7 @@ impl Main {
         let alt_action = if is_default_location {
             sharedtypes::EnclaveAction::DownloadToDefault
         } else {
-            let storage_id = self.storage_get_id(&location);
+            let storage_id = self.storage_get_id(tn, &location);
             if let Some(storage_id) = storage_id {
                 sharedtypes::EnclaveAction::DownloadToLocation(storage_id)
             } else {
@@ -485,38 +510,43 @@ impl Main {
 
         let default_file_enclave = format!("File_Download_location_{}", location);
         self.enclave_name_put(
+            tn,
             default_file_enclave.clone(),
             &default_or_alternative_priority,
         );
-        self.enclave_condition_put(&default_or_alternative_name, &alt_condition);
-        self.enclave_action_put(&default_or_alternative_location.to_string(), alt_action);
+        self.enclave_condition_put(tn, &default_or_alternative_name, &alt_condition);
+        self.enclave_action_put(tn, &default_or_alternative_location.to_string(), alt_action);
 
-        let enclave_id = self.enclave_name_get_id(&default_file_enclave).unwrap();
+        let enclave_id = self.enclave_name_get_id(tn, &default_file_enclave).unwrap();
         let condition_id = self
-            .enclave_condition_get_id(&default_or_alternative_name)
+            .enclave_condition_get_id(tn, &default_or_alternative_name)
             .unwrap();
         let action_id = self
-            .enclave_action_get_id(&default_or_alternative_location.to_string())
+            .enclave_action_get_id(tn, &default_or_alternative_location.to_string())
             .unwrap();
-        self.enclave_condition_link_put(&condition_id, &action_id, None);
+        self.enclave_condition_link_put(tn, &condition_id, &action_id, None);
         let condition_link_id = self
-            .enclave_condition_link_get_id(&condition_id, &action_id)
+            .enclave_condition_link_get_id(tn, &condition_id, &action_id)
             .unwrap();
 
-        self.enclave_action_order_link_put(&enclave_id, &condition_link_id, &0);
+        self.enclave_action_order_link_put(tn, &enclave_id, &condition_link_id, &0);
     }
 
     ///
     /// Inserts the enclave's name into the database
     /// Kinda a dumb way but hey it works
     ///
-    fn enclave_name_put(&mut self, name: String, enclave_priority: &usize) {
-        if self.enclave_name_get_id(&name).is_some() {
+    fn enclave_name_put(
+        &mut self,
+        tn: &rusqlite::Transaction<'_>,
+        name: String,
+        enclave_priority: &usize,
+    ) {
+        if self.enclave_name_get_id(tn, &name).is_some() {
             return;
         }
 
-        let conn = self.conn.get().unwrap();
-        let mut prep = conn
+        let mut prep = tn
             .prepare("INSERT OR REPLACE INTO Enclave (enclave_name, priority) VALUES (?, ?) ON CONFLICT DO NOTHING")
             .unwrap();
         let _ = prep.insert(params![name, enclave_priority]);
@@ -526,9 +556,8 @@ impl Main {
     ///
     /// Gets the enclave name from the enclave id
     ///
-    fn enclave_name_get_name(&self, id: &usize) -> Option<String> {
-        let conn = self.conn.get().unwrap();
-        conn.query_row(
+    fn enclave_name_get_name(&self, tn: &rusqlite::Transaction<'_>, id: &usize) -> Option<String> {
+        tn.query_row(
             "SELECT enclave_name from Enclave where id = ?",
             params![id],
             |row| row.get(0),
@@ -540,9 +569,8 @@ impl Main {
     ///
     /// Gets the enclave id from the enclave name
     ///
-    pub fn enclave_name_get_id(&self, name: &str) -> Option<usize> {
-        let conn = self.conn.get().unwrap();
-        conn.query_row(
+    pub fn enclave_name_get_id(&self, tn: &rusqlite::Transaction<'_>, name: &str) -> Option<usize> {
+        tn.query_row(
             "SELECT id from Enclave where enclave_name = ?",
             params![name],
             |row| row.get(0),
@@ -554,10 +582,13 @@ impl Main {
     ///
     /// Gets prioritys from Enclaves
     ///
-    fn enclave_get_id_from_priority(&self, priority_id: &usize) -> Vec<usize> {
+    fn enclave_get_id_from_priority(
+        &self,
+        tn: &rusqlite::Transaction<'_>,
+        priority_id: &usize,
+    ) -> Vec<usize> {
         let mut out: Vec<usize> = Vec::new();
-        let conn = self.conn.get().unwrap();
-        let mut stmt = conn
+        let mut stmt = tn
             .prepare("SELECT id from Enclave WHERE priority = ?")
             .unwrap();
         let row = stmt
@@ -584,10 +615,9 @@ impl Main {
     ///
     /// Gets prioritys from Enclaves
     ///
-    fn enclave_priority_get(&self) -> Vec<usize> {
+    fn enclave_priority_get(&self, tn: &rusqlite::Transaction<'_>) -> Vec<usize> {
         let mut out: Vec<usize> = Vec::new();
-        let conn = self.conn.get().unwrap();
-        let mut stmt = conn
+        let mut stmt = tn
             .prepare("SELECT priority from Enclave ORDER BY priority DESC")
             .unwrap();
         let row = stmt
@@ -614,15 +644,15 @@ impl Main {
     ///
     fn enclave_condition_put(
         &mut self,
+        tn: &rusqlite::Transaction<'_>,
         action: &sharedtypes::EnclaveAction,
         condition: &sharedtypes::EnclaveCondition,
     ) {
-        if self.enclave_condition_get_id(action).is_some() {
+        if self.enclave_condition_get_id(tn, action).is_some() {
             return;
         }
 
-        let conn = self.conn.get().unwrap();
-        let mut prep = conn
+        let mut prep = tn
             .prepare("INSERT OR REPLACE INTO EnclaveCondition (action_name, action_condition) VALUES (?, ?)")
             .unwrap();
         let _ = prep.insert(params![
@@ -630,9 +660,12 @@ impl Main {
             serde_json::to_string(condition).unwrap()
         ]);
     }
-    pub fn enclave_condition_get_id(&self, name: &sharedtypes::EnclaveAction) -> Option<usize> {
-        let conn = self.conn.get().unwrap();
-        conn.query_row(
+    pub fn enclave_condition_get_id(
+        &self,
+        tn: &rusqlite::Transaction<'_>,
+        name: &sharedtypes::EnclaveAction,
+    ) -> Option<usize> {
+        tn.query_row(
             "SELECT id from EnclaveCondition where action_name = ?",
             params![serde_json::to_string(name).unwrap()],
             |row| row.get(0),
@@ -646,10 +679,10 @@ impl Main {
     ///
     fn enclave_condition_get_data(
         &self,
+        tn: &rusqlite::Transaction<'_>,
         condition_id: &usize,
     ) -> Option<(sharedtypes::EnclaveAction, sharedtypes::EnclaveCondition)> {
-        let conn = self.conn.get().unwrap();
-        if let Ok(out) = conn
+        if let Ok(out) = tn
             .query_row(
                 "SELECT action_name, action_condition from EnclaveCondition where id = ?",
                 params![condition_id],
@@ -675,19 +708,19 @@ impl Main {
     ///
     fn enclave_action_order_link_put(
         &mut self,
+        tn: &rusqlite::Transaction<'_>,
         enclave_id: &usize,
         enclave_conditional_list_id: &usize,
         enclave_action_position: &usize,
     ) {
         if self
-            .enclave_action_order_link_get_id(enclave_id, enclave_conditional_list_id)
+            .enclave_action_order_link_get_id(tn, enclave_id, enclave_conditional_list_id)
             .is_some()
         {
             return;
         }
 
-        let conn = self.conn.get().unwrap();
-        let mut prep = conn
+        let mut prep = tn
             .prepare("INSERT OR REPLACE INTO EnclaveActionOrderList (enclave_id,enclave_conditional_list_id, enclave_action_position) VALUES (? ,? ,?)")
             .unwrap();
         let _ = prep.insert(params![
@@ -701,11 +734,11 @@ impl Main {
     ///
     fn enclave_action_order_link_get_id(
         &self,
+        tn: &rusqlite::Transaction<'_>,
         enclave_id: &usize,
         enclave_conditional_list_id: &usize,
     ) -> Option<usize> {
-        let conn = self.conn.get().unwrap();
-        conn
+        tn
             .query_row(
                 "SELECT id from EnclaveActionOrderList where enclave_id = ? AND enclave_conditional_list_id = ?",
                 params![enclave_id, enclave_conditional_list_id],
@@ -717,10 +750,13 @@ impl Main {
     ///
     /// Gets enclave conditional jump by enclave_id
     ///
-    fn enclave_action_order_enclave_get_list_id(&self, enclave_id: &usize) -> Vec<usize> {
+    fn enclave_action_order_enclave_get_list_id(
+        &self,
+        tn: &rusqlite::Transaction<'_>,
+        enclave_id: &usize,
+    ) -> Vec<usize> {
         let mut out: Vec<usize> = Vec::new();
-        let conn = self.conn.get().unwrap();
-        let mut stmt = conn
+        let mut stmt = tn
             .prepare("SELECT enclave_conditional_list_id from EnclaveActionOrderList where enclave_id = ? ORDER BY enclave_action_position DESC")
             .unwrap();
         let row = stmt
@@ -749,19 +785,19 @@ impl Main {
     ///
     fn enclave_condition_link_put(
         &mut self,
+        tn: &rusqlite::Transaction<'_>,
         condition_id: &usize,
         action_id: &usize,
         failed_enclave_id: Option<&usize>,
     ) {
         if self
-            .enclave_condition_link_get_id(condition_id, action_id)
+            .enclave_condition_link_get_id(tn, condition_id, action_id)
             .is_some()
         {
             return;
         }
 
-        let conn = self.conn.get().unwrap();
-        let mut prep = conn
+        let mut prep = tn
             .prepare("INSERT OR REPLACE INTO EnclaveConditionList (enclave_action_id,failed_enclave_action_id,condition_id) VALUES (? ,? ,?)")
             .unwrap();
         let _ = prep.insert(params![action_id, failed_enclave_id, condition_id,]);
@@ -772,11 +808,11 @@ impl Main {
     ///
     fn enclave_condition_link_get_id(
         &self,
+        tn: &rusqlite::Transaction<'_>,
         condition_id: &usize,
         action_id: &usize,
     ) -> Option<usize> {
-        let conn = self.conn.get().unwrap();
-        conn.query_row(
+        tn.query_row(
             "SELECT id from EnclaveConditionList where enclave_action_id = ? AND condition_id = ?",
             params![action_id, condition_id],
             |row| row.get(0),
@@ -790,11 +826,10 @@ impl Main {
     ///
     fn enclave_condition_list_get(
         &mut self,
+        tn: &rusqlite::Transaction<'_>,
         condition_list_id: &usize,
     ) -> Option<(usize, Option<usize>, usize)> {
-        let conn = self.conn.get().unwrap();
-
-        if let Ok(out) = conn
+        if let Ok(out) = tn
             .query_row(
                 "SELECT enclave_action_id, failed_enclave_action_id, condition_id from EnclaveConditionList where id = ?",
                 params![condition_list_id],
@@ -811,14 +846,18 @@ impl Main {
     ///
     /// Inserts the name and action into the database
     ///
-    fn enclave_action_put(&mut self, name: &String, action: sharedtypes::EnclaveAction) {
+    fn enclave_action_put(
+        &mut self,
+        tn: &rusqlite::Transaction<'_>,
+        name: &String,
+        action: sharedtypes::EnclaveAction,
+    ) {
         // Quick out if we already have this inserted
-        if self.enclave_action_get_id(name).is_some() {
+        if self.enclave_action_get_id(tn, name).is_some() {
             return;
         }
 
-        let conn = self.conn.get().unwrap();
-        let mut prep = conn
+        let mut prep = tn
             .prepare(
                 "INSERT OR REPLACE INTO EnclaveAction (action_name, action_text) VALUES (?, ?)",
             )
@@ -829,9 +868,12 @@ impl Main {
     ///
     /// Gets an action's ID based on name
     ///
-    fn enclave_action_get_id(&self, name: &String) -> Option<usize> {
-        let conn = self.conn.get().unwrap();
-        conn.query_row(
+    fn enclave_action_get_id(
+        &self,
+        tn: &rusqlite::Transaction<'_>,
+        name: &String,
+    ) -> Option<usize> {
+        tn.query_row(
             "SELECT id from EnclaveAction where action_name = ?",
             params![name],
             |row| row.get(0),

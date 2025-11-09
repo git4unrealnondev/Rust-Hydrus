@@ -1,3 +1,5 @@
+use rusqlite::Transaction;
+
 use crate::database;
 use crate::database::Main;
 use crate::logging;
@@ -45,9 +47,9 @@ impl Jobs {
     ///
     fn jobs_add_internal(
         &mut self,
+        tn: &Transaction<'_>,
         scraper: sharedtypes::GlobalPluginScraper,
         dbjobsobj: sharedtypes::DbJobsObj,
-        db: &mut Main,
     ) {
         let mut dbjobsobj = dbjobsobj;
 
@@ -99,7 +101,7 @@ impl Jobs {
             if dbjobsobj.id.is_none() {
                 let mut temp = dbjobsobj.clone();
                 temp.id = None;
-                let id = db.jobs_add_new(temp);
+                let id = self.db.write().unwrap().jobs_add_new(tn, temp);
 
                 // Updates the ID field with something from the db
                 dbjobsobj.id = Some(id);
@@ -131,11 +133,12 @@ impl Jobs {
 
     pub fn jobs_add_nolock(
         &mut self,
+        tn: &Transaction<'_>,
         scraper: sharedtypes::GlobalPluginScraper,
         dbjobsobj: sharedtypes::DbJobsObj,
         db: Arc<RwLock<Main>>,
     ) {
-        self.jobs_add_internal(scraper, dbjobsobj, &mut db.write().unwrap());
+        self.jobs_add_internal(tn, scraper, dbjobsobj);
     }
 
     ///
@@ -143,10 +146,11 @@ impl Jobs {
     ///
     pub fn jobs_add(
         &mut self,
+        tn: &Transaction<'_>,
         scraper: sharedtypes::GlobalPluginScraper,
         dbjobsobj: sharedtypes::DbJobsObj,
     ) {
-        self.jobs_add_internal(scraper, dbjobsobj, &mut self.db.clone().write().unwrap());
+        self.jobs_add_internal(tn, scraper, dbjobsobj);
     }
 
     ///
@@ -174,6 +178,7 @@ impl Jobs {
     ///
     pub fn jobs_remove_dbjob(
         &mut self,
+        tn: &Transaction<'_>,
         scraper: &sharedtypes::GlobalPluginScraper,
         data: &sharedtypes::DbJobsObj,
         worker_id: &usize,
@@ -184,10 +189,9 @@ impl Jobs {
             for job in job_list_static {
                 if job.id == data.id && job_list.remove(&job) {
                     logging::info_log(format!("Worker: {worker_id} --Removing Job: {:?}", &job));
-                    db.del_from_jobs_byid(job.id.as_ref());
+                    db.del_from_jobs_byid(&tn, job.id.as_ref());
                 }
             }
-            db.transaction_flush();
         }
     }
 
@@ -210,6 +214,7 @@ impl Jobs {
     ///
     pub fn jobs_decrement_count(
         &mut self,
+        tn: &Transaction<'_>,
         data: &sharedtypes::DbJobsObj,
         scraper: &sharedtypes::GlobalPluginScraper,
         worker_id: &usize,
@@ -224,7 +229,7 @@ impl Jobs {
                 sharedtypes::DbJobRecreation::AlwaysTime(_, count) => {
                     if let &Some(count) = count {
                         if count == 0 {
-                            self.jobs_remove_dbjob(scraper, data, worker_id);
+                            self.jobs_remove_dbjob(tn, scraper, data, worker_id);
                         } else {
                             //count -= 1;
                         }
@@ -251,7 +256,7 @@ impl Jobs {
     /// Determines if we need to load tables to run job
     /// Might add the login info here if I can
     ///
-    pub fn jobs_run_new(&mut self) {
+    pub fn jobs_run_new(&self) {
         logging::info_log("Checking if we have any Jobs to run.".to_string());
         if self.site_job.is_empty() {
             logging::info_log("No jobs to run".to_string());
@@ -263,11 +268,6 @@ impl Jobs {
                     jobsobj.len()
                 ));
             }
-
-            self.db
-                .write()
-                .unwrap()
-                .load_table(&sharedtypes::LoadDBTable::All);
         }
     }
 
@@ -278,19 +278,11 @@ impl Jobs {
         &mut self,
         globalplugin_sites: Vec<(sharedtypes::GlobalPluginScraper, String)>,
     ) {
-        // Loads table if this hasn't been loaded yet
-        {
-            self.db
-                .write()
-                .unwrap()
-                .load_table(&sharedtypes::LoadDBTable::Jobs);
-        }
-        let hashjobs;
         let mut jobs_vec = Vec::new();
-        {
-            let db = self.db.read().unwrap();
-            hashjobs = db.jobs_get_all().clone();
-        }
+        let db_clone = self.db.clone();
+        let db = db_clone.read().unwrap();
+        let mut conn = db.get_database_connection();
+        let tn = conn.transaction().unwrap();
 
         {
             'mainloop: for (scraper, sites) in globalplugin_sites {
@@ -302,7 +294,7 @@ impl Jobs {
                 }
 
                 //for sites in global_load.read().unwrap().sites_get(&scraper) {
-                for (_, job) in hashjobs.iter() {
+                for (_, job) in db.jobs_get_all(&tn).iter() {
                     if sites == job.site && job.priority != 0 {
                         jobs_vec.push((scraper.clone(), job.clone()));
                     }
@@ -320,8 +312,9 @@ impl Jobs {
             .collect();
 
         for (scraper, job) in jobs_vec {
-            self.jobs_add(scraper, job);
+            self.jobs_add(&tn, scraper, job);
         }
+        tn.commit();
     }
 }
 

@@ -58,6 +58,7 @@ pub fn find_sidecar(location: &Path) -> Vec<PathBuf> {
 /// If it's an archive file it will extract its internals into the system
 ///
 pub fn parse_file(
+    tn: &rusqlite::Transaction<'_>,
     file_location: &Path,
     sidecars: &Vec<PathBuf>,
     db: Arc<RwLock<Main>>,
@@ -145,6 +146,7 @@ pub fn parse_file(
             {
                 let mut unwrappy = db.write().unwrap();
                 unwrappy.enclave_run_process(
+                    tn,
                     &mut sharedtypes::FileObject {
                         source: None,
                         hash: sharedtypes::HashesSupported::Sha512(sha512hash.clone()),
@@ -156,20 +158,18 @@ pub fn parse_file(
                     None,
                     enclave::DEFAULT_PUT_DISK,
                 );
-                fileid = unwrappy.file_get_hash(&sha512hash);
+                fileid = unwrappy.file_get_hash(tn, &sha512hash);
             }
 
             // imports all tags onto the file that we dl'ed
             for tag in tag_list.iter() {
-                parse_tags(db.clone(), tag, fileid, &0, &0, manager_arc.clone());
+                parse_tags(tn, db.clone(), tag, fileid, &0, &0, manager_arc.clone());
             }
 
             manager_arc
                 .read()
                 .unwrap()
-                .callback_on_import(&bytes, &sha512hash);
-
-            // callback_on_import(manager_arc.clone(), db.clone(), &bytes, &sha512hash);
+                .callback_on_import(tn, &bytes, &sha512hash);
 
             if let Ok(filetype) = file_format::FileFormat::from_file(file_location) {
                 inside_files.append(&mut process_archive_files(
@@ -194,6 +194,7 @@ pub fn parse_file(
                 {
                     let mut unwrappy = db.write().unwrap();
                     unwrappy.enclave_run_process(
+                        tn,
                         &mut sharedtypes::FileObject {
                             source: None,
                             hash: sharedtypes::HashesSupported::Sha512(sub_sha512hash.clone()),
@@ -205,24 +206,17 @@ pub fn parse_file(
                         None,
                         enclave::DEFAULT_PUT_DISK,
                     );
-                    subfileid = unwrappy.file_get_hash(&sub_sha512hash);
+                    subfileid = unwrappy.file_get_hash(tn, &sub_sha512hash);
                 }
                 // imports all tags onto the file that we dl'ed
                 for tag in tags.iter() {
-                    parse_tags(db.clone(), tag, subfileid, &0, &0, manager_arc.clone());
+                    parse_tags(tn, db.clone(), tag, subfileid, &0, &0, manager_arc.clone());
                 }
 
                 manager_arc
                     .read()
                     .unwrap()
-                    .callback_on_import(&file_bytes, &sub_sha512hash);
-
-                /* callback_on_import(
-                    manager_arc.clone(),
-                    db.clone(),
-                    &file_bytes,
-                    &sub_sha512hash,
-                );*/
+                    .callback_on_import(tn, &file_bytes, &sub_sha512hash);
             }
             if let Some(fid) = fileid {
                 return Some(fid);
@@ -235,7 +229,12 @@ pub fn parse_file(
 ///
 /// Parses a sidecar file into a valid data for the db
 ///
-pub fn parse_sidecar(file_location: &Path, sidecar_location: &Path, db: Arc<RwLock<Main>>) {
+pub fn parse_sidecar(
+    tn: &rusqlite::Transaction<'_>,
+    file_location: &Path,
+    sidecar_location: &Path,
+    db: Arc<RwLock<Main>>,
+) {
     let sha512hash = hash_file(
         &file_location.display().to_string(),
         &sharedtypes::HashesSupported::Sha512("Null".into()),
@@ -261,6 +260,7 @@ pub fn parse_sidecar(file_location: &Path, sidecar_location: &Path, db: Arc<RwLo
                 }
                 let mut unwrappy = db.write().unwrap();
                 unwrappy.enclave_run_process(
+                    tn,
                     &mut sharedtypes::FileObject {
                         source: None,
                         hash: sharedtypes::HashesSupported::Sha512(sha512hash.clone()),
