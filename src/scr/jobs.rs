@@ -50,7 +50,7 @@ impl Jobs {
         tn: &Transaction<'_>,
         scraper: sharedtypes::GlobalPluginScraper,
         dbjobsobj: sharedtypes::DbJobsObj,
-    ) {
+    ) -> bool {
         let mut dbjobsobj = dbjobsobj;
 
         let obj = PreviouslySeenObj {
@@ -66,7 +66,7 @@ impl Jobs {
         // call then the program can poop itself
         if let Some(sharedtypes::ScraperOrPlugin::Scraper(_)) = scraper.storage_type {
         } else {
-            return;
+            return false;
         }
 
         if let Some(list) = self.previously_seen.get(&scraper) {
@@ -76,7 +76,7 @@ impl Jobs {
                     "Skipping obj because I've seen it already: {:?}",
                     &obj
                 ));*/
-                return;
+                return false;
             }
 
             for job_to_check in list {
@@ -90,19 +90,19 @@ impl Jobs {
                         );
                         if job_to_check.params == dbjobsobj.param {
                             dbg!("SKIPPING");
-                            return;
+                            return false;
                         }
                     }
                 }
             }
         }
-
+        let mut out = false;
         if time_func::time_secs() >= dbjobsobj.time + dbjobsobj.reptime.unwrap() {
             if dbjobsobj.id.is_none() {
                 let mut temp = dbjobsobj.clone();
                 temp.id = None;
                 let id = self.db.write().unwrap().jobs_add_new(tn, temp);
-
+                out = true;
                 // Updates the ID field with something from the db
                 dbjobsobj.id = Some(id);
             }
@@ -129,6 +129,7 @@ impl Jobs {
                 }
             }
         }
+        out
     }
 
     pub fn jobs_add_nolock(
@@ -149,8 +150,8 @@ impl Jobs {
         tn: &Transaction<'_>,
         scraper: sharedtypes::GlobalPluginScraper,
         dbjobsobj: sharedtypes::DbJobsObj,
-    ) {
-        self.jobs_add_internal(tn, scraper, dbjobsobj);
+    ) -> bool {
+        self.jobs_add_internal(tn, scraper, dbjobsobj)
     }
 
     ///
@@ -278,11 +279,18 @@ impl Jobs {
         &mut self,
         globalplugin_sites: Vec<(sharedtypes::GlobalPluginScraper, String)>,
     ) {
+        let hashjobs;
         let mut jobs_vec = Vec::new();
-        let db_clone = self.db.clone();
-        let db = db_clone.read().unwrap();
-        let mut conn = db.get_database_connection();
+        let mut conn = {
+            let db = self.db.read().unwrap();
+            db.get_database_connection()
+        };
         let tn = conn.transaction().unwrap();
+
+        {
+            let db = self.db.read().unwrap();
+            hashjobs = db.jobs_get_all(&tn).clone();
+        }
 
         {
             'mainloop: for (scraper, sites) in globalplugin_sites {
@@ -294,7 +302,7 @@ impl Jobs {
                 }
 
                 //for sites in global_load.read().unwrap().sites_get(&scraper) {
-                for (_, job) in db.jobs_get_all(&tn).iter() {
+                for (_, job) in hashjobs.iter() {
                     if sites == job.site && job.priority != 0 {
                         jobs_vec.push((scraper.clone(), job.clone()));
                     }
@@ -311,10 +319,15 @@ impl Jobs {
             .filter(|job| job.1.priority != 0)
             .collect();
 
+        let mut commit = false;
         for (scraper, job) in jobs_vec {
-            self.jobs_add(&tn, scraper, job);
+            if self.jobs_add(&tn, scraper, job) {
+                commit = true;
+            }
         }
-        tn.commit();
+        if commit {
+            tn.commit();
+        }
     }
 }
 

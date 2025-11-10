@@ -58,11 +58,13 @@ pub enum CacheType {
     // Will be use to query the DB directly. No caching.
     Bare,
 }
+
 /// Holder of database self variables
 pub struct Main {
     _dbpath: Option<String>,
     _vers: usize,
     pool: Pool<SqliteConnectionManager>,
+    write_lock: Mutex<()>,
     _active_vers: usize,
     _inmemdb: NewinMemDB,
     _dbcommitnum: usize,
@@ -79,9 +81,9 @@ impl Main {
     /// Sets up new db instance.
     pub fn new(path: Option<String>, vers: usize) -> Self {
         // Initiates two tnections to the DB. Cheap workaround to avoid loading errors.
-
         let mut first_time_load_flag = false;
 
+        let write_lock = Mutex::new(());
         let mut main = match path {
             Some(ref file_path) => {
                 first_time_load_flag = Path::new(&file_path).exists();
@@ -92,6 +94,7 @@ impl Main {
                     _dbpath: path.clone(),
                     _vers: vers,
                     pool,
+                    write_lock,
                     _active_vers: 0,
                     _inmemdb: memdb,
                     _dbcommitnum: 0,
@@ -111,19 +114,27 @@ PRAGMA journal_mode = WAL;
             PRAGMA synchronous = NORMAL;
             PRAGMA secure_delete = 0;
             PRAGMA page_size = 8192;
-            PRAGMA cache_size = -5000000;
+            PRAGMA cache_size = -500000;
     ",
-                    )
+                    )?;
+
+                    // Enable SQL tracing
+                    /*conn.trace(Some(|sql| {
+                        println!("[SQL TRACE] {}", sql);
+                    }));*/
+                    Ok(())
                 });
+                let write_lock = Mutex::new(());
                 let pool = r2d2::Builder::new()
                     .idle_timeout(Some(Duration::from_secs(5)))
-                    .max_size(20)
+                    .max_size(30)
                     .build(manager)
                     .unwrap();
                 let mut main = Main {
                     _dbpath: path,
                     _vers: vers,
                     pool,
+                    write_lock,
                     _active_vers: 0,
                     _inmemdb: memdbmain._inmemdb,
                     _dbcommitnum: 0,
@@ -140,10 +151,12 @@ PRAGMA journal_mode = WAL;
                 let memdb = NewinMemDB::new();
                 let manager = SqliteConnectionManager::memory();
                 let pool = r2d2::Builder::new().max_size(20).build(manager).unwrap();
+                let write_lock = Mutex::new(());
                 let memdbmain = Main {
                     _dbpath: None,
                     _vers: vers,
                     pool,
+                    write_lock,
                     _active_vers: 0,
                     _inmemdb: memdb,
                     _dbcommitnum: 0,
@@ -155,11 +168,15 @@ PRAGMA journal_mode = WAL;
                     localref: None,
                 };
                 let manager = SqliteConnectionManager::memory();
+
+                let write_lock = Mutex::new(());
+
                 let pool = r2d2::Builder::new().max_size(20).build(manager).unwrap();
                 let mut main = Main {
                     _dbpath: None,
                     _vers: vers,
                     pool,
+                    write_lock,
                     _active_vers: 0,
                     _inmemdb: memdbmain._inmemdb,
                     _dbcommitnum: 0,
@@ -611,9 +628,9 @@ PRAGMA journal_mode = WAL;
     /// Adds the job to the inmemdb
     pub fn jobs_add_new_todb(&mut self, tn: &Transaction<'_>, job: sharedtypes::DbJobsObj) {
         match self._cache {
-            CacheType::Bare => {
+            /*CacheType::Bare => {
                 self.jobs_add_sql(tn, &job);
-            }
+            }*/
             _ => {
                 self._inmemdb.jobref_new(job);
             }
@@ -804,7 +821,7 @@ PRAGMA journal_mode = WAL;
     /// Wrapper
     pub fn jobs_get_all(&self, tn: &Transaction<'_>) -> HashMap<usize, sharedtypes::DbJobsObj> {
         match &self._cache {
-            CacheType::Bare => self.jobs_get_all_sql(tn),
+            //CacheType::Bare => self.jobs_get_all_sql(tn),
             _ => self._inmemdb.jobs_get_all().clone(),
         }
     }
@@ -812,7 +829,7 @@ PRAGMA journal_mode = WAL;
     /// Pull job by id TODO NEEDS TO ADD IN PROPER POLLING FROM DB.
     pub fn jobs_get(&self, tn: &Transaction<'_>, id: &usize) -> Option<sharedtypes::DbJobsObj> {
         match self._cache {
-            CacheType::Bare => self.jobs_get_id_sql(tn, id),
+            // CacheType::Bare => self.jobs_get_id_sql(tn, id),
             _ => self._inmemdb.jobs_get(id).cloned(),
         }
     }
@@ -877,7 +894,7 @@ PRAGMA journal_mode = WAL;
     /// Returns next jobid from _inmemdb
     pub fn jobs_get_max(&self, tn: &Transaction<'_>) -> usize {
         match self._cache {
-            CacheType::Bare => self.jobs_return_count_sql(tn),
+            //  CacheType::Bare => self.jobs_return_count_sql(tn),
             _ => *self._inmemdb.jobs_get_max(),
         }
     }
@@ -1355,7 +1372,7 @@ PRAGMA journal_mode = WAL;
         if self._active_vers != self._vers {
             let mut conn = self.get_database_connection();
             let tn = conn
-                .transaction_with_behavior(rusqlite::TransactionBehavior::Exclusive)
+                .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
                 .unwrap();
             logging::info_log(format!(
                 "Starting upgrade from V{} to V{}",
@@ -1602,9 +1619,6 @@ PRAGMA journal_mode = WAL;
 
     /// Loads jobs in from DB tnection
     fn load_jobs(&mut self, tn: &Transaction<'_>) {
-        if self._cache == CacheType::Bare {
-            return;
-        }
         logging::info_log("Database is Loading: Jobs".to_string());
         let temp = tn.prepare("SELECT * FROM Jobs");
         if let Ok(mut con) = temp {
@@ -1965,6 +1979,24 @@ PRAGMA journal_mode = WAL;
         self.namespace_add(tn, &namespace_obj.name, &namespace_obj.description)
     }
 
+    pub fn relationship_tag_add(&mut self, fid: usize, tags: Vec<sharedtypes::TagObject>) {
+        match self._cache {
+            CacheType::Bare => {
+                let mut conn = self.get_database_connection();
+                self.file_tag_relationship(&mut conn, &fid, tags);
+            }
+            _ => {
+                let mut conn = self.get_database_connection();
+                let tn = conn.transaction().unwrap();
+                for tag in tags.iter() {
+                    let tid = self.tag_add_tagobject(&tn, tag, true);
+                    self.relationship_add(&tn, fid, tid, true);
+                }
+                tn.commit();
+            }
+        }
+    }
+
     ///
     /// More modern way to add a file into the db
     ///
@@ -2083,13 +2115,13 @@ PRAGMA journal_mode = WAL;
     /// Updates the database for inmemdb and sql
     pub fn jobs_update_db(&mut self, tn: &Transaction<'_>, jobs_obj: sharedtypes::DbJobsObj) {
         match self._cache {
-            CacheType::Bare => {
+            /*CacheType::Bare => {
                 if self.jobs_get_id_sql(tn, &jobs_obj.id.unwrap()).is_none() {
                     self.jobs_add_sql(tn, &jobs_obj)
                 } else {
                     self.jobs_update_by_id(tn, &jobs_obj);
                 }
-            }
+            }*/
             _ => {
                 if self._inmemdb.jobref_new(jobs_obj.clone()) {
                     self.jobs_update_by_id(tn, &jobs_obj);
@@ -2579,6 +2611,7 @@ PRAGMA journal_mode = WAL;
 
     /// Removes a parent selectivly
     pub fn parents_selective_remove(&mut self, parentobj: &sharedtypes::DbParentsObj) {
+        todo!("Need to fix this for sqlite");
         self._inmemdb.parents_selective_remove(parentobj);
     }
 

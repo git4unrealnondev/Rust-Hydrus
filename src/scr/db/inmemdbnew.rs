@@ -108,7 +108,7 @@ impl NewinMemDB {
             _tag_max: 1,
             _settings_max: 0,
             _parents_max: 0,
-            _jobs_max: 0,
+            _jobs_max: 1,
             _namespace_max: 0,
             _file_max: 1,
             _relationship_max: 0,

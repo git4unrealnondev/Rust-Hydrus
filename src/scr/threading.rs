@@ -299,11 +299,6 @@ impl Worker {
                             }
                         }
                     }
-                    let mut conn = {
-                        let db = db.read().unwrap();
-                        db.get_database_connection()
-                    };
-                    let tn = conn.transaction().unwrap();
 
                     // Makes recursion possible
                     if let Some(recursion) = &job.jobmanager.recreation {
@@ -311,6 +306,12 @@ impl Worker {
                         if let sharedtypes::DbJobRecreation::AlwaysTime(timestamp, _count) =
                             recursion
                         {
+                            let mut conn = {
+                                let db = db.read().unwrap();
+                                db.get_database_connection()
+                            };
+                            let tn = conn.transaction().unwrap();
+
                             let mut data = job.clone();
                             data.time = crate::time_func::time_secs();
                             data.reptime = Some(*timestamp);
@@ -324,10 +325,9 @@ impl Worker {
                             // job next
                             let unwrappydb = &mut db.write().unwrap();
                             unwrappydb.jobs_update_db(&tn, data);
+                            tn.commit();
                         }
                     }
-
-                    tn.commit();
 
                     // Legacy data holder for plugin system
                     let job_holder_legacy = sharedtypes::JobScraper {
@@ -512,6 +512,7 @@ Worker: {id} JobId: {} -- While trying to parse parameters we got this error: {:
                             };
                             let tn = conn.transaction().unwrap();
 
+                            // Extracts any jobs from the tags field
                             for tag in out_st.tag.iter() {
                                 parse_jobs(
                                     &tn,
@@ -526,7 +527,6 @@ Worker: {id} JobId: {} -- While trying to parse parameters we got this error: {:
                                 );
                             }
                             tn.commit();
-
                             // Spawns the multithreaded pool
                             let pool = ThreadPool::new(1, 5, Duration::from_secs(1));
 
@@ -538,19 +538,19 @@ Worker: {id} JobId: {} -- While trying to parse parameters we got this error: {:
                                 let client = client_file.clone();
                                 let jobstorage = jobstorage.clone();
                                 let scraper = scraper.clone();
-                                pool.execute(move || {
-                                    main_file_loop(
-                                        &mut file,
-                                        db,
-                                        ratelimiter_obj,
-                                        globalload,
-                                        client,
-                                        jobstorage,
-                                        &scraper,
-                                        &id,
-                                        &jobid,
-                                    );
-                                });
+                                //pool.execute(move || {
+                                main_file_loop(
+                                    &mut file,
+                                    db,
+                                    ratelimiter_obj,
+                                    globalload,
+                                    client,
+                                    jobstorage,
+                                    &scraper,
+                                    &id,
+                                    &jobid,
+                                );
+                                //  });
                                 // End of err catching loop. break 'errloop;
                             }
                             pool.join();
@@ -605,10 +605,14 @@ pub fn parse_tags(
     worker_id: &usize,
     job_id: &usize,
     manager: Arc<RwLock<GlobalLoad>>,
+    should_return_jobs: bool,
 ) -> BTreeSet<sharedtypes::ScraperData> {
     let mut url_return: BTreeSet<sharedtypes::ScraperData> = BTreeSet::new();
     match &tag.tag_type {
         sharedtypes::TagType::Normal | sharedtypes::TagType::NormalNoRegex => {
+            if should_return_jobs {
+                return BTreeSet::new();
+            }
             if tag.tag_type != sharedtypes::TagType::NormalNoRegex {
                 // Runs regex mostly
                 manager.read().unwrap().plugin_on_tag(tn, tag);
@@ -621,9 +625,18 @@ pub fn parse_tags(
                     unwrappy.relationship_add(tn, id, tag_id, true);
                 }
             }
+            /*if let Some(fid) = file_id {
+                db.write()
+                    .unwrap()
+                    .relationship_tag_add(fid, vec![tag.clone()]);
+            }*/
+
             url_return
         }
         sharedtypes::TagType::ParseUrl((jobscraped, skippy)) => {
+            if !should_return_jobs {
+                return BTreeSet::new();
+            }
             match skippy {
                 None => {
                     url_return.insert(jobscraped.clone());
@@ -820,7 +833,7 @@ fn parse_jobs(
     job_id: &usize,
     manager: Arc<RwLock<GlobalLoad>>,
 ) {
-    let urls_to_scrape = parse_tags(tn, db, tag, fileid, worker_id, job_id, manager);
+    let urls_to_scrape = parse_tags(&tn, db, tag, fileid, worker_id, job_id, manager, true);
     {
         let mut joblock = jobstorage.write().unwrap();
         for data in urls_to_scrape {
@@ -843,7 +856,7 @@ fn parse_jobs(
                 user_data: data.user_data,
             };
 
-            joblock.jobs_add(tn, scraper.clone(), dbjob);
+            joblock.jobs_add(&tn, scraper.clone(), dbjob);
         }
     }
 }
@@ -931,37 +944,24 @@ pub fn main_file_loop(
 ) {
     let fileid;
 
-    let source_url_id;
+    let source_url_id = 0;
 
-    {
-        let mut conn = {
-            let db = db.read().unwrap();
-            db.get_database_connection()
-        };
-        let tn = conn.transaction().unwrap();
-
-        // Gets the source url namespace id
-        source_url_id = {
-            let mut unwrappydb = db.write().unwrap();
-            unwrappydb.create_default_source_url_ns_id(&tn)
-        };
-        tn.commit();
-    }
     match file.source.clone() {
         Some(source) => match source {
             sharedtypes::FileSource::Url(source_url) => {
-                let mut conn = {
-                    let db = db.read().unwrap();
-                    db.get_database_connection()
-                };
-                let tn = conn.transaction().unwrap();
-
                 // If url exists in db then don't download thread::sleep(Duration::from_secs(10));
                 for file_tag in file.skip_if.iter() {
+                    let mut conn = {
+                        let db = db.read().unwrap();
+                        db.get_database_connection()
+                    };
+                    let tn = conn.transaction().unwrap();
+
                     if let Some(file_id) =
                         parse_skipif(file_tag, &source_url, db.clone(), worker_id, job_id, &tn)
                     {
                         for tag in file.tag_list.iter() {
+                            dbg!(tag);
                             parse_tags(
                                 &tn,
                                 db.clone(),
@@ -970,24 +970,36 @@ pub fn main_file_loop(
                                 worker_id,
                                 job_id,
                                 globalload.clone(),
+                                false,
                             );
                         }
+                        tn.commit();
                         return;
                     }
                 }
 
                 let location = {
+                    let mut conn = {
+                        let db = db.read().unwrap();
+                        db.get_database_connection()
+                    };
+
+                    let tn = conn.transaction().unwrap();
                     let unwrappydb = db.read().unwrap();
                     unwrappydb.location_get(&tn)
                 };
 
                 let url_tag;
                 {
+                    let mut conn = {
+                        let db = db.read().unwrap();
+                        db.get_database_connection()
+                    };
+
+                    let tn = conn.transaction().unwrap();
                     let unwrappydb = db.read().unwrap();
                     url_tag = unwrappydb.tag_get_name(&tn, source_url.clone(), source_url_id);
                 };
-
-                tn.commit();
 
                 // Get's the hash & file ext for the file.
                 fileid = match url_tag {
@@ -1005,7 +1017,7 @@ pub fn main_file_loop(
                             scraper,
                         ) {
                             None => return,
-                            Some(id) => id,
+                            Some(out) => out,
                         }
                     }
                     Some(url_id) => {
@@ -1054,19 +1066,33 @@ pub fn main_file_loop(
                         }
                     }
                 };
-            }
-            sharedtypes::FileSource::Bytes(bytes) => {
-                let bytes = &bytes::Bytes::from(bytes);
-                let file_ext = FileFormat::from_bytes(bytes).extension().to_string();
-                let sha512 = hash_bytes(bytes, &sharedtypes::HashesSupported::Sha512("".into()));
+
+                /* dbg!(&fileid);
                 let mut conn = {
                     let db = db.read().unwrap();
                     db.get_database_connection()
                 };
                 let tn = conn.transaction().unwrap();
 
+                for tag in file.tag_list.iter() {
+                    parse_tags(
+                        &tn,
+                        db.clone(),
+                        tag,
+                        Some(fileid),
+                        worker_id,
+                        job_id,
+                        globalload.clone(),
+                        false,
+                    );
+                }
+                tn.commit();*/
+            }
+            sharedtypes::FileSource::Bytes(bytes) => {
+                let bytes = &bytes::Bytes::from(bytes);
+                let file_ext = FileFormat::from_bytes(bytes).extension().to_string();
+                let sha512 = hash_bytes(bytes, &sharedtypes::HashesSupported::Sha512("".into()));
                 process_bytes(
-                    &tn,
                     bytes,
                     Some(globalload.clone()),
                     &sha512.0,
@@ -1075,10 +1101,10 @@ pub fn main_file_loop(
                     file,
                     None,
                 );
-
                 let unwrappy = db.read().unwrap();
+                let mut conn = unwrappy.get_database_connection();
+                let tn = conn.transaction().unwrap();
                 fileid = unwrappy.file_get_hash(&tn, &sha512.0).unwrap();
-                tn.commit();
             }
         },
         None => return,
@@ -1090,6 +1116,17 @@ pub fn main_file_loop(
     let tn = conn.transaction().unwrap();
 
     for tag in file.tag_list.iter() {
+        parse_tags(
+            &tn,
+            db.clone(),
+            tag,
+            Some(fileid),
+            worker_id,
+            job_id,
+            globalload.clone(),
+            false,
+        );
+
         parse_jobs(
             &tn,
             tag,
@@ -1102,8 +1139,5 @@ pub fn main_file_loop(
             globalload.clone(),
         );
     }
-    {
-        let db = db.read().unwrap();
-        db.transaction_flush(tn);
-    }
+    tn.commit();
 }

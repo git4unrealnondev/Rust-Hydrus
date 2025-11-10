@@ -1,8 +1,8 @@
+use crate::Mutex;
 use crate::database::CacheType;
 use crate::database::Main;
 use crate::error;
 use crate::logging;
-use crate::logging::error_log;
 use crate::sharedtypes;
 use r2d2::PooledConnection;
 use r2d2_sqlite::SqliteConnectionManager;
@@ -13,7 +13,6 @@ use rusqlite::params;
 use rusqlite::types::Null;
 use std::collections::HashMap;
 use std::collections::HashSet;
-use std::thread;
 use std::time::Duration;
 
 const DEFAULT_DURATION_BACKOFF: Duration = Duration::from_millis(100);
@@ -22,14 +21,19 @@ const DEFAULT_DURATION_BACKOFF: Duration = Duration::from_millis(100);
 #[macro_export]
 macro_rules! wait_until_sqlite_ok {
     ($expr:expr) => {{
+        let mut cnt = 0;
         loop {
             match $expr {
                 Ok(val) => break Ok(val),
                 Err(err) => {
+                    cnt += 1;
+                    if cnt == 5 {
+                        dbg!(&err);
+                    }
                     // Retry only on "database is locked"
                     if let rusqlite::Error::SqliteFailure(_, Some(ref msg)) = err {
                         if msg.contains("database is locked") {
-                            std::thread::sleep(std::time::Duration::from_millis(50));
+                            std::thread::sleep(Duration::from_millis(100));
                             continue;
                         }
                     }
@@ -52,6 +56,7 @@ pub fn transaction_start<'a>(
 impl Main {
     ///
     /// Searches for a list of fileids from a list of tagids
+    /// Straight yoinked off chad
     ///
     pub fn relationship_get_fileid_search_sql(
         &self,
@@ -475,6 +480,62 @@ impl Main {
             |row| Ok(row.get(0).unwrap_or(false)),
         ))
         .unwrap_or(false)
+    }
+
+    pub fn file_tag_relationship(
+        &self,
+        conn: &mut PooledConnection<SqliteConnectionManager>,
+        fid: &usize,
+        // tag, namespace
+        tags: Vec<sharedtypes::TagObject>,
+    ) {
+        let tn = conn.transaction().unwrap();
+        {
+            // Prepare statements
+            let mut ns_stmt = tn
+                .prepare("INSERT INTO Namespace (name, description) VALUES (?1, ?2) ON CONFLICT(name) DO NOTHING")
+                .unwrap();
+            let mut get_ns_id_stmt = tn
+                .prepare("SELECT id FROM Namespace WHERE name = ?1")
+                .unwrap();
+            let mut tag_stmt = tn
+                .prepare(
+                    "INSERT OR IGNORE INTO Tags (name, namespace) VALUES (?1, ?2)
+         ",
+                )
+                .unwrap();
+            let mut rel_stmt = tn
+                .prepare("INSERT OR IGNORE INTO Relationship (fileid, tagid) VALUES (?1, ?2)")
+                .unwrap();
+
+            for tag in tags {
+                // Insert namespace if missing
+                ns_stmt
+                    .execute(params![tag.namespace.name, tag.namespace.description])
+                    .unwrap();
+
+                // Get namespace id
+                let namespace_id: i64 = get_ns_id_stmt
+                    .query_row(params![tag.namespace.name], |row| row.get(0))
+                    .unwrap();
+
+                // Insert tag
+                tag_stmt.execute(params![tag.tag, namespace_id]).unwrap();
+
+                // Get tag id
+                let tag_id: i64 = tn
+                    .query_row(
+                        "SELECT id FROM Tags WHERE name = ?1 AND namespace = ?2",
+                        params![tag.tag, namespace_id],
+                        |row| row.get(0),
+                    )
+                    .unwrap();
+
+                // Insert file -> tag relationship
+                rel_stmt.execute(params![fid, tag_id]).unwrap();
+            }
+        }
+        tn.commit();
     }
 
     ///

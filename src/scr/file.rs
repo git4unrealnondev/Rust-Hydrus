@@ -163,13 +163,23 @@ pub fn parse_file(
 
             // imports all tags onto the file that we dl'ed
             for tag in tag_list.iter() {
-                parse_tags(tn, db.clone(), tag, fileid, &0, &0, manager_arc.clone());
+                parse_tags(
+                    tn,
+                    db.clone(),
+                    tag,
+                    fileid,
+                    &0,
+                    &0,
+                    manager_arc.clone(),
+                    false,
+                );
             }
 
+            // NOTE COULD CAUSE LOCKING
             manager_arc
                 .read()
                 .unwrap()
-                .callback_on_import(tn, &bytes, &sha512hash);
+                .callback_on_import(&bytes, &sha512hash);
 
             if let Ok(filetype) = file_format::FileFormat::from_file(file_location) {
                 inside_files.append(&mut process_archive_files(
@@ -210,13 +220,23 @@ pub fn parse_file(
                 }
                 // imports all tags onto the file that we dl'ed
                 for tag in tags.iter() {
-                    parse_tags(tn, db.clone(), tag, subfileid, &0, &0, manager_arc.clone());
+                    parse_tags(
+                        tn,
+                        db.clone(),
+                        tag,
+                        subfileid,
+                        &0,
+                        &0,
+                        manager_arc.clone(),
+                        false,
+                    );
                 }
 
+                // NOTE COULD CAUSE LOCKING
                 manager_arc
                     .read()
                     .unwrap()
-                    .callback_on_import(tn, &file_bytes, &sub_sha512hash);
+                    .callback_on_import(&file_bytes, &sub_sha512hash);
             }
             if let Some(fid) = fileid {
                 return Some(fid);

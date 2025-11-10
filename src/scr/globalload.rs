@@ -164,7 +164,6 @@ pub fn callback_on_import(
 /// Hopefully a thread-safe way to call plugins per thread avoiding a lock.
 ///
 pub fn plugin_on_download(
-    tn: &rusqlite::Transaction<'_>,
     manager_arc: Arc<RwLock<GlobalLoad>>,
     db: Arc<RwLock<Main>>,
     cursorpass: &[u8],
@@ -222,14 +221,20 @@ pub fn plugin_on_download(
             let manager = manager_arc.read().unwrap();
             jobmanager = manager.jobmanager.clone();
         }
+        let mut conn = {
+            let db = db.read().unwrap();
+            db.get_database_connection()
+        };
+        let tn = conn.transaction().unwrap();
         parse_plugin_output(
-            tn,
+            &tn,
             output,
             db.clone(),
             libscraper.get(cnt).unwrap(),
             jobmanager,
             manager_arc.clone(),
         );
+        tn.commit();
         let _ = lib.close();
     }
 }
@@ -438,12 +443,7 @@ impl GlobalLoad {
         }))
     }
 
-    pub fn callback_on_import(
-        &self,
-        tn: &rusqlite::Transaction<'_>,
-        bytes: &bytes::Bytes,
-        hash: &String,
-    ) {
+    pub fn callback_on_import(&self, bytes: &bytes::Bytes, hash: &String) {
         let (libpath, libscraper);
         {
             (libpath, libscraper) = (
@@ -485,7 +485,7 @@ impl GlobalLoad {
                 output = plugindatafunc(bytes, hash);
             }
 
-            self.parse_plugin_output_local(tn, output, libscraper.get(cnt).unwrap());
+            self.parse_plugin_output_local(output, libscraper.get(cnt).unwrap());
             /*parse_plugin_output(
                 output,
                 db.clone(),
@@ -658,7 +658,7 @@ impl GlobalLoad {
                 .unwrap();
             output = plugindatafunc(tag, tag_namespace, regex_match, plugin_callback);
         };
-        self.parse_plugin_output_local(tn, output, scraper);
+        self.parse_plugin_output_local(output, scraper);
         // parse_plugin_output_andmain(output, db, scraper, jobmanager, &self)
     }
 
@@ -667,10 +667,11 @@ impl GlobalLoad {
     ///
     fn parse_plugin_output_local(
         &self,
-        tn: &rusqlite::Transaction<'_>,
         plugin_data: Vec<sharedtypes::DBPluginOutputEnum>,
         scraper: &GlobalPluginScraper,
     ) {
+        let mut conn = self.db.read().unwrap().get_database_connection();
+        let tn = conn.transaction().unwrap();
         for each in plugin_data {
             match each {
                 sharedtypes::DBPluginOutputEnum::Add(name) => {
@@ -681,17 +682,18 @@ impl GlobalLoad {
                             if files.id.is_none() && files.hash.is_some() && files.ext.is_some() {
                                 // Gets the extension id
                                 let mut unwrappy = self.db.write().unwrap();
-                                let ext_id = unwrappy.extension_put_string(tn, &files.ext.unwrap());
+                                let ext_id =
+                                    unwrappy.extension_put_string(&tn, &files.ext.unwrap());
 
                                 let storage_id = match files.location {
                                     Some(exists) => {
-                                        unwrappy.storage_put(tn, &exists);
-                                        unwrappy.storage_get_id(tn, &exists).unwrap()
+                                        unwrappy.storage_put(&tn, &exists);
+                                        unwrappy.storage_get_id(&tn, &exists).unwrap()
                                     }
                                     None => {
-                                        let exists = unwrappy.location_get(tn);
-                                        unwrappy.storage_put(tn, &exists);
-                                        unwrappy.storage_get_id(tn, &exists).unwrap()
+                                        let exists = unwrappy.location_get(&tn);
+                                        unwrappy.storage_put(&tn, &exists);
+                                        unwrappy.storage_get_id(&tn, &exists).unwrap()
                                     }
                                 };
 
@@ -702,16 +704,16 @@ impl GlobalLoad {
                                         storage_id,
                                     },
                                 );
-                                unwrappy.file_add(tn, file);
+                                unwrappy.file_add(&tn, file);
                             }
                         }
                         for tag in names.tag {
                             if tag.tag_type != sharedtypes::TagType::NormalNoRegex {
-                                self.plugin_on_tag(tn, &tag);
+                                self.plugin_on_tag(&tn, &tag);
                             }
                             {
                                 let mut unwrappy = self.db.write().unwrap();
-                                unwrappy.tag_add_tagobject(tn, &tag, true);
+                                unwrappy.tag_add_tagobject(&tn, &tag, true);
                             }
 
                             /*let namespace_id;
@@ -744,7 +746,7 @@ impl GlobalLoad {
                         for settings in names.setting {
                             let mut unwrappy = self.db.write().unwrap();
                             unwrappy.setting_add(
-                                tn,
+                                &tn,
                                 settings.name,
                                 settings.pretty,
                                 settings.num,
@@ -755,7 +757,7 @@ impl GlobalLoad {
 
                         for job in names.jobs {
                             self.jobmanager.write().unwrap().jobs_add_nolock(
-                                tn,
+                                &tn,
                                 scraper.clone(),
                                 job,
                                 self.db.clone(),
@@ -767,11 +769,11 @@ impl GlobalLoad {
                         {
                             let unwrappy = self.db.read().unwrap();
                             for relations in names.relationship {
-                                let file_id = unwrappy.file_get_hash(tn, &relations.file_hash);
+                                let file_id = unwrappy.file_get_hash(&tn, &relations.file_hash);
                                 let namespace_id =
-                                    unwrappy.namespace_get(tn, &relations.tag_namespace);
+                                    unwrappy.namespace_get(&tn, &relations.tag_namespace);
                                 let tag_id = unwrappy.tag_get_name(
-                                    tn,
+                                    &tn,
                                     relations.tag_name.clone(),
                                     namespace_id.unwrap(),
                                 );
@@ -785,7 +787,7 @@ impl GlobalLoad {
                         }
                         for (file_id, tag_id) in temp_vec {
                             let mut unwrappy = self.db.write().unwrap();
-                            unwrappy.relationship_add(tn, file_id.unwrap(), tag_id.unwrap(), true);
+                            unwrappy.relationship_add(&tn, file_id.unwrap(), tag_id.unwrap(), true);
                         }
                     }
                 }
@@ -793,6 +795,7 @@ impl GlobalLoad {
                 sharedtypes::DBPluginOutputEnum::None => {}
             }
         }
+        tn.commit();
     }
 
     pub fn return_regex_storage(

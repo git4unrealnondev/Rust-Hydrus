@@ -524,16 +524,10 @@ pub fn dlfile_new(
         }
     }
     logging::info_log(format!("Downloaded hash: {}", &hash));
-    let mut conn = {
-        let db = db.read().unwrap();
-        db.get_database_connection()
-    };
-    let tn = conn.transaction().unwrap();
 
     if let Some(ref bytes) = bytes {
         let file_ext = FileFormat::from_bytes(bytes).extension().to_string();
         process_bytes(
-            &tn,
             bytes,
             globalload,
             &hash,
@@ -544,7 +538,6 @@ pub fn dlfile_new(
         );
         return FileReturnStatus::File((hash, file_ext));
     }
-    tn.commit();
 
     // If we don't donwload anything the default to try again later
     FileReturnStatus::TryLater
@@ -554,7 +547,6 @@ pub fn dlfile_new(
 /// Runs external bytes processing and starts enclave work
 ///
 pub fn process_bytes(
-    tn: &rusqlite::Transaction<'_>,
     bytes: &Bytes,
     globalload: Option<Arc<RwLock<GlobalLoad>>>,
     hash: &String,
@@ -568,22 +560,17 @@ pub fn process_bytes(
     // valid file hash inside of the db
     {
         let mut unwrappydb = db.write().unwrap();
-        unwrappydb.create_default_source_url_ns_id(tn);
-        unwrappydb.enclave_determine_processing(tn, file, bytes, hash, source_url);
+
+        unwrappydb.enclave_determine_processing(file, bytes, hash, source_url);
     }
+
+    // Flushes to disk before we run the plugins on_download hook.
 
     // If the plugin manager is None then don't do anything plugin wise. Useful for if
     // doing something that we CANNOT allow plugins to run.
     {
         if let Some(globalload) = globalload {
-            crate::globalload::plugin_on_download(
-                tn,
-                globalload,
-                db.clone(),
-                bytes,
-                hash,
-                file_ext,
-            );
+            crate::globalload::plugin_on_download(globalload, db.clone(), bytes, hash, file_ext);
         }
     }
 }

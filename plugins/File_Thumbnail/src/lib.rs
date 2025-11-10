@@ -31,6 +31,7 @@ mod client;
 #[path = "../../../src/scr/sharedtypes.rs"]
 mod sharedtypes;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
 use std::{
     collections::HashMap,
     path::{Path, PathBuf},
@@ -286,11 +287,29 @@ pub fn on_start() {
         file_ids.len()
     ));
     let counter = AtomicUsize::new(0);
+    let storage = Arc::new(Mutex::new(Vec::new()));
     if let Some(location) = setup_thumbnail_location() {
         file_ids.par_iter().for_each(|fid| {
             let _ = std::panic::catch_unwind(|| {
-                process_fid(fid, &location, &counter, &utable);
+                if let Some(thumb_hash) = process_fid(fid, &location, &utable) {
+                    let cnt = counter.fetch_add(1, Ordering::SeqCst);
+                    storage.lock().unwrap().push((fid, thumb_hash));
+                }
             });
+            if counter.load(Ordering::SeqCst) >= 1000 {
+                counter.store(0, Ordering::SeqCst);
+                client::log("Starting to dump 1000 items into the db".into());
+                let mut veclock = storage.lock().unwrap();
+                while let Some((file_id, file_thumb_hash)) = veclock.pop() {
+                    let _ = client::relationship_file_tag_add(
+                        *file_id,
+                        file_thumb_hash,
+                        utable,
+                        true,
+                        None,
+                    );
+                }
+            }
         });
     }
     client::log(format!("{} - generation done", PLUGIN_NAME));
@@ -308,7 +327,7 @@ pub fn on_start() {
     client::transaction_flush();
 }
 
-fn process_fid(fid: &usize, location: &PathBuf, counter: &AtomicUsize, utable: &usize) {
+fn process_fid(fid: &usize, location: &PathBuf, utable: &usize) -> Option<String> {
     match generate_thumbnail(*fid) {
         Ok(thumb_file) => {
             let (thumb_path, thumb_hash) = make_thumbnail_path(&location, &thumb_file);
@@ -319,23 +338,18 @@ fn process_fid(fid: &usize, location: &PathBuf, counter: &AtomicUsize, utable: &
                 PLUGIN_NAME, fid, &pa
             ));*/
             if let Ok(_) = std::fs::write(pa, thumb_file) {
-                let cnt = counter.fetch_add(1, Ordering::SeqCst);
                 client::log_no_print(format!(
                     "Plugin: {} -- fid {fid} Wrote: {} to {:?}",
                     PLUGIN_NAME, &thumb_hash, &thumb_path,
                 ));
-
-                let _ = client::relationship_file_tag_add(*fid, thumb_hash, *utable, true, None);
-                if cnt == 1000 {
-                    client::transaction_flush();
-                    counter.store(0, Ordering::SeqCst);
-                }
+                return Some(thumb_hash);
             }
         }
         Err(st) => {
             client::log(format!("{} Fid: {} ERR- {}", PLUGIN_NAME, &fid, st));
         }
     }
+    None
 }
 
 ///
@@ -365,7 +379,15 @@ pub fn file_thumbnailer_generate_thumbnail_fid(
                                 }
                             }
 
-                            process_fid(&inp, location, counter, &utable);
+                            if let Some(file_thumb_hash) = process_fid(&inp, location, &utable) {
+                                client::relationship_file_tag_add(
+                                    *inp,
+                                    file_thumb_hash,
+                                    utable,
+                                    true,
+                                    None,
+                                );
+                            }
                         }
                     }
                     _ => {}

@@ -1249,6 +1249,7 @@ fn determine_site_type(
 ///
 #[no_mangle]
 pub fn on_start(site_struct: &sharedtypes::GlobalPluginScraper) {
+    return;
     let mut site_op = None;
 
     if let Some(ref stored_info) = site_struct.stored_info {

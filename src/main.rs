@@ -198,7 +198,7 @@ fn main() {
     }
 
     // A way to get around a mutex lock but it works lol
-    let one_sec = time::Duration::from_millis(100);
+    let one_sec = time::Duration::from_millis(1000);
     loop {
         if !globalload_arc
             .write()

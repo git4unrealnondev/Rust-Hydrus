@@ -28,8 +28,8 @@ impl Main {
         source_url: Option<&String>,
         enclave_name: &str,
     ) -> bool {
-        if let Some(enclave_id) = self.enclave_name_get_id(tn, enclave_name) {
-            return self.enclave_run_logic(tn, file, bytes, sha512hash, source_url, &enclave_id);
+        if let Some(enclave_id) = self.enclave_name_get_id(&tn, enclave_name) {
+            return self.enclave_run_logic(file, bytes, sha512hash, source_url, &enclave_id);
         }
         false
     }
@@ -39,33 +39,43 @@ impl Main {
     ///
     fn enclave_run_logic(
         &mut self,
-        tn: &rusqlite::Transaction<'_>,
         file: &mut sharedtypes::FileObject,
         bytes: &Bytes,
         sha512hash: &String,
         source_url: Option<&String>,
         enclave_id: &usize,
     ) -> bool {
-        for condition_list_id in self
-            .enclave_action_order_enclave_get_list_id(tn, enclave_id)
-            .iter()
+        let loop_one;
+        let source_url_ns_id;
         {
+            let mut conn = self.get_database_connection();
+            let tn = conn.transaction().unwrap();
+            loop_one = self.enclave_action_order_enclave_get_list_id(&tn, enclave_id);
+            // NOTE bad practice but we called it in above code so this should already be handled
+            source_url_ns_id = self.create_default_source_url_ns_id(&tn);
+        }
+
+        for condition_list_id in loop_one {
             logging::log(format!(
                 "Enclave FileHash {}: Pulled condition list id for {}, enclave_id: {}",
                 &sha512hash, condition_list_id, enclave_id
             ));
+            let condition_one = {
+                let mut conn = self.get_database_connection();
+                let tn = conn.transaction().unwrap();
+                self.enclave_condition_list_get(&tn, &condition_list_id)
+            };
 
-            for (enclave_action_id, failed_enclave_action_id, condition_id) in self
-                .enclave_condition_list_get(tn, condition_list_id)
-                .iter()
-            {
-                let (action_bool, action_name) =
-                    self.enclave_condition_evaluate(tn, condition_id, file, bytes);
-
+            for (enclave_action_id, failed_enclave_action_id, condition_id) in condition_one {
+                let (action_bool, action_name) = {
+                    let mut conn = self.get_database_connection();
+                    let tn = conn.transaction().unwrap();
+                    self.enclave_condition_evaluate(&tn, &condition_id, file, bytes)
+                };
                 let run_option_action_id = if action_bool {
                     Some(enclave_action_id)
                 } else {
-                    failed_enclave_action_id.as_ref()
+                    failed_enclave_action_id
                 };
 
                 if let Some(run_action_id) = run_option_action_id {
@@ -78,16 +88,14 @@ impl Main {
                             "Enclave FileHash {}: Running action name: {:?}",
                             &sha512hash, action_name
                         ));
-                        let source_url_ns_id = self.create_default_source_url_ns_id(tn);
                         if !self.enclave_run_action(
-                            tn,
                             &action_name,
                             file,
                             bytes,
                             sha512hash,
                             source_url,
                             source_url_ns_id,
-                            run_action_id,
+                            &run_action_id,
                         ) {
                             return true;
                         }
@@ -103,7 +111,6 @@ impl Main {
     ///
     pub fn enclave_determine_processing(
         &mut self,
-        tn: &rusqlite::Transaction<'_>,
         file: &mut sharedtypes::FileObject,
         bytes: &Bytes,
         sha512hash: &String,
@@ -114,9 +121,22 @@ impl Main {
             &sha512hash
         ));
 
-        'priorityloop: for priority_id in self.enclave_priority_get(tn).iter() {
-            for enclave_id in self.enclave_get_id_from_priority(tn, priority_id).iter() {
-                if self.enclave_run_logic(tn, file, bytes, sha512hash, source_url, enclave_id) {
+        'priorityloop: for priority_id in {
+            let mut conn = self.get_database_connection();
+            let tn = conn.transaction().unwrap();
+
+            self.enclave_priority_get(&tn)
+        }
+        .iter()
+        {
+            for enclave_id in {
+                let mut conn = self.get_database_connection();
+                let tn = conn.transaction().unwrap();
+                self.enclave_get_id_from_priority(&tn, priority_id)
+            }
+            .iter()
+            {
+                if self.enclave_run_logic(file, bytes, sha512hash, source_url, enclave_id) {
                     break 'priorityloop;
                 }
             }
@@ -129,7 +149,6 @@ impl Main {
     ///
     fn enclave_run_action(
         &mut self,
-        tn: &rusqlite::Transaction<'_>,
         action: &sharedtypes::EnclaveAction,
         file: &mut sharedtypes::FileObject,
         bytes: &Bytes,
@@ -138,15 +157,20 @@ impl Main {
         source_url_ns_id: usize,
         enclave_id: &usize,
     ) -> bool {
+        let download_location = {
+            let mut conn = self.get_database_connection();
+            let tn = conn.transaction().unwrap();
+
+            self.location_get(&tn)
+        };
+
         match action {
             sharedtypes::EnclaveAction::PutAtDefault => {
-                let download_location = self.location_get(tn);
                 logging::log(format!(
                     "Enclave FileHash {} Putting at Default location {}",
                     &sha512hash, &download_location
                 ));
                 let _ = self.download_and_do_parsing(
-                    tn,
                     bytes,
                     sha512hash,
                     source_url,
@@ -173,14 +197,12 @@ impl Main {
                 //None
             }
             sharedtypes::EnclaveAction::DownloadToDefault => {
-                let download_location = self.location_get(tn);
                 logging::log(format!(
                     "Enclave FileHash {}: {}",
                     &sha512hash,
                     format!("Downloading to Default location {}", &download_location)
                 ));
                 let _ = self.download_and_do_parsing(
-                    tn,
                     bytes,
                     sha512hash,
                     source_url,
@@ -202,7 +224,6 @@ impl Main {
     ///
     fn download_and_do_parsing(
         &mut self,
-        tn: &rusqlite::Transaction<'_>,
         bytes: &Bytes,
         sha512hash: &String,
         source_url: Option<&String>,
@@ -211,8 +232,11 @@ impl Main {
         download_location: &String,
         file: &mut sharedtypes::FileObject,
     ) -> usize {
+        let mut conn = self.get_database_connection();
+        let tn = conn.transaction().unwrap();
+
         {
-            self.storage_put(tn, download_location);
+            self.storage_put(&tn, download_location);
         }
         // error checking. We should have all dirs needed but hey if we're missing
         std::fs::create_dir_all(download_location).unwrap();
@@ -220,28 +244,29 @@ impl Main {
         // Gives file extension
         let file_ext = FileFormat::from_bytes(bytes).extension().to_string();
 
-        let ext_id = self.extension_put_string(tn, &file_ext);
+        let ext_id = self.extension_put_string(&tn, &file_ext);
 
         let download_loc = std::path::Path::new(&download_location)
             .canonicalize()
             .unwrap();
 
-        download::write_to_disk(download_loc, bytes, sha512hash);
-
-        let storage_id = self.storage_get_id(tn, download_location).unwrap();
+        let storage_id = self.storage_get_id(&tn, download_location).unwrap();
 
         let filestorage = sharedtypes::DbFileStorage::NoIdExist(sharedtypes::DbFileObjNoId {
             hash: sha512hash.to_string(),
             ext_id,
             storage_id,
         });
-        let fileid = self.file_add(tn, filestorage);
+        let fileid = self.file_add(&tn, filestorage);
         if let Some(source_url) = source_url {
-            let tagid = self.tag_add(tn, source_url, source_url_ns_id, true, None);
-            self.relationship_add(tn, fileid, tagid, true);
+            let tagid = self.tag_add(&tn, source_url, source_url_ns_id, true, None);
+            self.relationship_add(&tn, fileid, tagid, true);
         }
 
-        self.enclave_file_mapping_add(tn, &fileid, enclave_id);
+        self.enclave_file_mapping_add(&tn, &fileid, enclave_id);
+
+        tn.commit();
+        download::write_to_disk(download_loc, bytes, sha512hash);
 
         fileid
     }

@@ -10,7 +10,7 @@ reqwest = { version = "0.12.22", features = ["cookies", "gzip", "brotli", "nativ
 url = "2.3.1"
 ratelimit = "0.10.0"
 async-std = { version = "1", features = ["attributes", "tokio1"] }
-rusqlite = {version = "^0.37.0", features=["modern_sqlite", "bundled", "column_decltype"] }
+rusqlite = { version = "^0.37.0", features = ["modern_sqlite", "bundled", "column_decltype", "unlock_notify", "trace", "load_extension"] }
 fast_log = {version="1.7.6", features=["lz4"]}
 bytes = { default-features = false, version = "1.4.0" }
 sha2 = { version = "0.10.6"}
@@ -47,6 +47,7 @@ reqwest-websocket = "0.5.0"
 remove_empty_subdirs = "0.1.1"
 r2d2 = "0.8.10"
 r2d2_sqlite = { version = "0.31.0", features = ["bundled"] }
+lazy_static = "1.5.0"
 
 [features]
 default = ["exe_build"]
