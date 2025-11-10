@@ -163,16 +163,7 @@ pub fn parse_file(
 
             // imports all tags onto the file that we dl'ed
             for tag in tag_list.iter() {
-                parse_tags(
-                    tn,
-                    db.clone(),
-                    tag,
-                    fileid,
-                    &0,
-                    &0,
-                    manager_arc.clone(),
-                    false,
-                );
+                parse_tags(tn, db.clone(), tag, fileid, &0, &0, manager_arc.clone());
             }
 
             // NOTE COULD CAUSE LOCKING
@@ -220,16 +211,7 @@ pub fn parse_file(
                 }
                 // imports all tags onto the file that we dl'ed
                 for tag in tags.iter() {
-                    parse_tags(
-                        tn,
-                        db.clone(),
-                        tag,
-                        subfileid,
-                        &0,
-                        &0,
-                        manager_arc.clone(),
-                        false,
-                    );
+                    parse_tags(tn, db.clone(), tag, subfileid, &0, &0, manager_arc.clone());
                 }
 
                 // NOTE COULD CAUSE LOCKING

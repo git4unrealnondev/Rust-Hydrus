@@ -514,6 +514,7 @@ Worker: {id} JobId: {} -- While trying to parse parameters we got this error: {:
 
                             // Extracts any jobs from the tags field
                             for tag in out_st.tag.iter() {
+                                dbg!(tag);
                                 parse_jobs(
                                     &tn,
                                     tag,
@@ -605,14 +606,10 @@ pub fn parse_tags(
     worker_id: &usize,
     job_id: &usize,
     manager: Arc<RwLock<GlobalLoad>>,
-    should_return_jobs: bool,
 ) -> BTreeSet<sharedtypes::ScraperData> {
     let mut url_return: BTreeSet<sharedtypes::ScraperData> = BTreeSet::new();
     match &tag.tag_type {
         sharedtypes::TagType::Normal | sharedtypes::TagType::NormalNoRegex => {
-            if should_return_jobs {
-                return BTreeSet::new();
-            }
             if tag.tag_type != sharedtypes::TagType::NormalNoRegex {
                 // Runs regex mostly
                 manager.read().unwrap().plugin_on_tag(tn, tag);
@@ -634,9 +631,6 @@ pub fn parse_tags(
             url_return
         }
         sharedtypes::TagType::ParseUrl((jobscraped, skippy)) => {
-            if !should_return_jobs {
-                return BTreeSet::new();
-            }
             match skippy {
                 None => {
                     url_return.insert(jobscraped.clone());
@@ -833,7 +827,7 @@ fn parse_jobs(
     job_id: &usize,
     manager: Arc<RwLock<GlobalLoad>>,
 ) {
-    let urls_to_scrape = parse_tags(&tn, db, tag, fileid, worker_id, job_id, manager, true);
+    let urls_to_scrape = parse_tags(&tn, db, tag, fileid, worker_id, job_id, manager);
     {
         let mut joblock = jobstorage.write().unwrap();
         for data in urls_to_scrape {
@@ -970,7 +964,6 @@ pub fn main_file_loop(
                                 worker_id,
                                 job_id,
                                 globalload.clone(),
-                                false,
                             );
                         }
                         tn.commit();
@@ -1124,7 +1117,6 @@ pub fn main_file_loop(
             worker_id,
             job_id,
             globalload.clone(),
-            false,
         );
 
         parse_jobs(
