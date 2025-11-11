@@ -193,6 +193,7 @@ fn load_image(byte_c: &[u8]) -> Result<Vec<Thumbnail>, ThumbError> {
 ///
 #[no_mangle]
 pub fn on_start() {
+    use rayon::ThreadPoolBuilder;
     use rayon::iter::IntoParallelRefIterator;
     use rayon::iter::ParallelIterator;
 
@@ -286,30 +287,18 @@ pub fn on_start() {
         PLUGIN_NAME,
         file_ids.len()
     ));
-    let counter = AtomicUsize::new(0);
-    let storage = Arc::new(Mutex::new(Vec::new()));
+    let pool = ThreadPoolBuilder::new().num_threads(8).build().unwrap();
+
     if let Some(location) = setup_thumbnail_location() {
-        file_ids.par_iter().for_each(|fid| {
-            let _ = std::panic::catch_unwind(|| {
-                if let Some(thumb_hash) = process_fid(fid, &location, &utable) {
-                    let cnt = counter.fetch_add(1, Ordering::SeqCst);
-                    storage.lock().unwrap().push((fid, thumb_hash));
-                }
+        pool.install(|| {
+            file_ids.par_iter().for_each(|fid| {
+                let _ = std::panic::catch_unwind(|| {
+                    if let Some(thumb_hash) = process_fid(fid, &location, &utable) {
+                        let _ =
+                            client::relationship_file_tag_add(*fid, thumb_hash, utable, true, None);
+                    }
+                });
             });
-            if counter.load(Ordering::SeqCst) >= 1000 {
-                counter.store(0, Ordering::SeqCst);
-                client::log("Starting to dump 1000 items into the db".into());
-                let mut veclock = storage.lock().unwrap();
-                while let Some((file_id, file_thumb_hash)) = veclock.pop() {
-                    let _ = client::relationship_file_tag_add(
-                        *file_id,
-                        file_thumb_hash,
-                        utable,
-                        true,
-                        None,
-                    );
-                }
-            }
         });
     }
     client::log(format!("{} - generation done", PLUGIN_NAME));

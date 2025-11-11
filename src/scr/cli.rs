@@ -114,13 +114,10 @@ pub fn main(data: Arc<RwLock<database::Main>>, globalload: Arc<RwLock<GlobalLoad
         return;
     }
 
-    let mut conn = data.read().unwrap().get_database_connection();
-    let tn = conn.transaction().unwrap();
-
     // Loads settings into DB.
     {
         let mut data = data.write().unwrap();
-        data.load_table(&tn, &sharedtypes::LoadDBTable::Settings);
+        data.load_table(&sharedtypes::LoadDBTable::Settings);
     }
 
     match &args.a.as_ref().unwrap() {
@@ -135,9 +132,8 @@ pub fn main(data: Arc<RwLock<database::Main>>, globalload: Arc<RwLock<GlobalLoad
                     let (_jobtype, jobsmanager) =
                         return_jobtypemanager(addstruct.jobtype, addstruct.recursion.as_ref());
                     let mut data = data.write().unwrap();
-                    data.load_table(&tn, &sharedtypes::LoadDBTable::Jobs);
+                    data.load_table(&sharedtypes::LoadDBTable::Jobs);
                     data.jobs_add(
-                        &tn,
                         None,
                         crate::time_func::time_secs(),
                         crate::time_func::time_conv(&addstruct.time),
@@ -155,14 +151,13 @@ pub fn main(data: Arc<RwLock<database::Main>>, globalload: Arc<RwLock<GlobalLoad
                     let (_jobtype, jobsmanager) =
                         return_jobtypemanager(addstruct.jobtype, addstruct.recursion.as_ref());
                     let mut data = data.write().unwrap();
-                    data.load_table(&tn, &sharedtypes::LoadDBTable::Jobs);
+                    data.load_table(&sharedtypes::LoadDBTable::Jobs);
                     for bulk in addstruct.bulkadd.iter() {
                         let mut vars = HashMap::new();
                         vars.insert("inject".to_string(), bulk.to_string());
                         let temp = addstruct.query.format(&vars);
                         if let Ok(ins) = temp {
                             data.jobs_add(
-                                &tn,
                                 None,
                                 crate::time_func::time_secs(),
                                 crate::time_func::time_conv(&addstruct.time),
@@ -188,9 +183,9 @@ pub fn main(data: Arc<RwLock<database::Main>>, globalload: Arc<RwLock<GlobalLoad
         cli_structs::Test::Search(searchstruct) => match searchstruct {
             cli_structs::SearchStruct::Parent(parent) => {
                 let mut data = data.write().unwrap();
-                data.load_table(&tn, &sharedtypes::LoadDBTable::Parents);
-                data.load_table(&tn, &sharedtypes::LoadDBTable::Tags);
-                match &data.tag_get_name(&tn, parent.tag.clone(), parent.namespace) {
+                data.load_table(&sharedtypes::LoadDBTable::Parents);
+                data.load_table(&sharedtypes::LoadDBTable::Tags);
+                match &data.tag_get_name(parent.tag.clone(), parent.namespace) {
                     None => {
                         dbg!("Cannot find tag.");
                     }
@@ -198,20 +193,20 @@ pub fn main(data: Arc<RwLock<database::Main>>, globalload: Arc<RwLock<GlobalLoad
                         dbg!("rel_get");
 
                         // let mut col = Vec::new(); let mut ucol = Vec::new();
-                        for each in data.parents_rel_get(&tn, tid).iter() {
-                            dbg!(each, data.tag_id_get(&tn, each).unwrap());
+                        for each in data.parents_rel_get(tid).iter() {
+                            dbg!(each, data.tag_id_get(each).unwrap());
                         }
                         dbg!("tag_get");
-                        for each in data.parents_tag_get(&tn, tid).iter() {
-                            dbg!(each, data.tag_id_get(&tn, each).unwrap());
+                        for each in data.parents_tag_get(tid).iter() {
+                            dbg!(each, data.tag_id_get(each).unwrap());
                         }
                     }
                 }
             }
             cli_structs::SearchStruct::Fid(id) => {
                 let mut data = data.write().unwrap();
-                data.load_table(&tn, &sharedtypes::LoadDBTable::All);
-                let hstags = data.relationship_get_tagid(&tn, &id.id);
+                data.load_table(&sharedtypes::LoadDBTable::All);
+                let hstags = data.relationship_get_tagid(&id.id);
                 if hstags.is_empty() {
                     println!(
                         "Cannot find any loaded relationships for fileid: {}",
@@ -221,13 +216,13 @@ pub fn main(data: Arc<RwLock<database::Main>>, globalload: Arc<RwLock<GlobalLoad
                     let mut itvec: Vec<usize> = hstags.into_iter().collect();
                     itvec.sort();
                     for tid in itvec {
-                        let tag = data.tag_id_get(&tn, &tid);
+                        let tag = data.tag_id_get(&tid);
                         match tag {
                             None => {
                                 println!("WANRING CORRUPTION DETECTED for tagid: {}", &tid);
                             }
                             Some(tagnns) => {
-                                let ns = data.namespace_get_string(&tn, &tagnns.namespace).unwrap();
+                                let ns = data.namespace_get_string(&tagnns.namespace).unwrap();
                                 println!("ID {} Tag: {} namespace: {}", tid, tagnns.name, ns.name);
                             }
                         }
@@ -236,8 +231,8 @@ pub fn main(data: Arc<RwLock<database::Main>>, globalload: Arc<RwLock<GlobalLoad
             }
             cli_structs::SearchStruct::Tid(id) => {
                 let mut data = data.write().unwrap();
-                data.load_table(&tn, &sharedtypes::LoadDBTable::All);
-                let fids = data.relationship_get_fileid(&tn, &id.id);
+                data.load_table(&sharedtypes::LoadDBTable::All);
+                let fids = data.relationship_get_fileid(&id.id);
                 if !fids.is_empty() {
                     logging::info_log("Found Fids:".to_string());
                     for each in fids {
@@ -247,12 +242,12 @@ pub fn main(data: Arc<RwLock<database::Main>>, globalload: Arc<RwLock<GlobalLoad
             }
             cli_structs::SearchStruct::Tag(tag) => {
                 let mut data = data.write().unwrap();
-                data.load_table(&tn, &sharedtypes::LoadDBTable::All);
-                let nsid = data.namespace_get(&tn, &tag.namespace);
+                data.load_table(&sharedtypes::LoadDBTable::All);
+                let nsid = data.namespace_get(&tag.namespace);
                 if let Some(nsid) = nsid {
-                    let tid = &data.tag_get_name(&tn, tag.tag.clone(), nsid);
+                    let tid = &data.tag_get_name(tag.tag.clone(), nsid);
                     if let Some(tid) = tid {
-                        let fids = data.relationship_get_fileid(&tn, tid);
+                        let fids = data.relationship_get_fileid(tid);
 
                         if fids.is_empty() {
                             logging::info_log(format!(
@@ -275,34 +270,33 @@ pub fn main(data: Arc<RwLock<database::Main>>, globalload: Arc<RwLock<GlobalLoad
             }
             cli_structs::SearchStruct::Hash(hash) => {
                 let mut data = data.write().unwrap();
-                data.load_table(&tn, &sharedtypes::LoadDBTable::All);
-                let file_id = data.file_get_hash(&tn, &hash.hash);
+                data.load_table(&sharedtypes::LoadDBTable::All);
+                let file_id = data.file_get_hash(&hash.hash);
                 match file_id {
                     None => {
                         println!("Cannot find hash in db: {}", &hash.hash);
                     }
                     Some(fid) => {
-                        let hstags = data.relationship_get_tagid(&tn, &fid);
+                        let hstags = data.relationship_get_tagid(&fid);
                         if hstags.is_empty() {
                             println!("Cannot find any loaded relationships for fileid: {}", &fid);
                         } else {
                             let mut tvec = Vec::new();
                             for tid in hstags.iter() {
-                                if data.tag_id_get(&tn, tid).is_some() {
+                                if data.tag_id_get(tid).is_some() {
                                     tvec.push(tid)
                                 }
                             }
                             tvec.sort();
                             for tid in tvec.iter() {
-                                let tag = data.tag_id_get(&tn, tid);
+                                let tag = data.tag_id_get(tid);
                                 match tag {
                                     None => {
                                         println!("WANRING CORRUPTION DETECTED for tagid: {}", &tid);
                                     }
                                     Some(tagnns) => {
-                                        let ns = data
-                                            .namespace_get_string(&tn, &tagnns.namespace)
-                                            .unwrap();
+                                        let ns =
+                                            data.namespace_get_string(&tagnns.namespace).unwrap();
                                         println!(
                                             "ID {} Tag: {} namespace: {}",
                                             tid, tagnns.name, ns.name
@@ -319,12 +313,12 @@ pub fn main(data: Arc<RwLock<database::Main>>, globalload: Arc<RwLock<GlobalLoad
             cli_structs::TasksStruct::Import(directory) => {
                 {
                     let mut unwrappy = data.write().unwrap();
-                    unwrappy.load_table(&tn, &sharedtypes::LoadDBTable::Files);
-                    unwrappy.load_table(&tn, &sharedtypes::LoadDBTable::Relationship);
-                    unwrappy.load_table(&tn, &sharedtypes::LoadDBTable::Tags);
-                    unwrappy.load_table(&tn, &sharedtypes::LoadDBTable::Namespace);
-                    unwrappy.load_table(&tn, &sharedtypes::LoadDBTable::Parents);
-                    unwrappy.enclave_create_default_file_import(&tn);
+                    unwrappy.load_table(&sharedtypes::LoadDBTable::Files);
+                    unwrappy.load_table(&sharedtypes::LoadDBTable::Relationship);
+                    unwrappy.load_table(&sharedtypes::LoadDBTable::Tags);
+                    unwrappy.load_table(&sharedtypes::LoadDBTable::Namespace);
+                    unwrappy.load_table(&sharedtypes::LoadDBTable::Parents);
+                    unwrappy.enclave_create_default_file_import();
                 }
 
                 for local_file in directory.location.iter() {
@@ -365,7 +359,7 @@ pub fn main(data: Arc<RwLock<database::Main>>, globalload: Arc<RwLock<GlobalLoad
                     // Removes any sidecar files from files
                     /*files.par_iter().for_each(|(file, sidecars)| {
                         let file_id =
-                            parse_file(&tn, file, sidecars, data.clone(), globalload.clone());
+                            parse_file( file, sidecars, data.clone(), globalload.clone());
                         match directory.file_action {
                             // Don't need to do anything as the default is to copy
                             sharedtypes::FileAction::Copy => {}
@@ -380,7 +374,7 @@ pub fn main(data: Arc<RwLock<database::Main>>, globalload: Arc<RwLock<GlobalLoad
                             sharedtypes::FileAction::HardLink => {
                                 if let Some(fid) = file_id {
                                     let db = data.read().unwrap();
-                                    let location = db.get_file(&tn, &fid);
+                                    let location = db.get_file( &fid);
                                     if let Some(dbfile_location) = location {
                                         std::fs::remove_file(file).unwrap();
                                         std::fs::hard_link(dbfile_location, file).unwrap();
@@ -412,7 +406,7 @@ pub fn main(data: Arc<RwLock<database::Main>>, globalload: Arc<RwLock<GlobalLoad
                         }
                         Some(load) => load.clone(),
                     };
-                    data.load_table(&tn,&sharedtypes::LoadDBTable::All);
+                    data.load_table(&sharedtypes::LoadDBTable::All);
                     let failedtoparse: HashSet<String> = HashSet::new();
                     let file_regen = crate::globalload::scraper_file_regen(libload);
                     std::env::set_var("RAYON_NUM_THREADS", "50");
@@ -494,32 +488,24 @@ pub fn main(data: Arc<RwLock<database::Main>>, globalload: Arc<RwLock<GlobalLoad
                 match db {
                     cli_structs::Database::ConsistencyCheck => {
                         let mut data = data.write().unwrap();
-                        let mut conn = data.get_database_connection();
-                        let tn = conn
-                            .transaction_with_behavior(rusqlite::TransactionBehavior::Exclusive)
-                            .unwrap();
-                        data.check_relationship_tag_relations(tn);
+                        data.check_relationship_tag_relations();
                     }
                     cli_structs::Database::BackupDB => {
                         // backs up the db. check the location in setting or code if I change anything lol
                         let mut data = data.write().unwrap();
-                        let mut conn = data.get_database_connection();
-                        let tn = conn
-                            .transaction_with_behavior(rusqlite::TransactionBehavior::Exclusive)
-                            .unwrap();
 
-                        data.backup_db(tn);
+                        data.backup_db();
                     }
                     cli_structs::Database::CheckFiles(action) => {
                         let mut data = data.write().unwrap();
 
-                        data.check_db_paths(&tn);
+                        data.check_db_paths();
 
                         // This will check files in the database and will see if they even exist.
-                        let db_location = data.location_get(&tn);
+                        let db_location = data.location_get();
                         let cnt: std::sync::Arc<std::sync::Mutex<usize>> =
                             std::sync::Arc::new(std::sync::Mutex::new(0));
-                        data.load_table(&tn, &sharedtypes::LoadDBTable::All);
+                        data.load_table(&sharedtypes::LoadDBTable::All);
                         if !Path::new("fileexists.txt").exists() {
                             let _ = std::fs::File::create("fileexists.txt");
                         }
@@ -540,13 +526,13 @@ pub fn main(data: Arc<RwLock<database::Main>>, globalload: Arc<RwLock<GlobalLoad
                                 .open("fileexists.txt")
                                 .unwrap(),
                         ));
-                        let lis = data.file_get_list_all(&tn);
+                        let lis = data.file_get_list_all();
                         logging::info_log(
                             "Checking if we have any missing or bad files.".to_string(),
                         );
                         let mut nsid: Option<usize> = None;
                         {
-                            let nso = data.namespace_get(&tn, &"source_url".to_owned());
+                            let nso = data.namespace_get(&"source_url".to_owned());
                             if let Some(ns) = nso {
                                 nsid = Some(ns);
                             }
@@ -587,9 +573,9 @@ pub fn main(data: Arc<RwLock<database::Main>>, globalload: Arc<RwLock<GlobalLoad
                                     }
                                 }
                                 if let Some(nsid) = nsid {
-                                    let rel = data.relationship_get_tagid(&tn, fid);
+                                    let rel = data.relationship_get_tagid( fid);
                                     for eachs in rel.iter() {
-                                        let dat = data.tag_id_get(&tn, eachs).unwrap();
+                                        let dat = data.tag_id_get( eachs).unwrap();
                                         logging::info_log(format!(
                                             "Got Tag: {} for fileid: {}",
                                             dat.name, fid
@@ -606,7 +592,7 @@ pub fn main(data: Arc<RwLock<database::Main>>, globalload: Arc<RwLock<GlobalLoad
                                                 skip_if: Vec::new(),
                                             };
                                             download::dlfile_new(
-                                                &tn,
+
                                                 client,
                                                 dbstore.clone(),
                                                 &mut file,
@@ -639,9 +625,9 @@ pub fn main(data: Arc<RwLock<database::Main>>, globalload: Arc<RwLock<GlobalLoad
                                     }
 
                                     if nsid.is_some() {
-                                        let rel = data.relationship_get_tagid(&tn, fid);
+                                        let rel = data.relationship_get_tagid( fid);
                                         for eachs in rel.iter() {
-                                            let dat = data.tag_id_get(&tn, eachs).unwrap();
+                                            let dat = data.tag_id_get( eachs).unwrap();
                                             logging::info_log(format!(
                                                 "Got Tag: {} for fileid: {}",
                                                 dat.name, fid
@@ -658,7 +644,7 @@ pub fn main(data: Arc<RwLock<database::Main>>, globalload: Arc<RwLock<GlobalLoad
                                                     skip_if: Vec::new(),
                                                 };
                                                 download::dlfile_new(
-                                                    &tn,
+
                                                     client,
                                                     dbstore.clone(),
                                                     &mut file,
@@ -682,20 +668,20 @@ pub fn main(data: Arc<RwLock<database::Main>>, globalload: Arc<RwLock<GlobalLoad
                     }
                     cli_structs::Database::CheckInMemdb => {
                         let mut data = data.write().unwrap();
-                        data.load_table(&tn, &sharedtypes::LoadDBTable::Tags);
+                        data.load_table(&sharedtypes::LoadDBTable::Tags);
                         pause();
                     }
                     cli_structs::Database::CompressDatabase => {
                         let mut data = data.write().unwrap();
-                        data.condense_db_all(&tn);
+                        data.condense_db_all();
                     }
                     cli_structs::Database::RemoveWhereNot(db_n_rmv) => {
                         let mut data = data.write().unwrap();
                         let ns_id = match db_n_rmv {
                             cli_structs::NamespaceInfo::NamespaceString(ns) => {
-                                data.load_table(&tn, &sharedtypes::LoadDBTable::Namespace);
+                                data.load_table(&sharedtypes::LoadDBTable::Namespace);
 
-                                match data.namespace_get(&tn, &ns.namespace_string) {
+                                match data.namespace_get(&ns.namespace_string) {
                                     None => {
                                         logging::info_log(format!(
                                             "Cannot find the tasks remove string in namespace {}",
@@ -712,15 +698,15 @@ pub fn main(data: Arc<RwLock<database::Main>>, globalload: Arc<RwLock<GlobalLoad
                             "Found Namespace: {} Removing all but id...",
                             &ns_id
                         ));
-                        data.load_table(&tn, &sharedtypes::LoadDBTable::Tags);
-                        data.load_table(&tn, &sharedtypes::LoadDBTable::Relationship);
-                        data.load_table(&tn, &sharedtypes::LoadDBTable::Parents);
+                        data.load_table(&sharedtypes::LoadDBTable::Tags);
+                        data.load_table(&sharedtypes::LoadDBTable::Relationship);
+                        data.load_table(&sharedtypes::LoadDBTable::Parents);
 
                         // data.namespace_get(inp)
-                        let mut key = data.namespace_keys(&tn);
+                        let mut key = data.namespace_keys();
                         key.retain(|x| *x != ns_id);
                         for each in key {
-                            data.delete_namespace_sql(&tn, &each);
+                            data.delete_namespace_sql(&each);
                         }
                         //data.drop_recreate_ns(&ns_id);
                         panic!();
@@ -728,12 +714,12 @@ pub fn main(data: Arc<RwLock<database::Main>>, globalload: Arc<RwLock<GlobalLoad
                     // Removing db namespace. Will get id to remove then remove it.
                     cli_structs::Database::Remove(db_rmv) => {
                         let mut data = data.write().unwrap();
-                        data.load_table(&tn, &sharedtypes::LoadDBTable::Namespace);
+                        data.load_table(&sharedtypes::LoadDBTable::Namespace);
                         let ns_id = match db_rmv {
                             cli_structs::NamespaceInfo::NamespaceString(ns) => {
-                                data.load_table(&tn, &sharedtypes::LoadDBTable::Namespace);
+                                data.load_table(&sharedtypes::LoadDBTable::Namespace);
 
-                                match data.namespace_get(&tn, &ns.namespace_string) {
+                                match data.namespace_get(&ns.namespace_string) {
                                     None => {
                                         logging::info_log(format!(
                                             "Cannot find the tasks remove string in namespace {}",
@@ -747,9 +733,9 @@ pub fn main(data: Arc<RwLock<database::Main>>, globalload: Arc<RwLock<GlobalLoad
                             cli_structs::NamespaceInfo::NamespaceId(ns) => ns.namespace_id,
                         };
                         logging::info_log(format!("Found Namespace: {} Removing...", &ns_id));
-                        data.load_table(&tn, &sharedtypes::LoadDBTable::Tags);
-                        data.load_table(&tn, &sharedtypes::LoadDBTable::Relationship);
-                        data.namespace_delete_id(&tn, &ns_id);
+                        data.load_table(&sharedtypes::LoadDBTable::Tags);
+                        data.load_table(&sharedtypes::LoadDBTable::Relationship);
+                        data.namespace_delete_id(&ns_id);
                     }
                 }
             }
@@ -758,6 +744,6 @@ pub fn main(data: Arc<RwLock<database::Main>>, globalload: Arc<RwLock<GlobalLoad
     }
 
     // I hate this but it works and keeps everything self contained
-    data.read().unwrap().transaction_flush(tn);
+    data.read().unwrap().transaction_flush();
     // AllFields::Nothing
 }

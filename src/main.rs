@@ -123,14 +123,12 @@ fn main() {
 
     let globalload_arc = globalload::GlobalLoad::new(arc.clone(), jobmanager.clone());
     {
-        let mut conn = arc.read().unwrap().get_database_connection();
-        let tn = conn.transaction().unwrap();
         arc.write()
             .unwrap()
-            .load_table(&tn, &sharedtypes::LoadDBTable::Settings);
+            .load_table(&sharedtypes::LoadDBTable::Settings);
         arc.write()
             .unwrap()
-            .load_table(&tn, &sharedtypes::LoadDBTable::Jobs);
+            .load_table(&sharedtypes::LoadDBTable::Jobs);
 
         //let mut globalload_arc =
         //    plugins::globalload_arc::new(plugin_loc.to_string(), arc.clone(), jobmanager.clone());
@@ -158,7 +156,7 @@ fn main() {
         'upgradeloop: loop {
             let repeat;
             {
-                repeat = arc.write().unwrap().check_version(&tn);
+                repeat = arc.write().unwrap().check_version();
             }
             if !repeat {
                 let lck = arc.read().unwrap();
@@ -168,9 +166,7 @@ fn main() {
             }
         }
 
-        arc.write().unwrap().transaction_flush(tn);
-        let mut conn = arc.read().unwrap().get_database_connection();
-        let tn = conn.transaction().unwrap();
+        arc.write().unwrap().transaction_flush();
 
         // Actually upgrades the DB from scraper calls
         for db_version in upgradeversvec {
@@ -189,7 +185,7 @@ fn main() {
         //cli::main(arc.clone(), globalload_arc.clone());
         cli::main(arc.clone(), globalload_arc.clone());
 
-        arc.write().unwrap().transaction_flush(tn);
+        arc.write().unwrap().transaction_flush();
     }
     {
         globalload_arc.write().unwrap().reload_regex();
@@ -212,12 +208,10 @@ fn main() {
     }
 
     {
+        let sites = globalload_arc.read().unwrap().return_all_sites();
         //let globalload_sites = ;
         // Checks if we need to load any jobs
-        jobmanager
-            .write()
-            .unwrap()
-            .jobs_load(globalload_arc.read().unwrap().return_all_sites());
+        jobmanager.write().unwrap().jobs_load(sites);
     }
 
     // One flush after all the on_start unless needed
@@ -241,7 +235,6 @@ fn main() {
             );
         }
     }
-
     // Anything below here will run automagically. Jobs run in OS threads Waits until
     // all threads have closed.
     loop {
@@ -253,10 +246,8 @@ fn main() {
         }
 
         {
-            jobmanager
-                .write()
-                .unwrap()
-                .jobs_load(globalload_arc.read().unwrap().return_all_sites());
+            let sites = globalload_arc.read().unwrap().return_all_sites();
+            jobmanager.write().unwrap().jobs_load(sites);
         }
 
         for scraper in jobmanager.read().unwrap().job_scrapers_get() {

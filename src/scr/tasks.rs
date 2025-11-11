@@ -48,7 +48,7 @@ pub fn import_files(
         error!("CSV ERROR, issue with csv file. No path header.");
         panic!("CSV ERROR, issue with csv file. No path header.");
     }
-    let location = db.location_get(&tn);
+    let location = db.location_get();
     println!("Importing Files to: {}", &location);
     let mut delfiles: AHashMap<String, String> = AHashMap::new();
     for line in rdr.records() {
@@ -75,7 +75,7 @@ pub fn import_files(
             }
             Ok(out) => out,
         };
-        let hash_exists = db.file_get_hash(tn, &hash);
+        let hash_exists = db.file_get_hash(&hash);
         if hash_exists.is_some() {
             // delfiles.insert(row.path.to_string(), "".to_owned()); Removes file that's
             // already in DB.
@@ -106,11 +106,11 @@ pub fn import_files(
         }
         println!("Copied to path: {}", &final_path);
 
-        db.storage_put(&tn, &location);
-        let storage_id = db.storage_get_id(tn, &location).unwrap();
+        db.storage_put(&&location);
+        let storage_id = db.storage_get_id(&location).unwrap();
 
         // Gets the extension id from a string
-        let ext_id = db.extension_put_string(tn, &file_ext);
+        let ext_id = db.extension_put_string(&file_ext);
 
         // Adds into DB
         let file = sharedtypes::DbFileStorage::NoIdExist(sharedtypes::DbFileObjNoId {
@@ -118,10 +118,10 @@ pub fn import_files(
             ext_id,
             storage_id,
         });
-        let file_id = db.file_add(tn, file);
-        let namespace_id = db.namespace_add(tn, &row.namespace, &None);
-        let tag_id = db.tag_add(tn, &row.tag, namespace_id, true, Some(row.id));
-        db.relationship_add(tn, file_id.to_owned(), tag_id.to_owned(), true);
+        let file_id = db.file_add(file);
+        let namespace_id = db.namespace_add(&row.namespace, &None);
+        let tag_id = db.tag_add(&row.tag, namespace_id, true, Some(row.id));
+        db.relationship_add(file_id.to_owned(), tag_id.to_owned(), true);
     }
     println!("Clearing any files from any move ops.");
     info!("Clearing any files from any move ops.");

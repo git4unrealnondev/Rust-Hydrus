@@ -47,7 +47,7 @@ impl Jobs {
     ///
     fn jobs_add_internal(
         &mut self,
-        tn: &Transaction<'_>,
+
         scraper: sharedtypes::GlobalPluginScraper,
         dbjobsobj: sharedtypes::DbJobsObj,
     ) -> bool {
@@ -101,7 +101,7 @@ impl Jobs {
             if dbjobsobj.id.is_none() {
                 let mut temp = dbjobsobj.clone();
                 temp.id = None;
-                let id = self.db.write().unwrap().jobs_add_new(tn, temp);
+                let id = self.db.write().unwrap().jobs_add_new(temp);
                 out = true;
                 // Updates the ID field with something from the db
                 dbjobsobj.id = Some(id);
@@ -134,12 +134,12 @@ impl Jobs {
 
     pub fn jobs_add_nolock(
         &mut self,
-        tn: &Transaction<'_>,
+
         scraper: sharedtypes::GlobalPluginScraper,
         dbjobsobj: sharedtypes::DbJobsObj,
         db: Arc<RwLock<Main>>,
     ) {
-        self.jobs_add_internal(tn, scraper, dbjobsobj);
+        self.jobs_add_internal(scraper, dbjobsobj);
     }
 
     ///
@@ -147,11 +147,11 @@ impl Jobs {
     ///
     pub fn jobs_add(
         &mut self,
-        tn: &Transaction<'_>,
+
         scraper: sharedtypes::GlobalPluginScraper,
         dbjobsobj: sharedtypes::DbJobsObj,
     ) -> bool {
-        self.jobs_add_internal(tn, scraper, dbjobsobj)
+        self.jobs_add_internal(scraper, dbjobsobj)
     }
 
     ///
@@ -179,7 +179,7 @@ impl Jobs {
     ///
     pub fn jobs_remove_dbjob(
         &mut self,
-        tn: &Transaction<'_>,
+
         scraper: &sharedtypes::GlobalPluginScraper,
         data: &sharedtypes::DbJobsObj,
         worker_id: &usize,
@@ -190,7 +190,7 @@ impl Jobs {
             for job in job_list_static {
                 if job.id == data.id && job_list.remove(&job) {
                     logging::info_log(format!("Worker: {worker_id} --Removing Job: {:?}", &job));
-                    db.del_from_jobs_byid(&tn, job.id.as_ref());
+                    db.del_from_jobs_byid(job.id.as_ref());
                 }
             }
         }
@@ -215,7 +215,7 @@ impl Jobs {
     ///
     pub fn jobs_decrement_count(
         &mut self,
-        tn: &Transaction<'_>,
+
         data: &sharedtypes::DbJobsObj,
         scraper: &sharedtypes::GlobalPluginScraper,
         worker_id: &usize,
@@ -230,7 +230,7 @@ impl Jobs {
                 sharedtypes::DbJobRecreation::AlwaysTime(_, count) => {
                     if let &Some(count) = count {
                         if count == 0 {
-                            self.jobs_remove_dbjob(tn, scraper, data, worker_id);
+                            self.jobs_remove_dbjob(scraper, data, worker_id);
                         } else {
                             //count -= 1;
                         }
@@ -281,15 +281,10 @@ impl Jobs {
     ) {
         let hashjobs;
         let mut jobs_vec = Vec::new();
-        let mut conn = {
-            let db = self.db.read().unwrap();
-            db.get_database_connection()
-        };
-        let tn = conn.transaction().unwrap();
 
         {
-            let db = self.db.read().unwrap();
-            hashjobs = db.jobs_get_all(&tn).clone();
+            let db = self.db.write().unwrap();
+            hashjobs = db.jobs_get_all().clone();
         }
 
         {
@@ -321,12 +316,12 @@ impl Jobs {
 
         let mut commit = false;
         for (scraper, job) in jobs_vec {
-            if self.jobs_add(&tn, scraper, job) {
+            if self.jobs_add(scraper, job) {
                 commit = true;
             }
         }
         if commit {
-            tn.commit();
+            self.db.read().unwrap().transaction_flush();
         }
     }
 }

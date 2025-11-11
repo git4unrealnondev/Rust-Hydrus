@@ -58,11 +58,7 @@ impl Main {
     /// Searches for a list of fileids from a list of tagids
     /// Straight yoinked off chad
     ///
-    pub fn relationship_get_fileid_search_sql(
-        &self,
-        tn: &Transaction<'_>,
-        tag_ids: &[usize],
-    ) -> Vec<usize> {
+    pub fn relationship_get_fileid_search_sql(&self, tag_ids: &[usize]) -> Vec<usize> {
         if tag_ids.is_empty() {
             return vec![];
         }
@@ -92,6 +88,7 @@ impl Main {
         let params_refs: Vec<&dyn ToSql> =
             params_boxed.iter().map(|b| &**b as &dyn ToSql).collect();
 
+        let tn = self.pool.get().unwrap();
         let mut stmt = tn.prepare(&sql).unwrap();
         wait_until_sqlite_ok!(
             stmt.query_map(&params_refs[..], |row| row.get::<_, usize>(0))
@@ -106,12 +103,13 @@ impl Main {
     ///
     /// Gets all jobs from the sql tables
     ///
-    pub fn jobs_get_all_sql(&self, tn: &Transaction<'_>) -> HashMap<usize, sharedtypes::DbJobsObj> {
+    pub fn jobs_get_all_sql(&self) -> HashMap<usize, sharedtypes::DbJobsObj> {
         let mut out = HashMap::new();
-        let max_jobs = self.jobs_return_count_sql(tn);
+        let tn = self.pool.get().unwrap();
+        let max_jobs = self.jobs_return_count_sql();
 
         for job_id in 0..max_jobs {
-            if let Some(job) = self.jobs_get_id_sql(tn, &job_id) {
+            if let Some(job) = self.jobs_get_id_sql(&job_id) {
                 out.insert(job_id, job.clone());
             }
         }
@@ -122,7 +120,8 @@ impl Main {
     ///
     /// Returns the total count of the jobs table
     ///
-    pub fn jobs_return_count_sql(&self, tn: &Transaction<'_>) -> usize {
+    pub fn jobs_return_count_sql(&self) -> usize {
+        let tn = self.pool.get().unwrap();
         let mut max: Option<usize> =
             wait_until_sqlite_ok!(
                 tn.query_row("SELECT MAX(id) FROM Jobs", params![], |row| row.get(0))
@@ -151,7 +150,8 @@ impl Main {
     ///
     /// Returns the total count of the namespace table
     ///
-    pub fn namespace_return_count_sql(&self, tn: &Transaction<'_>) -> usize {
+    pub fn namespace_return_count_sql(&self) -> usize {
+        let tn = self.pool.get().unwrap();
         wait_until_sqlite_ok!(
             tn.query_row("SELECT COUNT(*) FROM Namespace", params![], |row| {
                 row.get(0)
@@ -163,11 +163,8 @@ impl Main {
     ///
     /// Get file if it exists by id
     ///
-    pub fn files_get_id_sql(
-        &self,
-        tn: &Transaction<'_>,
-        file_id: &usize,
-    ) -> Option<sharedtypes::DbFileStorage> {
+    pub fn files_get_id_sql(&self, file_id: &usize) -> Option<sharedtypes::DbFileStorage> {
+        let tn = self.pool.get().unwrap();
         let inp = "SELECT * FROM File where id = ?";
         wait_until_sqlite_ok!(tn.query_row(inp, params![file_id], |row| {
             let id = row.get(0).unwrap();
@@ -189,7 +186,8 @@ impl Main {
     ///
     /// Returns all namespace keys
     ///
-    pub fn namespace_keys_sql(&self, tn: &Transaction<'_>) -> Vec<usize> {
+    pub fn namespace_keys_sql(&self) -> Vec<usize> {
+        let tn = self.pool.get().unwrap();
         let mut out = Vec::new();
         let mut inp = tn.prepare("SELECT id FROM Namespace").unwrap();
         let quer = inp.query_map(params![], |row| row.get(0)).unwrap();
@@ -204,7 +202,8 @@ impl Main {
     ///
     /// Get file if it exists by id
     ///
-    pub fn namespace_get_tagids_sql(&self, tn: &Transaction<'_>, ns_id: &usize) -> HashSet<usize> {
+    pub fn namespace_get_tagids_sql(&self, ns_id: &usize) -> HashSet<usize> {
+        let tn = self.pool.get().unwrap();
         let mut out = HashSet::new();
         let mut inp = tn
             .prepare("SELECT id FROM Tags where namespace = ?")
@@ -225,11 +224,8 @@ impl Main {
     ///
     /// Gets a job by id
     ///
-    pub fn jobs_get_id_sql(
-        &self,
-        tn: &Transaction<'_>,
-        job_id: &usize,
-    ) -> Option<sharedtypes::DbJobsObj> {
+    pub fn jobs_get_id_sql(&self, job_id: &usize) -> Option<sharedtypes::DbJobsObj> {
+        let tn = self.pool.get().unwrap();
         let inp = "SELECT * FROM Jobs WHERE id = ? LIMIT 1";
         wait_until_sqlite_ok!(tn.query_row(inp, params![job_id], |row| {
             let id = row.get(0).unwrap();
@@ -265,7 +261,9 @@ impl Main {
     }
 
     /// Adds a job to sql
-    pub fn jobs_add_sql(&mut self, tn: &Transaction<'_>, data: &sharedtypes::DbJobsObj) {
+    pub fn jobs_add_sql(&mut self, data: &sharedtypes::DbJobsObj) {
+        self.transaction_exclusive_start();
+        let tn = self.write_conn.lock().unwrap();
         let inp = "INSERT INTO Jobs VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
         {
             wait_until_sqlite_ok!(tn.execute(
@@ -289,7 +287,9 @@ impl Main {
     }
 
     /// Wrapper that handles inserting parents info into DB.
-    pub fn parents_add_sql(&mut self, tn: &Transaction<'_>, parent: &sharedtypes::DbParentsObj) {
+    pub fn parents_add_sql(&mut self, parent: &sharedtypes::DbParentsObj) {
+        self.transaction_exclusive_start();
+        let tn = self.write_conn.lock().unwrap();
         let inp = "INSERT INTO Parents(tag_id, relate_tag_id, limit_to) VALUES(?, ?, ?)";
         let limit_to = match parent.limit_to {
             None => &Null as &dyn ToSql,
@@ -311,11 +311,8 @@ impl Main {
     /// Returns a list of parents where: relate_tag_id
     /// exists
     ///
-    pub fn parents_relate_tag_get(
-        &self,
-        tn: &Transaction<'_>,
-        relate_tag: &usize,
-    ) -> HashSet<sharedtypes::DbParentsObj> {
+    pub fn parents_relate_tag_get(&self, relate_tag: &usize) -> HashSet<sharedtypes::DbParentsObj> {
+        let tn = self.pool.get().unwrap();
         let mut out = HashSet::new();
 
         let mut stmt = tn
@@ -343,11 +340,8 @@ impl Main {
     /// Returns a list of parents where: tag_id
     /// exists
     ///
-    pub fn parents_tagid_tag_get(
-        &self,
-        tn: &Transaction<'_>,
-        tag_id: &usize,
-    ) -> HashSet<sharedtypes::DbParentsObj> {
+    pub fn parents_tagid_tag_get(&self, tag_id: &usize) -> HashSet<sharedtypes::DbParentsObj> {
+        let tn = self.pool.get().unwrap();
         let mut out = HashSet::new();
 
         let mut stmt = tn
@@ -375,7 +369,8 @@ impl Main {
     /// Returns a list of relate_tag_ids where: tag_id
     /// exists
     ///
-    pub fn parents_tagid_get(&self, tn: &Transaction<'_>, relate_tag: &usize) -> HashSet<usize> {
+    pub fn parents_tagid_get(&self, relate_tag: &usize) -> HashSet<usize> {
+        let tn = self.pool.get().unwrap();
         let mut out = HashSet::new();
 
         let mut stmt = tn
@@ -397,7 +392,8 @@ impl Main {
     /// Returns a list of relate_tag_ids where: tag_id
     /// exists
     ///
-    pub fn parents_relatetagid_get(&self, tn: &Transaction<'_>, tag_id: &usize) -> HashSet<usize> {
+    pub fn parents_relatetagid_get(&self, tag_id: &usize) -> HashSet<usize> {
+        let tn = self.pool.get().unwrap();
         let mut out = HashSet::new();
 
         let mut stmt = tn
@@ -419,11 +415,8 @@ impl Main {
     /// Returns a list of parents where: limit_to
     /// exists
     ///
-    pub fn parents_limitto_tag_get(
-        &self,
-        tn: &Transaction<'_>,
-        limitto: &usize,
-    ) -> HashSet<sharedtypes::DbParentsObj> {
+    pub fn parents_limitto_tag_get(&self, limitto: &usize) -> HashSet<sharedtypes::DbParentsObj> {
+        let tn = self.pool.get().unwrap();
         let mut out = HashSet::new();
 
         let mut stmt = tn
@@ -447,16 +440,17 @@ impl Main {
         out
     }
 
-    pub fn parents_delete_sql(&mut self, tn: &Transaction<'_>, id: &usize) {
-        self.parents_delete_tag_id_sql(tn, id);
-        self.parents_delete_relate_tag_id_sql(tn, id);
-        self.parents_delete_limit_to_sql(tn, id);
+    pub fn parents_delete_sql(&mut self, id: &usize) {
+        self.parents_delete_tag_id_sql(id);
+        self.parents_delete_relate_tag_id_sql(id);
+        self.parents_delete_limit_to_sql(id);
     }
 
     ///
     /// Checks if a dead source exists
     ///
-    pub fn does_dead_source_exist(&self, tn: &Transaction<'_>, url: &String) -> bool {
+    pub fn does_dead_source_exist(&self, url: &String) -> bool {
+        let tn = self.pool.get().unwrap();
         wait_until_sqlite_ok!(tn.query_row(
             "SELECT id from dead_source_urls WHERE dead_url = ?",
             params![url],
@@ -468,12 +462,8 @@ impl Main {
     ///
     /// Does namespace contains tagid. A more optimizes sqlite version
     ///
-    pub fn namespace_contains_id_sql(
-        &self,
-        tn: &Transaction<'_>,
-        tid: &usize,
-        nsid: &usize,
-    ) -> bool {
+    pub fn namespace_contains_id_sql(&self, tid: &usize, nsid: &usize) -> bool {
+        let tn = self.pool.get().unwrap();
         wait_until_sqlite_ok!(tn.query_row(
             "SELECT id FROM Tags WHERE id = ? AND namespace = ?",
             params![tid, nsid],
@@ -482,66 +472,12 @@ impl Main {
         .unwrap_or(false)
     }
 
-    pub fn file_tag_relationship(
-        &self,
-        conn: &mut PooledConnection<SqliteConnectionManager>,
-        fid: &usize,
-        // tag, namespace
-        tags: Vec<sharedtypes::TagObject>,
-    ) {
-        let tn = conn.transaction().unwrap();
-        {
-            // Prepare statements
-            let mut ns_stmt = tn
-                .prepare("INSERT INTO Namespace (name, description) VALUES (?1, ?2) ON CONFLICT(name) DO NOTHING")
-                .unwrap();
-            let mut get_ns_id_stmt = tn
-                .prepare("SELECT id FROM Namespace WHERE name = ?1")
-                .unwrap();
-            let mut tag_stmt = tn
-                .prepare(
-                    "INSERT OR IGNORE INTO Tags (name, namespace) VALUES (?1, ?2)
-         ",
-                )
-                .unwrap();
-            let mut rel_stmt = tn
-                .prepare("INSERT OR IGNORE INTO Relationship (fileid, tagid) VALUES (?1, ?2)")
-                .unwrap();
-
-            for tag in tags {
-                // Insert namespace if missing
-                ns_stmt
-                    .execute(params![tag.namespace.name, tag.namespace.description])
-                    .unwrap();
-
-                // Get namespace id
-                let namespace_id: i64 = get_ns_id_stmt
-                    .query_row(params![tag.namespace.name], |row| row.get(0))
-                    .unwrap();
-
-                // Insert tag
-                tag_stmt.execute(params![tag.tag, namespace_id]).unwrap();
-
-                // Get tag id
-                let tag_id: i64 = tn
-                    .query_row(
-                        "SELECT id FROM Tags WHERE name = ?1 AND namespace = ?2",
-                        params![tag.tag, namespace_id],
-                        |row| row.get(0),
-                    )
-                    .unwrap();
-
-                // Insert file -> tag relationship
-                rel_stmt.execute(params![fid, tag_id]).unwrap();
-            }
-        }
-        tn.commit();
-    }
-
     ///
     /// Removes ALL of a tag_id from the parents collumn
     ///
-    pub fn parents_delete_tag_id_sql(&mut self, tn: &Transaction<'_>, tag_id: &usize) {
+    pub fn parents_delete_tag_id_sql(&mut self, tag_id: &usize) {
+        self.transaction_exclusive_start();
+        let tn = self.write_conn.lock().unwrap();
         let _ = wait_until_sqlite_ok!(
             tn.execute("DELETE FROM Parents WHERE tag_id = ?", params![tag_id])
         );
@@ -550,11 +486,9 @@ impl Main {
     ///
     /// Removes ALL of a relate_tag_id from the parents collumn
     ///
-    pub fn parents_delete_relate_tag_id_sql(
-        &mut self,
-        tn: &Transaction<'_>,
-        relate_tag_id: &usize,
-    ) {
+    pub fn parents_delete_relate_tag_id_sql(&mut self, relate_tag_id: &usize) {
+        self.transaction_exclusive_start();
+        let tn = self.write_conn.lock().unwrap();
         let _ = wait_until_sqlite_ok!(tn.execute(
             "DELETE FROM Parents WHERE relate_tag_id = ?",
             params![relate_tag_id],
@@ -564,7 +498,9 @@ impl Main {
     ///
     /// Removes ALL of a relate_tag_id from the parents collumn
     ///
-    pub fn parents_delete_limit_to_sql(&mut self, tn: &Transaction<'_>, limit_to: &usize) {
+    pub fn parents_delete_limit_to_sql(&mut self, limit_to: &usize) {
+        self.transaction_exclusive_start();
+        let tn = self.write_conn.lock().unwrap();
         let _ = wait_until_sqlite_ok!(
             tn.execute("DELETE FROM Parents WHERE limit_to = ?", params![limit_to])
         );
@@ -573,7 +509,8 @@ impl Main {
     ///
     /// Gets a file storage location id
     ///
-    pub fn storage_get_id(&self, tn: &Transaction<'_>, location: &String) -> Option<usize> {
+    pub fn storage_get_id(&self, location: &String) -> Option<usize> {
+        let tn = self.pool.get().unwrap();
         wait_until_sqlite_ok!(tn.query_row(
             "SELECT id from FileStorageLocations where location = ?",
             params![location],
@@ -588,7 +525,8 @@ impl Main {
     /// Note needs to be offset by one because sqlite starts at 1 but the internal sqlite counter
     /// starts at zero but the stupid actual count starts at 1
     ///
-    pub fn tags_max_return_sql(&self, tn: &Transaction<'_>) -> usize {
+    pub fn tags_max_return_sql(&self) -> usize {
+        let tn = self.pool.get().unwrap();
         wait_until_sqlite_ok!(tn.query_row("SELECT MAX(id) FROM Tags", params![], |row| row.get(0)))
             .unwrap_or(0)
             + 1
@@ -597,11 +535,8 @@ impl Main {
     ///
     /// Gets a tag by id
     ///
-    pub fn tags_get_dbtagnns_sql(
-        &self,
-        tn: &Transaction<'_>,
-        tag_id: &usize,
-    ) -> Option<sharedtypes::DbTagNNS> {
+    pub fn tags_get_dbtagnns_sql(&self, tag_id: &usize) -> Option<sharedtypes::DbTagNNS> {
+        let tn = self.pool.get().unwrap();
         wait_until_sqlite_ok!(tn.query_row(
             "SELECT name, namespace from Tags where id = ?",
             params![tag_id],
@@ -620,7 +555,8 @@ impl Main {
     ///
     /// Gets a list of tag ids
     ///
-    pub fn tags_get_id_list_sql(&self, tn: &Transaction<'_>) -> HashSet<usize> {
+    pub fn tags_get_id_list_sql(&self) -> HashSet<usize> {
+        let tn = self.pool.get().unwrap();
         let inp = "SELECT id FROM Tags";
 
         let mut stmt = tn.prepare(inp).unwrap();
@@ -637,7 +573,8 @@ impl Main {
     ///
     /// Gets a list of tag ids
     ///
-    pub fn file_get_list_id_sql(&self, tn: &Transaction<'_>) -> HashSet<usize> {
+    pub fn file_get_list_id_sql(&self) -> HashSet<usize> {
+        let tn = self.pool.get().unwrap();
         let inp = "SELECT id FROM File";
 
         let mut stmt = tn.prepare(inp).unwrap();
@@ -654,7 +591,8 @@ impl Main {
     ///
     /// Gets a string from the ID of the storage location
     ///
-    pub fn storage_get_string(&self, tn: &Transaction<'_>, id: &usize) -> Option<String> {
+    pub fn storage_get_string(&self, id: &usize) -> Option<String> {
+        let tn = self.pool.get().unwrap();
         wait_until_sqlite_ok!(tn.query_row(
             "SELECT location from FileStorageLocations where id = ?",
             params![id],
@@ -667,42 +605,45 @@ impl Main {
     ///
     /// Inserts into storage the location
     ///
-    pub fn storage_put(&mut self, tn: &Transaction<'_>, location: &String) {
-        if self.storage_get_id(tn, location).is_some() {
-            return;
+    pub fn storage_put(&mut self, location: &String) -> usize {
+        if let Some(out) = self.storage_get_id(location) {
+            return out;
         }
-        let mut prep = tn
-            .prepare("INSERT OR REPLACE INTO FileStorageLocations (location) VALUES (?)")
-            .unwrap();
+        self.transaction_exclusive_start();
+        {
+            let tn = self.write_conn.lock().unwrap();
+            let mut prep = tn
+                .prepare("INSERT OR REPLACE INTO FileStorageLocations (location) VALUES (?)")
+                .unwrap();
 
-        loop {
-            if wait_until_sqlite_ok!(prep.insert(params![location])).is_ok() {
-                break;
-            }
+            wait_until_sqlite_ok!(prep.insert(params![location]));
         }
+        self.transaction_flush();
+        self.storage_get_id(location).unwrap()
     }
     /// Adds tags into sql database
-    pub(super) fn tag_add_sql(
-        &mut self,
-        tn: &Transaction<'_>,
-        tag_id: &usize,
-        tags: &String,
-        namespace: &usize,
-    ) {
+    pub(super) fn tag_add_sql(&mut self, tag_id: &usize, tag: &String, namespace: &usize) -> usize {
         let inp = "INSERT INTO Tags (id, name, namespace) VALUES(?, ?, ?) ON CONFLICT(id) DO UPDATE SET name = EXCLUDED.name, namespace = EXCLUDED.namespace";
         {
-            let _ = wait_until_sqlite_ok!(tn.execute(inp, params![tag_id, tags, namespace]));
+            self.transaction_exclusive_start();
+            {
+                let tn = self.write_conn.lock().unwrap();
+                let _ = wait_until_sqlite_ok!(tn.execute(inp, params![tag_id, tag, namespace]));
+            }
+            self.transaction_flush();
+            self.tag_get_name(tag.clone(), *namespace).unwrap()
         }
     }
 
     /// Adds namespace to the SQL database
     pub(super) fn namespace_add_sql(
         &mut self,
-        tn: &Transaction<'_>,
         name: &String,
         description: &Option<String>,
         name_id: Option<usize>,
     ) {
+        self.transaction_exclusive_start();
+        let tn = self.write_conn.lock().unwrap();
         let inp = "INSERT INTO Namespace (id, name, description) VALUES(?, ?, ?)";
         {
             let _ = wait_until_sqlite_ok!(tn.execute(inp, params![name_id, name, description]));
@@ -710,11 +651,12 @@ impl Main {
     }
 
     /// Loads Parents in from DB tnection
-    pub(super) fn load_parents(&mut self, tn: &Transaction<'_>) {
+    pub(super) fn load_parents(&mut self) {
         if self._cache == CacheType::Bare {
             return;
         }
         logging::info_log("Database is Loading: Parents".to_string());
+        let tn = self.get_database_connection();
         let temp = tn.prepare("SELECT tag_id, relate_tag_id, limit_to FROM Parents");
         if let Ok(mut con) = temp {
             let parents = wait_until_sqlite_ok!(con.query_map([], |row| {
@@ -738,17 +680,14 @@ impl Main {
     ///
     /// Returns the parents
     ///
-    pub fn parents_get_id_list_sql(
-        &self,
-        tn: &Transaction<'_>,
-        par: &sharedtypes::DbParentsObj,
-    ) -> HashSet<usize> {
+    pub fn parents_get_id_list_sql(&self, par: &sharedtypes::DbParentsObj) -> HashSet<usize> {
         let mut out = HashSet::new();
         let limit_to = match par.limit_to {
             None => &Null as &dyn ToSql,
             Some(temp) => &temp.clone() as &dyn ToSql,
         };
 
+        let tn = self.get_database_connection();
         {
             let temp = match par.limit_to {
             None => {
@@ -805,16 +744,68 @@ impl Main {
 
         out
     }
+    pub fn file_tag_relationship(
+        &self,
+        fid: &usize,
+        // tag, namespace
+        tags: Vec<sharedtypes::TagObject>,
+    ) {
+        self.transaction_exclusive_start();
+        let tn = self.write_conn.lock().unwrap();
+        {
+            // Prepare statements
+            let mut ns_stmt = tn
+                .prepare("INSERT INTO Namespace (name, description) VALUES (?1, ?2) ON CONFLICT(name) DO NOTHING")
+                .unwrap();
+            let mut get_ns_id_stmt = tn
+                .prepare("SELECT id FROM Namespace WHERE name = ?1")
+                .unwrap();
+            let mut tag_stmt = tn
+                .prepare(
+                    "INSERT OR IGNORE INTO Tags (name, namespace) VALUES (?1, ?2)
+         ",
+                )
+                .unwrap();
+            let mut rel_stmt = tn
+                .prepare("INSERT OR IGNORE INTO Relationship (fileid, tagid) VALUES (?1, ?2)")
+                .unwrap();
+
+            for tag in tags {
+                // Insert namespace if missing
+                ns_stmt
+                    .execute(params![tag.namespace.name, tag.namespace.description])
+                    .unwrap();
+
+                // Get namespace id
+                let namespace_id: i64 = get_ns_id_stmt
+                    .query_row(params![tag.namespace.name], |row| row.get(0))
+                    .unwrap();
+
+                // Insert tag
+                tag_stmt.execute(params![tag.tag, namespace_id]).unwrap();
+
+                // Get tag id
+                let tag_id: i64 = tn
+                    .query_row(
+                        "SELECT id FROM Tags WHERE name = ?1 AND namespace = ?2",
+                        params![tag.tag, namespace_id],
+                        |row| row.get(0),
+                    )
+                    .unwrap();
+
+                // Insert file -> tag relationship
+                rel_stmt.execute(params![fid, tag_id]).unwrap();
+            }
+        }
+        self.transaction_flush();
+    }
 
     ///
     /// Adds a extension and an id OPTIONAL into the db
     ///
-    pub fn extension_put_id_ext_sql(
-        &mut self,
-        tn: &Transaction<'_>,
-        id: Option<usize>,
-        ext: &str,
-    ) -> usize {
+    pub fn extension_put_id_ext_sql(&mut self, id: Option<usize>, ext: &str) -> usize {
+        self.transaction_exclusive_start();
+        let tn = self.write_conn.lock().unwrap();
         {
             let _ = wait_until_sqlite_ok!(tn.execute(
                 "insert or ignore into FileExtensions(id, extension) VALUES (?,?)",
@@ -822,12 +813,19 @@ impl Main {
             ));
         }
 
-        self.extension_get_id_sql(tn, ext).unwrap()
+        wait_until_sqlite_ok!(tn.query_row(
+            "SELECT id FROM FileExtensions WHERE extension = ?",
+            params![ext],
+            |row| row.get(0),
+        ))
+        .unwrap_or(None)
+        .unwrap()
     }
     ///
     /// Returns id if a hash exists
     ///
-    pub fn file_get_id_sql(&self, tn: &Transaction<'_>, hash: &str) -> Option<usize> {
+    pub fn file_get_id_sql(&self, hash: &str) -> Option<usize> {
+        let tn = self.pool.get().unwrap();
         wait_until_sqlite_ok!(tn.query_row(
             "SELECT id FROM File WHERE hash = ? LIMIT 1",
             params![hash],
@@ -839,7 +837,8 @@ impl Main {
     ///
     /// Returns if an extension exists gey by ext string
     ///
-    pub fn extension_get_id_sql(&self, tn: &Transaction<'_>, ext: &str) -> Option<usize> {
+    pub fn extension_get_id_sql(&self, ext: &str) -> Option<usize> {
+        let tn = self.pool.get().unwrap();
         wait_until_sqlite_ok!(tn.query_row(
             "SELECT id FROM FileExtensions WHERE extension = ?",
             params![ext],
@@ -850,7 +849,8 @@ impl Main {
     ///
     /// Returns if an extension exists get by id
     ///
-    pub fn extension_get_string_sql(&self, tn: &Transaction<'_>, id: &usize) -> Option<String> {
+    pub fn extension_get_string_sql(&self, id: &usize) -> Option<String> {
+        let tn = self.pool.get().unwrap();
         wait_until_sqlite_ok!(tn.query_row(
             "select extension from FileExtensions where id = ?",
             params![id],
@@ -860,11 +860,7 @@ impl Main {
     }
 
     /// Adds file via SQL
-    pub(super) fn file_add_sql(
-        &mut self,
-        tn: &Transaction<'_>,
-        file: &sharedtypes::DbFileStorage,
-    ) -> usize {
+    pub(super) fn file_add_sql(&mut self, file: &sharedtypes::DbFileStorage) -> usize {
         let out_file_id;
         let file_id;
         let hash;
@@ -893,13 +889,15 @@ impl Main {
 
         // Catches issue where a non bare DB would nuke itself
         if self._cache == CacheType::Bare
-            && let Some(id) = self.file_get_hash(tn, &hash)
+            && let Some(id) = self.file_get_hash(&hash)
         {
             return id;
         }
 
         let inp = "INSERT INTO File VALUES(?, ?, ?, ?)";
         {
+            self.transaction_exclusive_start();
+            let tn = self.write_conn.lock().unwrap();
             let _ = wait_until_sqlite_ok!(
                 tn.execute(inp, params![file_id, hash, extension, storage_id])
             );
@@ -907,17 +905,25 @@ impl Main {
         if let Some(id) = file_id {
             out_file_id = id;
         } else {
-            out_file_id = self.file_get_hash(tn, &hash).unwrap();
+            let tn = self.write_conn.lock().unwrap();
+
+            out_file_id = wait_until_sqlite_ok!(tn.query_row(
+                "SELECT id FROM File WHERE hash = ? LIMIT 1",
+                params![hash],
+                |row| row.get(0),
+            ))
+            .unwrap();
         }
 
         out_file_id
     }
 
     /// Loads Relationships in from DB tnection
-    pub(super) fn load_relationships(&mut self, tn: &Transaction<'_>) {
+    pub(super) fn load_relationships(&mut self) {
         if self._cache == CacheType::Bare {
             return;
         }
+        let tn = self.pool.get().unwrap();
         logging::info_log("Database is Loading: Relationships".to_string());
         let temp = tn.prepare("SELECT fileid, tagid FROM Relationship");
         if let Ok(mut con) = temp {
@@ -943,17 +949,44 @@ impl Main {
             }
         }
     }
+    /// Adds relationship to SQL db.
+    pub fn relationship_add_sql(&mut self, file: &usize, tag: &usize) {
+        self.transaction_exclusive_start();
+        let tn = self.write_conn.lock().unwrap();
+        let inp = "INSERT OR IGNORE INTO Relationship VALUES(?, ?)";
+        let _out = tn.execute(inp, params![file, tag]);
+    }
+    /// Updates job by id
+    pub fn jobs_update_by_id(&mut self, data: &sharedtypes::DbJobsObj) {
+        self.transaction_exclusive_start();
+        let tn = self.write_conn.lock().unwrap();
+        let inp = "UPDATE Jobs SET id=?, time=?, reptime=?, Manager=?, priority=?,cachetime=?,cachechecktype=?, site=?, param=?, SystemData=?, UserData=? WHERE id = ?";
+        let _ = tn.execute(
+            inp,
+            params![
+                data.id.unwrap().to_string(),
+                data.time.to_string(),
+                data.reptime.unwrap().to_string(),
+                serde_json::to_string(&data.jobmanager).unwrap(),
+                data.priority.to_string(),
+                serde_json::to_string(&data.cachetime).unwrap(),
+                serde_json::to_string(&data.cachechecktype).unwrap(),
+                data.site,
+                serde_json::to_string(&data.param).unwrap(),
+                serde_json::to_string(&data.system_data).unwrap(),
+                serde_json::to_string(&data.user_data).unwrap(),
+                data.id.unwrap().to_string()
+            ],
+        );
+    }
 
     ///
     /// Gets a list of fileid associated with a tagid
     ///
-    pub fn relationship_get_fileid_sql(
-        &self,
-        tn: &Transaction<'_>,
-        tag_id: &usize,
-    ) -> HashSet<usize> {
+    pub fn relationship_get_fileid_sql(&self, tag_id: &usize) -> HashSet<usize> {
         let mut out = HashSet::new();
 
+        let tn = self.pool.get().unwrap();
         let mut stmt = tn
             .prepare("SELECT fileid from Relationship where tagid = ?")
             .unwrap();
@@ -967,13 +1000,10 @@ impl Main {
     ///
     /// Gets a list of tagid associated with a fileid
     ///
-    pub fn relationship_get_tagid_sql(
-        &self,
-        tn: &Transaction<'_>,
-        file_id: &usize,
-    ) -> HashSet<usize> {
+    pub fn relationship_get_tagid_sql(&self, file_id: &usize) -> HashSet<usize> {
         let mut out = HashSet::new();
 
+        let tn = self.pool.get().unwrap();
         let mut stmt = tn
             .prepare("SELECT tagid from Relationship where fileid = ?")
             .unwrap();
@@ -983,20 +1013,6 @@ impl Main {
             out.insert(item);
         }
         out
-    }
-
-    ///
-    /// Determines if the DB has pending actions.
-    /// Was having a weird edge case where I was flushing over 6k tags at once and the db vomited
-    /// on itself. Hopefully this fixes it
-    ///
-    pub fn determine_if_busy(&self, tn: &Transaction<'_>) -> bool {
-        tn.is_busy()
-    }
-
-    /// Flushes to disk.
-    pub fn transaction_flush(&self, tn: Transaction<'_>) {
-        tn.commit();
     }
 
     /// Querys the db use this for select statements. NOTE USE THIS ONY FOR RESULTS
@@ -1013,7 +1029,8 @@ impl Main {
     }*/
     /// Querys the db use this for select statements. NOTE USE THIS ONY FOR RESULTS
     /// THAT RETURN INTS
-    pub fn quer_int(&mut self, tn: &Transaction<'_>, inp: String) -> Vec<isize> {
+    pub fn quer_int(&mut self, inp: String) -> Vec<isize> {
+        let tn = self.pool.get().unwrap();
         let mut toexec = tn.prepare(&inp).unwrap();
         let rows = wait_until_sqlite_ok!(toexec.query_map([], |row| row.get(0))).unwrap();
         let mut out: Vec<isize> = Vec::new();
@@ -1036,12 +1053,13 @@ impl Main {
     ///
     pub fn setting_add_sql(
         &mut self,
-        tn: &Transaction<'_>,
         name: String,
         pretty: &Option<String>,
         num: Option<usize>,
         param: &Option<String>,
     ) {
+        self.transaction_exclusive_start();
+        let tn = self.write_conn.lock().unwrap();
         let _ex =
             wait_until_sqlite_ok!( tn                .execute(
                     "INSERT INTO Settings(name, pretty, num, param) VALUES (?1, ?2, ?3, ?4) ON CONFLICT(name) DO UPDATE SET pretty=?2, num=?3, param=?4 ;",
@@ -1082,9 +1100,10 @@ impl Main {
     }
 
     /// Loads settings into db
-    pub(super) fn load_settings(&mut self, tn: &Transaction<'_>) {
+    pub(super) fn load_settings(&mut self) {
         logging::info_log("Database is Loading: Settings".to_string());
         {
+            let tn = self.pool.get().unwrap();
             let temp = tn.prepare("SELECT * FROM Settings");
             match temp {
                 Ok(mut con) => {
@@ -1110,7 +1129,9 @@ impl Main {
         }
     }
 
-    pub(super) fn add_dead_url_sql(&mut self, tn: &Transaction<'_>, url: &String) {
+    pub(super) fn add_dead_url_sql(&mut self, url: &String) {
+        self.transaction_exclusive_start();
+        let tn = self.write_conn.lock().unwrap();
         let _ = wait_until_sqlite_ok!(tn.execute(
             "INSERT INTO dead_source_urls(dead_url) VALUES (?)",
             params![url],
@@ -1120,11 +1141,8 @@ impl Main {
     ///
     /// Returns id if a tag exists
     ///
-    pub fn tags_get_id_sql(
-        &self,
-        tn: &Transaction<'_>,
-        db_tag_nns: &sharedtypes::DbTagNNS,
-    ) -> Option<usize> {
+    pub fn tags_get_id_sql(&self, db_tag_nns: &sharedtypes::DbTagNNS) -> Option<usize> {
+        let tn = self.pool.get().unwrap();
         wait_until_sqlite_ok!(tn.query_row(
             "SELECT id FROM Tags WHERE name = ? AND namespace = ?",
             params![db_tag_nns.name, db_tag_nns.namespace],
@@ -1136,12 +1154,9 @@ impl Main {
     ///
     /// Migrates a relationship's tag id
     ///
-    pub fn migrate_relationship_tag_sql(
-        &self,
-        tn: &Transaction<'_>,
-        old_tag_id: &usize,
-        new_tag_id: &usize,
-    ) {
+    pub fn migrate_relationship_tag_sql(&self, old_tag_id: &usize, new_tag_id: &usize) {
+        self.transaction_exclusive_start();
+        let tn = self.write_conn.lock().unwrap();
         wait_until_sqlite_ok!(tn.execute(
             "UPDATE OR REPLACE Relationship SET tagid = ? WHERE tagid = ?",
             params![new_tag_id, old_tag_id],
@@ -1153,11 +1168,12 @@ impl Main {
     ///
     pub fn migrate_relationship_file_tag_sql(
         &self,
-        tn: &Transaction<'_>,
         file_id: &usize,
         old_tag_id: &usize,
         new_tag_id: &usize,
     ) {
+        self.transaction_exclusive_start();
+        let tn = self.write_conn.lock().unwrap();
         wait_until_sqlite_ok!(tn.execute(
             "UPDATE OR REPLACE Relationship SET tagid = ? WHERE tagid = ? AND fileid=?",
             params![new_tag_id, old_tag_id, file_id],
@@ -1168,7 +1184,8 @@ impl Main {
     ///
     /// Returns id if a namespace exists
     ///
-    pub fn namespace_get_id_sql(&self, tn: &Transaction<'_>, namespace: &String) -> Option<usize> {
+    pub fn namespace_get_id_sql(&self, namespace: &String) -> Option<usize> {
+        let tn = self.pool.get().unwrap();
         wait_until_sqlite_ok!(tn.query_row(
             "SELECT id FROM Namespace WHERE name = ?",
             params![namespace],
@@ -1181,9 +1198,9 @@ impl Main {
     ///
     pub fn namespace_get_namespaceobj_sql(
         &self,
-        tn: &Transaction<'_>,
         ns_id: &usize,
     ) -> Option<sharedtypes::DbNamespaceObj> {
+        let tn = self.pool.get().unwrap();
         wait_until_sqlite_ok!(tn.query_row(
             "SELECT * FROM Namespace WHERE id = ?",
             params![ns_id],
@@ -1205,9 +1222,10 @@ impl Main {
     ///
     /// Loads the DB into memory
     ///
-    pub(super) fn load_dead_urls(&mut self, tn: &Transaction<'_>) {
+    pub(super) fn load_dead_urls(&mut self) {
         logging::info_log("Database is Loading: dead_source_urls".to_string());
 
+        let tn = self.pool.get().unwrap();
         let temp = tn.prepare("SELECT * FROM dead_source_urls");
 
         if let Ok(mut con) = temp {
@@ -1223,7 +1241,7 @@ impl Main {
                             // logging::info_log(&format!( "Already have tag {:?} adding {} {} {}", id,
                             // res.name, res.namespace, res.id )); continue;
                             // delete_tags.insert((res.name.clone(), res.namespace.clone())); }
-                            self.add_dead_url(tn, &res);
+                            self.add_dead_url(&res);
                         } else {
                             error!("Bad dead_source_url cant load {:?}", each);
                         }
@@ -1240,7 +1258,7 @@ impl Main {
     }
 
     /// Loads tags into db
-    pub(super) fn load_tags(&mut self, tn: &Transaction<'_>) {
+    pub(super) fn load_tags(&mut self) {
         if self._cache == CacheType::Bare {
             return;
         }
@@ -1248,6 +1266,7 @@ impl Main {
 
         // let mut delete_tags = HashSet::new();
         {
+            let tn = self.pool.get().unwrap();
             let temp = tn.prepare("SELECT * FROM Tags");
             if let Ok(mut con) = temp {
                 let tag = wait_until_sqlite_ok!(con.query_map([], |row| {
@@ -1273,7 +1292,7 @@ impl Main {
                                 // logging::info_log(&format!( "Already have tag {:?} adding {} {} {}", id,
                                 // res.name, res.namespace, res.id )); continue;
                                 // delete_tags.insert((res.name.clone(), res.namespace.clone())); }
-                                self.tag_add(tn, &res.name, res.namespace, false, Some(res.id));
+                                self.tag_add(&res.name, res.namespace, false, Some(res.id));
                             } else {
                                 error!("Bad Tag cant load {:?}", each);
                             }
@@ -1288,7 +1307,9 @@ impl Main {
     }
 
     /// Sets advanced settings for journaling. NOTE Experimental badness
-    pub fn db_open(&mut self, tn: &Transaction<'_>) {
+    pub fn db_open(&mut self) {
+        self.transaction_exclusive_start();
+        let tn = self.write_conn.lock().unwrap();
         let _ = wait_until_sqlite_ok!(tn.execute("PRAGMA secure_delete = 0", params![]));
         let _ = wait_until_sqlite_ok!(tn.execute("PRAGMA busy_timeout = 5000", params![]));
         let _ = wait_until_sqlite_ok!(tn.execute("PRAGMA journal_mode = WAL", params![]));
@@ -1299,29 +1320,25 @@ impl Main {
     }
 
     /// Removes a job from sql table by id
-    pub fn del_from_jobs_table_sql_better(&mut self, tn: &Transaction<'_>, id: &usize) {
+    pub fn del_from_jobs_table_sql_better(&mut self, id: &usize) {
+        self.transaction_exclusive_start();
+        let tn = self.write_conn.lock().unwrap();
         let inp = "DELETE FROM Jobs WHERE id = ?";
         let _ = wait_until_sqlite_ok!(tn.execute(inp, params![id.to_string()]));
     }
 
     /// Removes a tag from sql table by name and namespace
-    pub fn del_from_tags_by_name_and_namespace(
-        &mut self,
-        tn: &Transaction<'_>,
-        name: &String,
-        namespace: &String,
-    ) {
+    pub fn del_from_tags_by_name_and_namespace(&mut self, name: &String, namespace: &String) {
+        self.transaction_exclusive_start();
+        let tn = self.write_conn.lock().unwrap();
         let inp = "DELETE FROM Tags WHERE name = ? AND namespace = ?";
         wait_until_sqlite_ok!(tn.execute(inp, params![name, namespace])).unwrap();
     }
 
     /// Sqlite wrapper for deleteing a relationship from table.
-    pub fn delete_relationship_sql(
-        &mut self,
-        tn: &Transaction<'_>,
-        file_id: &usize,
-        tag_id: &usize,
-    ) {
+    pub fn delete_relationship_sql(&mut self, file_id: &usize, tag_id: &usize) {
+        self.transaction_exclusive_start();
+        let tn = self.write_conn.lock().unwrap();
         logging::log(format!(
             "Removing Relationship where fileid = {} and tagid = {}",
             file_id, tag_id
@@ -1337,12 +1354,9 @@ impl Main {
     }
 
     /// Sqlite wrapper for deleteing a parent from table.
-    pub fn delete_parent_sql(
-        &mut self,
-        tn: &Transaction<'_>,
-        tag_id: &usize,
-        relate_tag_id: &usize,
-    ) {
+    pub fn delete_parent_sql(&mut self, tag_id: &usize, relate_tag_id: &usize) {
+        self.transaction_exclusive_start();
+        let tn = self.write_conn.lock().unwrap();
         let inp = "DELETE FROM Parents WHERE tag_id = ? AND relate_tag_id = ?";
         {
             let _ = wait_until_sqlite_ok!(
@@ -1352,7 +1366,9 @@ impl Main {
     }
 
     /// Sqlite wrapper for deleteing a tag from table.
-    pub fn delete_tag_sql(&mut self, tn: &Transaction<'_>, tag_id: &usize) {
+    pub fn delete_tag_sql(&mut self, tag_id: &usize) {
+        self.transaction_exclusive_start();
+        let tn = self.write_conn.lock().unwrap();
         let inp = "DELETE FROM Tags WHERE id = ?";
         {
             let _ = wait_until_sqlite_ok!(tn.execute(inp, params![tag_id.to_string()]));
@@ -1360,7 +1376,9 @@ impl Main {
     }
 
     /// Sqlite wrapper for deleteing a tag from table.
-    pub fn delete_namespace_sql(&mut self, tn: &Transaction<'_>, namespace_id: &usize) {
+    pub fn delete_namespace_sql(&mut self, namespace_id: &usize) {
+        self.transaction_exclusive_start();
+        let tn = self.write_conn.lock().unwrap();
         logging::info_log(format!(
             "Deleting namespace with id : {} from db",
             namespace_id

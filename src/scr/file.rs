@@ -58,7 +58,6 @@ pub fn find_sidecar(location: &Path) -> Vec<PathBuf> {
 /// If it's an archive file it will extract its internals into the system
 ///
 pub fn parse_file(
-    tn: &rusqlite::Transaction<'_>,
     file_location: &Path,
     sidecars: &Vec<PathBuf>,
     db: Arc<RwLock<Main>>,
@@ -146,7 +145,6 @@ pub fn parse_file(
             {
                 let mut unwrappy = db.write().unwrap();
                 unwrappy.enclave_run_process(
-                    tn,
                     &mut sharedtypes::FileObject {
                         source: None,
                         hash: sharedtypes::HashesSupported::Sha512(sha512hash.clone()),
@@ -158,12 +156,12 @@ pub fn parse_file(
                     None,
                     enclave::DEFAULT_PUT_DISK,
                 );
-                fileid = unwrappy.file_get_hash(tn, &sha512hash);
+                fileid = unwrappy.file_get_hash(&sha512hash);
             }
 
             // imports all tags onto the file that we dl'ed
             for tag in tag_list.iter() {
-                parse_tags(tn, db.clone(), tag, fileid, &0, &0, manager_arc.clone());
+                parse_tags(db.clone(), tag, fileid, &0, &0, manager_arc.clone());
             }
 
             // NOTE COULD CAUSE LOCKING
@@ -195,7 +193,6 @@ pub fn parse_file(
                 {
                     let mut unwrappy = db.write().unwrap();
                     unwrappy.enclave_run_process(
-                        tn,
                         &mut sharedtypes::FileObject {
                             source: None,
                             hash: sharedtypes::HashesSupported::Sha512(sub_sha512hash.clone()),
@@ -207,11 +204,11 @@ pub fn parse_file(
                         None,
                         enclave::DEFAULT_PUT_DISK,
                     );
-                    subfileid = unwrappy.file_get_hash(tn, &sub_sha512hash);
+                    subfileid = unwrappy.file_get_hash(&sub_sha512hash);
                 }
                 // imports all tags onto the file that we dl'ed
                 for tag in tags.iter() {
-                    parse_tags(tn, db.clone(), tag, subfileid, &0, &0, manager_arc.clone());
+                    parse_tags(db.clone(), tag, subfileid, &0, &0, manager_arc.clone());
                 }
 
                 // NOTE COULD CAUSE LOCKING
@@ -231,12 +228,7 @@ pub fn parse_file(
 ///
 /// Parses a sidecar file into a valid data for the db
 ///
-pub fn parse_sidecar(
-    tn: &rusqlite::Transaction<'_>,
-    file_location: &Path,
-    sidecar_location: &Path,
-    db: Arc<RwLock<Main>>,
-) {
+pub fn parse_sidecar(file_location: &Path, sidecar_location: &Path, db: Arc<RwLock<Main>>) {
     let sha512hash = hash_file(
         &file_location.display().to_string(),
         &sharedtypes::HashesSupported::Sha512("Null".into()),
@@ -262,7 +254,6 @@ pub fn parse_sidecar(
                 }
                 let mut unwrappy = db.write().unwrap();
                 unwrappy.enclave_run_process(
-                    tn,
                     &mut sharedtypes::FileObject {
                         source: None,
                         hash: sharedtypes::HashesSupported::Sha512(sha512hash.clone()),
