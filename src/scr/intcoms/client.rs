@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 #![allow(unused_variables)]
 
 use crate::sharedtypes::{self};
@@ -333,6 +332,12 @@ pub fn job_add(job: sharedtypes::DbJobsObj) -> bool {
         types::SupportedDBRequests::PutJob(job),
     ))
 }
+/// Condenses tags in the db
+pub fn condense_tags() -> bool {
+    init_data_request(&types::SupportedRequests::Database(
+        types::SupportedDBRequests::CondenseTags(),
+    ))
+}
 
 /// See the database reference for this function. I'm a lazy turd just check it
 /// their
@@ -354,7 +359,7 @@ pub fn external_plugin_call(
     func_name: String,
     vers: usize,
     input: sharedtypes::CallbackInfoInput,
-) -> Option<HashMap<String, sharedtypes::CallbackCustomDataReturning>> {
+) -> HashMap<String, sharedtypes::CallbackCustomDataReturning> {
     init_data_request(&types::SupportedRequests::Database(
         types::SupportedDBRequests::PluginCallback(func_name, vers, input),
     ))
@@ -370,13 +375,26 @@ fn init_data_request<T: serde::de::DeserializeOwned>(requesttype: &types::Suppor
     loop {
         // Wait indefinitely for this to get a connection. shit way of doing it will
         // likely add a wait or something this will likely block the CPU or something.
-        let temp_conn = LocalSocketStream::connect(name.clone());
-        if let Ok(con_ok) = temp_conn {
-            conn = con_ok;
+        let worker_id;
+        loop {
+            let temp_conn = LocalSocketStream::connect(name.clone());
+            if let Ok(con_ok) = temp_conn {
+                let mut buf_reader = BufReader::new(con_ok);
+                if let Ok(id) = types::recieve::<u64>(&mut buf_reader) {
+                    worker_id = id;
+                    break;
+                }
+            }
+        }
+        if let Ok(conn_out) = LocalSocketStream::connect(
+            format!("{}_{}", types::SOCKET_NAME, worker_id)
+                .to_ns_name::<GenericNamespaced>()
+                .unwrap(),
+        ) {
+            conn = conn_out;
             break;
         }
     }
-
     // Wrap it into a buffered reader right away so that we could read a single line
     // out of it.
     let mut conn = BufReader::new(conn);

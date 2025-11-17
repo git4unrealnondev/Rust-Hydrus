@@ -74,7 +74,7 @@ pub fn get_global_info() -> Vec<sharedtypes::GlobalPluginScraper> {
 #[no_mangle]
 pub fn file_thumbnailer_give_thumbnail_location(
     callback: &sharedtypes::CallbackInfoInput,
-) -> Option<HashMap<String, sharedtypes::CallbackCustomDataReturning>> {
+) -> HashMap<String, sharedtypes::CallbackCustomDataReturning> {
     use std::path::Path;
 
     // If we have both image and thumbnail location
@@ -109,7 +109,7 @@ pub fn file_thumbnailer_give_thumbnail_location(
                                     finpath.join(outhash).to_string_lossy().to_string(),
                                 ),
                             );
-                            return Some(out);
+                            return out;
                         }
                         _ => {}
                     },
@@ -118,7 +118,7 @@ pub fn file_thumbnailer_give_thumbnail_location(
             }
         }
     }
-    None
+    HashMap::new()
 }
 
 ///
@@ -134,14 +134,24 @@ fn make_thumbnail_path(dbloc: &PathBuf, imgdata: &Vec<u8>) -> (PathBuf, String) 
     hasher.update(imgdata);
     let hash = format!("{:X}", hasher.finalize());
 
+    if canonicalize(dbloc).is_err() {
+        create_dir_all(dbloc);
+    }
     // Final folder location path of db
     let folderpath = canonicalize(dbloc)
         .unwrap()
         .join(hash[0..2].to_string())
         .join(hash[2..4].to_string())
         .join(hash[4..6].to_string());
+    if let Ok(path) = std::fs::exists(folderpath.clone()) {
+        if path {
+            return (folderpath, hash);
+        }
+    }
 
-    create_dir_all(folderpath.clone()).unwrap();
+    if let Err(err) = create_dir_all(folderpath.clone()) {
+        panic!("Faled to make path at: {} {}", dbloc.to_string_lossy(), err);
+    }
 
     (folderpath, hash)
 }
@@ -152,7 +162,7 @@ fn make_thumbnail_path(dbloc: &PathBuf, imgdata: &Vec<u8>) -> (PathBuf, String) 
 #[no_mangle]
 pub fn file_thumbnailer_generate_thumbnail_u8(
     callback: &sharedtypes::CallbackInfoInput,
-) -> Option<HashMap<String, sharedtypes::CallbackCustomDataReturning>> {
+) -> HashMap<String, sharedtypes::CallbackCustomDataReturning> {
     if callback.data_name.contains(&"image".to_string()) {
         let i = callback
             .data_name
@@ -168,14 +178,14 @@ pub fn file_thumbnailer_generate_thumbnail_u8(
                             "image".to_string(),
                             sharedtypes::CallbackCustomDataReturning::U8(thumbnail),
                         );
-                        return Some(out);
+                        return out;
                     }
                 }
                 _ => {}
             }
         }
     }
-    None
+    HashMap::new()
 }
 
 ///
@@ -210,7 +220,6 @@ pub fn on_start() {
                 Some("True".to_string()),
                 true,
             );
-            client::transaction_flush();
             "True".to_string()
         }
         Some(loc) => match loc.param {
@@ -287,7 +296,7 @@ pub fn on_start() {
         PLUGIN_NAME,
         file_ids.len()
     ));
-    let pool = ThreadPoolBuilder::new().num_threads(8).build().unwrap();
+    let pool = ThreadPoolBuilder::new().num_threads(16).build().unwrap();
 
     if let Some(location) = setup_thumbnail_location() {
         pool.install(|| {
@@ -347,7 +356,7 @@ fn process_fid(fid: &usize, location: &PathBuf, utable: &usize) -> Option<String
 #[no_mangle]
 pub fn file_thumbnailer_generate_thumbnail_fid(
     callback: &sharedtypes::CallbackInfoInput,
-) -> Option<HashMap<String, sharedtypes::CallbackCustomDataReturning>> {
+) -> HashMap<String, sharedtypes::CallbackCustomDataReturning> {
     let index = callback.data_name.iter().position(|x| x == "file_id");
     if let Some(index) = index {
         if callback.data.len() >= index {
@@ -384,7 +393,7 @@ pub fn file_thumbnailer_generate_thumbnail_fid(
             }
         }
     }
-    None
+    HashMap::new()
 }
 
 ///
@@ -575,7 +584,6 @@ fn setup_thumbnail_default() -> PathBuf {
         Some(finpath.clone()),
         true,
     );
-    client::transaction_flush();
     let final_location = Path::new(&finpath).to_path_buf();
     final_location
 }
@@ -601,7 +609,13 @@ fn setup_default_path(path: &Path) -> String {
     match fpath {
         Ok(_) => {}
         Err(_) => {
-            let _ = std::fs::create_dir_all(path.join(LOCATION_THUMBNAILS));
+            if let Err(err) = std::fs::create_dir_all(path.join(LOCATION_THUMBNAILS)) {
+                panic!(
+                    "File thumbnailer failed to make thumbnail - {} - {}",
+                    err,
+                    path.to_string_lossy()
+                );
+            }
         }
     }
     std::fs::canonicalize(path.join(LOCATION_THUMBNAILS))
@@ -628,7 +642,6 @@ fn setup_thumbnail_location() -> Option<PathBuf> {
                 Some(finpath.clone()),
                 true,
             );
-            client::transaction_flush();
             finpath
         }
         Some(loc) => match loc.param {

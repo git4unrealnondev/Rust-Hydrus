@@ -95,7 +95,7 @@ pub fn ratelimiter_wait(ratelimit_object: &Arc<Mutex<Ratelimiter>>) {
     loop {
         let limit;
         {
-            let hold = ratelimit_object.lock().unwrap();
+            let hold = ratelimit_object.lock();
             limit = hold.try_wait();
         }
         match limit {
@@ -201,12 +201,7 @@ pub async fn dltext_new(
             worker_id, &url_string
         ));
 
-        let futureresult = client
-            .read()
-            .unwrap()
-            .get(url)
-            .header("Accept", "text/css")
-            .send();
+        let futureresult = client.read().get(url).header("Accept", "text/css").send();
 
         // let test = reqwest::get(url).await.unwrap().text(); let futurez =
         // futures::executor::block_on(futureresult); dbg!(&futureresult);
@@ -377,8 +372,8 @@ pub enum FileReturnStatus {
 
 /// Downloads file to position
 pub fn dlfile_new(
-    client: &mut Client,
-    db: Arc<RwLock<Main>>,
+    client: Arc<RwLock<Client>>,
+    db: Main,
     file: &mut sharedtypes::FileObject,
     globalload: Option<Arc<RwLock<GlobalLoad>>>,
     ratelimiter_obj: &Arc<Mutex<Ratelimiter>>,
@@ -428,7 +423,10 @@ pub fn dlfile_new(
                 let url = Url::parse(source_url).unwrap();
                 ratelimiter_wait(ratelimiter_obj);
                 logging::info_log(format!("Downloading: {}", &source_url));
-                let mut futureresult = client.get(url.as_ref()).send();
+                let mut futureresult = {
+                    let client = client.read();
+                    client.get(url.as_ref()).send()
+                };
                 loop {
                     match &futureresult {
                         Ok(result) => {
@@ -457,7 +455,10 @@ pub fn dlfile_new(
                             dbg!("Worker: {workerid} JobID: {jobid} -- Repeating: {}", &url);
                             let time_dur = Duration::from_secs(10);
                             thread::sleep(time_dur);
-                            futureresult = client.get(url.as_ref()).send();
+                            futureresult = {
+                                let client = client.read();
+                                client.get(url.as_ref()).send()
+                            };
                         }
                     }
                 }
@@ -536,6 +537,7 @@ pub fn dlfile_new(
             file,
             Some(source_url),
         );
+        logging::info_log(format!("Finished processing bytes"));
         return FileReturnStatus::File((hash, file_ext));
     }
 
@@ -551,7 +553,7 @@ pub fn process_bytes(
     globalload: Option<Arc<RwLock<GlobalLoad>>>,
     hash: &String,
     file_ext: &String,
-    db: Arc<RwLock<Main>>,
+    db: Main,
     file: &mut sharedtypes::FileObject,
     source_url: Option<&String>,
 ) {
@@ -559,11 +561,13 @@ pub fn process_bytes(
     // That way if theirs any data that needs to get processed then we can do it while theirs a
     // valid file hash inside of the db
     {
-        let mut unwrappydb = db.write().unwrap();
-
-        unwrappydb.enclave_determine_processing(file, bytes, hash, source_url);
+        let enclave_id_list;
+        {
+            enclave_id_list = db.enclave_determine_processing(file, bytes, hash, source_url);
+        }
     }
 
+    logging::info_log(format!("Finished enclave_determine_processing"));
     // Flushes to disk before we run the plugins on_download hook.
 
     // If the plugin manager is None then don't do anything plugin wise. Useful for if

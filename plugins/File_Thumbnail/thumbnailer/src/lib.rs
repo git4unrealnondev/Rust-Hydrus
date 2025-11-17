@@ -173,11 +173,7 @@ fn resize_images(
         .into_par_iter()
         .map(|size| {
             let (width, height) = size.dimensions();
-            image.resize_exact(
-                width,
-                height,
-                image::imageops::FilterType::from(filter_type.clone()),
-            )
+            image.thumbnail_exact(width, height)
         })
         .collect()
 }

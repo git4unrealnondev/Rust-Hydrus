@@ -5,11 +5,12 @@
 use log::{error, warn};
 //use scraper::db_upgrade_call;
 //use scraper::on_start;
-use std::sync::Arc;
 //use std::sync::{Mutex, RwLock};
-use tracing_mutex::stdsync::{Mutex, RwLock};
+//use tracing_mutex::stdsync::{Mutex, RwLock};
+use parking_lot::{Mutex, RwLock};
 
-// use std::sync::{Arc, Mutex};
+// use std::sync::{data, Mutex};
+use std::sync::Arc;
 use std::{thread, time};
 
 pub const VERS: usize = 9;
@@ -80,10 +81,10 @@ fn makedb(dbloc: &str) -> database::Main {
     // let dbexist = Path::new(&path).exists(); dbcon is database connector let mut
     // dbcon = scr::database::dbinit(&path);
     database::Main::new(Some(path), VERS)
-    // let dbcon = data.load_mem(&mut data._conn);
+    // let dbcon = database.load_mem(&mut data._conn);
 }
 
-/// Gets file setup out of main. Checks if null data was written to data.
+/// Gets file setup out of main. Checks if null data was written to database.
 fn db_file_sanity(dbloc: &str) {
     let _dbzero = file::size_eq(dbloc.to_string(), 0);
     match _dbzero {
@@ -115,34 +116,25 @@ fn main() {
     os::check_os_compatibility();
 
     // Inits Database.
-    let mut data = makedb(dbloc);
+    let mut database = makedb(dbloc);
 
-    let arc = Arc::new(RwLock::new(data));
+    let jobmanager = Arc::new(RwLock::new(jobs::Jobs::new(database.clone())));
 
-    let jobmanager = Arc::new(RwLock::new(jobs::Jobs::new(arc.clone())));
-
-    let globalload_arc = globalload::GlobalLoad::new(arc.clone(), jobmanager.clone());
+    let globalload_database = globalload::GlobalLoad::new(database.clone(), jobmanager.clone());
     {
-        arc.write()
-            .unwrap()
-            .load_table(&sharedtypes::LoadDBTable::Settings);
-        arc.write()
-            .unwrap()
-            .load_table(&sharedtypes::LoadDBTable::Jobs);
+        database.load_table(&sharedtypes::LoadDBTable::Settings);
+        database.load_table(&sharedtypes::LoadDBTable::Jobs);
 
-        //let mut globalload_arc =
-        //    plugins::globalload_arc::new(plugin_loc.to_string(), arc.clone(), jobmanager.clone());
+        //let mut globalload_data =
+        //    plugins::globalload_data::new(plugin_loc.to_string(), database.clone(), jobmanager.clone());
 
         // Adds plugin and scraper callback capability from inside the db
         // Things like callbacks and the like
-        arc.write()
-            .unwrap()
-            .setup_globalload(globalload_arc.clone());
-        arc.write().unwrap().setup_localref(arc.clone());
+        database.setup_globalload(globalload_database.clone());
 
-        globalload_arc.write().unwrap().setup_ipc(
-            globalload_arc.clone(),
-            arc.clone(),
+        globalload_database.write().setup_ipc(
+            globalload_database.clone(),
+            database.clone(),
             jobmanager.clone(),
         );
 
@@ -156,22 +148,21 @@ fn main() {
         'upgradeloop: loop {
             let repeat;
             {
-                repeat = arc.write().unwrap().check_version();
+                repeat = database.check_version();
             }
             if !repeat {
-                let lck = arc.read().unwrap();
-                upgradeversvec.push(lck.db_vers_get());
+                upgradeversvec.push(database.db_vers_get());
             } else {
                 break 'upgradeloop;
             }
         }
 
-        arc.write().unwrap().transaction_flush();
+        database.transaction_flush();
 
         // Actually upgrades the DB from scraper calls
         for db_version in upgradeversvec {
             for (internal_scraper, scraper_library) in
-                globalload_arc.read().unwrap().library_get_raw().iter()
+                globalload_database.read().library_get_raw().iter()
             {
                 logging::info_log(format!(
                     "Starting scraper upgrade: {}",
@@ -182,25 +173,21 @@ fn main() {
         }
 
         // Processes any CLI input here
-        //cli::main(arc.clone(), globalload_arc.clone());
-        cli::main(arc.clone(), globalload_arc.clone());
+        //cli::main(database.clone(), globalload_database.clone());
+        cli::main(database.clone(), globalload_database.clone());
 
-        arc.write().unwrap().transaction_flush();
+        database.transaction_flush();
     }
     {
-        globalload_arc.write().unwrap().reload_regex();
+        globalload_database.write().reload_regex();
         // Calls the on_start func for the plugins
-        globalload_arc.write().unwrap().pluginscraper_on_start();
+        globalload_database.write().pluginscraper_on_start();
     }
 
     // A way to get around a mutex lock but it works lol
     let one_sec = time::Duration::from_millis(1000);
     loop {
-        if !globalload_arc
-            .write()
-            .unwrap()
-            .plugin_on_start_should_wait()
-        {
+        if !globalload_database.write().plugin_on_start_should_wait() {
             break;
         } else {
             thread::sleep(one_sec);
@@ -208,30 +195,30 @@ fn main() {
     }
 
     {
-        let sites = globalload_arc.read().unwrap().return_all_sites();
+        let sites = globalload_database.read().return_all_sites();
         //let globalload_sites = ;
         // Checks if we need to load any jobs
-        jobmanager.write().unwrap().jobs_load(sites);
+        jobmanager.write().jobs_load(sites);
     }
 
     // One flush after all the on_start unless needed
-    //arc.write().unwrap().transaction_flush();
+    //database.transaction_flush();
 
     // Creates a threadhandler that manages callable threads.
     let mut threadhandler = threading::Threads::new();
 
-    //let mut conn = arc.read().unwrap().get_database_connection();
+    //let mut conn = database.read().get_database_connection();
     //let tn = conn.transaction().unwrap();
     // just determines if we have any loaded jobs
-    jobmanager.read().unwrap().jobs_run_new();
+    jobmanager.read().jobs_run_new();
 
     {
-        for scraper in jobmanager.read().unwrap().job_scrapers_get() {
+        for scraper in jobmanager.read().job_scrapers_get() {
             threadhandler.startwork(
                 jobmanager.clone(),
-                arc.clone(),
+                database.clone(),
                 scraper.clone(),
-                globalload_arc.clone(),
+                globalload_database.clone(),
             );
         }
     }
@@ -241,22 +228,22 @@ fn main() {
         let brk;
         threadhandler.check_threads();
         {
-            globalload_arc.write().unwrap().thread_finish_closed();
-            brk = globalload_arc.read().unwrap().return_thread();
+            globalload_database.write().thread_finish_closed();
+            brk = globalload_database.read().return_thread();
         }
 
         {
-            let sites = globalload_arc.read().unwrap().return_all_sites();
-            jobmanager.write().unwrap().jobs_load(sites);
+            let sites = globalload_database.read().return_all_sites();
+            jobmanager.write().jobs_load(sites);
         }
 
-        for scraper in jobmanager.read().unwrap().job_scrapers_get() {
+        for scraper in jobmanager.read().job_scrapers_get() {
             // let scraper_library = scraper_manager._library.get(&scraper).unwrap();
             threadhandler.startwork(
                 jobmanager.clone(),
-                arc.clone(),
+                database.clone(),
                 scraper.clone(),
-                globalload_arc.clone(),
+                globalload_database.clone(),
             );
         }
         thread::sleep(one_sec);
@@ -268,7 +255,7 @@ fn main() {
 
     // This wait is done for allowing any thread to "complete" Shouldn't be nessisary
     // but hey. :D
-    //arc.write().unwrap().transaction_flush(tn);
+    //database.transaction_flush(tn);
 
     let mills_fifty = time::Duration::from_millis(50);
     std::thread::sleep(mills_fifty);

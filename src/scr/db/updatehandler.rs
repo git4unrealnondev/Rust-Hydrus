@@ -21,7 +21,7 @@ impl Main {
                 }
                 let mut storage = std::collections::HashSet::new();
                 {
-                    let tn = self.write_conn.lock().unwrap();
+                    let tn = self.write_conn.lock();
                     let mut stmt = tn.prepare("SELECT * FROM Jobs_Old").unwrap();
                     let mut rows = stmt.query([]).unwrap();
                     let mut cnt = 0;
@@ -67,7 +67,7 @@ impl Main {
                 // Putting blank parenthesis forces rust to drop tn which is locking our
                 // reference to self
                 {
-                    let tn = self.write_conn.lock().unwrap();
+                    let tn = self.write_conn.lock();
                     let mut stmt =
                         tn
                             .prepare(
@@ -128,7 +128,7 @@ impl Main {
                 }
                 let mut storage = std::collections::HashSet::new();
                 {
-                    let tn = self.write_conn.lock().unwrap();
+                    let tn = self.write_conn.lock();
                     let mut stmt = tn.prepare("SELECT * FROM Tags_Old").unwrap();
                     let mut rows = stmt.query([]).unwrap();
 
@@ -147,7 +147,7 @@ impl Main {
                 // Putting blank parenthesis forces rust to drop tn which is locking our
                 // reference to self
                 {
-                    let tn = self.write_conn.lock().unwrap();
+                    let tn = self.write_conn.lock();
                     let mut stmt = tn
                         .prepare("INSERT INTO Tags (id,name,namespace) VALUES (?1,?2,?3)")
                         .unwrap();
@@ -191,7 +191,7 @@ impl Main {
                 }
                 let mut storage = std::collections::HashSet::new();
                 {
-                    let tn = self.write_conn.lock().unwrap();
+                    let tn = self.write_conn.lock();
                     let mut stmt = tn.prepare("SELECT * FROM Parents_Old").unwrap();
                     let mut rows = stmt.query([]).unwrap();
 
@@ -209,7 +209,7 @@ impl Main {
                 // Putting blank parenthesis forces rust to drop tn which is locking our
                 // reference to self
                 {
-                    let tn = self.write_conn.lock().unwrap();
+                    let tn = self.write_conn.lock();
                     let mut stmt = tn
                         .prepare("INSERT INTO Parents (tag_id,relate_tag_id) VALUES (?1,?2)")
                         .unwrap();
@@ -246,7 +246,7 @@ impl Main {
                     self.alter_table(&"Jobs".to_string(), &"Jobs_Old".to_string());
                 }
                 {
-                    let tn = self.write_conn.lock().unwrap();
+                    let tn = self.write_conn.lock();
                     let mut stmt = tn.prepare("SELECT * FROM Jobs_Old").unwrap();
                     let mut rows = stmt.query([]).unwrap();
 
@@ -288,7 +288,7 @@ impl Main {
                 );
                 self.table_create(&"Jobs".to_string(), keys, vals);
                 {
-                    let tn = self.write_conn.lock().unwrap();
+                    let tn = self.write_conn.lock();
                     let mut stmt =
                         tn
                             .prepare(
@@ -375,7 +375,7 @@ impl Main {
         // Creating storage location in db
         let mut location_storage = std::collections::HashMap::new();
         {
-            let tn = self.write_conn.lock().unwrap();
+            let tn = self.write_conn.lock();
             let mut stmt = tn.prepare("SELECT location FROM File_Old").unwrap();
             let mut rows = stmt.query([]).unwrap();
             while let Some(row) = rows.next().unwrap() {
@@ -425,7 +425,7 @@ impl Main {
 
             let mut extension_cnt = 0;
             let mut extension_storage = std::collections::HashMap::new();
-            let tn = self.write_conn.lock().unwrap();
+            let tn = self.write_conn.lock();
             let mut stmt = tn.prepare("SELECT * FROM File_Old").unwrap();
             let mut rows = stmt.query([]).unwrap();
             while let Some(row) = rows.next().unwrap() {
@@ -449,12 +449,12 @@ impl Main {
                 logging::info_log(format!("Adding File: {}", &hash));
                 let utc = Utc::now();
                 let timestamp = utc.timestamp_millis();
-                let tn = self.write_conn.lock().unwrap();
+                let tn = self.write_conn.lock();
                 let _ = tn.execute(
                     file_enclave_sqlite_inp,
                     params![id, location_to_enclave.get(&storage_id).unwrap(), timestamp],
                 );
-                let tn = self.write_conn.lock().unwrap();
+                let tn = self.write_conn.lock();
                 let _ = tn.execute(file_sqlite_inp, params![id, hash, extension_id, storage_id]);
             }
         }
@@ -470,7 +470,7 @@ impl Main {
             // Worst that can happen is that we cant pull numbers of items and we default to 1
             let mut row_count: usize = 1;
             {
-                let tn = self.write_conn.lock().unwrap();
+                let tn = self.write_conn.lock();
                 let sqlite_count = "select count(*) from Tags_Old";
                 let mut stmt = tn.prepare(sqlite_count).unwrap();
                 let mut rows = stmt.query([]).unwrap();
@@ -487,7 +487,7 @@ impl Main {
             //
             logging::info_log("Starting to process Tags for DB V5 Upgrade".to_string());
 
-            let tn = self.write_conn.lock().unwrap();
+            let tn = self.write_conn.lock();
             let tag_sqlite_inp = "INSERT INTO Tags VALUES (?, ?, ?)";
             let mut stmt = tn.prepare("SELECT * FROM Tags_Old").unwrap();
             let mut rows = stmt.query([]).unwrap();
@@ -542,7 +542,7 @@ impl Main {
             //
             logging::info_log("Starting to process Jobs for DB V5 Upgrade".to_string());
 
-            let tn = self.write_conn.lock().unwrap();
+            let tn = self.write_conn.lock();
             let tag_sqlite_inp = "INSERT INTO Jobs VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
             let mut stmt = tn.prepare("SELECT * FROM Jobs_Old").unwrap();
             let mut rows = stmt.query([]).unwrap();
@@ -629,7 +629,7 @@ impl Main {
             //
             logging::info_log("Starting to process Jobs for DB V6 Upgrade".to_string());
 
-            let tn = self.write_conn.lock().unwrap();
+            let tn = self.write_conn.lock();
             let tag_sqlite_inp = "INSERT INTO Jobs VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
             let mut stmt = tn.prepare("SELECT * FROM Jobs_Old").unwrap();
             let mut rows = stmt.query([]).unwrap();
@@ -693,7 +693,7 @@ impl Main {
 
             logging::info_log("Starting to process Namespace for DB V7 Upgrade".to_string());
 
-            let tn = self.write_conn.lock().unwrap();
+            let tn = self.write_conn.lock();
             let tag_sqlite_inp = "INSERT INTO Namespace (id, name, description) VALUES (?, ?, ?)";
             let mut stmt = tn
                 .prepare("SELECT id, name, description FROM Namespace_Old")
@@ -723,7 +723,7 @@ impl Main {
 
             logging::info_log("Starting to process Parents for DB V7 Upgrade".to_string());
 
-            let tn = self.write_conn.lock().unwrap();
+            let tn = self.write_conn.lock();
             let tag_sqlite_inp =
                 "INSERT INTO Parents (tag_id, relate_tag_id, limit_to) VALUES (?, ?, ?)";
             let mut stmt = tn
@@ -753,7 +753,7 @@ impl Main {
 
             logging::info_log("Starting to process Tags for DB V7 Upgrade".to_string());
 
-            let tn = self.write_conn.lock().unwrap();
+            let tn = self.write_conn.lock();
             let tag_sqlite_inp = "INSERT INTO Tags (id, name, namespace) VALUES (?, ?, ?)";
             let mut stmt = tn
                 .prepare("SELECT id, name, namespace FROM Tags_Old")
@@ -778,7 +778,7 @@ impl Main {
         if self.check_table_exists("Relationship".into()) {
             self.alter_table(&"Relationship".to_string(), &"Relationship_Old".to_string());
 
-            let tn = self.write_conn.lock().unwrap();
+            let tn = self.write_conn.lock();
             logging::info_log("Starting to process Relationships for DB V8 Upgrade".to_string());
             tn.execute(
                 "CREATE TABLE Relationship (fileid INTEGER NOT NULL, tagid INTEGER NOT NULL, PRIMARY KEY (fileid, tagid) ) WITHOUT ROWID",
@@ -801,7 +801,7 @@ impl Main {
         if self.check_table_exists("Tags".into()) {
             self.alter_table(&"Tags".to_string(), &"Tags_Old".to_string());
 
-            let tn = self.write_conn.lock().unwrap();
+            let tn = self.write_conn.lock();
             tn.execute(
                 "CREATE TABLE Tags (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, namespace INTEGER NOT NULL, UNIQUE(name, namespace) )",
                 [],
@@ -832,7 +832,7 @@ impl Main {
         if self.check_table_exists("File".into()) {
             logging::info_log("Starting to process Files for DB V8 Upgrade".to_string());
             self.alter_table(&"File".to_string(), &"File_Old".to_string());
-            let tn = self.write_conn.lock().unwrap();
+            let tn = self.write_conn.lock();
 
             tn.execute(
                 "CREATE TABLE File 
@@ -846,7 +846,7 @@ impl Main {
             )
             .unwrap();
 
-            let tn = self.write_conn.lock().unwrap();
+            let tn = self.write_conn.lock();
             tn.execute("INSERT INTO File (id, hash, extension, storage_id) SELECT id, hash, extension, storage_id FROM File_Old", []).unwrap();
             /*let tag_sqlite_inp =
                 "INSERT INTO File (id, hash, extension, storage_id) VALUES (?, ?, ?, ?)";
@@ -865,7 +865,7 @@ impl Main {
             }*/
         }
         if self.check_table_exists("Parents".into()) {
-            let tn = self.write_conn.lock().unwrap();
+            let tn = self.write_conn.lock();
             logging::info_log("Starting to process Parent Index for DB V8 Upgrade".to_string());
             tn.execute(
                 "CREATE INDEX idx_parents ON Parents (tag_id, relate_tag_id, limit_to)",
@@ -884,7 +884,7 @@ impl Main {
         if self.check_table_exists("Namespace".into()) {
             logging::info_log("Starting to process Namespace for DB V8 Upgrade".to_string());
             self.alter_table(&"Namespace".to_string(), &"Namespace_Old".to_string());
-            let tn = self.write_conn.lock().unwrap();
+            let tn = self.write_conn.lock();
             tn.execute(
                 "CREATE TABLE Namespace (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, name TEXT NOT NULL UNIQUE, description TEXT )",
                 [],
@@ -930,7 +930,7 @@ impl Main {
             self.table_create(&name, &keys, &vals);
 
             {
-                let tn = self.write_conn.lock().unwrap();
+                let tn = self.write_conn.lock();
                 tn.execute("INSERT INTO Jobs (id, time, reptime, priority, cachetime, cachechecktype, Manager, site, param, SystemData, UserData) SELECT  id, time, reptime, priority, cachetime, cachechecktype, Manager, site, param, SystemData, UserData FROM Jobs_Old", []).unwrap();
             }
         }
@@ -949,7 +949,7 @@ impl Main {
 
     pub fn db_update_eight_to_nine(&mut self) {
         {
-            let tn = self.write_conn.lock().unwrap();
+            let tn = self.write_conn.lock();
             tn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_file_hash ON File (hash)",
                 [],

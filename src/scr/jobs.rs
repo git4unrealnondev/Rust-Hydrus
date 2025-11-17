@@ -23,13 +23,13 @@ struct PreviouslySeenObj {
 
 #[derive(Clone)]
 pub struct Jobs {
-    db: Arc<RwLock<database::Main>>,
+    db: database::Main,
     site_job: HashMap<sharedtypes::GlobalPluginScraper, HashSet<sharedtypes::DbJobsObj>>,
     previously_seen: HashMap<sharedtypes::GlobalPluginScraper, HashSet<PreviouslySeenObj>>,
 }
 
 impl Jobs {
-    pub fn new(db: Arc<RwLock<database::Main>>) -> Self {
+    pub fn new(db: database::Main) -> Self {
         Jobs {
             db,
             site_job: HashMap::new(),
@@ -101,7 +101,7 @@ impl Jobs {
             if dbjobsobj.id.is_none() {
                 let mut temp = dbjobsobj.clone();
                 temp.id = None;
-                let id = self.db.write().unwrap().jobs_add_new(temp);
+                let id = self.db.jobs_add_new(temp);
                 out = true;
                 // Updates the ID field with something from the db
                 dbjobsobj.id = Some(id);
@@ -137,7 +137,6 @@ impl Jobs {
 
         scraper: sharedtypes::GlobalPluginScraper,
         dbjobsobj: sharedtypes::DbJobsObj,
-        db: Arc<RwLock<Main>>,
     ) {
         self.jobs_add_internal(scraper, dbjobsobj);
     }
@@ -185,12 +184,11 @@ impl Jobs {
         worker_id: &usize,
     ) {
         if let Some(job_list) = self.site_job.get_mut(scraper) {
-            let mut db = self.db.write().unwrap();
             let job_list_static = job_list.clone();
             for job in job_list_static {
                 if job.id == data.id && job_list.remove(&job) {
                     logging::info_log(format!("Worker: {worker_id} --Removing Job: {:?}", &job));
-                    db.del_from_jobs_byid(job.id.as_ref());
+                    self.db.del_from_jobs_byid(job.id.as_ref());
                 }
             }
         }
@@ -283,8 +281,7 @@ impl Jobs {
         let mut jobs_vec = Vec::new();
 
         {
-            let db = self.db.write().unwrap();
-            hashjobs = db.jobs_get_all().clone();
+            hashjobs = self.db.jobs_get_all().clone();
         }
 
         {
@@ -296,7 +293,7 @@ impl Jobs {
                     continue 'mainloop;
                 }
 
-                //for sites in global_load.read().unwrap().sites_get(&scraper) {
+                //for sites in global_load.read().sites_get(&scraper) {
                 for (_, job) in hashjobs.iter() {
                     if sites == job.site && job.priority != 0 {
                         jobs_vec.push((scraper.clone(), job.clone()));
@@ -321,7 +318,7 @@ impl Jobs {
             }
         }
         if commit {
-            self.db.read().unwrap().transaction_flush();
+            self.db.transaction_flush();
         }
     }
 }
@@ -358,7 +355,7 @@ mod tests {
     ///
     /// Sets up for globalloading
     ///
-    fn get_globalload(db: Arc<RwLock<Main>>, jobs: Arc<RwLock<Jobs>>) -> Arc<RwLock<GlobalLoad>> {
+    fn get_globalload(db: Main, jobs: Arc<RwLock<Jobs>>) -> Arc<RwLock<GlobalLoad>> {
         test_globalload::emulate_loaded(db, jobs)
     }
 
@@ -389,7 +386,7 @@ mod tests {
     fn insert_duplicate_job() {
         for mut job in create_default() {
             let globalload = get_globalload(job.db.clone(), Arc::new(RwLock::new(job.clone())));
-            let globalload_sites = globalload.read().unwrap().return_all_sites();
+            let globalload_sites = globalload.read().return_all_sites();
             job.jobs_load(globalload_sites);
             let mut scraper = sharedtypes::return_default_globalpluginparser();
             scraper.storage_type = Some(sharedtypes::ScraperOrPlugin::Scraper(
@@ -415,7 +412,7 @@ mod tests {
     fn jobs_remove_job() {
         for mut job in create_default() {
             let globalload = get_globalload(job.db.clone(), Arc::new(RwLock::new(job.clone())));
-            let globalload_sites = globalload.read().unwrap().return_all_sites();
+            let globalload_sites = globalload.read().return_all_sites();
             job.jobs_load(globalload_sites);
             let mut scraper = sharedtypes::return_default_globalpluginparser();
             scraper.storage_type = Some(sharedtypes::ScraperOrPlugin::Scraper(
@@ -435,7 +432,7 @@ mod tests {
             assert_eq!(job.previously_seen.get(&scraper).unwrap().len(), 1);
             job.jobs_remove_dbjob(&scraper, &dbjobsobj, &0);
 
-            let unwrappy = job.db.read().unwrap();
+            let unwrappy = job.db;
             assert_eq!(unwrappy.jobs_get_all().keys().len(), 0);
             assert_eq!(job.site_job.get(&scraper).unwrap().len(), 0);
         }

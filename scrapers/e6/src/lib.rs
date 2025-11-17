@@ -390,7 +390,7 @@ pub fn get_global_info() -> Vec<sharedtypes::GlobalPluginScraper> {
         },
     ));
     e6.callbacks = vec![sharedtypes::GlobalCallbacks::Start(
-        sharedtypes::StartupThreadType::Spawn,
+        sharedtypes::StartupThreadType::Inline,
     )];
 
     let mut e6ai = sharedtypes::return_default_globalpluginparser();
@@ -417,7 +417,7 @@ pub fn get_global_info() -> Vec<sharedtypes::GlobalPluginScraper> {
         },
     ));
     e6ai.callbacks = vec![sharedtypes::GlobalCallbacks::Start(
-        sharedtypes::StartupThreadType::Spawn,
+        sharedtypes::StartupThreadType::Inline,
     )];
 
     vec![e6, e6ai]
@@ -972,7 +972,6 @@ fn gen_source_from_md5_ext(md5: &String, ext: &String, site: &Site) -> String {
 }
 #[path = "../../../src/scr/intcoms/client.rs"]
 mod client;
-
 pub fn db_upgrade_call_3(site: &Site) {
     dbg!("{} GOING TO LOCK DB DOES THIS WORKY", site_to_string(site));
     client::load_table(sharedtypes::LoadDBTable::All);
@@ -1346,6 +1345,22 @@ pub fn on_start(site_struct: &sharedtypes::GlobalPluginScraper) {
                 client::load_table(sharedtypes::LoadDBTable::Tags);
                 client::load_table(sharedtypes::LoadDBTable::All);
                 for tagid in client::namespace_get_tagids(nsid) {
+                    if client::relationship_get_fileid(tagid).is_empty()
+                        && client::parents_get(client::types::ParentsType::Tag, tagid).is_empty()
+                        && client::parents_get(client::types::ParentsType::Rel, tagid).is_empty()
+                        && client::parents_get(client::types::ParentsType::LimitTo, tagid)
+                            .is_empty()
+                    {
+                        client::log(format!("E6-Scraper - Tag {} is empty removing", tagid));
+                        client::tag_remove(tagid);
+                        continue;
+                    } else {
+                        client::log(format!(
+                            "E6-Scraper - Tag {} is not empty processing...",
+                            tagid
+                        ));
+                    }
+
                     //dbg!(&tagid);
                     let fileids = client::relationship_get_fileid(tagid);
                     for fileid in fileids.iter() {
@@ -1363,7 +1378,6 @@ pub fn on_start(site_struct: &sharedtypes::GlobalPluginScraper) {
                                                 "E6-Scraper: Fileid: {} Moving tag: {} from Namespace: {} to Namespace: {}",
                                                 &fileid, &tag.name, tag.namespace, legacy_ns
                                             ));
-                                            client::transaction_flush();
                                             cnt = 0;
                                         } else {
                                             client::log_no_print(format!(
@@ -1391,9 +1405,12 @@ pub fn on_start(site_struct: &sharedtypes::GlobalPluginScraper) {
                     }
                 }
                 nsids.push(nsid);
+                client::transaction_flush();
             }
         }
-        client::transaction_flush();
+        //client::transaction_flush();
+        client::condense_tags();
+
         client::log_no_print("E6-Scraper: Finished processing migrations".to_string());
     }
 }

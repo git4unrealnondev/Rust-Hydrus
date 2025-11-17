@@ -48,6 +48,9 @@ remove_empty_subdirs = "0.1.1"
 r2d2 = "0.8.10"
 r2d2_sqlite = { version = "0.31.0", features = ["bundled"] }
 lazy_static = "1.5.0"
+ipc-channel-mux = "0.0.1"
+crossbeam-channel = "0.5.15"
+parking_lot = {version="0.12.5", features=["send_guard"]}
 
 [features]
 default = ["exe_build"]

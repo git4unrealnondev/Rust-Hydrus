@@ -60,7 +60,7 @@ impl Threads {
     pub fn startwork(
         &mut self,
         jobstorage: Arc<RwLock<crate::jobs::Jobs>>,
-        db: Arc<RwLock<database::Main>>,
+        db: database::Main,
         scrapermanager: sharedtypes::GlobalPluginScraper,
         globalload: Arc<RwLock<GlobalLoad>>,
     ) {
@@ -159,14 +159,13 @@ impl Worker {
     fn new(
         id: usize,
         jobstorage: Arc<RwLock<crate::jobs::Jobs>>,
-        dba: Arc<RwLock<database::Main>>,
+        database: database::Main,
         scraper: sharedtypes::GlobalPluginScraper,
         globalload: Arc<RwLock<GlobalLoad>>,
         threadflagcontrol: Control,
     ) -> Worker {
         // info_log(&format!( "Creating Worker for id: {} Scraper Name: {} With a jobs
         // length of: {}", &id, &scraper._name, &jobstorage..len() ));
-        let db = dba.clone();
         let jobstorage = jobstorage.clone();
         let globalload = globalload.clone();
         let ratelimiter_main;
@@ -190,7 +189,7 @@ impl Worker {
             'bigloop: loop {
                 let jobsstorage;
                 {
-                    jobsstorage = jobstorage.read().unwrap().jobs_get(&scraper).clone();
+                    jobsstorage = jobstorage.read().jobs_get(&scraper).clone();
                 }
 
                 if jobsstorage.is_empty() {
@@ -218,9 +217,8 @@ impl Worker {
                                     api_body,
                                 ) => {
                                     {
-                                        let unwrappydb = &mut db.write().unwrap();
                                         if *overwrite_db_entry && api_namespace.is_some() {
-                                            unwrappydb.setting_add(
+                                            database.setting_add(
                                                 format!(
                                                     "API_NAMESPACED_NAMESPACE_{}_{}",
                                                     key, name
@@ -230,21 +228,21 @@ impl Worker {
                                                 api_namespace.clone(),
                                                 true,
                                             );
+                                            database.transaction_flush();
                                         }
                                         if *overwrite_db_entry && api_body.is_some() {
-                                            unwrappydb.setting_add(
+                                            database.setting_add(
                                                 format!("API_NAMESPACED_BODY_{}_{}", key, name),
                                                 None,
                                                 None,
                                                 api_body.clone(),
                                                 true,
                                             );
+                                            database.transaction_flush();
                                         }
                                     }
-                                    db.write().unwrap().transaction_flush();
-                                    let unwrappydb = &mut db.write().unwrap();
                                     let ns_stored =
-                                        if let Some(setting_obj) = unwrappydb.settings_get_name(
+                                        if let Some(setting_obj) = database.settings_get_name(
                                             &format!("API_NAMESPACED_NAMESPACE_{}_{}", key, name),
                                         ) {
                                             setting_obj.param.clone()
@@ -252,7 +250,7 @@ impl Worker {
                                             None
                                         };
                                     let body_stored =
-                                        if let Some(setting_obj) = unwrappydb.settings_get_name(
+                                        if let Some(setting_obj) = database.settings_get_name(
                                             &format!("API_NAMESPACED_BODY_{}_{}", key, name),
                                         ) {
                                             setting_obj.param.clone()
@@ -310,16 +308,14 @@ impl Worker {
                                 data.reptime = Some(*timestamp);
                                 jobstorage
                                     .write()
-                                    .unwrap()
                                     .jobs_decrement_count(&data, &scraper, &id);
 
                                 // Updates the database with the "new" object. Will have the same ID
                                 // but time and reptime will be consistient to when we should run this
                                 // job next
-                                let unwrappydb = &mut db.write().unwrap();
-                                unwrappydb.jobs_update_db(data);
+                                database.jobs_update_db(data);
                             }
-                            db.read().unwrap().transaction_flush();
+                            database.transaction_flush();
                         }
                     }
 
@@ -379,7 +375,7 @@ Worker: {id} JobId: {} -- While trying to parse parameters we got this error: {:
                                         "Worker: {} JobId: {} -- Telling system to keep job due to previous error.",
                                         id, jobid
                                     ));
-                                    jobstorage.write().unwrap().jobs_remove_job(&scraper, &job);
+                                    jobstorage.write().jobs_remove_job(&scraper, &job);
                                     should_remove_original_job = false;
                                 }
                             }
@@ -507,15 +503,12 @@ Worker: {id} JobId: {} -- While trying to parse parameters we got this error: {:
                                     tag,
                                     None,
                                     jobstorage.clone(),
-                                    db.clone(),
+                                    database.clone(),
                                     &scraper,
                                     &id,
                                     &jobid,
                                     globalload.clone(),
                                 );
-                            }
-                            {
-                                db.read().unwrap().transaction_flush();
                             }
                             // Spawns the multithreaded pool
                             let pool = ThreadPool::default();
@@ -524,7 +517,7 @@ Worker: {id} JobId: {} -- While trying to parse parameters we got this error: {:
                             for mut file in out_st.file {
                                 let ratelimiter_obj = ratelimiter_main.clone();
                                 let globalload = globalload.clone();
-                                let db = db.clone();
+                                let db = database.clone();
                                 let client = client_file.clone();
                                 let jobstorage = jobstorage.clone();
                                 let scraper = scraper.clone();
@@ -549,28 +542,19 @@ Worker: {id} JobId: {} -- While trying to parse parameters we got this error: {:
                     }
                     {
                         if should_remove_original_job {
-                            jobstorage.write().unwrap().jobs_remove_dbjob(
-                                &scraper,
-                                &currentjob,
-                                &id,
-                            );
-                        } else {
-                        }
-                        db.read().unwrap().transaction_flush();
-                        {
                             jobstorage
                                 .write()
-                                .unwrap()
-                                .jobs_remove_job(&scraper, &currentjob);
+                                .jobs_remove_dbjob(&scraper, &currentjob, &id);
+                        } else {
+                        }
+                        {
+                            jobstorage.write().jobs_remove_job(&scraper, &currentjob);
                         }
                     }
                 }
             }
             threadflagcontrol.stop();
-            jobstorage
-                .write()
-                .unwrap()
-                .clear_previously_seen_cache(&scraper);
+            jobstorage.write().clear_previously_seen_cache(&scraper);
         });
         Worker {
             id,
@@ -579,9 +563,9 @@ Worker: {id} JobId: {} -- While trying to parse parameters we got this error: {:
     }
 }
 
-/// Parses tags and adds the tags into the db.
+/// Parses tags and adds the tags into the database.
 pub fn parse_tags(
-    db: Arc<RwLock<database::Main>>,
+    mut database: database::Main,
     tag: &sharedtypes::TagObject,
     file_id: Option<usize>,
     worker_id: &usize,
@@ -593,18 +577,17 @@ pub fn parse_tags(
         sharedtypes::TagType::Normal | sharedtypes::TagType::NormalNoRegex => {
             if tag.tag_type != sharedtypes::TagType::NormalNoRegex {
                 // Runs regex mostly
-                manager.read().unwrap().plugin_on_tag(tag);
+                manager.read().plugin_on_tag(tag);
             }
-            let tag_id = db.write().unwrap().tag_add_tagobject(tag, true);
+            let tag_id = database.tag_add_tagobject(tag, true);
             match file_id {
                 None => {}
                 Some(id) => {
-                    let mut unwrappy = db.write().unwrap();
-                    unwrappy.relationship_add(id, tag_id, true);
+                    database.relationship_add(id, tag_id, true);
                 }
             }
             /*if let Some(fid) = file_id {
-                db.write()
+                database
                     .unwrap()
                     .relationship_tag_add(fid, vec![tag.clone()]);
             }*/
@@ -618,8 +601,7 @@ pub fn parse_tags(
                 }
                 Some(skip_if) => match skip_if {
                     sharedtypes::SkipIf::FileHash(sha512hash) => {
-                        let unwrappy = db.read().unwrap();
-                        if unwrappy.file_get_hash(sha512hash).is_none() {
+                        if database.file_get_hash(sha512hash).is_none() {
                             url_return.insert(jobscraped.clone());
                         }
                     }
@@ -629,17 +611,16 @@ pub fn parse_tags(
                         filter_number,
                     )) => {
                         let mut cnt = 0;
-                        let unwrappy = db.read().unwrap();
-                        if let Some(nidf) = &unwrappy.namespace_get(&namespace_filter.name)
-                            && let Some(nid) = &unwrappy.namespace_get(&unique_tag.namespace.name)
-                            && let Some(tid) = &unwrappy.tag_get_name(unique_tag.tag.clone(), *nid)
+                        if let Some(nidf) = &database.namespace_get(&namespace_filter.name)
+                            && let Some(nid) = &database.namespace_get(&unique_tag.namespace.name)
+                            && let Some(tid) = &database.tag_get_name(unique_tag.tag.clone(), *nid)
                         {
-                            let fids = unwrappy.relationship_get_fileid(tid);
+                            let fids = database.relationship_get_fileid(tid);
                             if fids.len() == 1 {
                                 let fid = fids.iter().next().unwrap();
-                                for tidtofilter in unwrappy.relationship_get_tagid(fid).iter() {
-                                    //if unwrappy.namespace_contains_id(nidf) {
-                                    if unwrappy.namespace_contains_id(nidf, tidtofilter) {
+                                for tidtofilter in database.relationship_get_tagid(fid).iter() {
+                                    //if database.namespace_contains_id(nidf) {
+                                    if database.namespace_contains_id(nidf, tidtofilter) {
                                         cnt += 1;
                                     }
                                 }
@@ -658,8 +639,7 @@ pub fn parse_tags(
                         }
                     }
                     sharedtypes::SkipIf::FileTagRelationship(taginfo) => 'tag: {
-                        let unwrappy = db.read().unwrap();
-                        let nid = unwrappy.namespace_get(&taginfo.namespace.name);
+                        let nid = database.namespace_get(&taginfo.namespace.name);
                         let id = match nid {
                             None => {
                                 println!("Namespace does not exist: {:?}", taginfo.namespace);
@@ -668,13 +648,13 @@ pub fn parse_tags(
                             }
                             Some(id) => id,
                         };
-                        match &unwrappy.tag_get_name(taginfo.tag.clone(), id) {
+                        match &database.tag_get_name(taginfo.tag.clone(), id) {
                             None => {
                                 println!("WillDownload: {}", taginfo.tag);
                                 url_return.insert(jobscraped.clone());
                             }
                             Some(tag_id) => {
-                                let rel_hashset = unwrappy.relationship_get_fileid(tag_id);
+                                let rel_hashset = database.relationship_get_fileid(tag_id);
                                 if rel_hashset.is_empty() {
                                     info_log(format!(
                                         "Worker: {worker_id} JobId: {job_id} -- Will download from {} because tag name {} has no relationship.",
@@ -713,7 +693,7 @@ fn download_add_to_db(
     location: String,
     globalload: Arc<RwLock<GlobalLoad>>,
     client: Arc<RwLock<Client>>,
-    db: Arc<RwLock<database::Main>>,
+    database: database::Main,
     file: &mut sharedtypes::FileObject,
     worker_id: &usize,
     job_id: &usize,
@@ -721,8 +701,7 @@ fn download_add_to_db(
 ) -> Option<usize> {
     // Early exit for if the file is a dead url
     {
-        let unwrappydb = &mut db.read().unwrap();
-        if unwrappydb.check_dead_url(source) {
+        if database.check_dead_url(source) {
             logging::info_log(format!(
                 "Worker: {worker_id} JobID: {job_id} -- Skipping {} because it's a dead link.",
                 source
@@ -731,14 +710,14 @@ fn download_add_to_db(
         }
     }
 
-    let mut_client = &mut client.write().unwrap();
-
-    // Download file doesn't exist. URL doesn't exist in DB Will download
     let blopt;
     {
+        //let mut_client = &mut client.write();
+
+        // Download file doesn't exist. URL doesn't exist in DB Will download
         blopt = download::dlfile_new(
-            mut_client,
-            db.clone(),
+            client,
+            database.clone(),
             file,
             Some(globalload),
             &ratelimiter_obj,
@@ -753,36 +732,28 @@ fn download_add_to_db(
         download::FileReturnStatus::File((hash, file_ext)) => {
             let fileid;
             {
-                let unwrappydb = &mut db.write().unwrap();
+                let ext_id = database.extension_put_string(&file_ext);
 
-                let ext_id = unwrappydb.extension_put_string(&file_ext);
-
-                unwrappydb.storage_put(&location);
-                let storage_id = unwrappydb.storage_get_id(&location).unwrap();
+                let storage_id = database.storage_put(&location);
 
                 let file = sharedtypes::DbFileStorage::NoIdExist(sharedtypes::DbFileObjNoId {
                     hash,
                     ext_id,
                     storage_id,
                 });
-                fileid = unwrappydb.file_add(file);
-                unwrappydb.transaction_flush();
-                let source_url_ns_id = unwrappydb.create_default_source_url_ns_id();
-                let tagid = unwrappydb.tag_add(source, source_url_ns_id, true, None);
-                unwrappydb.relationship_add(fileid, tagid, true);
+                fileid = database.file_add(file);
+                let source_url_ns_id = database.create_default_source_url_ns_id();
+                let tagid = database.tag_add(source, source_url_ns_id, true, None);
+                database.relationship_add(fileid, tagid, true);
             }
-            db.read().unwrap().transaction_flush();
             return Some(fileid);
         }
         download::FileReturnStatus::DeadUrl(dead_url) => {
-            let unwrappydb = &mut db.write().unwrap();
-            unwrappydb.add_dead_url(&dead_url);
-            db.read().unwrap().transaction_flush();
+            database.add_dead_url(&dead_url);
         }
-        _ => {
-            db.read().unwrap().transaction_flush();
-        }
+        _ => {}
     }
+    database.transaction_flush();
     None
 }
 
@@ -791,16 +762,19 @@ fn parse_jobs(
     tag: &sharedtypes::TagObject,
     fileid: Option<usize>,
     jobstorage: Arc<RwLock<crate::jobs::Jobs>>,
-    db: Arc<RwLock<database::Main>>,
+    database: database::Main,
     scraper: &sharedtypes::GlobalPluginScraper,
 
     worker_id: &usize,
     job_id: &usize,
     manager: Arc<RwLock<GlobalLoad>>,
 ) {
-    let urls_to_scrape = parse_tags(db, tag, fileid, worker_id, job_id, manager);
+    let urls_to_scrape = parse_tags(database.clone(), tag, fileid, worker_id, job_id, manager);
+
+    let should_flush = !urls_to_scrape.is_empty();
+
     {
-        let mut joblock = jobstorage.write().unwrap();
+        let mut joblock = jobstorage.write();
         for data in urls_to_scrape {
             // Defualt job object
             let dbjob = sharedtypes::DbJobsObj {
@@ -824,6 +798,11 @@ fn parse_jobs(
             joblock.jobs_add(scraper.clone(), dbjob);
         }
     }
+
+    // Only flush if we got jobs in from this. Should only do this once
+    if should_flush {
+        database.transaction_flush();
+    }
 }
 
 /// Parses weather we should skip downloading the file
@@ -831,29 +810,27 @@ fn parse_jobs(
 fn parse_skipif(
     file_tag: &sharedtypes::SkipIf,
     file_url_source: &String,
-    db: Arc<RwLock<database::Main>>,
+    database: database::Main,
     worker_id: &usize,
     job_id: &usize,
 ) -> Option<usize> {
     match file_tag {
         sharedtypes::SkipIf::FileHash(sha512hash) => {
-            let unwrappy = db.read().unwrap();
-            return unwrappy.file_get_hash(sha512hash);
+            return database.file_get_hash(sha512hash);
         }
         sharedtypes::SkipIf::FileNamespaceNumber((unique_tag, namespace_filter, filter_number)) => {
-            let unwrappydb = db.read().unwrap();
             let mut cnt = 0;
             let fids;
-            if let Some(nidf) = &unwrappydb.namespace_get(&namespace_filter.name)
-                && let Some(nid) = unwrappydb.namespace_get(&unique_tag.namespace.name)
-                && let Some(tid) = &unwrappydb.tag_get_name(unique_tag.tag.clone(), nid)
+            if let Some(nidf) = &database.namespace_get(&namespace_filter.name)
+                && let Some(nid) = database.namespace_get(&unique_tag.namespace.name)
+                && let Some(tid) = &database.tag_get_name(unique_tag.tag.clone(), nid)
             {
-                fids = unwrappydb.relationship_get_fileid(tid);
+                fids = database.relationship_get_fileid(tid);
                 if fids.len() == 1 {
                     let fid = fids.iter().next().unwrap();
-                    for tidtofilter in unwrappydb.relationship_get_tagid(fid).iter() {
-                        if unwrappydb.namespace_contains_id(nidf, tidtofilter) {
-                            //if unwrappydb.namespace_contains_id(nidf, tidtofilter) {
+                    for tidtofilter in database.relationship_get_tagid(fid).iter() {
+                        if database.namespace_contains_id(nidf, tidtofilter) {
+                            //if database.namespace_contains_id(nidf, tidtofilter) {
                             cnt += 1;
                         }
                     }
@@ -875,16 +852,15 @@ fn parse_skipif(
             }
         }
         sharedtypes::SkipIf::FileTagRelationship(tag) => {
-            let unwrappydb = db.read().unwrap();
-            if let Some(nsid) = unwrappydb.namespace_get(&tag.namespace.name)
-                && unwrappydb.tag_get_name(tag.tag.to_string(), nsid).is_some()
+            if let Some(nsid) = database.namespace_get(&tag.namespace.name)
+                && database.tag_get_name(tag.tag.to_string(), nsid).is_some()
             {
                 info_log(format!(
                     "Worker: {worker_id} JobId: {job_id} -- Skipping file: {} Due to skip tag {} already existing in Tags Table.",
                     file_url_source, tag.tag
                 ));
-                if let Some(tid) = unwrappydb.tag_get_name(tag.tag.to_string(), nsid) {
-                    return unwrappydb.relationship_get_one_fileid(&tid);
+                if let Some(tid) = database.tag_get_name(tag.tag.to_string(), nsid) {
+                    return database.relationship_get_one_fileid(&tid);
                 }
             }
         }
@@ -895,7 +871,7 @@ fn parse_skipif(
 /// Main file checking loop manages the downloads
 pub fn main_file_loop(
     file: &mut sharedtypes::FileObject,
-    db: Arc<RwLock<database::Main>>,
+    database: database::Main,
     ratelimiter_obj: Arc<Mutex<Ratelimiter>>,
     globalload: Arc<RwLock<GlobalLoad>>,
     client: Arc<RwLock<Client>>,
@@ -914,12 +890,12 @@ pub fn main_file_loop(
                 // If url exists in db then don't download thread::sleep(Duration::from_secs(10));
                 for file_tag in file.skip_if.iter() {
                     if let Some(file_id) =
-                        parse_skipif(file_tag, &source_url, db.clone(), worker_id, job_id)
+                        parse_skipif(file_tag, &source_url, database.clone(), worker_id, job_id)
                     {
                         for tag in file.tag_list.iter() {
                             dbg!(tag);
                             parse_tags(
-                                db.clone(),
+                                database.clone(),
                                 tag,
                                 Some(file_id),
                                 worker_id,
@@ -927,20 +903,16 @@ pub fn main_file_loop(
                                 globalload.clone(),
                             );
                         }
-                        db.read().unwrap().transaction_flush();
+                        database.transaction_flush();
                         return;
                     }
                 }
 
-                let location = {
-                    let unwrappydb = db.read().unwrap();
-                    unwrappydb.location_get()
-                };
+                let location = { database.location_get() };
 
                 let url_tag;
                 {
-                    let unwrappydb = db.read().unwrap();
-                    url_tag = unwrappydb.tag_get_name(source_url.clone(), source_url_id);
+                    url_tag = database.tag_get_name(source_url.clone(), source_url_id);
                 };
 
                 // Get's the hash & file ext for the file.
@@ -952,7 +924,7 @@ pub fn main_file_loop(
                             location,
                             globalload.clone(),
                             client,
-                            db.clone(),
+                            database.clone(),
                             file,
                             worker_id,
                             job_id,
@@ -966,10 +938,9 @@ pub fn main_file_loop(
                         let file_id;
                         {
                             // We've already got a valid relationship
-                            let unwrappydb = db.read().unwrap();
-                            file_id = unwrappydb.relationship_get_one_fileid(&url_id);
+                            file_id = database.relationship_get_one_fileid(&url_id);
                             /*if let Some(fid) = file_id {
-                                unwrappydb.file_get_id(&fid).unwrap();
+                                database.file_get_id(&fid).unwrap();
                             }*/
                         }
 
@@ -989,7 +960,7 @@ pub fn main_file_loop(
                                     location,
                                     globalload.clone(),
                                     client,
-                                    db.clone(),
+                                    database.clone(),
                                     file,
                                     worker_id,
                                     job_id,
@@ -1005,15 +976,15 @@ pub fn main_file_loop(
 
                 /* dbg!(&fileid);
                 let mut conn = {
-                    let db = db.read().unwrap();
-                    db.get_database_connection()
+                    let db = database;
+                    database.get_database_connection()
                 };
                 let tn = conn.transaction().unwrap();
 
                 for tag in file.tag_list.iter() {
                     parse_tags(
 
-                        db.clone(),
+                        database.clone(),
                         tag,
                         Some(fileid),
                         worker_id,
@@ -1022,7 +993,7 @@ pub fn main_file_loop(
                         false,
                     );
                 }
-                db.read().unwrap().transaction_flush();*/
+                database.transaction_flush();*/
             }
             sharedtypes::FileSource::Bytes(bytes) => {
                 let bytes = &bytes::Bytes::from(bytes);
@@ -1033,12 +1004,11 @@ pub fn main_file_loop(
                     Some(globalload.clone()),
                     &sha512.0,
                     &file_ext,
-                    db.clone(),
+                    database.clone(),
                     file,
                     None,
                 );
-                let unwrappy = db.read().unwrap();
-                fileid = unwrappy.file_get_hash(&sha512.0).unwrap();
+                fileid = database.file_get_hash(&sha512.0).unwrap();
             }
         },
         None => return,
@@ -1046,7 +1016,7 @@ pub fn main_file_loop(
 
     for tag in file.tag_list.iter() {
         parse_tags(
-            db.clone(),
+            database.clone(),
             tag,
             Some(fileid),
             worker_id,
@@ -1058,12 +1028,12 @@ pub fn main_file_loop(
             tag,
             Some(fileid),
             jobstorage.clone(),
-            db.clone(),
+            database.clone(),
             scraper,
             worker_id,
             job_id,
             globalload.clone(),
         );
     }
-    db.read().unwrap().transaction_flush();
+    database.transaction_flush();
 }

@@ -107,8 +107,8 @@ fn parse_string_to_scraperparam(input: &str) -> Vec<sharedtypes::ScraperParam> {
 }
 
 /// Returns the main argument and parses data.
-pub fn main(data: Arc<RwLock<database::Main>>, globalload: Arc<RwLock<GlobalLoad>>) {
-    //pub fn main(data: Arc<RwLock<database::Main>>, scraper: Arc<RwLock<GlobalLoad>>) {
+pub fn main(data: database::Main, globalload: Arc<RwLock<GlobalLoad>>) {
+    //pub fn main(data: database::Main, scraper: Arc<RwLock<GlobalLoad>>) {
     let args = cli_structs::MainWrapper::parse();
     if args.a.is_none() {
         return;
@@ -116,7 +116,6 @@ pub fn main(data: Arc<RwLock<database::Main>>, globalload: Arc<RwLock<GlobalLoad
 
     // Loads settings into DB.
     {
-        let mut data = data.write().unwrap();
         data.load_table(&sharedtypes::LoadDBTable::Settings);
     }
 
@@ -131,7 +130,6 @@ pub fn main(data: Arc<RwLock<database::Main>>, globalload: Arc<RwLock<GlobalLoad
                     }
                     let (_jobtype, jobsmanager) =
                         return_jobtypemanager(addstruct.jobtype, addstruct.recursion.as_ref());
-                    let mut data = data.write().unwrap();
                     data.load_table(&sharedtypes::LoadDBTable::Jobs);
                     data.jobs_add(
                         None,
@@ -150,7 +148,6 @@ pub fn main(data: Arc<RwLock<database::Main>>, globalload: Arc<RwLock<GlobalLoad
                 cli_structs::JobStruct::AddBulk(addstruct) => {
                     let (_jobtype, jobsmanager) =
                         return_jobtypemanager(addstruct.jobtype, addstruct.recursion.as_ref());
-                    let mut data = data.write().unwrap();
                     data.load_table(&sharedtypes::LoadDBTable::Jobs);
                     for bulk in addstruct.bulkadd.iter() {
                         let mut vars = HashMap::new();
@@ -182,7 +179,6 @@ pub fn main(data: Arc<RwLock<database::Main>>, globalload: Arc<RwLock<GlobalLoad
         }
         cli_structs::Test::Search(searchstruct) => match searchstruct {
             cli_structs::SearchStruct::Parent(parent) => {
-                let mut data = data.write().unwrap();
                 data.load_table(&sharedtypes::LoadDBTable::Parents);
                 data.load_table(&sharedtypes::LoadDBTable::Tags);
                 match &data.tag_get_name(parent.tag.clone(), parent.namespace) {
@@ -204,7 +200,6 @@ pub fn main(data: Arc<RwLock<database::Main>>, globalload: Arc<RwLock<GlobalLoad
                 }
             }
             cli_structs::SearchStruct::Fid(id) => {
-                let mut data = data.write().unwrap();
                 data.load_table(&sharedtypes::LoadDBTable::All);
                 let hstags = data.relationship_get_tagid(&id.id);
                 if hstags.is_empty() {
@@ -230,7 +225,6 @@ pub fn main(data: Arc<RwLock<database::Main>>, globalload: Arc<RwLock<GlobalLoad
                 }
             }
             cli_structs::SearchStruct::Tid(id) => {
-                let mut data = data.write().unwrap();
                 data.load_table(&sharedtypes::LoadDBTable::All);
                 let fids = data.relationship_get_fileid(&id.id);
                 if !fids.is_empty() {
@@ -241,7 +235,6 @@ pub fn main(data: Arc<RwLock<database::Main>>, globalload: Arc<RwLock<GlobalLoad
                 }
             }
             cli_structs::SearchStruct::Tag(tag) => {
-                let mut data = data.write().unwrap();
                 data.load_table(&sharedtypes::LoadDBTable::All);
                 let nsid = data.namespace_get(&tag.namespace);
                 if let Some(nsid) = nsid {
@@ -269,7 +262,6 @@ pub fn main(data: Arc<RwLock<database::Main>>, globalload: Arc<RwLock<GlobalLoad
                 }
             }
             cli_structs::SearchStruct::Hash(hash) => {
-                let mut data = data.write().unwrap();
                 data.load_table(&sharedtypes::LoadDBTable::All);
                 let file_id = data.file_get_hash(&hash.hash);
                 match file_id {
@@ -311,15 +303,12 @@ pub fn main(data: Arc<RwLock<database::Main>>, globalload: Arc<RwLock<GlobalLoad
         },
         cli_structs::Test::Tasks(taskstruct) => match taskstruct {
             cli_structs::TasksStruct::Import(directory) => {
-                {
-                    let mut unwrappy = data.write().unwrap();
-                    unwrappy.load_table(&sharedtypes::LoadDBTable::Files);
-                    unwrappy.load_table(&sharedtypes::LoadDBTable::Relationship);
-                    unwrappy.load_table(&sharedtypes::LoadDBTable::Tags);
-                    unwrappy.load_table(&sharedtypes::LoadDBTable::Namespace);
-                    unwrappy.load_table(&sharedtypes::LoadDBTable::Parents);
-                    unwrappy.enclave_create_default_file_import();
-                }
+                data.load_table(&sharedtypes::LoadDBTable::Files);
+                data.load_table(&sharedtypes::LoadDBTable::Relationship);
+                data.load_table(&sharedtypes::LoadDBTable::Tags);
+                data.load_table(&sharedtypes::LoadDBTable::Namespace);
+                data.load_table(&sharedtypes::LoadDBTable::Parents);
+                data.enclave_create_default_file_import();
 
                 for local_file in directory.location.iter() {
                     let mut files = HashMap::new();
@@ -373,7 +362,7 @@ pub fn main(data: Arc<RwLock<database::Main>>, globalload: Arc<RwLock<GlobalLoad
                             // Will hardlink the file
                             sharedtypes::FileAction::HardLink => {
                                 if let Some(fid) = file_id {
-                                    let db = data.read().unwrap();
+                                    let db = data.read();
                                     let location = db.get_file( &fid);
                                     if let Some(dbfile_location) = location {
                                         std::fs::remove_file(file).unwrap();
@@ -393,12 +382,12 @@ pub fn main(data: Arc<RwLock<database::Main>>, globalload: Arc<RwLock<GlobalLoad
             },
             cli_structs::TasksStruct::Reimport(reimp) => match reimp {
                 cli_structs::Reimport::DirectoryLocation(loc) => {
-                    //let data = data.read().unwrap();
+                    //let data = data.read();
                     if !Path::new(&loc.location).exists() {
                         println!("Couldn't find location: {}", &loc.location);
                     }
                     /* // Loads the scraper info for parsing.
-                    let scraperlibrary = scraper.read().unwrap().filter_sites_return_lib(&loc.site);
+                    let scraperlibrary = scraper.read().filter_sites_return_lib(&loc.site);
                     let libload = match scraperlibrary {
                         None => {
                             println!("Cannot find a loaded scraper. {}", &loc.site);
@@ -487,18 +476,14 @@ pub fn main(data: Arc<RwLock<database::Main>>, globalload: Arc<RwLock<GlobalLoad
                 let dbstore = data.clone();
                 match db {
                     cli_structs::Database::ConsistencyCheck => {
-                        let mut data = data.write().unwrap();
                         data.check_relationship_tag_relations();
                     }
                     cli_structs::Database::BackupDB => {
                         // backs up the db. check the location in setting or code if I change anything lol
-                        let mut data = data.write().unwrap();
 
                         data.backup_db();
                     }
                     cli_structs::Database::CheckFiles(action) => {
-                        let mut data = data.write().unwrap();
-
                         data.check_db_paths();
 
                         // This will check files in the database and will see if they even exist.
@@ -667,16 +652,13 @@ pub fn main(data: Arc<RwLock<database::Main>>, globalload: Arc<RwLock<GlobalLoad
                         let _ = std::fs::remove_file("fileexists.txt");
                     }
                     cli_structs::Database::CheckInMemdb => {
-                        let mut data = data.write().unwrap();
                         data.load_table(&sharedtypes::LoadDBTable::Tags);
                         pause();
                     }
                     cli_structs::Database::CompressDatabase => {
-                        let mut data = data.write().unwrap();
                         data.condense_db_all();
                     }
                     cli_structs::Database::RemoveWhereNot(db_n_rmv) => {
-                        let mut data = data.write().unwrap();
                         let ns_id = match db_n_rmv {
                             cli_structs::NamespaceInfo::NamespaceString(ns) => {
                                 data.load_table(&sharedtypes::LoadDBTable::Namespace);
@@ -713,7 +695,6 @@ pub fn main(data: Arc<RwLock<database::Main>>, globalload: Arc<RwLock<GlobalLoad
                     }
                     // Removing db namespace. Will get id to remove then remove it.
                     cli_structs::Database::Remove(db_rmv) => {
-                        let mut data = data.write().unwrap();
                         data.load_table(&sharedtypes::LoadDBTable::Namespace);
                         let ns_id = match db_rmv {
                             cli_structs::NamespaceInfo::NamespaceString(ns) => {
@@ -744,6 +725,6 @@ pub fn main(data: Arc<RwLock<database::Main>>, globalload: Arc<RwLock<GlobalLoad
     }
 
     // I hate this but it works and keeps everything self contained
-    data.read().unwrap().transaction_flush();
+    data.transaction_flush();
     // AllFields::Nothing
 }

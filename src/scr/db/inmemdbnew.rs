@@ -231,11 +231,11 @@ impl NewinMemDB {
     }
 
     /// Gets all running jobs
-    pub fn jobref_get_isrunning(&self) -> HashSet<&sharedtypes::DbJobsObj> {
+    pub fn jobref_get_isrunning(&self) -> HashSet<sharedtypes::DbJobsObj> {
         let mut out = HashSet::new();
         for each in self._jobs_id_data.values() {
             if each.isrunning {
-                out.insert(each);
+                out.insert(each.clone());
             }
         }
         out
