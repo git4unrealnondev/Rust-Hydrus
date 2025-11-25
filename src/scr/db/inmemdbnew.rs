@@ -1710,10 +1710,12 @@ mod inmemdb {
     #[test]
     fn jobs_check() {
         let mut db = setup_db();
-        let none = db.jobs_get(&0);
+        let current_id = db.jobs_get_max().clone();
+
+        let none = db.jobs_get(&current_id);
         assert_eq!(None, none);
         let jobobj = sharedtypes::DbJobsObj {
-            id: Some(*db.jobs_get_max()),
+            id: Some(current_id),
             time: 0,
             reptime: None,
             priority: sharedtypes::DEFAULT_PRIORITY,
@@ -1730,7 +1732,7 @@ mod inmemdb {
             user_data: BTreeMap::new(),
         };
         db.jobs_add(jobobj.clone());
-        assert_eq!(db.jobs_get(&0).unwrap(), &jobobj);
+        assert_eq!(db.jobs_get(&current_id).unwrap(), &jobobj);
     }
 
     #[test]

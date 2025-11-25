@@ -1,7 +1,7 @@
 use crate::logging::error_log;
-
+use url::Url;
 /// Returns the location as a string that will store the string
-pub fn getfinpath(location: &String, hash: &String) -> String {
+pub fn getfinpath(location: &String, hash: &String, create_dir: bool) -> String {
     // Gets and makes folderpath.
     let final_loc = format!(
         "{}/{}{}/{}{}/{}{}",
@@ -13,11 +13,26 @@ pub fn getfinpath(location: &String, hash: &String) -> String {
         hash.chars().nth(4).unwrap(),
         hash.chars().nth(5).unwrap()
     );
-    match std::fs::create_dir_all(&final_loc) {
-        Ok(_) => {}
-        Err(err) => {
-            error_log(format!("{} {}", hash, err));
+    if create_dir {
+        match std::fs::create_dir_all(&final_loc) {
+            Ok(_) => {}
+            Err(err) => {
+                error_log(format!("{} {}", hash, err));
+            }
         }
     }
     final_loc
+}
+
+///
+/// Checks if a url is valid
+///
+pub fn check_url(input: &String) -> bool {
+    if let Ok(url) = url::Url::parse(input) {
+        if url.host_str().is_some() {
+            return true;
+        }
+    }
+
+    false
 }

@@ -322,18 +322,23 @@ impl Main {
     /// Creates tje database tables for a V5 upgrade
     ///
     pub fn enclave_create_database_v5(&self) {
+        dbg!("c");
+        self.transaction_flush();
         // Creates a location to store the location of files
         if !self.check_table_exists("FileStorageLocations".to_string()) {
             let keys = &vec_of_strings!("id", "location");
             let vals = &vec_of_strings!("INTEGER PRIMARY KEY", "TEXT NOT NULL");
             self.table_create(&"FileStorageLocations".to_string(), keys, vals);
+            self.transaction_flush();
         }
 
+        dbg!("d");
         // Creates a location to store the location of the extension of a file
         if !self.check_table_exists("FileExtensions".to_string()) {
             let keys = &vec_of_strings!("id", "extension");
             let vals = &vec_of_strings!("INTEGER PRIMARY KEY", "TEXT NOT NULL UNIQUE");
             self.table_create(&"FileExtensions".to_string(), keys, vals);
+            self.transaction_flush();
         }
 
         if !self.check_table_exists("EnclaveAction".to_string()) {
@@ -344,6 +349,7 @@ impl Main {
                 "TEXT NOT NULL"
             );
             self.table_create(&"EnclaveAction".to_string(), keys, vals);
+            self.transaction_flush();
         }
 
         // Maps enclave id's to file ids
@@ -351,6 +357,7 @@ impl Main {
             let keys = &vec_of_strings!("file_id", "enclave_id", "timestamp");
             let vals = &vec_of_strings!("INTEGER NOT NULL", "INTEGER NOT NULL", "INTEGER NOT NULL");
             self.table_create(&"FileEnclaveMapping".to_string(), keys, vals);
+            self.transaction_flush();
         }
 
         // Enclave condition
@@ -362,6 +369,7 @@ impl Main {
                 "TEXT NOT NULL"
             );
             self.table_create(&"EnclaveCondition".to_string(), keys, vals);
+            self.transaction_flush();
         }
 
         // Lists of conditions if X do Y
@@ -379,6 +387,7 @@ impl Main {
                 "INTEGER NOT NULL"
             );
             self.table_create(&"EnclaveConditionList".to_string(), keys, vals);
+            self.transaction_flush();
         }
 
         // Intermedidate table
@@ -396,12 +405,14 @@ impl Main {
                 "INTEGER NOT NULL"
             );
             self.table_create(&"EnclaveActionOrderList".to_string(), keys, vals);
+            self.transaction_flush();
         }
 
         if !self.check_table_exists("Enclave".to_string()) {
             let keys = &vec_of_strings!("id", "enclave_name", "priority");
             let vals = &vec_of_strings!("INTEGER PRIMARY KEY", "TEXT NOT NULL", "INTEGER NOT NULL");
             self.table_create(&"Enclave".to_string(), keys, vals);
+            self.transaction_flush();
         }
     }
 
@@ -424,6 +435,7 @@ impl Main {
             .enclave_condition_link_get_id(&condition_id, &action_id)
             .unwrap();
 
+        self.transaction_flush();
         self.enclave_action_order_link_put(&enclave_id, &condition_link_id, &0);
     }
 
@@ -703,16 +715,19 @@ impl Main {
             return;
         }
 
-        self.transaction_exclusive_start();
-        let tn = self.write_conn.lock();
-        let mut prep = tn
+        self.transaction_start();
+        {
+            let tn = self.write_conn.lock();
+            let mut prep = tn
             .prepare("INSERT OR REPLACE INTO EnclaveActionOrderList (enclave_id,enclave_conditional_list_id, enclave_action_position) VALUES (? ,? ,?)")
             .unwrap();
-        let _ = prep.insert(params![
-            enclave_id,
-            enclave_conditional_list_id,
-            enclave_action_position
-        ]);
+            let _ = prep.insert(params![
+                enclave_id,
+                enclave_conditional_list_id,
+                enclave_action_position
+            ]);
+        }
+        self.transaction_flush();
     }
     ///
     /// Gives id from conditional linked list

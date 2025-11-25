@@ -1,5 +1,6 @@
 #![allow(unused_variables)]
 
+use crate::sharedtypes::DbFileStorage;
 use crate::sharedtypes::{self};
 use interprocess::local_socket::GenericNamespaced;
 use interprocess::local_socket::ToNsName;
@@ -53,6 +54,14 @@ pub fn load_table(table: sharedtypes::LoadDBTable) -> bool {
 pub fn get_file(fileid: usize) -> Option<String> {
     init_data_request(&types::SupportedRequests::Database(
         types::SupportedDBRequests::GetFileLocation(fileid),
+    ))
+}
+///
+/// Gets the dbfilestorage refence for everything
+///
+pub fn get_file_raw(fileid: usize) -> Option<DbFileStorage> {
+    init_data_request(&types::SupportedRequests::Database(
+        types::SupportedDBRequests::GetFileRaw(fileid),
     ))
 }
 
@@ -336,6 +345,33 @@ pub fn job_add(job: sharedtypes::DbJobsObj) -> bool {
 pub fn condense_tags() -> bool {
     init_data_request(&types::SupportedRequests::Database(
         types::SupportedDBRequests::CondenseTags(),
+    ))
+}
+
+///
+/// Gets all tag ids that have more then count relations with a file
+/// Can be slow
+///
+pub fn relationship_get_tagid_where_namespace_count(
+    namespace_id: usize,
+    count: usize,
+    dir: sharedtypes::GreqLeqOrEq,
+) -> Vec<usize> {
+    init_data_request(&types::SupportedRequests::Database(
+        types::SupportedDBRequests::GetRelationshipTagidWhereNamespace((namespace_id, count, dir)),
+    ))
+}
+///
+/// Gets all file ids that have more then count relations with a file
+/// Can be slow
+///
+pub fn relationship_get_fileid_where_namespace_count(
+    namespace_id: usize,
+    count: usize,
+    dir: sharedtypes::GreqLeqOrEq,
+) -> Vec<usize> {
+    init_data_request(&types::SupportedRequests::Database(
+        types::SupportedDBRequests::GetRelationshipFileidWhereNamespace((namespace_id, count, dir)),
     ))
 }
 

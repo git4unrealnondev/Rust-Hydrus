@@ -10,8 +10,7 @@ use log::{error, warn};
 use parking_lot::{Mutex, RwLock};
 
 // use std::sync::{data, Mutex};
-use std::sync::Arc;
-use std::{thread, time};
+use std::{sync::Arc, thread, time};
 
 pub const VERS: usize = 9;
 pub const DEFAULT_LOC_PLUGIN: &str = "plugins";
@@ -174,7 +173,7 @@ fn main() {
 
         // Processes any CLI input here
         //cli::main(database.clone(), globalload_database.clone());
-        cli::main(database.clone(), globalload_database.clone());
+        cli::main(database.clone());
 
         database.transaction_flush();
     }

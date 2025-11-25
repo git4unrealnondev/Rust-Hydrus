@@ -5,6 +5,8 @@
 #[cfg(feature = "regex")]
 use regex::Regex;
 
+#[cfg(feature = "clap")]
+use clap::Subcommand;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashSet};
 #[cfg(feature = "clap")]
@@ -36,6 +38,22 @@ pub enum JobCacheType {
     TimeReptimeParam,
     // Just checks the params field
     Param,
+}
+#[derive(
+    Debug, Hash, Eq, PartialEq, Clone, Serialize, bincode::Encode, bincode::Decode, Deserialize,
+)]
+
+pub enum GreqLeqOrEq {
+    GreaterThan,
+    LessThan,
+    Equal,
+}
+#[cfg_attr(feature = "clap", derive(Debug, Subcommand))]
+pub enum CheckSourceUrlsEnum {
+    /// Just print the suspected urls
+    Print,
+    /// Delete the bad suspect urls
+    Delete,
 }
 
 ///

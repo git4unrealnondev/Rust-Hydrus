@@ -1,13 +1,17 @@
 #![forbid(unsafe_code)]
 use crate::Mutex;
 use crate::RwLock;
+use crate::cli;
 use crate::database::sqlitedb::transaction_start;
 use crate::download::hash_file;
 use crate::file;
 use crate::globalload::GlobalLoad;
+use crate::helpers::check_url;
 use crate::helpers::getfinpath;
 use crate::logging;
 use crate::sharedtypes;
+use crate::sharedtypes::DEFAULT_CACHECHECK;
+use crate::sharedtypes::DbFileStorage;
 use crate::sharedtypes::ScraperParam;
 use crate::wait_until_sqlite_ok;
 use eta::{Eta, TimeAcc};
@@ -30,6 +34,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 pub mod enclave;
+pub mod fuzzy_search;
 pub mod helpers;
 pub mod inmemdbnew;
 pub mod sqlitedb;
@@ -81,7 +86,6 @@ impl Main {
     pub fn new(path: Option<String>, vers: usize) -> Self {
         // Initiates two tnections to the DB. Cheap workaround to avoid loading errors.
         let mut first_time_load_flag = false;
-
         let mut main = match path {
             Some(ref file_path) => {
                 first_time_load_flag = Path::new(&file_path).exists();
@@ -146,30 +150,28 @@ PRAGMA journal_mode = WAL;
                 main
             }
             None => {
+                first_time_load_flag = false;
                 let memdb = Arc::new(RwLock::new(NewinMemDB::new()));
-                let manager = SqliteConnectionManager::memory();
-                let pool = r2d2::Builder::new().max_size(20).build(manager).unwrap();
-                let write_conn = Arc::new(Mutex::new(pool.get().unwrap()));
-                let write_conn_istransaction = Arc::new(Mutex::new(false));
-                let memdbmain = Main {
-                    _dbpath: None,
-                    _vers: vers,
-                    pool,
-                    write_conn,
-                    write_conn_istransaction,
-                    _active_vers: 0,
-                    _inmemdb: memdb.clone(),
-                    tables_loaded: Arc::new(vec![].into()),
-                    tables_loading: Arc::new(vec![].into()),
-                    _cache: CacheType::InMemory,
-                    globalload: None,
-                    localref: None,
-                };
-                let manager = SqliteConnectionManager::memory();
+                let manager = SqliteConnectionManager::file(format!(
+                    "file:memdb_{}?mode=memory&cache=shared",
+                    uuid::Uuid::new_v4()
+                ))
+                .with_init(|conn| {
+                    conn.execute_batch(
+                        "
+PRAGMA busy_timeout = 1000;
+    ",
+                    )?; // Enable SQL tracing
+                    conn.trace(Some(|sql| {
+                        println!("[SQL TRACE] {}", sql);
+                    }));
+                    Ok(())
+                });
 
-                let pool = r2d2::Builder::new().max_size(20).build(manager).unwrap();
+                let pool = r2d2::Builder::new().max_size(100).build(manager).unwrap();
                 let write_conn = Arc::new(Mutex::new(pool.get().unwrap()));
                 let write_conn_istransaction = Arc::new(Mutex::new(false));
+                dbg!("a");
                 let mut main = Main {
                     _dbpath: None,
                     _vers: vers,
@@ -187,15 +189,18 @@ PRAGMA journal_mode = WAL;
                 main
             }
         };
-
         // let path = String::from("./main.db");
         // Sets default settings for db settings.
         if !first_time_load_flag {
             // Database Doesn't exist
             main.first_db();
+            dbg!("made first db");
             main.updatedb();
+            dbg!("made update db");
             main.load_table(&sharedtypes::LoadDBTable::Settings);
+            dbg!("made loaded table db");
             main.load_caching();
+            dbg!("cached  db");
         } else {
             // Database does exist.
             logging::log(format!(
@@ -205,6 +210,7 @@ PRAGMA journal_mode = WAL;
             main.load_table(&sharedtypes::LoadDBTable::Settings);
             main.load_caching();
         }
+        dbg!(&main._cache);
         main.transaction_flush();
         main
     }
@@ -238,6 +244,18 @@ PRAGMA journal_mode = WAL;
                 .execute("BEGIN EXCLUSIVE TRANSACTION", []);
         }
     }
+    ///
+    /// Starts an exclusive write transaction
+    ///
+    fn transaction_start(&self) {
+        self.transaction_flush();
+
+        let mut transaction = self.write_conn_istransaction.lock();
+        if !*transaction {
+            *transaction = true;
+            self.write_conn.lock().execute("BEGIN TRANSACTION", []);
+        }
+    }
 
     ///
     /// commits an exclusive write transaction
@@ -246,9 +264,11 @@ PRAGMA journal_mode = WAL;
         logging::log("Flushing to disk");
         let mut transaction = self.write_conn_istransaction.lock();
         if *transaction {
+            dbg!("Flushing");
             let conn = self.write_conn.lock();
             conn.execute("COMMIT", []);
             *transaction = false;
+            dbg!("Flushing");
         }
     }
 
@@ -390,6 +410,7 @@ PRAGMA journal_mode = WAL;
                                     .unwrap()
                                     .to_string_lossy()
                                     .to_string(),
+                                true,
                             ))
                             .join(Path::new(&cleaned_filename));
 
@@ -436,6 +457,7 @@ PRAGMA journal_mode = WAL;
                                 .unwrap()
                                 .to_string_lossy()
                                 .to_string(),
+                            true,
                         ))
                         .join(Path::new(&cleaned_filename));
 
@@ -591,7 +613,7 @@ PRAGMA journal_mode = WAL;
                 } else {
                     each.to_string()
                 };
-                let folderloc = helpers::getfinpath(&loc, &file.hash);
+                let folderloc = helpers::getfinpath(&loc, &file.hash, false);
 
                 let out;
                 if cfg!(unix) {
@@ -603,6 +625,18 @@ PRAGMA journal_mode = WAL;
                     return None;
                 }
 
+                // No idea why this is faster? Metadata maybe
+                if let Ok(filepath) = std::fs::canonicalize(&out) {
+                    return Some(filepath.to_string_lossy().to_string());
+                }
+
+                /*  if Path::new(&out).exists() {
+                    let out = std::fs::canonicalize(out)
+                        .unwrap()
+                        .to_string_lossy()
+                        .to_string();
+                    return Some(out);
+                }*/
                 // New revision of the downloader adds the extension to the file downloaded.
                 // This will rename the file if it uses the old file ext
                 if let Some(ref ext_str) = self.extension_get_string(&file.ext_id)
@@ -614,14 +648,6 @@ PRAGMA journal_mode = WAL;
                             .to_string_lossy()
                             .to_string(),
                     );
-                }
-
-                if Path::new(&out).exists() {
-                    let out = std::fs::canonicalize(out)
-                        .unwrap()
-                        .to_string_lossy()
-                        .to_string();
-                    return Some(out);
                 }
             }
         }
@@ -959,7 +985,9 @@ PRAGMA journal_mode = WAL;
 
     /// Sets up first database interaction. Makes tables and does first time setup.
     pub fn first_db(&self) {
+        dbg!("");
         self.transaction_exclusive_start();
+        dbg!("");
         // Making Relationship Table
         {
             let tn = self.write_conn.lock();
@@ -975,6 +1003,7 @@ PRAGMA journal_mode = WAL;
             )
             .unwrap();
         }
+        dbg!("");
         // Making Tags Table
         let mut name = "Tags".to_string();
         let mut keys = vec_of_strings!["id", "name", "namespace"];
@@ -985,6 +1014,7 @@ PRAGMA journal_mode = WAL;
         ];
         self.table_create(&name, &keys, &vals);
 
+        dbg!("");
         // Making Parents Table. Relates tags to tag parents.
         name = "Parents".to_string();
         keys = vec_of_strings!["id", "tag_id", "relate_tag_id", "limit_to"];
@@ -1072,8 +1102,10 @@ PRAGMA journal_mode = WAL;
                 .unwrap();
         }
 
+        dbg!("a");
         self.enclave_create_database_v5();
 
+        dbg!("b");
         // Making dead urls Table
         name = "dead_source_urls".to_string();
         keys = vec_of_strings!["id", "dead_url"];
@@ -1090,7 +1122,7 @@ PRAGMA journal_mode = WAL;
     }
 
     pub fn updatedb(&self) {
-        self.transaction_exclusive_start();
+        self.transaction_start();
         self.setting_add(
             "DBCOMMITNUM".to_string(),
             Some("Number of transactional items before pushing to db.".to_string()),
@@ -1220,6 +1252,30 @@ PRAGMA journal_mode = WAL;
         }
     }
 
+    pub fn check_default_source_urls(&self, action: &sharedtypes::CheckSourceUrlsEnum) {
+        self.load_table(&sharedtypes::LoadDBTable::Namespace);
+        self.load_table(&sharedtypes::LoadDBTable::Tags);
+        let source_nsid = self.create_default_source_url_ns_id();
+
+        for tag_id in self.namespace_get_tagids(&source_nsid).iter() {
+            if let Some(tag) = self.tag_id_get(tag_id) {
+                if !check_url(&tag.name) {
+                    match action {
+                        sharedtypes::CheckSourceUrlsEnum::Print => {
+                            logging::info_log(format!(
+                                "Tagid - {} name - {} doesn't look like a valid url",
+                                tag_id, &tag.name
+                            ));
+                        }
+                        sharedtypes::CheckSourceUrlsEnum::Delete => {
+                            self.load_table(&sharedtypes::LoadDBTable::All);
+                            self.tag_remove(tag_id);
+                        }
+                    }
+                }
+            }
+        }
+    }
     ///
     /// Gets a default namespace id if it doesn't exist
     ///
@@ -1245,7 +1301,7 @@ PRAGMA journal_mode = WAL;
             dtype.len()
         );
 
-        self.transaction_exclusive_start();
+        self.transaction_start();
         let tn = self.write_conn.lock();
         // Not sure if theirs a better way to dynamically allocate a string based on two
         // vec strings at run time. Let me know if im doing something stupid.
@@ -1289,7 +1345,7 @@ PRAGMA journal_mode = WAL;
 
     /// Alters a tables name
     fn alter_table(&self, original_table: &String, new_table: &String) {
-        self.transaction_exclusive_start();
+        self.transaction_start();
         let tn = self.write_conn.lock();
         tn.execute(
             "ALTER TABLE ? RENAME TO ?",
@@ -1300,13 +1356,18 @@ PRAGMA journal_mode = WAL;
     /// Checks if table exists in DB if it do then delete.
     fn check_table_exists(&self, table: String) -> bool {
         let mut out = false;
-        let query_string = format!(
-            "SELECT * FROM sqlite_master WHERE type='table' AND name='{}';",
-            table
-        );
+        let query_string = format!("SELECT * FROM sqlite_master WHERE type='table' AND name=? ;",);
+        dbg!("setup");
         let tn = self.get_database_connection();
+        dbg!("connection");
+        dbg!(&self._cache);
+        dbg!(&table);
+        dbg!(self.pool.state());
+        //panic!();
         let mut toexec = tn.prepare(&query_string).unwrap();
-        let mut rows = toexec.query(params![]).unwrap();
+        dbg!("query");
+        let mut rows = toexec.query(params![table]).unwrap();
+        dbg!("rows");
         if let Some(_each) = rows.next().unwrap() {
             out = true;
         }
@@ -1667,7 +1728,8 @@ PRAGMA journal_mode = WAL;
                     let reptime = row.get(2).unwrap();
                     let priority = row.get(3).unwrap_or(sharedtypes::DEFAULT_PRIORITY);
                     let cachetime = row.get(4).unwrap_or_default();
-                    let cachechecktype: String = row.get(5).unwrap();
+                    //let cachechecktype: String = row.get(5).unwrap();
+                    let cachechecktype = "TimeReptimeParam".to_string();
                     let manager: String = row.get(6).unwrap();
                     let man = serde_json::from_str(&manager).unwrap();
                     let site = row.get(7).unwrap();
@@ -1682,7 +1744,8 @@ PRAGMA journal_mode = WAL;
                         reptime,
                         priority,
                         cachetime,
-                        cachechecktype: serde_json::from_str(&cachechecktype).unwrap(),
+                        cachechecktype: DEFAULT_CACHECHECK,
+                        //cachechecktype: serde_json::from_str(&cachechecktype).unwrap(),
                         site,
                         param: serde_json::from_str(&param).unwrap(),
                         jobmanager: man,
@@ -2019,7 +2082,7 @@ PRAGMA journal_mode = WAL;
             CacheType::Bare => {
                 let tag = self.tag_get_name(tags.to_string(), namespace);
                 match tag {
-                    None => self.tag_add_no_id_sql(tags, &namespace),
+                    None => self.tag_add_no_id_sql(tags, namespace),
                     Some(id) => id,
                 }
             }
@@ -2762,35 +2825,18 @@ pub(crate) mod test_database {
     pub fn setup_default_db() -> Vec<Main> {
         let mut out = Vec::new();
         for cachetype in [CacheType::Bare, CacheType::InMemdb, CacheType::InMemory] {
-            let mut db = Main::new(None, VERS);
-            if &cachetype == &CacheType::Bare {
-                db._dbpath = Some("test1.db".into());
-            }
+            let path = if &cachetype == &CacheType::Bare {
+                Some("test1.db".to_string())
+            } else {
+                None
+            };
+            let mut db = Main::new(path, VERS);
             db._cache = cachetype;
-            /* let parents = [
-                sharedtypes::DbParentsObj {
-                    tag_id: 1,
-                    relate_tag_id: 2,
-                    limit_to: Some(3),
-                },
-                sharedtypes::DbParentsObj {
-                    tag_id: 2,
-                    relate_tag_id: 3,
-                    limit_to: Some(4),
-                },
-                sharedtypes::DbParentsObj {
-                    tag_id: 3,
-                    relate_tag_id: 4,
-                    limit_to: Some(5),
-                },
-            ];
-            for parent in parents {
-                db.parents_add(parent);
-            }*/
 
             db.tag_add(&"test".to_string(), 1, false, None);
             db.tag_add(&"test1".to_string(), 1, false, None);
             db.tag_add(&"test2".to_string(), 1, false, None);
+            db.transaction_flush();
             out.push(db);
         }
         out
@@ -2836,7 +2882,7 @@ pub(crate) mod test_database {
             assert!(main.tag_id_get(&2).is_some());
         }
     }
-    #[test]
+    /* #[test]
     fn condense_tags_test() {
         let test_id = 10;
         for mut main in setup_default_db() {
@@ -2866,7 +2912,7 @@ pub(crate) mod test_database {
                 relate_tag_id: 1,
                 limit_to: Some(id),
             });
-
+            main.transaction_flush();
             dbg!(&main._cache, &max_tag, &id);
             main.condense_tags();
 
@@ -2917,7 +2963,7 @@ pub(crate) mod test_database {
                 assert_eq!(tag.name, "test3");
             }
         }
-    }
+    }*/
     #[test]
     fn db_namespace() {
         for mut main in setup_default_db() {

@@ -22,7 +22,7 @@ pub fn get_global_info() -> Vec<sharedtypes::GlobalPluginScraper> {
         },
     ));
     main.callbacks = vec![
-        sharedtypes::GlobalCallbacks::Start(sharedtypes::StartupThreadType::SpawnInline),
+        sharedtypes::GlobalCallbacks::Start(sharedtypes::StartupThreadType::Spawn),
         sharedtypes::GlobalCallbacks::Download,
         sharedtypes::GlobalCallbacks::Import,
     ];
@@ -187,7 +187,7 @@ fn check_existing_db() {
 
     let mut utable_storage: HashMap<Supset, usize> = HashMap::new();
     let mut utable_count: HashMap<Supset, usize> = HashMap::new();
-    let mut modernstorage: HashMap<sharedtypes::DbFileObj, Vec<Supset>> = HashMap::new();
+    let mut modernstorage: HashMap<usize, Vec<Supset>> = HashMap::new();
 
     let mut table_skip: Vec<Supset> = Vec::new();
 
@@ -223,41 +223,35 @@ fn check_existing_db() {
         let table_temp = sharedtypes::LoadDBTable::All;
         client::load_table(table_temp);
 
-        let file_ids = client::file_get_list_all();
-        let mut total = file_ids.clone();
         let ctab = TableData {
             name: get_set(table).name,
             description: get_set(table).description,
         };
         let utable = check_existing_db_table(ctab);
         utable_storage.insert(table, utable);
-        let huetable = client::namespace_get_tagids(utable);
 
-        for each in huetable {
-            for tag in client::relationship_get_fileid(each) {
-                total.remove(&tag);
-            }
-        }
-
-        for item in &total {
-            match item.1 {
-                sharedtypes::DbFileStorage::Exist(fileobj) => {
-                    match modernstorage.get_mut(fileobj) {
-                        None => {
-                            modernstorage.insert(fileobj.clone(), vec![table]);
-                            *utable_count.get_mut(&table).unwrap() += 1;
-                        }
-                        Some(intf) => {
-                            intf.push(table);
-                            *utable_count.get_mut(&table).unwrap() += 1;
-                        }
-                    }
+        let total = client::relationship_get_fileid_where_namespace_count(
+            utable,
+            0,
+            sharedtypes::GreqLeqOrEq::Equal,
+        );
+        dbg!(&utable, &total);
+        for file_id in &total {
+            match modernstorage.get_mut(file_id) {
+                None => {
+                    modernstorage.insert(file_id.clone(), vec![table]);
+                    *utable_count.get_mut(&table).unwrap() += 1;
                 }
-                _ => {}
+                Some(intf) => {
+                    intf.push(table);
+                    *utable_count.get_mut(&table).unwrap() += 1;
+                }
             }
         }
         client::log(format!("Ended table loop for table: {:?}", &table));
     }
+
+    dbg!(&modernstorage);
     let failed_id: Arc<Mutex<HashMap<Supset, usize>>> = Arc::new(Mutex::new(HashMap::new()));
     let hashed_id: Arc<Mutex<HashMap<Supset, usize>>> = Arc::new(Mutex::new(HashMap::new()));
     for table in Supset::iter() {
@@ -299,17 +293,17 @@ fn check_existing_db() {
 
     // Main loop paralel iterated for each file.
     modernstorage.par_iter().for_each(|modern| {
-        if let Some(fbyte) = client::get_file(modern.0.id) {
+        if let Some(fbyte) = client::get_file(*modern.0) {
             let byte = std::fs::read(fbyte).unwrap();
             for hashtype in modern.1 {
                 if let Some(hash) = hash_file(hashtype, &byte) {
                     client::log_no_print(format!(
                         "FileHash - Hashtype: {:?} Hash: {} Fileid: {}",
-                        &hashtype, &hash, modern.0.id
+                        &hashtype, &hash, modern.0
                     ));
                     let tid =
                         client::tag_add(hash, *utable_storage.get(&hashtype).unwrap(), true, None);
-                    client::relationship_add(modern.0.id, tid);
+                    client::relationship_add(*modern.0, tid);
                     let mut hashed_lock = hashed_id.lock().unwrap();
 
                     if let Some(hashed_number) = hashed_lock.get_mut(hashtype) {
@@ -323,10 +317,7 @@ fn check_existing_db() {
                 }
             }
         } else {
-            client::log(format!(
-                "FileHash - Couldn't find: {}   {}",
-                modern.0.id, modern.0.hash
-            ));
+            client::log(format!("FileHash - Couldn't find: {}  ", modern.0));
         }
     });
 

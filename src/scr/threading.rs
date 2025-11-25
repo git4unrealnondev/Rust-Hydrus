@@ -189,7 +189,7 @@ impl Worker {
             'bigloop: loop {
                 let jobsstorage;
                 {
-                    jobsstorage = jobstorage.read().jobs_get(&scraper).clone();
+                    jobsstorage = jobstorage.read().jobs_get_priority_order(&scraper);
                 }
 
                 if jobsstorage.is_empty() {
@@ -429,7 +429,7 @@ Worker: {id} JobId: {} -- While trying to parse parameters we got this error: {:
                                                 "Worker: {} -- While processing job {:?} was unable to download text.",
                                                 &id, &job
                                             ));
-                                            break 'errloop;
+                                            break 'urlloop;
                                         }
                                     };
                                     out_st = match st {
@@ -479,7 +479,7 @@ Worker: {id} JobId: {} -- While trying to parse parameters we got this error: {:
                                                         "Worker: {} -- While processing job {:?} was unable to download text.",
                                                         &id, &job
                                                     ));
-                                                    break 'errloop;
+                                                    break 'urlloop;
                                                 }
                                             },
                                         }
@@ -561,6 +561,18 @@ Worker: {id} JobId: {} -- While trying to parse parameters we got this error: {:
             thread: Some(thread),
         }
     }
+}
+
+///
+/// Better handling of skipping
+///
+enum SkipResult {
+    // Skip because of a dead url or someting
+    SkipNoFile,
+    // We've already got the file, with id x
+    SkipExistingFile(usize),
+    // Download that sucket
+    Download,
 }
 
 /// Parses tags and adds the tags into the database.

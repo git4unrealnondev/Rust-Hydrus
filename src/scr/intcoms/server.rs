@@ -200,11 +200,6 @@ impl PluginIpcInteract {
                 // Bind our listener.
                 let listener = opt.create_sync().unwrap();
 
-                /* listener
-                .set_nonblocking(
-                    interprocess::local_socket::traits::ListenerNonblockingMode::Stream,
-                )
-                .unwrap();*/
                 {
                     thread_list.lock().push(worker_id);
                 }
@@ -268,9 +263,9 @@ another process and try again.",
             num_threads
         ));
 
-        listener
-            .set_nonblocking(interprocess::local_socket::traits::ListenerNonblockingMode::Stream)
-            .unwrap();
+        //listener
+        //    .set_nonblocking(interprocess::local_socket::traits::ListenerNonblockingMode::Stream)
+        //    .unwrap();
 
         let listener = Arc::new(listener);
         // NOTE due to the nature of this POS if the number of requests coming in exceed the number
@@ -375,6 +370,25 @@ pub fn dbactions_to_function(
     jobmanager: Arc<RwLock<Jobs>>,
 ) -> Vec<u8> {
     match dbaction {
+        types::SupportedDBRequests::GetRelationshipTagidWhereNamespace((
+            namespace_id,
+            count,
+            dir,
+        )) => data_size_to_b(&database.relationship_get_tagid_where_namespace_count(
+            &namespace_id,
+            &count,
+            &dir,
+        )),
+        types::SupportedDBRequests::GetRelationshipFileidWhereNamespace((
+            namespace_id,
+            count,
+            dir,
+        )) => data_size_to_b(&database.relationship_get_fileid_where_namespace_count(
+            &namespace_id,
+            &count,
+            &dir,
+        )),
+
         types::SupportedDBRequests::CondenseTags() => {
             let mut unwrappy = database;
             unwrappy.transaction_flush();
@@ -462,6 +476,11 @@ pub fn dbactions_to_function(
             let unwrappy = database;
             option_to_bytes(unwrappy.extension_get_string(&ext_id).as_ref())
         }
+        types::SupportedDBRequests::GetFileRaw(ext_id) => {
+            let unwrappy = database;
+            option_to_bytes(unwrappy.file_get_id(&ext_id).as_ref())
+        }
+
         types::SupportedDBRequests::GetJob(id) => {
             let unwrappy = database;
             option_to_bytes(unwrappy.jobs_get(&id).as_ref())

@@ -136,7 +136,7 @@ fn nsobjplg(name: &NsIdent, site: &Site) -> sharedtypes::GenericNamespaceObj {
                 description: Some("Pool When the pool was last updated.".to_string()),
             }
         }
-        NsIdent::PoolCreatedAt => {
+       NsIdent::PoolCreatedAt => {
             sharedtypes::GenericNamespaceObj {
                 //tag: tag,
                 name: format!("{}_Created_At", site_to_string(site)),
@@ -184,7 +184,7 @@ fn nsobjplg(name: &NsIdent, site: &Site) -> sharedtypes::GenericNamespaceObj {
                 name: format!("{}_Pool_Position", site_to_string(site)),
                 description: Some("Position of an id in a pool.".to_string()),
             }
-        }
+       }
         NsIdent::General => {
             sharedtypes::GenericNamespaceObj {
                 name: format!("{}_General", site_to_string(site)),
@@ -1244,10 +1244,61 @@ fn determine_site_type(
 }
 
 ///
+/// Removes any duplicate source urls that may exist inside of the db that are ours
+///
+fn client_clear_duplicate_sources() {
+    let file_hash_md5_nsid = match client::namespace_get("FileHash-MD5".to_string()) {
+        Some(id) => id,
+        None => return,
+    };
+    let source_url_nsid = match client::namespace_get("source_url".to_string()) {
+        Some(id) => id,
+        None => return,
+    };
+
+    for file_id in client::relationship_get_fileid_where_namespace_count(
+        source_url_nsid,
+        1,
+        sharedtypes::GreqLeqOrEq::GreaterThan,
+    ) {
+        let tag_id_list = client::relationship_get_tagid(file_id);
+        let source_url_list = client::filter_namespaces_by_id(tag_id_list.clone(), source_url_nsid);
+        let md5_hash_list = client::filter_namespaces_by_id(tag_id_list, file_hash_md5_nsid);
+
+        if md5_hash_list.len() != 1 {
+            client::log(format!(
+                "E6Scraper - Skipping {file_id} because I couldn't find a md5 associated with it or their were multiple"
+            ));
+            continue;
+        }
+
+        let md5_hash = client::tag_get_id(*md5_hash_list.iter().next().unwrap())
+            .unwrap()
+            .name;
+
+        for source_url_id in source_url_list {
+            if let Some(source_url) = client::tag_get_id(source_url_id) {
+                if source_url.name.contains("e621.net") || source_url.name.contains("e6ai.net") {
+                    if !source_url.name.contains(&md5_hash) {
+                        client::log(format!(
+                            "E6-Scraper - Removing {} from file_id {file_id} because hash {md5_hash} doesn't exist for it",
+                            source_url.name
+                        ));
+                        client::relationship_remove(file_id, source_url_id);
+                    }
+                }
+            }
+        }
+    }
+    client::transaction_flush();
+}
+
+///
 /// Runs on startup of the software before any jobs run
 ///
 #[no_mangle]
 pub fn on_start(site_struct: &sharedtypes::GlobalPluginScraper) {
+    client_clear_duplicate_sources();
     return;
     let mut site_op = None;
 

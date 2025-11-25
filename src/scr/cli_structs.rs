@@ -117,8 +117,10 @@ pub enum Database {
     CheckFiles(CheckFilesEnum),
     /// Backs up the database to a folder defined in settings.
     BackupDB,
+    #[clap(subcommand)]
+    /// Cleans up any source urls that may be bad
+    CheckSourceUrls(sharedtypes::CheckSourceUrlsEnum),
 }
-
 /// Removes a namespace, tags & relationships from db.
 #[derive(Debug, Subcommand)]
 pub enum NamespaceInfo {

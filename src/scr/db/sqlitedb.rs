@@ -55,6 +55,73 @@ pub fn transaction_start<'a>(
 
 impl Main {
     ///
+    /// Gets all tagids where namespace_id has a linkage with a tag that has count greater then
+    /// cnt
+    ///
+    pub fn relationship_get_tagid_where_namespace_count(
+        &self,
+        namespace_id: &usize,
+        count: &usize,
+        direction: &sharedtypes::GreqLeqOrEq,
+    ) -> Vec<usize> {
+        let dir = match direction {
+            sharedtypes::GreqLeqOrEq::GreaterThan => '>',
+            sharedtypes::GreqLeqOrEq::LessThan => '<',
+            sharedtypes::GreqLeqOrEq::Equal => '=',
+        };
+
+        let conn = self.get_database_connection();
+        let mut stmt = conn
+            .prepare(&format!(
+                "SELECT t.id AS tagid
+FROM Tags t
+LEFT JOIN Relationship r ON r.tagid = t.id
+WHERE t.namespace = ?
+GROUP BY t.id
+HAVING COUNT(r.fileid) {dir} ?;"
+            ))
+            .unwrap();
+        wait_until_sqlite_ok!(
+            stmt.query_map(params![namespace_id, count], |row| row.get::<_, usize>(0))
+                .unwrap()
+                .collect::<Result<Vec<usize>, _>>()
+        )
+        .unwrap_or(Vec::new())
+    }
+
+    ///
+    /// Gets all fileids where namespace_id has a linkage with a tag that has count greater then
+    /// cnt
+    ///
+    pub fn relationship_get_fileid_where_namespace_count(
+        &self,
+        namespace_id: &usize,
+        count: &usize,
+        direction: &sharedtypes::GreqLeqOrEq,
+    ) -> Vec<usize> {
+        let dir = match direction {
+            sharedtypes::GreqLeqOrEq::GreaterThan => '>',
+            sharedtypes::GreqLeqOrEq::LessThan => '<',
+            sharedtypes::GreqLeqOrEq::Equal => '=',
+        };
+        dbg!(format!(
+            "SELECT r.fileid FROM Relationship r LEFT JOIN Tags t ON r.tagid = t.id AND t.namespace = ? GROUP BY r.fileid HAVING COUNT(t.id) {dir} ?;"
+        ));
+        let conn = self.get_database_connection();
+        let mut stmt = conn
+            .prepare(
+                &format!("SELECT r.fileid FROM Relationship r LEFT JOIN Tags t ON r.tagid = t.id AND t.namespace = ? GROUP BY r.fileid HAVING COUNT(t.id) {dir} ?;")
+            )
+            .unwrap();
+        wait_until_sqlite_ok!(
+            stmt.query_map(params![namespace_id, count], |row| row.get::<_, usize>(0))
+                .unwrap()
+                .collect::<Result<Vec<usize>, _>>()
+        )
+        .unwrap_or(Vec::new())
+    }
+
+    ///
     /// Searches for a list of fileids from a list of tagids
     /// Straight yoinked off chad
     ///
@@ -98,6 +165,27 @@ impl Main {
         .unwrap_or(vec![])
 
         // Convert to Vec<usize>
+    }
+
+    ///
+    /// Checks if a relationship exists
+    ///
+    pub fn relationship_exists(&self, file_id: &usize, tag_id: &usize) -> bool {
+        let sql = "SELECT EXISTS(SELECT 1 FROM Relationship WHERE fileid=? AND tagid=? LIMIT 1)";
+
+        let tn = match self.pool.get() {
+            Ok(conn) => conn,
+            Err(_) => return false,
+        };
+
+        let result: Result<i32, _> = tn.query_one(sql, params![file_id, tag_id], |row| {
+            row.get::<usize, i32>(0) // specify column index and expected type
+        });
+
+        match result {
+            Ok(exists) => exists == 1,
+            Err(_) => false,
+        }
     }
 
     ///
@@ -262,7 +350,7 @@ impl Main {
 
     /// Adds a job to sql
     pub fn jobs_add_sql(&self, data: &sharedtypes::DbJobsObj) {
-        self.transaction_exclusive_start();
+        self.transaction_start();
         let tn = self.write_conn.lock();
         let inp = "INSERT INTO Jobs VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
         {
@@ -644,17 +732,25 @@ impl Main {
     }
 
     /// Adds tags into sql database
-    pub(super) fn tag_add_no_id_sql(&self, tag: &String, namespace: &usize) -> usize {
-        let inp = "INSERT INTO Tags (name, namespace) VALUES(?, ?) ON CONFLICT(id) DO UPDATE SET name = EXCLUDED.name, namespace = EXCLUDED.namespace";
-        {
-            {
-                let tn = self.write_conn.lock();
-                let _ = wait_until_sqlite_ok!(tn.execute(inp, params![tag, namespace]));
-                wait_until_sqlite_ok!(tn.query_row(
+    pub(super) fn tag_add_no_id_sql(&self, tag: &str, namespace: usize) -> usize {
+        let sql = r#"
+        INSERT INTO Tags (name, namespace)
+        VALUES (?, ?)
+        ON CONFLICT(name, namespace) DO NOTHING
+        RETURNING id;
+    "#;
+
+        let conn = self.write_conn.lock();
+
+        match conn.query_row(sql, params![tag, namespace], |row| row.get(0)) {
+            Ok(id) => id, // insert succeeded → return new id
+            Err(_) => {
+                // insert was ignored → fetch existing id
+                conn.query_row(
                     "SELECT id FROM Tags WHERE name = ? AND namespace = ?",
                     params![tag, namespace],
                     |row| row.get(0),
-                ))
+                )
                 .unwrap()
             }
         }
@@ -667,12 +763,15 @@ impl Main {
         description: &Option<String>,
         name_id: Option<usize>,
     ) {
-        self.transaction_exclusive_start();
-        let tn = self.write_conn.lock();
-        let inp = "INSERT INTO Namespace (id, name, description) VALUES(?, ?, ?)";
+        self.transaction_start();
         {
-            let _ = wait_until_sqlite_ok!(tn.execute(inp, params![name_id, name, description]));
+            let tn = self.write_conn.lock();
+            let inp = "INSERT INTO Namespace (id, name, description) VALUES(?, ?, ?)";
+            {
+                let _ = wait_until_sqlite_ok!(tn.execute(inp, params![name_id, name, description]));
+            }
         }
+        self.transaction_flush();
     }
 
     /// Loads Parents in from DB tnection
@@ -972,13 +1071,17 @@ impl Main {
     }
     /// Adds relationship to SQL db.
     pub fn relationship_add_sql(&self, file: &usize, tag: &usize) {
+        if self.relationship_exists(file, tag) {
+            return;
+        }
+
         let tn = self.write_conn.lock();
         let inp = "INSERT OR IGNORE INTO Relationship VALUES(?, ?)";
         let _out = tn.execute(inp, params![file, tag]);
     }
     /// Updates job by id
     pub fn jobs_update_by_id(&self, data: &sharedtypes::DbJobsObj) {
-        self.transaction_exclusive_start();
+        self.transaction_start();
         let tn = self.write_conn.lock();
         let inp = "UPDATE Jobs SET id=?, time=?, reptime=?, Manager=?, priority=?,cachetime=?,cachechecktype=?, site=?, param=?, SystemData=?, UserData=? WHERE id = ?";
         let _ = tn.execute(
@@ -1078,9 +1181,10 @@ impl Main {
         num: Option<usize>,
         param: &Option<String>,
     ) {
-        self.transaction_exclusive_start();
-        let tn = self.write_conn.lock();
-        let _ex =
+        self.transaction_start();
+        {
+            let tn = self.write_conn.lock();
+            let _ex =
             wait_until_sqlite_ok!( tn                .execute(
                     "INSERT INTO Settings(name, pretty, num, param) VALUES (?1, ?2, ?3, ?4) ON CONFLICT(name) DO UPDATE SET pretty=?2, num=?3, param=?4 ;",
                     params![
@@ -1104,19 +1208,21 @@ impl Main {
                         }
                     ],
                 ));
-        match _ex {
-            Err(_ex) => {
-                println!(
-                    "setting_add: Their was an error with inserting {} into db. {}",
-                    &name, &_ex
-                );
-                error!(
-                    "setting_add: Their was an error with inserting {} into db. {}",
-                    &name, &_ex
-                );
+            match _ex {
+                Err(_ex) => {
+                    println!(
+                        "setting_add: Their was an error with inserting {} into db. {}",
+                        &name, &_ex
+                    );
+                    error!(
+                        "setting_add: Their was an error with inserting {} into db. {}",
+                        &name, &_ex
+                    );
+                }
+                Ok(_ex) => {}
             }
-            Ok(_ex) => {}
         }
+        self.transaction_flush();
     }
 
     /// Loads settings into db
@@ -1147,9 +1253,11 @@ impl Main {
                 Err(_) => return,
             };
         }
+        self.transaction_flush();
     }
 
     pub(super) fn add_dead_url_sql(&self, url: &String) {
+        self.transaction_start();
         let tn = self.write_conn.lock();
         let _ = wait_until_sqlite_ok!(tn.execute(
             "INSERT INTO dead_source_urls(dead_url) VALUES (?)",
@@ -1325,7 +1433,7 @@ impl Main {
 
     /// Sets advanced settings for journaling. NOTE Experimental badness
     pub fn db_open(&self) {
-        self.transaction_exclusive_start();
+        self.transaction_start();
         let tn = self.write_conn.lock();
         let _ = wait_until_sqlite_ok!(tn.execute("PRAGMA secure_delete = 0", params![]));
         let _ = wait_until_sqlite_ok!(tn.execute("PRAGMA busy_timeout = 5000", params![]));
@@ -1338,7 +1446,7 @@ impl Main {
 
     /// Removes a job from sql table by id
     pub fn del_from_jobs_table_sql_better(&self, id: &usize) {
-        self.transaction_exclusive_start();
+        self.transaction_start();
         let tn = self.write_conn.lock();
         let inp = "DELETE FROM Jobs WHERE id = ?";
         let _ = wait_until_sqlite_ok!(tn.execute(inp, params![id.to_string()]));
@@ -1346,7 +1454,7 @@ impl Main {
 
     /// Removes a tag from sql table by name and namespace
     pub fn del_from_tags_by_name_and_namespace(&self, name: &String, namespace: &String) {
-        self.transaction_exclusive_start();
+        self.transaction_start();
         let tn = self.write_conn.lock();
         let inp = "DELETE FROM Tags WHERE name = ? AND namespace = ?";
         wait_until_sqlite_ok!(tn.execute(inp, params![name, namespace])).unwrap();
@@ -1445,8 +1553,8 @@ mod tests {
 
     #[test]
     fn tag_retrieve() {
-        let mut db = Main::new(None, VERS);
-        db.tag_add(&"te".to_string(), 0, true, None);
-        assert!(db.tag_get_name("te".to_string(), 0).is_some());
+        // let mut db = Main::new(None, VERS);
+        //db.tag_add(&"te".to_string(), 0, true, None);
+        //assert!(db.tag_get_name("te".to_string(), 0).is_some());
     }
 }

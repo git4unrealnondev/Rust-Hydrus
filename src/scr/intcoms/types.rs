@@ -104,6 +104,9 @@ pub enum SupportedDBRequests {
     MigrateTag((usize, usize)),
     MigrateRelationship((usize, usize, usize)),
     CondenseTags(),
+    GetFileRaw(usize),
+    GetRelationshipFileidWhereNamespace((usize, usize, sharedtypes::GreqLeqOrEq)),
+    GetRelationshipTagidWhereNamespace((usize, usize, sharedtypes::GreqLeqOrEq)),
 }
 
 /// A descriptor for the parents and the type of data that we're sending
@@ -168,15 +171,8 @@ pub fn send<T: Sized + Serialize + bincode::Encode>(
     let byte_buf = bincode::serde::encode_to_vec(&inp, bincode::config::standard()).unwrap();
     let size = &byte_buf.len();
 
-    let mut final_buf = Vec::with_capacity(std::mem::size_of::<usize>() + size);
-
-    final_buf.extend_from_slice(&size.to_ne_bytes());
-
-    final_buf.extend_from_slice(&byte_buf);
-
-    conn.get_mut().write_all(&final_buf).unwrap();
-    //conn.get_mut().write_all(&size.to_ne_bytes()).unwrap();
-    //conn.get_mut().write_all(&byte_buf).unwrap();
+    conn.get_mut().write_all(&size.to_ne_bytes()).unwrap();
+    conn.get_mut().write_all(&byte_buf).unwrap();
 }
 
 /// Writes all data into buffer. Assumes data is preserialzied from data generic

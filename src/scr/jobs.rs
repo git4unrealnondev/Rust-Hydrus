@@ -167,6 +167,23 @@ impl Jobs {
     }
 
     ///
+    /// Gets a list of jobs with the highest priority first.
+    ///
+    pub fn jobs_get_priority_order(
+        &self,
+        scraper: &sharedtypes::GlobalPluginScraper,
+    ) -> Vec<sharedtypes::DbJobsObj> {
+        let mut out = Vec::new();
+        for job in self.jobs_get(scraper) {
+            out.push(job);
+        }
+        out.sort_by_key(|key| key.priority);
+        out.reverse();
+
+        out
+    }
+
+    ///
     /// Gets all the GlobalPluginScraper objs that are loaded for jobs
     ///
     pub fn job_scrapers_get(&self) -> HashSet<&sharedtypes::GlobalPluginScraper> {
@@ -324,7 +341,7 @@ impl Jobs {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod test_database {
     use crate::RwLock;
     use std::collections::BTreeMap;
     use std::sync::Arc;
@@ -345,8 +362,6 @@ mod tests {
         let mut out = Vec::new();
         let dsb = test_database::setup_default_db();
         for db in dsb {
-            let db = Arc::new(RwLock::new(db));
-
             out.push(Jobs::new(db));
         }
         out

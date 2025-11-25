@@ -107,7 +107,7 @@ fn parse_string_to_scraperparam(input: &str) -> Vec<sharedtypes::ScraperParam> {
 }
 
 /// Returns the main argument and parses data.
-pub fn main(data: database::Main, globalload: Arc<RwLock<GlobalLoad>>) {
+pub fn main(data: database::Main) {
     //pub fn main(data: database::Main, scraper: Arc<RwLock<GlobalLoad>>) {
     let args = cli_structs::MainWrapper::parse();
     if args.a.is_none() {
@@ -475,6 +475,9 @@ pub fn main(data: database::Main, globalload: Arc<RwLock<GlobalLoad>>) {
 
                 let dbstore = data.clone();
                 match db {
+                    cli_structs::Database::CheckSourceUrls(source_url_enum) => {
+                        data.check_default_source_urls(source_url_enum);
+                    }
                     cli_structs::Database::ConsistencyCheck => {
                         data.check_relationship_tag_relations();
                     }

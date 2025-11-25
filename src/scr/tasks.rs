@@ -84,7 +84,7 @@ pub fn import_files(
             info!("File: {} already in DB. Skipping import.", &row.path);
             continue;
         }
-        let path = helpers::getfinpath(&location, &hash);
+        let path = helpers::getfinpath(&location, &hash, true);
         let final_path = format!("{}/{}", path, &hash);
         let file_ext = FileFormat::from_file(&row.path)
             .unwrap()
