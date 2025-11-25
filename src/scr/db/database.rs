@@ -1,8 +1,6 @@
 #![forbid(unsafe_code)]
 use crate::Mutex;
 use crate::RwLock;
-use crate::cli;
-use crate::database::sqlitedb::transaction_start;
 use crate::download::hash_file;
 use crate::file;
 use crate::globalload::GlobalLoad;
@@ -11,9 +9,7 @@ use crate::helpers::getfinpath;
 use crate::logging;
 use crate::sharedtypes;
 use crate::sharedtypes::DEFAULT_CACHECHECK;
-use crate::sharedtypes::DbFileStorage;
 use crate::sharedtypes::ScraperParam;
-use crate::wait_until_sqlite_ok;
 use eta::{Eta, TimeAcc};
 use log::{error, info};
 use r2d2::Pool;
@@ -23,7 +19,6 @@ use rayon::prelude::*;
 use remove_empty_subdirs::remove_empty_subdirs;
 pub use rusqlite::types::ToSql;
 pub use rusqlite::{Connection, Result, Transaction, params, types::Null};
-use std::borrow::BorrowMut;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -133,7 +128,7 @@ PRAGMA journal_mode = WAL;
                     .unwrap();
                 let write_conn = Arc::new(Mutex::new(pool.get().unwrap()));
                 let write_conn_istransaction = Arc::new(Mutex::new(false));
-                let mut main = Main {
+                let main = Main {
                     _dbpath: path,
                     _vers: vers,
                     pool,
@@ -172,7 +167,7 @@ PRAGMA busy_timeout = 1000;
                 let write_conn = Arc::new(Mutex::new(pool.get().unwrap()));
                 let write_conn_istransaction = Arc::new(Mutex::new(false));
                 dbg!("a");
-                let mut main = Main {
+                let main = Main {
                     _dbpath: None,
                     _vers: vers,
                     pool,
@@ -719,7 +714,7 @@ PRAGMA busy_timeout = 1000;
     /// File Sanity Checker This will check that the files by id will have a matching
     /// location & hash.
     pub fn db_sanity_check_file(&self) {
-        use crate::download;
+        
 
         self.load_table(&sharedtypes::LoadDBTable::Files);
         todo!("Need to fix this files are sucky");
@@ -780,10 +775,10 @@ PRAGMA busy_timeout = 1000;
         limit: Option<usize>,
         //offset: Option<usize>,
     ) -> Option<Vec<usize>> {
-        let mut stor: Vec<sharedtypes::SearchHolder> = Vec::with_capacity(search.searches.len());
-        let mut fin: Vec<usize> = Vec::new();
+        let stor: Vec<sharedtypes::SearchHolder> = Vec::with_capacity(search.searches.len());
+        let fin: Vec<usize> = Vec::new();
         let mut fin_temp: HashMap<usize, Vec<usize>> = HashMap::new();
-        let mut searched: Vec<(usize, usize)> = Vec::with_capacity(search.searches.len());
+        let searched: Vec<(usize, usize)> = Vec::with_capacity(search.searches.len());
         /*if search.search_relate.is_none() {
             if search.searches.len() == 1 {
                 stor.push(sharedtypes::SearchHolder::And((0, 0)));

@@ -15,10 +15,8 @@ use file_format::FileFormat;
 // use log::{error, info};
 use ratelimit::Ratelimiter;
 use reqwest::blocking::Client;
-use rusqlite::Transaction;
 use std::collections::BTreeSet;
 use std::collections::HashMap;
-use std::panic::UnwindSafe;
 use std::sync::Arc;
 //use std::sync::RwLock;
 
@@ -577,7 +575,7 @@ enum SkipResult {
 
 /// Parses tags and adds the tags into the database.
 pub fn parse_tags(
-    mut database: database::Main,
+    database: database::Main,
     tag: &sharedtypes::TagObject,
     file_id: Option<usize>,
     worker_id: &usize,

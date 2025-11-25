@@ -1,5 +1,4 @@
 use crate::RwLock;
-use crate::sharedtypes::TagObject;
 use crate::{
     database::{self, Main},
     jobs::Jobs,

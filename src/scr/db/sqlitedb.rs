@@ -1,4 +1,3 @@
-use crate::Mutex;
 use crate::database::CacheType;
 use crate::database::Main;
 use crate::error;

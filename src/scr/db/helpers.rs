@@ -1,5 +1,4 @@
 use crate::logging::error_log;
-use url::Url;
 /// Returns the location as a string that will store the string
 pub fn getfinpath(location: &String, hash: &String, create_dir: bool) -> String {
     // Gets and makes folderpath.

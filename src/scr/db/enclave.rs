@@ -113,9 +113,9 @@ impl Main {
             "Enclave FileHash {}: Starting to process",
             &sha512hash
         ));
-        let mut out = Vec::new();
+        let out = Vec::new();
         'priorityloop: for priority_id in self.enclave_priority_get() {
-            for enclave_id in { self.enclave_get_id_from_priority(&priority_id) } {
+            for enclave_id in self.enclave_get_id_from_priority(&priority_id) {
                 if self.enclave_run_logic(file, bytes, sha512hash, source_url, &enclave_id) {
                     break 'priorityloop;
                 }

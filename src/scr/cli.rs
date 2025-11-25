@@ -3,16 +3,14 @@ extern crate clap;
 use rayon::prelude::*;
 use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
-use std::{collections::HashSet, io::Write};
+use std::collections::HashSet;
 use strfmt::Format;
 use walkdir::WalkDir;
 
-use crate::globalload::GlobalLoad;
 // use std::str::pattern::Searcher;
 use crate::Mutex;
-use crate::RwLock;
 use crate::download;
-use crate::file::{find_sidecar, parse_file};
+use crate::file::find_sidecar;
 use crate::sharedtypes::{DEFAULT_CACHECHECK, DEFAULT_CACHETIME, DEFAULT_PRIORITY};
 use crate::{
     database, logging, pause,
@@ -471,7 +469,7 @@ pub fn main(data: database::Main) {
                 }
             },
             cli_structs::TasksStruct::Database(db) => {
-                use crate::helpers;
+                
 
                 let dbstore = data.clone();
                 match db {

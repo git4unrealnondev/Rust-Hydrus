@@ -1,18 +1,14 @@
 #![allow(dead_code)]
 #![allow(unused_variables)]
 
-use crate::client::transaction_flush;
 use crate::database;
 use crate::download;
 use crate::globalload::GlobalLoad;
 use crate::jobs::Jobs;
 use crate::logging;
-use crate::logging::error_log;
 use crate::sharedtypes;
 use crate::threading;
 use anyhow::Context;
-use r2d2::PooledConnection;
-use r2d2_sqlite::SqliteConnectionManager;
 
 use crate::RwLock;
 use interprocess::local_socket::{GenericNamespaced, ListenerOptions, prelude::*};
@@ -275,7 +271,7 @@ another process and try again.",
         {
             let thread_list = thread_list.clone();
             handles.push(std::thread::spawn(move || {
-                let mut cnt: u64 = 0;
+                let cnt: u64 = 0;
                 for stream in listener.incoming().flatten() {
                     let worker_id: u64 = {
                         loop {
@@ -314,7 +310,7 @@ fn handle_client(
 ) {
     let worker_id = worker_id.clone();
     std::thread::spawn(move || {
-        let mut buffer = [0u8; 1024];
+        let buffer = [0u8; 1024];
         let mut conn = BufReader::new(stream);
         let plugin_supportedrequests = match types::recieve(&mut conn) {
             Ok(out) => out,
@@ -390,7 +386,7 @@ pub fn dbactions_to_function(
         )),
 
         types::SupportedDBRequests::CondenseTags() => {
-            let mut unwrappy = database;
+            let unwrappy = database;
             unwrappy.transaction_flush();
             unwrappy.condense_tags();
             unwrappy.transaction_flush();
@@ -402,14 +398,14 @@ pub fn dbactions_to_function(
             data_size_to_b(&true)
         }
         types::SupportedDBRequests::MigrateRelationship((file_id, old_tag_id, new_tag_id)) => {
-            let mut unwrappy = database;
+            let unwrappy = database;
             unwrappy.migrate_relationship_file_tag(&file_id, &old_tag_id, &new_tag_id);
             unwrappy.transaction_flush();
             data_size_to_b(&true)
         }
 
         types::SupportedDBRequests::MigrateTag((old_tag_id, new_tag_id)) => {
-            let mut unwrappy = database;
+            let unwrappy = database;
             unwrappy.migrate_tag(&old_tag_id, &new_tag_id);
             unwrappy.transaction_flush();
             data_size_to_b(&true)
@@ -486,7 +482,7 @@ pub fn dbactions_to_function(
             option_to_bytes(unwrappy.jobs_get(&id).as_ref())
         }
         types::SupportedDBRequests::ParentsPut(parent) => {
-            let mut unwrappy = database;
+            let unwrappy = database;
             let out = &unwrappy.parents_add(parent);
             data_size_to_b(out)
         }

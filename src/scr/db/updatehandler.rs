@@ -1,5 +1,4 @@
 use crate::database::Main;
-use crate::database::Transaction;
 use crate::logging;
 use crate::sharedtypes;
 use crate::sharedtypes::{DEFAULT_CACHECHECK, DEFAULT_CACHETIME, DEFAULT_PRIORITY};
