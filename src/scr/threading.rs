@@ -903,7 +903,6 @@ pub fn main_file_loop(
                         parse_skipif(file_tag, &source_url, database.clone(), worker_id, job_id)
                     {
                         for tag in file.tag_list.iter() {
-                            dbg!(tag);
                             parse_tags(
                                 database.clone(),
                                 tag,
