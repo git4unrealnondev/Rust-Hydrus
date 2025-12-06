@@ -94,23 +94,11 @@ pub fn url_dump(
     out
 }
 
-///
-/// After the text download step. Parses the response from the text download
-///
-#[unsafe(no_mangle)]
-pub fn parser(
-    html_input: &str,
-    source_url: &str,
-    _scraperdata: &sharedtypes::ScraperData,
-) -> Result<sharedtypes::ScraperObject, sharedtypes::ScraperReturn> {
-    let fragment = Html::parse_fragment(html_input);
-
-    // Should never fail
-    let url_base = Url::parse(SITE_LINK).unwrap();
-
-    let mut file = HashSet::new();
-    let mut tag = HashSet::new();
-
+fn parse_from_root_page(
+    fragment: &Html,
+    url_base: &Url,
+    tag: &mut HashSet<sharedtypes::TagObject>,
+) {
     // On the root of the site this manages to loop through the thread list and first page
     let selector = Selector::parse(r#"td[class="threadtitle"]"#).unwrap();
     for element in fragment.select(&selector) {
@@ -146,7 +134,14 @@ pub fn parser(
             }
         }
     }
+}
 
+fn parse_from_pool_page(
+    fragment: &Html,
+    url_base: &Url,
+    tag: &mut HashSet<sharedtypes::TagObject>,
+    source_url: &str,
+) {
     // Gets all thumb posts
     let selector = Selector::parse(r#"div[class="thumb_wrapper"]"#).unwrap();
 
@@ -255,15 +250,18 @@ pub fn parser(
             }
         }
     }
+}
 
-    let mut file_url = None;
-    let mut file_tags = Vec::new();
-
+fn parse_from_file_page<'a>(
+    fragment: &'a Html,
+    file_tags: &mut Vec<sharedtypes::TagObject>,
+    file_url: &mut Option<&'a str>,
+) {
     // Should only ever be one file per page but this works gets the raw file url for the image
     let selector = Selector::parse(r#"meta[property="og:image"]"#).unwrap();
     for element in fragment.select(&selector) {
         if element.attr("content") != Some("//ychan.net/img/ychan_default_thumb.png") {
-            file_url = element.attr("content");
+            *file_url = element.attr("content");
         }
     }
     // Extracts tags from a post
@@ -301,7 +299,7 @@ pub fn parser(
             if let Some(tr) = tbody.next_sibling() {
                 if let Some(td) = tr.first_child() {
                     if let Some(main_info) = td.first_child() {
-                        let mut text_list: Vec<Text> = main_info
+                        let text_list: Vec<Text> = main_info
                             .children()
                             .filter_map(|noderef| noderef.value().as_text().map(|t| t.clone()))
                             .collect();
@@ -403,6 +401,33 @@ pub fn parser(
             }
         }
     }
+}
+
+///
+/// After the text download step. Parses the response from the text download
+///
+#[unsafe(no_mangle)]
+pub fn parser(
+    html_input: &str,
+    source_url: &str,
+    _scraperdata: &sharedtypes::ScraperData,
+) -> Result<sharedtypes::ScraperObject, sharedtypes::ScraperReturn> {
+    let fragment = Html::parse_fragment(html_input);
+
+    // Should never fail
+    let url_base = Url::parse(SITE_LINK).unwrap();
+
+    let mut file = HashSet::new();
+    let mut tag = HashSet::new();
+
+    parse_from_root_page(&fragment, &url_base, &mut tag);
+
+    parse_from_pool_page(&fragment, &url_base, &mut tag, source_url);
+
+    let mut file_url = None;
+    let mut file_tags = Vec::new();
+
+    parse_from_file_page(&fragment, &mut file_tags, &mut file_url);
 
     if let Some(file_url) = file_url {
         file.insert(sharedtypes::FileObject {
