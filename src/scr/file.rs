@@ -61,7 +61,7 @@ pub fn parse_file(
     file_location: &Path,
     sidecars: &Vec<PathBuf>,
     database: Main,
-    manager_arc: Arc<RwLock<GlobalLoad>>,
+    manager_arc: GlobalLoad,
 ) -> Option<usize> {
     let mut inside_files = Vec::new();
 
@@ -164,7 +164,7 @@ pub fn parse_file(
             }
 
             // NOTE COULD CAUSE LOCKING
-            manager_arc.read().callback_on_import(&bytes, &sha512hash);
+            manager_arc.callback_on_import(&bytes, &sha512hash);
 
             if let Ok(filetype) = file_format::FileFormat::from_file(file_location) {
                 inside_files.append(&mut process_archive_files(
@@ -214,9 +214,7 @@ pub fn parse_file(
                 }
 
                 // NOTE COULD CAUSE LOCKING
-                manager_arc
-                    .read()
-                    .callback_on_import(&file_bytes, &sub_sha512hash);
+                manager_arc.callback_on_import(&file_bytes, &sub_sha512hash);
             }
             if let Some(fid) = fileid {
                 return Some(fid);

@@ -60,7 +60,7 @@ impl Threads {
         jobstorage: Arc<RwLock<crate::jobs::Jobs>>,
         db: database::Main,
         scrapermanager: sharedtypes::GlobalPluginScraper,
-        globalload: Arc<RwLock<GlobalLoad>>,
+        globalload: GlobalLoad,
     ) {
         // Stupid prefilter because an item can be either a scraper or a plugin. Not sure how I
         // didn't hit this issue sooner lol
@@ -159,13 +159,12 @@ impl Worker {
         jobstorage: Arc<RwLock<crate::jobs::Jobs>>,
         database: database::Main,
         scraper: sharedtypes::GlobalPluginScraper,
-        globalload: Arc<RwLock<GlobalLoad>>,
+        globalload: GlobalLoad,
         threadflagcontrol: Control,
     ) -> Worker {
         // info_log(&format!( "Creating Worker for id: {} Scraper Name: {} With a jobs
         // length of: {}", &id, &scraper._name, &jobstorage..len() ));
         let jobstorage = jobstorage.clone();
-        let globalload = globalload.clone();
         let ratelimiter_main;
         if let Some(sharedtypes::ScraperOrPlugin::Scraper(ref scraper_info)) = scraper.storage_type
         {
@@ -187,7 +186,7 @@ impl Worker {
             'bigloop: loop {
                 let jobsstorage;
                 {
-                    jobsstorage = jobstorage.read().jobs_get_priority_order(&scraper);
+                    jobsstorage = jobstorage.read().jobs_get_priority_order(&scraper).clone();
                 }
 
                 if jobsstorage.is_empty() {
@@ -348,12 +347,7 @@ impl Worker {
                         sharedtypes::DbJobType::Params => {
                             let mut out = Vec::new();
 
-                            match globalload::url_dump(
-                                &job.param,
-                                &scraper_data_holder,
-                                globalload.clone(),
-                                &scraper,
-                            ) {
+                            match globalload.url_dump(&job.param, &scraper_data_holder, &scraper) {
                                 Ok(temp) => {
                                     for (url, scraperdata) in temp {
                                         out.push((
@@ -415,11 +409,10 @@ Worker: {id} JobId: {} -- While trying to parse parameters we got this error: {:
                                         &id,
                                     ));
                                     let st = match resp {
-                                        Ok((respstring, resp_url)) => globalload::parser_call(
+                                        Ok((respstring, resp_url)) => globalload.parser_call(
                                             &respstring,
                                             &resp_url,
                                             &scraperdata,
-                                            globalload.clone(),
                                             &scraper,
                                         ),
                                         Err(_) => {
@@ -457,11 +450,10 @@ Worker: {id} JobId: {} -- While trying to parse parameters we got this error: {:
                                     };
                                 } else {
                                     loop {
-                                        match globalload::text_scraping(
+                                        match globalload.text_scraping(
                                             url_string,
                                             &scraperdata.job.param,
                                             &scraperdata,
-                                            globalload.clone(),
                                             &scraper,
                                         ) {
                                             Ok(scraperobj) => {
@@ -580,14 +572,14 @@ pub fn parse_tags(
     file_id: Option<usize>,
     worker_id: &usize,
     job_id: &usize,
-    manager: Arc<RwLock<GlobalLoad>>,
+    manager: GlobalLoad,
 ) -> BTreeSet<sharedtypes::ScraperData> {
     let mut url_return: BTreeSet<sharedtypes::ScraperData> = BTreeSet::new();
     match &tag.tag_type {
         sharedtypes::TagType::Normal | sharedtypes::TagType::NormalNoRegex => {
             if tag.tag_type != sharedtypes::TagType::NormalNoRegex {
                 // Runs regex mostly
-                manager.read().plugin_on_tag(tag);
+                manager.plugin_on_tag(tag);
             }
             let tag_id = database.tag_add_tagobject(tag, true);
             match file_id {
@@ -701,7 +693,7 @@ fn download_add_to_db(
     ratelimiter_obj: Arc<Mutex<Ratelimiter>>,
     source: &String,
     location: String,
-    globalload: Arc<RwLock<GlobalLoad>>,
+    globalload: GlobalLoad,
     client: Arc<RwLock<Client>>,
     database: database::Main,
     file: &mut sharedtypes::FileObject,
@@ -777,7 +769,7 @@ fn parse_jobs(
 
     worker_id: &usize,
     job_id: &usize,
-    manager: Arc<RwLock<GlobalLoad>>,
+    manager: GlobalLoad,
 ) {
     let urls_to_scrape = parse_tags(database.clone(), tag, fileid, worker_id, job_id, manager);
 
@@ -883,7 +875,7 @@ pub fn main_file_loop(
     file: &mut sharedtypes::FileObject,
     database: database::Main,
     ratelimiter_obj: Arc<Mutex<Ratelimiter>>,
-    globalload: Arc<RwLock<GlobalLoad>>,
+    globalload: GlobalLoad,
     client: Arc<RwLock<Client>>,
     jobstorage: Arc<RwLock<crate::jobs::Jobs>>,
     scraper: &sharedtypes::GlobalPluginScraper,

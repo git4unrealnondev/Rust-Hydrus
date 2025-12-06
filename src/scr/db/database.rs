@@ -71,7 +71,7 @@ pub struct Main {
     tables_loaded: Arc<RwLock<Vec<sharedtypes::LoadDBTable>>>,
     tables_loading: Arc<RwLock<Vec<sharedtypes::LoadDBTable>>>,
     _cache: CacheType,
-    pub globalload: Option<Arc<RwLock<GlobalLoad>>>,
+    //pub globalload: Option<GlobalLoad>,
     localref: Option<Arc<RwLock<Main>>>,
 }
 
@@ -100,7 +100,7 @@ impl Main {
                     tables_loaded: Arc::new(vec![].into()),
                     tables_loading: Arc::new(vec![].into()),
                     _cache: CacheType::Bare,
-                    globalload: None,
+                    // globalload: None,
                     localref: None,
                 };
                 //                let tnection = dbinit(file_path);
@@ -139,7 +139,7 @@ PRAGMA journal_mode = WAL;
                     tables_loaded: Arc::new(vec![].into()),
                     tables_loading: Arc::new(vec![].into()),
                     _cache: CacheType::InMemdb,
-                    globalload: None,
+                    //  globalload: None,
                     localref: None,
                 };
                 main
@@ -178,7 +178,7 @@ PRAGMA busy_timeout = 1000;
                     tables_loaded: Arc::new(vec![].into()),
                     tables_loading: Arc::new(vec![].into()),
                     _cache: CacheType::InMemdb,
-                    globalload: None,
+                    //                globalload: None,
                     localref: None,
                 };
                 main
@@ -259,7 +259,6 @@ PRAGMA busy_timeout = 1000;
         logging::log("Flushing to disk");
         let mut transaction = self.write_conn_istransaction.lock();
         if *transaction {
-            dbg!("Flushing");
             let conn = self.write_conn.lock();
             conn.execute("COMMIT", []);
             *transaction = false;
@@ -714,8 +713,6 @@ PRAGMA busy_timeout = 1000;
     /// File Sanity Checker This will check that the files by id will have a matching
     /// location & hash.
     pub fn db_sanity_check_file(&self) {
-        
-
         self.load_table(&sharedtypes::LoadDBTable::Files);
         todo!("Need to fix this files are sucky");
         let flist = self.file_get_list_id();
@@ -2009,8 +2006,8 @@ PRAGMA busy_timeout = 1000;
         self._inmemdb.read().dumpe_data();
     }
 
-    pub fn setup_globalload(&mut self, globalload: Arc<RwLock<GlobalLoad>>) {
-        self.globalload = Some(globalload);
+    pub fn setup_globalload(&mut self, globalload: GlobalLoad) {
+        // self.globalload = Some(globalload);
     }
 
     pub fn namespace_add_namespaceobject(

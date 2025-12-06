@@ -38,116 +38,6 @@ fn c_run_onstart(path: &Path, global: &sharedtypes::GlobalPluginScraper) {
     };
 }
 
-///
-/// Calls a parser to cleave information from a lib
-///
-pub fn parser_call(
-    url_output: &str,
-    source_url: &str,
-    scraperdata: &sharedtypes::ScraperData,
-    globalload: Arc<RwLock<GlobalLoad>>,
-    scraper: &GlobalPluginScraper,
-) -> Result<sharedtypes::ScraperObject, sharedtypes::ScraperReturn> {
-    if let Some(scraper_library_rwlock) = globalload.read().library_get(scraper) {
-        let scraper_library = scraper_library_rwlock.read();
-        let temp: libloading::Symbol<
-            unsafe extern "C" fn(
-                &str,
-                &str,
-                &sharedtypes::ScraperData,
-            )
-                -> Result<sharedtypes::ScraperObject, sharedtypes::ScraperReturn>,
-        > = unsafe { scraper_library.get(b"parser\0").unwrap() };
-        unsafe { temp(url_output, source_url, scraperdata) }
-    } else {
-        Err(sharedtypes::ScraperReturn::Nothing)
-    }
-}
-
-///
-/// Gets a scraper to output any URLs based on params
-///
-pub fn url_dump(
-    params: &Vec<sharedtypes::ScraperParam>,
-    scraperdata: &sharedtypes::ScraperData,
-    arc_scrapermanager: Arc<RwLock<GlobalLoad>>,
-    scraper: &sharedtypes::GlobalPluginScraper,
-) -> Result<Vec<(String, sharedtypes::ScraperData)>, libloading::Error> {
-    let mut out = Vec::new();
-
-    if let Some(lib) = arc_scrapermanager.read().library_get(scraper) {
-        let lib = lib.read();
-        let temp: libloading::Symbol<
-            unsafe extern "C" fn(
-                &[sharedtypes::ScraperParam],
-                &sharedtypes::ScraperData,
-            ) -> Vec<(String, sharedtypes::ScraperData)>,
-        > = unsafe { lib.get(b"url_dump\0")? };
-        for item in unsafe { temp(params, scraperdata) } {
-            out.push(item);
-        }
-    }
-    Ok(out)
-}
-
-///
-/// Used by a scraper to download a file. ONLY ONE :/
-///
-pub fn download_from(
-    file: &sharedtypes::FileObject,
-    arc_scrapermanager: Arc<RwLock<GlobalLoad>>,
-    scraper: &sharedtypes::GlobalPluginScraper,
-) -> Option<Vec<u8>> {
-    if let Some(lib) = arc_scrapermanager.read().library_get(scraper) {
-        let lib = lib.read();
-        let temp: libloading::Symbol<
-            unsafe extern "C" fn(&sharedtypes::FileObject) -> Option<Vec<u8>>,
-        > = unsafe { lib.get(b"download_from\0").unwrap() };
-        return unsafe { temp(file) };
-    }
-    None
-}
-
-///
-/// Tells a scraper that it should handle the "text" downloading
-///
-pub fn text_scraping(
-    url_output: &str,
-    actual_params: &[sharedtypes::ScraperParam],
-    scraperdata: &sharedtypes::ScraperData,
-    globalload: Arc<RwLock<GlobalLoad>>,
-    scraper: &GlobalPluginScraper,
-) -> Result<sharedtypes::ScraperObject, sharedtypes::ScraperReturn> {
-    if let Some(lib) = globalload.read().library_get(scraper) {
-        let lib = lib.read();
-        let temp: libloading::Symbol<
-            unsafe extern "C" fn(
-                &str,
-                &[sharedtypes::ScraperParam],
-                &sharedtypes::ScraperData,
-            )
-                -> Result<sharedtypes::ScraperObject, sharedtypes::ScraperReturn>,
-        > = unsafe { lib.get(b"text_scraping\0").unwrap() };
-        unsafe { temp(url_output, actual_params, scraperdata) }
-    } else {
-        Err(sharedtypes::ScraperReturn::Nothing)
-    }
-}
-
-///
-/// Parses output from plugin.
-///
-fn parse_plugin_output(
-    plugin_data: Vec<sharedtypes::DBPluginOutputEnum>,
-    db: Main,
-    scraper: &GlobalPluginScraper,
-    jobmanager: Arc<RwLock<Jobs>>,
-    manager: Arc<RwLock<GlobalLoad>>,
-) {
-    //let db = self._database.lock().unwrap();
-    parse_plugin_output_andmain(plugin_data, db, scraper, jobmanager, manager);
-}
-
 /*///
 /// Runs on importing a file
 ///
@@ -158,77 +48,6 @@ pub fn callback_on_import(
     hash: &String,
 ) {
 }*/
-
-///
-/// Hopefully a thread-safe way to call plugins per thread avoiding a lock.
-///
-pub fn plugin_on_download(
-    manager_arc: Arc<RwLock<GlobalLoad>>,
-    db: Main,
-    cursorpass: &[u8],
-    hash: &String,
-    ext: &String,
-) {
-    let (libpath, libscraper);
-    {
-        let manager = manager_arc.read();
-        (libpath, libscraper) = (
-            manager.get_lib_path_from_callback(&sharedtypes::GlobalCallbacks::Download),
-            manager.get_scrapers_from_callback(&sharedtypes::GlobalCallbacks::Download),
-        );
-    }
-
-    for (cnt, lib_path) in libpath.iter().enumerate() {
-        let lib;
-        unsafe {
-            match libloading::Library::new(lib_path) {
-                Ok(good_lib) => lib = good_lib,
-                Err(_) => {
-                    logging::error_log(format!(
-                        "Cannot load library at path: {}",
-                        lib_path.to_string_lossy()
-                    ));
-                    continue;
-                }
-            }
-        }
-        let output;
-        unsafe {
-            let plugindatafunc: libloading::Symbol<
-                unsafe extern "C" fn(
-                    &[u8],
-                    &String,
-                    &String,
-                ) -> Vec<sharedtypes::DBPluginOutputEnum>,
-                //unsafe extern "C" fn(Cursor<Bytes>, &String, &String, database::Main),
-            > = match lib.get(b"on_download") {
-                Ok(lib) => lib,
-                Err(_) => {
-                    logging::info_log(format!(
-                        "Could not find on_download for plugin: {}",
-                        lib_path.to_string_lossy()
-                    ));
-                    continue;
-                }
-            };
-            //db.
-            output = plugindatafunc(cursorpass, hash, ext);
-        }
-
-        let jobmanager;
-        {
-            let manager = manager_arc.read();
-            jobmanager = manager.jobmanager.clone();
-        }
-        parse_plugin_output(
-            output,
-            db.clone(),
-            libscraper.get(cnt).unwrap(),
-            jobmanager,
-            manager_arc.clone(),
-        );
-    }
-}
 
 ///
 /// Gets called onstartup of the software
@@ -253,156 +72,34 @@ pub fn on_start(libloading: &libloading::Library, site_struct: &sharedtypes::Glo
     unsafe { temp(site_struct) }
 }
 
-///
-/// This function gets called after a DB upgrade
-///
-pub fn db_upgrade_call(
-    libloading: &RwLock<libloading::Library>,
-    db_version: &usize,
-    site_struct: &sharedtypes::GlobalPluginScraper,
-) {
-    let libloading = libloading.read();
-    let temp: libloading::Symbol<unsafe extern "C" fn(&usize, &sharedtypes::GlobalPluginScraper)> =
-        match unsafe { libloading.get(b"db_upgrade_call\0") } {
-            Err(err) => {
-                logging::error_log(format!(
-                    "Could not run scraper upgrade for db version {} because of {}.",
-                    db_version, err
-                ));
-                return;
-            }
-            Ok(lib) => lib,
-        };
-
-    unsafe { temp(db_version, site_struct) }
-}
-
-fn parse_plugin_output_andmain(
-    plugin_data: Vec<sharedtypes::DBPluginOutputEnum>,
-    db: Main,
-    scraper: &GlobalPluginScraper,
-    jobmanager: Arc<RwLock<Jobs>>,
-    manager: Arc<RwLock<GlobalLoad>>,
-) {
-    for each in plugin_data {
-        match each {
-            sharedtypes::DBPluginOutputEnum::Add(namespaces) => {
-                for names in namespaces {
-                    // 1️⃣ Collect all DB writes first
-                    let mut files_to_add = Vec::new();
-                    let mut tags_to_add = Vec::new();
-                    let mut relationships_to_add = Vec::new();
-                    let mut jobs_to_add = Vec::new();
-
-                    // Collect files
-                    for files in names.file.iter() {
-                        if files.id.is_none() && files.hash.is_some() && files.ext.is_some() {
-                            files_to_add.push(files.clone());
-                        }
-                    }
-
-                    // Collect tags
-                    for tag in names.tag.iter() {
-                        tags_to_add.push(tag.clone());
-                    }
-
-                    // Collect relationships
-                    for rel in names.relationship.iter() {
-                        relationships_to_add.push(rel.clone());
-                    }
-
-                    // Collect jobs
-                    for job in names.jobs.iter() {
-                        jobs_to_add.push(job.clone());
-                    }
-
-                    // 2️⃣ Apply file additions in bulk under one write lock
-                    {
-                        for files in files_to_add {
-                            let ext_id = db.extension_put_string(&files.ext.clone().unwrap());
-                            let storage_id = match &files.location {
-                                Some(exists) => {
-                                    db.storage_put(exists);
-                                    db.storage_get_id(exists).unwrap()
-                                }
-                                None => {
-                                    let exists = db.location_get();
-                                    db.storage_put(&exists);
-                                    db.storage_get_id(&exists).unwrap()
-                                }
-                            };
-                            let file =
-                                sharedtypes::DbFileStorage::NoIdExist(sharedtypes::DbFileObjNoId {
-                                    hash: files.hash.clone().unwrap(),
-                                    ext_id,
-                                    storage_id,
-                                });
-                            db.file_add(file);
-                        }
-                        db.transaction_flush();
-                    }
-
-                    // 3️⃣ Add tags under one write lock
-                    let mut tag_id_map = HashMap::new();
-                    {
-                        for tag in &tags_to_add {
-                            tag_id_map.insert(tag.clone(), db.tag_add_tagobject(tag, true));
-                        }
-                    }
-
-                    // Call plugin hook outside lock
-                    for tag in &tags_to_add {
-                        manager.read().plugin_on_tag(tag);
-                    }
-
-                    // 4️⃣ Add jobs under one write lock
-                    {
-                        let mut jm = jobmanager.write();
-                        for job in jobs_to_add {
-                            jm.jobs_add_nolock(scraper.clone(), job);
-                        }
-                    }
-
-                    // 5️⃣ Add relationships under one write lock
-                    {
-                        for rel in relationships_to_add {
-                            if let Some(ns_id) = db.namespace_get(&rel.tag_namespace) {
-                                if let (Some(file_id), Some(tag_id)) = (
-                                    db.file_get_hash(&rel.file_hash),
-                                    db.tag_get_name(rel.tag_name.clone(), ns_id),
-                                ) {
-                                    db.relationship_add(file_id, tag_id, true);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            sharedtypes::DBPluginOutputEnum::Del(_) => {} // handle deletes similarly if needed
-            sharedtypes::DBPluginOutputEnum::None => {}
-        }
-    }
-}
-
+#[derive(Clone)]
 pub struct GlobalLoad {
     db: Main,
-    callback: HashMap<sharedtypes::GlobalCallbacks, Vec<sharedtypes::GlobalPluginScraper>>,
-    callback_cross: HashMap<sharedtypes::GlobalPluginScraper, Vec<sharedtypes::CallbackInfo>>,
-    callback_storage:
-        HashMap<String, Vec<(sharedtypes::CallbackInfo, sharedtypes::GlobalPluginScraper)>>,
-    sites: HashMap<sharedtypes::GlobalPluginScraper, Vec<String>>,
-    library_path: HashMap<sharedtypes::GlobalPluginScraper, PathBuf>,
-    library_lib: HashMap<sharedtypes::GlobalPluginScraper, RwLock<libloading::Library>>,
-    default_load: LoadableType,
-    thread: HashMap<sharedtypes::GlobalPluginScraper, JoinHandle<()>>,
-    ipc_server: Option<JoinHandle<()>>,
-    regex_storage: HashMap<
-        (
-            (Option<String>, Option<sharedtypes::RegexStorage>),
-            Vec<usize>,
-            Vec<usize>,
-        ),
-        Vec<sharedtypes::GlobalPluginScraper>,
+    callback:
+        Arc<RwLock<HashMap<sharedtypes::GlobalCallbacks, Vec<sharedtypes::GlobalPluginScraper>>>>,
+    callback_cross:
+        Arc<RwLock<HashMap<sharedtypes::GlobalPluginScraper, Vec<sharedtypes::CallbackInfo>>>>,
+    callback_storage: Arc<
+        RwLock<HashMap<String, Vec<(sharedtypes::CallbackInfo, sharedtypes::GlobalPluginScraper)>>>,
+    >,
+    sites: Arc<RwLock<HashMap<sharedtypes::GlobalPluginScraper, Vec<String>>>>,
+    library_path: Arc<RwLock<HashMap<sharedtypes::GlobalPluginScraper, PathBuf>>>,
+    library_lib:
+        Arc<RwLock<HashMap<sharedtypes::GlobalPluginScraper, Arc<RwLock<libloading::Library>>>>>,
+    default_load: Arc<RwLock<LoadableType>>,
+    thread: Arc<RwLock<HashMap<sharedtypes::GlobalPluginScraper, JoinHandle<()>>>>,
+    ipc_server: Arc<RwLock<Option<JoinHandle<()>>>>,
+    regex_storage: Arc<
+        RwLock<
+            HashMap<
+                (
+                    (Option<String>, Option<sharedtypes::RegexStorage>),
+                    Vec<usize>,
+                    Vec<usize>,
+                ),
+                Vec<sharedtypes::GlobalPluginScraper>,
+            >,
+        >,
     >,
     jobmanager: Arc<RwLock<Jobs>>,
 }
@@ -416,23 +113,332 @@ enum LoadableType {
 }
 
 impl GlobalLoad {
-    pub fn new(db: database::Main, jobs: Arc<RwLock<Jobs>>) -> Arc<RwLock<Self>> {
+    pub fn new(db: database::Main, jobs: Arc<RwLock<Jobs>>) -> Self {
         logging::log("Starting IPC Server.".to_string());
 
-        Arc::new(RwLock::new(GlobalLoad {
+        GlobalLoad {
             db,
-            callback: HashMap::new(),
-            callback_cross: HashMap::new(),
-            callback_storage: HashMap::new(),
-            sites: HashMap::new(),
-            library_path: HashMap::new(),
-            library_lib: HashMap::new(),
-            default_load: LoadableType::Release,
-            thread: HashMap::new(),
-            ipc_server: None,
-            regex_storage: HashMap::new(),
+            callback: Arc::new(RwLock::new(HashMap::new())),
+            callback_cross: Arc::new(RwLock::new(HashMap::new())),
+            callback_storage: Arc::new(RwLock::new(HashMap::new())),
+            sites: Arc::new(RwLock::new(HashMap::new())),
+            library_path: Arc::new(RwLock::new(HashMap::new())),
+            library_lib: Arc::new(RwLock::new(HashMap::new())),
+            default_load: Arc::new(RwLock::new(LoadableType::Release)),
+            thread: Arc::new(RwLock::new(HashMap::new())),
+            ipc_server: Arc::new(RwLock::new(None)),
+            regex_storage: Arc::new(RwLock::new(HashMap::new())),
             jobmanager: jobs,
-        }))
+        }
+    }
+
+    ///
+    /// This function gets called after a DB upgrade
+    ///
+    fn db_upgrade_call(
+        &self,
+        libloading: &RwLock<libloading::Library>,
+        db_version: &usize,
+        site_struct: &sharedtypes::GlobalPluginScraper,
+    ) {
+        let libloading = libloading.read();
+        let temp: libloading::Symbol<
+            unsafe extern "C" fn(&usize, &sharedtypes::GlobalPluginScraper),
+        > = match unsafe { libloading.get(b"db_upgrade_call\0") } {
+            Err(err) => {
+                logging::error_log(format!(
+                    "Could not run scraper upgrade for db version {} because of {}.",
+                    db_version, err
+                ));
+                return;
+            }
+            Ok(lib) => lib,
+        };
+
+        unsafe { temp(db_version, site_struct) }
+    }
+
+    ///
+    /// Hopefully a thread-safe way to call plugins per thread avoiding a lock.
+    ///
+    pub fn plugin_on_download(&self, db: Main, cursorpass: &[u8], hash: &String, ext: &String) {
+        let (libpath, libscraper);
+        {
+            (libpath, libscraper) = (
+                self.get_lib_path_from_callback(&sharedtypes::GlobalCallbacks::Download),
+                self.get_scrapers_from_callback(&sharedtypes::GlobalCallbacks::Download),
+            );
+        }
+
+        for (cnt, lib_path) in libpath.iter().enumerate() {
+            let lib;
+            unsafe {
+                match libloading::Library::new(lib_path) {
+                    Ok(good_lib) => lib = good_lib,
+                    Err(_) => {
+                        logging::error_log(format!(
+                            "Cannot load library at path: {}",
+                            lib_path.to_string_lossy()
+                        ));
+                        continue;
+                    }
+                }
+            }
+            let output;
+            unsafe {
+                let plugindatafunc: libloading::Symbol<
+                    unsafe extern "C" fn(
+                        &[u8],
+                        &String,
+                        &String,
+                    )
+                        -> Vec<sharedtypes::DBPluginOutputEnum>,
+                    //unsafe extern "C" fn(Cursor<Bytes>, &String, &String, database::Main),
+                > = match lib.get(b"on_download") {
+                    Ok(lib) => lib,
+                    Err(_) => {
+                        logging::info_log(format!(
+                            "Could not find on_download for plugin: {}",
+                            lib_path.to_string_lossy()
+                        ));
+                        continue;
+                    }
+                };
+                //db.
+                output = plugindatafunc(cursorpass, hash, ext);
+            }
+
+            let jobmanager;
+            {
+                jobmanager = self.jobmanager.clone();
+            }
+            self.parse_plugin_output(output, db.clone(), libscraper.get(cnt).unwrap(), jobmanager);
+        }
+    }
+
+    ///
+    /// Runs internal logic to parse output from plugins
+    ///
+    fn parse_plugin_output_andmain(
+        &self,
+        plugin_data: Vec<sharedtypes::DBPluginOutputEnum>,
+        db: Main,
+        scraper: &GlobalPluginScraper,
+        jobmanager: Arc<RwLock<Jobs>>,
+    ) {
+        for each in plugin_data {
+            match each {
+                sharedtypes::DBPluginOutputEnum::Add(namespaces) => {
+                    for names in namespaces {
+                        // 1️⃣ Collect all DB writes first
+                        let mut files_to_add = Vec::new();
+                        let mut tags_to_add = Vec::new();
+                        let mut relationships_to_add = Vec::new();
+                        let mut jobs_to_add = Vec::new();
+
+                        // Collect files
+                        for files in names.file.iter() {
+                            if files.id.is_none() && files.hash.is_some() && files.ext.is_some() {
+                                files_to_add.push(files.clone());
+                            }
+                        }
+
+                        // Collect tags
+                        for tag in names.tag.iter() {
+                            tags_to_add.push(tag.clone());
+                        }
+
+                        // Collect relationships
+                        for rel in names.relationship.iter() {
+                            relationships_to_add.push(rel.clone());
+                        }
+
+                        // Collect jobs
+                        for job in names.jobs.iter() {
+                            jobs_to_add.push(job.clone());
+                        }
+
+                        // 2️⃣ Apply file additions in bulk under one write lock
+                        {
+                            for files in files_to_add {
+                                let ext_id = db.extension_put_string(&files.ext.clone().unwrap());
+                                let storage_id = match &files.location {
+                                    Some(exists) => {
+                                        db.storage_put(exists);
+                                        db.storage_get_id(exists).unwrap()
+                                    }
+                                    None => {
+                                        let exists = db.location_get();
+                                        db.storage_put(&exists);
+                                        db.storage_get_id(&exists).unwrap()
+                                    }
+                                };
+                                let file = sharedtypes::DbFileStorage::NoIdExist(
+                                    sharedtypes::DbFileObjNoId {
+                                        hash: files.hash.clone().unwrap(),
+                                        ext_id,
+                                        storage_id,
+                                    },
+                                );
+                                db.file_add(file);
+                            }
+                            db.transaction_flush();
+                        }
+
+                        // 3️⃣ Add tags under one write lock
+                        let mut tag_id_map = HashMap::new();
+                        {
+                            for tag in &tags_to_add {
+                                tag_id_map.insert(tag.clone(), db.tag_add_tagobject(tag, true));
+                            }
+                        }
+
+                        // Call plugin hook outside lock
+                        for tag in &tags_to_add {
+                            self.plugin_on_tag(tag);
+                        }
+
+                        // 4️⃣ Add jobs under one write lock
+                        {
+                            let mut jm = jobmanager.write();
+                            for job in jobs_to_add {
+                                jm.jobs_add_nolock(scraper.clone(), job);
+                            }
+                        }
+
+                        // 5️⃣ Add relationships under one write lock
+                        {
+                            for rel in relationships_to_add {
+                                if let Some(ns_id) = db.namespace_get(&rel.tag_namespace) {
+                                    if let (Some(file_id), Some(tag_id)) = (
+                                        db.file_get_hash(&rel.file_hash),
+                                        db.tag_get_name(rel.tag_name.clone(), ns_id),
+                                    ) {
+                                        db.relationship_add(file_id, tag_id, true);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                sharedtypes::DBPluginOutputEnum::Del(_) => {} // handle deletes similarly if needed
+                sharedtypes::DBPluginOutputEnum::None => {}
+            }
+        }
+    }
+
+    ///
+    /// Tells a scraper that it should handle the "text" downloading
+    ///
+    pub fn text_scraping(
+        &self,
+        url_output: &str,
+        actual_params: &[sharedtypes::ScraperParam],
+        scraperdata: &sharedtypes::ScraperData,
+        scraper: &GlobalPluginScraper,
+    ) -> Result<sharedtypes::ScraperObject, sharedtypes::ScraperReturn> {
+        if let Some(lib) = self.library_get(scraper) {
+            let lib = lib.read();
+            let temp: libloading::Symbol<
+                unsafe extern "C" fn(
+                    &str,
+                    &[sharedtypes::ScraperParam],
+                    &sharedtypes::ScraperData,
+                ) -> Result<
+                    sharedtypes::ScraperObject,
+                    sharedtypes::ScraperReturn,
+                >,
+            > = unsafe { lib.get(b"text_scraping\0").unwrap() };
+            unsafe { temp(url_output, actual_params, scraperdata) }
+        } else {
+            Err(sharedtypes::ScraperReturn::Nothing)
+        }
+    }
+
+    ///
+    /// Parses output from plugin.
+    ///
+    fn parse_plugin_output(
+        &self,
+        plugin_data: Vec<sharedtypes::DBPluginOutputEnum>,
+        db: Main,
+        scraper: &GlobalPluginScraper,
+        jobmanager: Arc<RwLock<Jobs>>,
+    ) {
+        //let db = self._database.lock().unwrap();
+        self.parse_plugin_output_andmain(plugin_data, db, scraper, jobmanager);
+    }
+
+    ///
+    /// Gets a scraper to output any URLs based on params
+    ///
+    pub fn url_dump(
+        &self,
+        params: &Vec<sharedtypes::ScraperParam>,
+        scraperdata: &sharedtypes::ScraperData,
+        scraper: &sharedtypes::GlobalPluginScraper,
+    ) -> Result<Vec<(String, sharedtypes::ScraperData)>, libloading::Error> {
+        let mut out = Vec::new();
+
+        if let Some(lib) = self.library_get(scraper) {
+            let lib = lib.read();
+            let temp: libloading::Symbol<
+                unsafe extern "C" fn(
+                    &[sharedtypes::ScraperParam],
+                    &sharedtypes::ScraperData,
+                ) -> Vec<(String, sharedtypes::ScraperData)>,
+            > = unsafe { lib.get(b"url_dump\0")? };
+            for item in unsafe { temp(params, scraperdata) } {
+                out.push(item);
+            }
+        }
+        Ok(out)
+    }
+
+    ///
+    /// Used by a scraper to download a file. ONLY ONE :/
+    ///
+    pub fn download_from(
+        &self,
+        file: &sharedtypes::FileObject,
+        scraper: &sharedtypes::GlobalPluginScraper,
+    ) -> Option<Vec<u8>> {
+        if let Some(lib) = self.library_get(scraper) {
+            let lib = lib.read();
+            let temp: libloading::Symbol<
+                unsafe extern "C" fn(&sharedtypes::FileObject) -> Option<Vec<u8>>,
+            > = unsafe { lib.get(b"download_from\0").unwrap() };
+            return unsafe { temp(file) };
+        }
+        None
+    }
+
+    ///
+    /// Calls a parser to cleave information from a lib
+    ///
+    pub fn parser_call(
+        &self,
+        url_output: &str,
+        source_url: &str,
+        scraperdata: &sharedtypes::ScraperData,
+        scraper: &GlobalPluginScraper,
+    ) -> Result<sharedtypes::ScraperObject, sharedtypes::ScraperReturn> {
+        if let Some(scraper_library_rwlock) = self.library_get(scraper) {
+            let scraper_library = scraper_library_rwlock.read();
+            let temp: libloading::Symbol<
+                unsafe extern "C" fn(
+                    &str,
+                    &str,
+                    &sharedtypes::ScraperData,
+                ) -> Result<
+                    sharedtypes::ScraperObject,
+                    sharedtypes::ScraperReturn,
+                >,
+            > = unsafe { scraper_library.get(b"parser\0").unwrap() };
+            unsafe { temp(url_output, source_url, scraperdata) }
+        } else {
+            Err(sharedtypes::ScraperReturn::Nothing)
+        }
     }
 
     pub fn callback_on_import(&self, bytes: &bytes::Bytes, hash: &String) {
@@ -744,7 +750,7 @@ impl GlobalLoad {
 
     pub fn return_regex_storage(
         &self,
-    ) -> &HashMap<
+    ) -> HashMap<
         (
             (Option<String>, Option<sharedtypes::RegexStorage>),
             Vec<usize>,
@@ -752,7 +758,7 @@ impl GlobalLoad {
         ),
         Vec<sharedtypes::GlobalPluginScraper>,
     > {
-        &self.regex_storage
+        self.regex_storage.read().clone()
     }
 
     ///
@@ -761,24 +767,18 @@ impl GlobalLoad {
     pub fn return_scraper_from_site(
         &self,
         site: &String,
-    ) -> Option<&sharedtypes::GlobalPluginScraper> {
-        for (scraper, sites) in self.sites.iter() {
+    ) -> Option<sharedtypes::GlobalPluginScraper> {
+        for (scraper, sites) in self.sites.read().iter() {
             if sites.contains(site) {
-                return Some(scraper);
+                return Some(scraper.clone());
             }
         }
         None
     }
 
-    pub fn setup_ipc(
-        &mut self,
-        globalload: Arc<RwLock<GlobalLoad>>,
-        db: Main,
-        jobs: Arc<RwLock<Jobs>>,
-    ) {
-        let globalload = globalload.clone();
+    pub fn setup_ipc(&mut self, globalload: GlobalLoad, db: Main, jobs: Arc<RwLock<Jobs>>) {
         let srv = std::thread::spawn(move || {
-            let mut ipc_coms = server::PluginIpcInteract::new(db.clone(), globalload.clone(), jobs);
+            let mut ipc_coms = server::PluginIpcInteract::new(db.clone(), globalload, jobs);
             //let _ = rcv.recv();
 
             //println!("v");
@@ -791,7 +791,7 @@ impl GlobalLoad {
             }
         });
 
-        self.ipc_server = Some(srv);
+        self.ipc_server = Arc::new(RwLock::new(Some(srv)));
     }
 
     ///
@@ -813,7 +813,7 @@ impl GlobalLoad {
         &self,
         callback: &sharedtypes::GlobalCallbacks,
     ) -> Vec<GlobalPluginScraper> {
-        if let Some(callbacklist) = self.callback.get(callback) {
+        if let Some(callbacklist) = self.callback.read().get(callback) {
             callbacklist.clone()
         } else {
             Vec::new()
@@ -828,9 +828,9 @@ impl GlobalLoad {
         callback: &sharedtypes::GlobalCallbacks,
     ) -> Vec<PathBuf> {
         let mut out = Vec::new();
-        if let Some(callbacklist) = self.callback.get(callback) {
+        if let Some(callbacklist) = self.callback.read().get(callback) {
             for callback_item in callbacklist {
-                if let Some(libp) = self.library_path.get(callback_item) {
+                if let Some(libp) = self.library_path.read().get(callback_item) {
                     out.push(libp.clone());
                 }
             }
@@ -890,10 +890,10 @@ impl GlobalLoad {
         vers: &usize,
         input_data: &sharedtypes::CallbackInfoInput,
     ) -> HashMap<String, sharedtypes::CallbackCustomDataReturning> {
-        if let Some(callback_list) = self.callback_storage.get(func_name) {
+        if let Some(callback_list) = self.callback_storage.read().get(func_name) {
             for (callback, global_plugin) in callback_list {
                 if *vers == callback.vers {
-                    if let Some(plugin_lib) = self.library_lib.get(global_plugin) {
+                    if let Some(plugin_lib) = self.library_lib.read().get(global_plugin) {
                         let plugin_lib = plugin_lib.read();
                         let plugininfo;
                         unsafe {
@@ -935,11 +935,19 @@ impl GlobalLoad {
         HashMap::new()
     }
 
+    pub fn return_external_plugin_call(&self, func_name: &str) -> Vec<String> {
+        let mut out = Vec::new();
+        if let Some(callback_list) = self.callback_storage.read().get(func_name) {
+            for (callback, callbackscraper) in callback_list {}
+        }
+
+        out
+    }
     ///
     /// Returns true if we have no threads that are running
     ///
     pub fn return_thread(&self) -> bool {
-        self.thread.is_empty()
+        self.thread.read().is_empty()
     }
 
     ///
@@ -948,22 +956,31 @@ impl GlobalLoad {
     pub fn library_get(
         &self,
         global: &sharedtypes::GlobalPluginScraper,
-    ) -> Option<&RwLock<Library>> {
-        self.library_lib.get(global)
+    ) -> Option<Arc<RwLock<Library>>> {
+        let lib = self.library_lib.read();
+        lib.get(global).cloned()
     }
 
     ///
     /// Returns a library path if it exists
     ///
-    pub fn library_get_path(&self, global: &sharedtypes::GlobalPluginScraper) -> Option<&PathBuf> {
-        self.library_path.get(global)
+    pub fn library_get_path(&self, global: &sharedtypes::GlobalPluginScraper) -> Option<PathBuf> {
+        self.library_path.read().get(global).cloned()
     }
 
-    ///
+    /* ///
     /// Returns the libraries raw
     ///
     pub fn library_get_raw(&self) -> &HashMap<GlobalPluginScraper, RwLock<Library>> {
-        &self.library_lib
+        &self.library_lib.read().cloned()
+    }*/
+
+    pub fn run_upgrade_logic(&self, db_version: &usize) {
+        for internal_scraper in self.library_lib.read().keys() {
+            if let Some(scraper_library) = self.library_lib.read().get(internal_scraper) {
+                self.db_upgrade_call(scraper_library, &db_version, internal_scraper);
+            }
+        }
     }
 
     ///
@@ -971,14 +988,14 @@ impl GlobalLoad {
     ///
     pub fn thread_finish_closed(&mut self) {
         let mut finished_threads = Vec::new();
-        for (scraper, thread) in self.thread.iter() {
+        for (scraper, thread) in self.thread.read().iter() {
             if thread.is_finished() {
                 finished_threads.push(scraper.clone());
             }
         }
 
         for thread in finished_threads.iter() {
-            let th = self.thread.remove(thread).unwrap();
+            let th = self.thread.write().remove(thread).unwrap();
             let _ = th.join();
         }
     }
@@ -998,7 +1015,7 @@ impl GlobalLoad {
     ///
     pub fn scraper_get(&self) -> Vec<sharedtypes::GlobalPluginScraper> {
         let mut out = Vec::new();
-        for each in self.sites.keys() {
+        for each in self.sites.read().keys() {
             out.push(each.clone());
         }
         out
@@ -1008,7 +1025,7 @@ impl GlobalLoad {
     /// Returns all sites for a scraper
     ///
     pub fn sites_get(&self, global: &sharedtypes::GlobalPluginScraper) -> Vec<String> {
-        match self.sites.get(global) {
+        match self.sites.read().get(global) {
             None => Vec::new(),
             Some(out) => out.clone(),
         }
@@ -1018,11 +1035,11 @@ impl GlobalLoad {
     /// Triggers the on_start for the plugins
     ///
     pub fn pluginscraper_on_start(&mut self) {
-        for (callback, list) in self.callback.iter() {
+        for (callback, list) in self.callback.read().iter() {
             if let sharedtypes::GlobalCallbacks::Start(thread_type) = callback {
                 for to_run in list {
                     logging::log(format!("Starting Call Start for: {}", &to_run.name));
-                    let file = self.library_path.get(to_run).unwrap().clone();
+                    let file = self.library_path.read().get(to_run).unwrap().clone();
                     match thread_type {
                         sharedtypes::StartupThreadType::Spawn => {
                             let run = to_run.clone();
@@ -1030,7 +1047,7 @@ impl GlobalLoad {
                             let thread = thread::spawn(move || {
                                 c_run_onstart(&file, &to_run.clone());
                             });
-                            self.thread.insert(run.clone(), thread);
+                            self.thread.write().insert(run.clone(), thread);
                         }
                         sharedtypes::StartupThreadType::SpawnInline => {
                             let run = to_run.clone();
@@ -1038,7 +1055,7 @@ impl GlobalLoad {
                             let thread = thread::spawn(move || {
                                 c_run_onstart(&file, &to_run);
                             });
-                            self.thread.insert(run.clone(), thread);
+                            self.thread.write().insert(run.clone(), thread);
                         }
                         sharedtypes::StartupThreadType::Inline => {
                             c_run_onstart(&file, to_run);
@@ -1054,46 +1071,33 @@ impl GlobalLoad {
     ///
     pub fn plugin_on_start_should_wait(&mut self) -> bool {
         self.thread_finish_closed();
-        for (check, list) in self.callback.iter() {
+        for (check, list) in self.callback.read().iter() {
             if let sharedtypes::GlobalCallbacks::Start(thread) = check {
                 for item in list {
                     if &sharedtypes::StartupThreadType::SpawnInline == thread
-                        && self.thread.contains_key(item)
+                        && self.thread.read().contains_key(item)
                     {
                         return true;
                     }
                 }
             }
         }
-        /*if let Some(plugin_list) = self.callback.get(&sharedtypes::GlobalCallbacks::Start) {
-            for plugin in plugin_list {
-                if let Some(stored_info) = &plugin.storage_type {
-                    if let sharedtypes::ScraperOrPlugin::Plugin(plugin_info) = stored_info {
-                        if sharedtypes::PluginThreadType::SpawnInline == plugin_info.com_type
-                            && self.thread.get(plugin).is_some()
-                        {
-                            return true;
-                        }
-                    }
-                }
-            }
-        }*/
         false
     }
 
     ///
     /// Clears the regex cache and callbacks
     ///
-    fn clear_regex(&mut self) {
-        self.callback.clear();
-        self.callback_cross.clear();
-        self.regex_storage.clear();
+    fn clear_regex(&self) {
+        self.callback.write().clear();
+        self.callback_cross.write().clear();
+        self.regex_storage.write().clear();
     }
 
     ///
     /// Reloads the regex stores
     ///
-    pub fn reload_regex(&mut self) {
+    pub fn reload_regex(&self) {
         self.clear_regex();
         {
             let db = self.db.clone();
@@ -1112,7 +1116,7 @@ impl GlobalLoad {
     /// Actually parses the Library
     /// TODO needs to make easy pulls for scraper and plugin info
     ///
-    fn parse_lib(&mut self, lib: Library, path: &Path) {
+    fn parse_lib(&self, lib: Library, path: &Path) {
         if let Some(items) = self.get_info(&lib, path) {
             if items.is_empty() {
                 logging::error_log(format!(
@@ -1134,7 +1138,9 @@ impl GlobalLoad {
                     }
                     Some(ref scraperplugin) => match scraperplugin {
                         sharedtypes::ScraperOrPlugin::Scraper(scraperinfo) => {
-                            self.sites.insert(global.clone(), scraperinfo.sites.clone());
+                            self.sites
+                                .write()
+                                .insert(global.clone(), scraperinfo.sites.clone());
                         }
                         sharedtypes::ScraperOrPlugin::Plugin(_plugininfo) => {}
                     },
@@ -1144,38 +1150,47 @@ impl GlobalLoad {
                     match callbacks {
                         sharedtypes::GlobalCallbacks::Callback(callback_info) => {
                             // Stores the callbacks pertaining to externals
-                            match self.callback_storage.get_mut(&callback_info.func) {
-                                None => {
-                                    self.callback_storage.insert(
-                                        callback_info.func.to_string(),
-                                        vec![(callback_info.clone(), global.clone())],
-                                    );
-                                }
-                                Some(vec) => {
-                                    vec.push((callback_info.clone(), global.clone()));
+                            {
+                                let mut callback_storage = self.callback_storage.write();
+                                match callback_storage.get_mut(&callback_info.func) {
+                                    None => {
+                                        callback_storage.insert(
+                                            callback_info.func.to_string(),
+                                            vec![(callback_info.clone(), global.clone())],
+                                        );
+                                    }
+                                    Some(vec) => {
+                                        vec.push((callback_info.clone(), global.clone()));
+                                    }
                                 }
                             }
 
                             // Some sort of goofy regex callback maybe not used
-                            match self.callback_cross.get_mut(&global) {
-                                None => {
-                                    self.callback_cross
-                                        .insert(global.clone(), vec![callback_info.clone()]);
-                                }
-                                Some(list) => {
-                                    list.push(callback_info.clone());
+                            {
+                                let mut callback_cross = self.callback_cross.write();
+                                match callback_cross.get_mut(&global) {
+                                    None => {
+                                        callback_cross
+                                            .insert(global.clone(), vec![callback_info.clone()]);
+                                    }
+                                    Some(list) => {
+                                        list.push(callback_info.clone());
+                                    }
                                 }
                             }
                         }
-                        _ => match self.callback.get_mut(callbacks) {
-                            None => {
-                                let temp = vec![global.clone()];
-                                self.callback.insert(callbacks.clone(), temp);
+                        _ => {
+                            let mut callback = self.callback.write();
+                            match callback.get_mut(callbacks) {
+                                None => {
+                                    let temp = vec![global.clone()];
+                                    callback.insert(callbacks.clone(), temp);
+                                }
+                                Some(plugin_list) => {
+                                    plugin_list.push(global.clone());
+                                }
                             }
-                            Some(plugin_list) => {
-                                plugin_list.push(global.clone());
-                            }
-                        },
+                        }
                     }
 
                     if let sharedtypes::GlobalCallbacks::Tag((searchtype, ns, not_ns)) = callbacks {
@@ -1210,13 +1225,14 @@ impl GlobalLoad {
                                 todo!();
                             }
                         };
-                        match self.regex_storage.get_mut(&(
+                        let mut regex_storage = self.regex_storage.write();
+                        match regex_storage.get_mut(&(
                             searchtype.clone(),
                             ns_u.clone(),
                             ns_not_u.clone(),
                         )) {
                             None => {
-                                self.regex_storage.insert(
+                                regex_storage.insert(
                                     (searchtype.clone(), ns_u, ns_not_u),
                                     vec![global.clone()],
                                 );
@@ -1228,12 +1244,16 @@ impl GlobalLoad {
                     }
                 }
 
-                self.library_path.insert(global.clone(), path.to_path_buf());
+                self.library_path
+                    .write()
+                    .insert(global.clone(), path.to_path_buf());
                 let lib;
                 unsafe {
                     lib = libloading::Library::new(path).unwrap();
                 }
-                self.library_lib.insert(global, RwLock::new(lib));
+                self.library_lib
+                    .write()
+                    .insert(global, Arc::new(RwLock::new(lib)));
             }
         }
     }
@@ -1265,7 +1285,7 @@ impl GlobalLoad {
     ///
     /// Gets a valid folder path and tries to load it into the library
     ///
-    pub fn load_folder(&mut self, folder: &Path) {
+    pub fn load_folder(&self, folder: &Path) {
         if !folder.exists() {
             let path_check = std::fs::create_dir_all(folder);
             match path_check {
@@ -1286,7 +1306,7 @@ impl GlobalLoad {
             ));
             return;
         }
-        let loadable_string = match self.default_load {
+        let loadable_string = match *self.default_load.read() {
             LoadableType::Release => "release",
             LoadableType::Debug => "debug",
         };
@@ -1307,7 +1327,7 @@ impl GlobalLoad {
         }
     }
 
-    pub fn filter_sites_return_lib(&self, site: &String) -> Option<&RwLock<Library>> {
+    pub fn filter_sites_return_lib(&self, site: &String) -> Option<Arc<RwLock<Library>>> {
         for scraper in self.scraper_get().iter() {
             if let Some(ref storage_type) = scraper.storage_type
                 && let sharedtypes::ScraperOrPlugin::Scraper(scraperinfo) = &storage_type

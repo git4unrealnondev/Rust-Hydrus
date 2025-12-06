@@ -145,11 +145,7 @@ pub struct PluginIpcInteract {
 
 /// This is going to be the main way to talk to the plugin system and stuffins.
 impl PluginIpcInteract {
-    pub fn new(
-        main_db: database::Main,
-        globalload: Arc<RwLock<GlobalLoad>>,
-        jobs: Arc<RwLock<Jobs>>,
-    ) -> Self {
+    pub fn new(main_db: database::Main, globalload: GlobalLoad, jobs: Arc<RwLock<Jobs>>) -> Self {
         PluginIpcInteract {
             db_interface: DbInteract {
                 database: main_db,
@@ -305,7 +301,7 @@ fn handle_client(
     stream: LocalSocketStream,
     worker_id: &usize,
     db: database::Main,
-    globalload: Arc<RwLock<GlobalLoad>>,
+    globalload: GlobalLoad,
     jobmanager: Arc<RwLock<Jobs>>,
 ) {
     let worker_id = worker_id.clone();
@@ -340,7 +336,7 @@ fn handle_client(
 #[derive(Clone)]
 struct DbInteract {
     database: database::Main,
-    globalload: Arc<RwLock<GlobalLoad>>,
+    globalload: GlobalLoad,
     jobmanager: Arc<RwLock<Jobs>>,
 }
 
@@ -362,7 +358,7 @@ fn data_size_to_b<T: serde::Serialize>(data_object: &T) -> Vec<u8> {
 pub fn dbactions_to_function(
     dbaction: types::SupportedDBRequests,
     database: database::Main,
-    globalload: Arc<RwLock<GlobalLoad>>,
+    globalload: GlobalLoad,
     jobmanager: Arc<RwLock<Jobs>>,
 ) -> Vec<u8> {
     match dbaction {
@@ -488,13 +484,13 @@ pub fn dbactions_to_function(
         }
         types::SupportedDBRequests::ParentsGet((parentswitch, id)) => {
             let unwrappy = database;
-            match parentswitch {
-                types::ParentsType::Tag => data_size_to_b(&unwrappy.parents_rel_get(&id)),
-                types::ParentsType::Rel => data_size_to_b(&unwrappy.parents_tag_get(&id)),
-                types::ParentsType::LimitTo => {
-                    data_size_to_b(&unwrappy.parents_limitto_tag_get(&id))
-                }
-            }
+            let out = match parentswitch {
+                types::ParentsType::Tag => &unwrappy.parents_tagid_tag_get(&id),
+                types::ParentsType::Rel => &unwrappy.parents_relate_tag_get(&id),
+                types::ParentsType::LimitTo => &unwrappy.parents_limitto_tag_get(&id),
+            };
+
+            data_size_to_b(&out)
         }
         types::SupportedDBRequests::ParentsDelete(parentobj) => {
             let unwrappy = database;
@@ -527,7 +523,7 @@ pub fn dbactions_to_function(
             data_size_to_b(&tmep)
         }
         types::SupportedDBRequests::PluginCallback(func_name, version, input_data) => {
-            let plugin = globalload.read();
+            let plugin = globalload;
             let out = plugin.external_plugin_call(&func_name, &version, &input_data);
             data_size_to_b(&out)
         }
@@ -668,17 +664,7 @@ pub fn dbactions_to_function(
             //bincode::serialize(&tmep).unwrap()
         }
         types::SupportedDBRequests::ReloadRegex => {
-            let unwrappy = database;
-            let globalload;
-            {
-                if let Some(globalload_arc) = unwrappy.globalload.clone() {
-                    globalload = globalload_arc.clone();
-                } else {
-                    return data_size_to_b(&true);
-                }
-            }
-
-            globalload.write().reload_regex();
+            globalload.reload_regex();
 
             data_size_to_b(&true)
         }

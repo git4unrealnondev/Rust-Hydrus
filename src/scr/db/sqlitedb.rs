@@ -3,6 +3,7 @@ use crate::database::Main;
 use crate::error;
 use crate::logging;
 use crate::sharedtypes;
+use crate::sharedtypes::DbParentsObj;
 use r2d2::PooledConnection;
 use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::OptionalExtension;
@@ -867,6 +868,32 @@ HAVING COUNT(r.fileid) {dir} ?;"
 
         out
     }
+
+    pub fn parents_dbobj_get_sql(&self, parent_id: &usize) -> Option<DbParentsObj> {
+        let tn = self.get_database_connection();
+
+        let result: Result<(usize, usize, Option<usize>), rusqlite::Error> = tn.query_row(
+            "SELECT tag_id, relate_tag_id, limit_to FROM Parents WHERE id = ?",
+            params![parent_id],
+            |row| {
+                Ok((
+                    row.get::<_, usize>(0)?,
+                    row.get::<_, usize>(1)?,
+                    row.get::<_, Option<usize>>(2)?,
+                ))
+            },
+        );
+
+        match result {
+            Ok((tag_id, relate_tag_id, limit_to)) => Some(DbParentsObj {
+                tag_id,
+                relate_tag_id,
+                limit_to,
+            }),
+            Err(_) => None,
+        }
+    }
+
     pub fn file_tag_relationship(
         &self,
         fid: &usize,
@@ -1446,9 +1473,12 @@ HAVING COUNT(r.fileid) {dir} ?;"
     /// Removes a job from sql table by id
     pub fn del_from_jobs_table_sql_better(&self, id: &usize) {
         self.transaction_start();
-        let tn = self.write_conn.lock();
-        let inp = "DELETE FROM Jobs WHERE id = ?";
-        let _ = wait_until_sqlite_ok!(tn.execute(inp, params![id.to_string()]));
+        {
+            let tn = self.write_conn.lock();
+            let inp = "DELETE FROM Jobs WHERE id = ?";
+            let _ = wait_until_sqlite_ok!(tn.execute(inp, params![id.to_string()])).unwrap();
+        }
+        self.transaction_flush();
     }
 
     /// Removes a tag from sql table by name and namespace

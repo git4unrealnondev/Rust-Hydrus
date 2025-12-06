@@ -105,6 +105,26 @@ fn db_file_sanity(dbloc: &str) {
 
 /// Main function.
 fn main() {
+    // Create a background thread which checks for deadlocks every 10s
+    thread::spawn(move || {
+        loop {
+            thread::sleep(std::time::Duration::from_secs(1));
+            let deadlocks = parking_lot::deadlock::check_deadlock();
+            if deadlocks.is_empty() {
+                continue;
+            }
+
+            println!("{} deadlocks detected", deadlocks.len());
+            for (i, threads) in deadlocks.iter().enumerate() {
+                println!("Deadlock #{}", i);
+                for t in threads {
+                    println!("Thread Id {:#?}", t.thread_id());
+                    println!("{:#?}", t.backtrace());
+                }
+            }
+        }
+    });
+
     let dbloc = "main.db";
     {
         let logloc = "log.txt";
@@ -119,7 +139,7 @@ fn main() {
 
     let jobmanager = Arc::new(RwLock::new(jobs::Jobs::new(database.clone())));
 
-    let globalload_database = globalload::GlobalLoad::new(database.clone(), jobmanager.clone());
+    let mut globalload = globalload::GlobalLoad::new(database.clone(), jobmanager.clone());
     {
         database.load_table(&sharedtypes::LoadDBTable::Settings);
         database.load_table(&sharedtypes::LoadDBTable::Jobs);
@@ -129,13 +149,9 @@ fn main() {
 
         // Adds plugin and scraper callback capability from inside the db
         // Things like callbacks and the like
-        database.setup_globalload(globalload_database.clone());
+        database.setup_globalload(globalload.clone());
 
-        globalload_database.write().setup_ipc(
-            globalload_database.clone(),
-            database.clone(),
-            jobmanager.clone(),
-        );
+        globalload.setup_ipc(globalload.clone(), database.clone(), jobmanager.clone());
 
         // Putting this down here after plugin manager because that's when the IPC server
         // starts and we can then inside of the scraper start calling IPC functions
@@ -159,34 +175,26 @@ fn main() {
         database.transaction_flush();
 
         // Actually upgrades the DB from scraper calls
-        for db_version in upgradeversvec {
-            for (internal_scraper, scraper_library) in
-                globalload_database.read().library_get_raw().iter()
-            {
-                logging::info_log(format!(
-                    "Starting scraper upgrade: {}",
-                    internal_scraper.name
-                ));
-                globalload::db_upgrade_call(scraper_library, &db_version, internal_scraper);
-            }
+        for db_version in upgradeversvec.iter() {
+            globalload.run_upgrade_logic(db_version);
         }
 
         // Processes any CLI input here
-        //cli::main(database.clone(), globalload_database.clone());
+        //cli::main(database.clone(), globalload);
         cli::main(database.clone());
 
         database.transaction_flush();
     }
     {
-        globalload_database.write().reload_regex();
+        globalload.reload_regex();
         // Calls the on_start func for the plugins
-        globalload_database.write().pluginscraper_on_start();
+        globalload.pluginscraper_on_start();
     }
 
     // A way to get around a mutex lock but it works lol
     let one_sec = time::Duration::from_millis(1000);
     loop {
-        if !globalload_database.write().plugin_on_start_should_wait() {
+        if !globalload.plugin_on_start_should_wait() {
             break;
         } else {
             thread::sleep(one_sec);
@@ -194,7 +202,7 @@ fn main() {
     }
 
     {
-        let sites = globalload_database.read().return_all_sites();
+        let sites = globalload.return_all_sites();
         //let globalload_sites = ;
         // Checks if we need to load any jobs
         jobmanager.write().jobs_load(sites);
@@ -217,7 +225,7 @@ fn main() {
                 jobmanager.clone(),
                 database.clone(),
                 scraper.clone(),
-                globalload_database.clone(),
+                globalload.clone(),
             );
         }
     }
@@ -227,12 +235,12 @@ fn main() {
         let brk;
         threadhandler.check_threads();
         {
-            globalload_database.write().thread_finish_closed();
-            brk = globalload_database.read().return_thread();
+            globalload.clone().thread_finish_closed();
+            brk = globalload.return_thread();
         }
 
         {
-            let sites = globalload_database.read().return_all_sites();
+            let sites = globalload.return_all_sites();
             jobmanager.write().jobs_load(sites);
         }
 
@@ -242,7 +250,7 @@ fn main() {
                 jobmanager.clone(),
                 database.clone(),
                 scraper.clone(),
-                globalload_database.clone(),
+                globalload.clone(),
             );
         }
         thread::sleep(one_sec);

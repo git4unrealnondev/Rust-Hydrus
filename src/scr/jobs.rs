@@ -1,4 +1,3 @@
-
 use crate::database;
 use crate::logging;
 use crate::sharedtypes;
@@ -323,7 +322,6 @@ impl Jobs {
             .into_iter()
             .filter(|job| job.1.priority != 0)
             .collect();
-
         let mut commit = false;
         for (scraper, job) in jobs_vec {
             if self.jobs_add(scraper, job) {

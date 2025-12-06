@@ -1,4 +1,5 @@
 #![allow(unused_variables)]
+#![allow(dead_code)]
 
 use crate::sharedtypes::DbFileStorage;
 use crate::sharedtypes::{self};
@@ -258,7 +259,10 @@ pub fn namespace_get_tagids(id: usize) -> HashSet<usize> {
 ///
 /// It's basically a 2 way pointer like the Relations table limit_to limits the
 /// exposure of
-pub fn parents_get(parenttype: types::ParentsType, id: usize) -> HashSet<usize> {
+pub fn parents_get(
+    parenttype: types::ParentsType,
+    id: usize,
+) -> HashSet<sharedtypes::DbParentsObj> {
     init_data_request(&types::SupportedRequests::Database(
         types::SupportedDBRequests::ParentsGet((parenttype, id)),
     ))
@@ -278,7 +282,7 @@ pub fn tag_remove(tag_id: usize) -> bool {
     ))
 }
 
-/// Adds a parent into the db returns the cantor pair of the parent inserted
+/// Adds a parent into the db returns the unique of the parent inserted
 pub fn parents_put(parentobj: sharedtypes::DbParentsObj) -> usize {
     init_data_request(&types::SupportedRequests::Database(
         types::SupportedDBRequests::ParentsPut(parentobj),

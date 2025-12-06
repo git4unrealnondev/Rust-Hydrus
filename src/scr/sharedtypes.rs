@@ -1032,6 +1032,7 @@ pub enum CallbackCustomData {
     VString,
     VU8,
     VUsize,
+    VCallback,
 }
 
 pub enum FileDownloadReturn {}
@@ -1047,6 +1048,38 @@ pub enum CallbackCustomDataReturning {
     VString(Vec<String>),
     VU8(Vec<u8>),
     VUsize(Vec<usize>),
+    VCallback(Vec<CallbackCustomDataReturning>),
+}
+
+impl std::fmt::Display for CallbackCustomDataReturning {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CallbackCustomDataReturning::String(s) => write!(f, "{}", s),
+            CallbackCustomDataReturning::U8(bytes) => {
+                write!(f, "U8({:?})", bytes)
+            }
+            CallbackCustomDataReturning::Usize(v) => write!(f, "Usize({})", v),
+            CallbackCustomDataReturning::VString(v) => {
+                write!(f, "VString({:?})", v)
+            }
+            CallbackCustomDataReturning::VU8(v) => {
+                write!(f, "VU8({:?})", v)
+            }
+            CallbackCustomDataReturning::VUsize(v) => {
+                write!(f, "VUsize({:?})", v)
+            }
+            CallbackCustomDataReturning::VCallback(list) => {
+                write!(f, "VCallback([")?;
+                for (i, item) in list.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}", item)?;
+                }
+                write!(f, "])")
+            }
+        }
+    }
 }
 
 /// information block for plugin info

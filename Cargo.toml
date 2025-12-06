@@ -50,7 +50,7 @@ r2d2_sqlite = { version = "0.31.0", features = ["bundled"] }
 lazy_static = "1.5.0"
 ipc-channel-mux = "0.0.1"
 crossbeam-channel = "0.5.15"
-parking_lot = {version="0.12.5", features=["send_guard"]}
+parking_lot = {version="0.12.5", features=["deadlock_detection"]}
 tokio = {version="1.48.0", features=["rt-multi-thread", "macros"]}
 uuid = "1.18.1"
 fuzz-search = "0.1.0"

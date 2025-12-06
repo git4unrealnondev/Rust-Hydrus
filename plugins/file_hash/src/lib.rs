@@ -235,7 +235,6 @@ fn check_existing_db() {
             0,
             sharedtypes::GreqLeqOrEq::Equal,
         );
-        dbg!(&utable, &total);
         for file_id in &total {
             match modernstorage.get_mut(file_id) {
                 None => {
@@ -251,7 +250,6 @@ fn check_existing_db() {
         client::log(format!("Ended table loop for table: {:?}", &table));
     }
 
-    dbg!(&modernstorage);
     let failed_id: Arc<Mutex<HashMap<Supset, usize>>> = Arc::new(Mutex::new(HashMap::new()));
     let hashed_id: Arc<Mutex<HashMap<Supset, usize>>> = Arc::new(Mutex::new(HashMap::new()));
     for table in Supset::iter() {

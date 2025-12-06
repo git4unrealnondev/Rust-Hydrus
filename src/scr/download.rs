@@ -375,7 +375,7 @@ pub fn dlfile_new(
     client: Arc<RwLock<Client>>,
     db: Main,
     file: &mut sharedtypes::FileObject,
-    globalload: Option<Arc<RwLock<GlobalLoad>>>,
+    globalload: Option<GlobalLoad>,
     ratelimiter_obj: &Arc<Mutex<Ratelimiter>>,
     source_url: &String,
     workerid: &usize,
@@ -397,7 +397,7 @@ pub fn dlfile_new(
         if let Some(ref globalload) = globalload
             && let Some(scraper) = scraper
         {
-            match globalload::download_from(file, globalload.clone(), scraper) {
+            match globalload.download_from(file, scraper) {
                 None => {
                     logging::log(format!("Could not pull info for file {:?}", &file));
                 }
@@ -420,7 +420,12 @@ pub fn dlfile_new(
                     }
                     Some(fileurl) => fileurl,
                 };
-                let url = Url::parse(source_url).unwrap();
+                let url = Url::parse(source_url);
+                if url.is_err() {
+                    error_log(format!("Error while parsing url {} {:?}", source_url, url));
+                    return FileReturnStatus::DeadUrl(source_url.to_string());
+                }
+                let url = url.unwrap();
                 ratelimiter_wait(ratelimiter_obj);
                 logging::info_log(format!("Downloading: {}", &source_url));
                 let mut futureresult = {
@@ -550,7 +555,7 @@ pub fn dlfile_new(
 ///
 pub fn process_bytes(
     bytes: &Bytes,
-    globalload: Option<Arc<RwLock<GlobalLoad>>>,
+    globalload: Option<GlobalLoad>,
     hash: &String,
     file_ext: &String,
     db: Main,
@@ -574,7 +579,7 @@ pub fn process_bytes(
     // doing something that we CANNOT allow plugins to run.
     {
         if let Some(globalload) = globalload {
-            crate::globalload::plugin_on_download(globalload, db.clone(), bytes, hash, file_ext);
+            globalload.plugin_on_download(db.clone(), bytes, hash, file_ext);
         }
     }
 }

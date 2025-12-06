@@ -5,6 +5,7 @@ use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::collections::HashMap;
 use std::collections::HashSet;
+use std::collections::hash_map;
 use std::time::Duration;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -36,6 +37,12 @@ pub fn get_global_info() -> Vec<sharedtypes::GlobalPluginScraper> {
     let callbackvec = vec![
         sharedtypes::GlobalCallbacks::Tag(tag_vec),
         sharedtypes::GlobalCallbacks::Start(sharedtypes::StartupThreadType::SpawnInline),
+        sharedtypes::GlobalCallbacks::Callback(sharedtypes::CallbackInfo {
+            func: "overall_ordering".to_string(),
+            vers: 0,
+            data_name: vec!["return_order".to_string(), "return_styling".to_string()],
+            data: vec![],
+        }),
     ];
 
     let mut plugin = sharedtypes::return_default_globalpluginparser();
@@ -66,6 +73,68 @@ pub fn get_global_info() -> Vec<sharedtypes::GlobalPluginScraper> {
         },
     ));
     vec![plugin, scraper]
+}
+
+///
+/// Returns the styling and ordering information for 3rd party display schemas
+///
+#[no_mangle]
+pub fn overall_ordering(
+    input: &sharedtypes::CallbackInfoInput,
+) -> HashMap<String, sharedtypes::CallbackCustomDataReturning> {
+    let mut out = HashMap::new();
+    if input.vers != 0 {
+        return out;
+    }
+
+    for name in input.data_name.iter() {
+        if name == "return_styling" {
+            let temp = vec![
+                sharedtypes::CallbackCustomDataReturning::String("Styling-Post".to_string()),
+                sharedtypes::CallbackCustomDataReturning::String("Post-Content".to_string()),
+                sharedtypes::CallbackCustomDataReturning::String(
+                    "Catbox Collection Text".to_string(),
+                ),
+                sharedtypes::CallbackCustomDataReturning::String("Post-List-OrderBy".to_string()),
+                sharedtypes::CallbackCustomDataReturning::VString(vec![
+                    "source_url".to_string(),
+                    "Catbox Collection Position".to_string(),
+                ]),
+            ];
+            out.insert(
+                "return_styling".to_string(),
+                sharedtypes::CallbackCustomDataReturning::VCallback(temp),
+            );
+        }
+
+        // Returns the order of the items from catbox
+        if name == "return_order" {
+            let temp = vec![
+                sharedtypes::CallbackCustomDataReturning::String(
+                    "Parent-Namespace-relate-Maybe".to_string(),
+                ),
+                sharedtypes::CallbackCustomDataReturning::String("source_url".to_string()),
+                sharedtypes::CallbackCustomDataReturning::VString(vec![
+                    "Catbox Collection Position".to_string(),
+                    "Catbox Collection".to_string(),
+                ]),
+                sharedtypes::CallbackCustomDataReturning::String(
+                    "Parent-Namespace-relate_tag_id-Maybe".to_string(),
+                ),
+                sharedtypes::CallbackCustomDataReturning::String("source_url".to_string()),
+                sharedtypes::CallbackCustomDataReturning::VString(vec![
+                    "Catbox Collection".to_string(),
+                    "".to_string(),
+                ]),
+            ];
+            out.insert(
+                "return_order".to_string(),
+                sharedtypes::CallbackCustomDataReturning::VCallback(temp),
+            );
+        }
+    }
+
+    out
 }
 
 #[no_mangle]
