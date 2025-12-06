@@ -42,11 +42,10 @@ pub fn url_dump(
     scraperdata: &sharedtypes::ScraperData,
 ) -> Vec<(String, sharedtypes::ScraperData)> {
     let mut out = vec![];
-    dbg!(&scraperdata);
     for param in scraperdata.job.param.iter() {
         match param {
             sharedtypes::ScraperParam::Normal(input) => {
-                let url = Url::parse(&input);
+                let url = Url::parse(input);
                 if url.is_err() {
                     continue;
                 }
@@ -102,36 +101,34 @@ fn parse_from_root_page(
     // On the root of the site this manages to loop through the thread list and first page
     let selector = Selector::parse(r#"td[class="threadtitle"]"#).unwrap();
     for element in fragment.select(&selector) {
-        if let Some(a) = element.child_elements().next() {
-            if let Some(url_relative) = a.value().attr("href") {
-                let url = url_base.join(url_relative);
-                if url.is_err() {
-                    continue;
-                }
-                let url = url.unwrap();
-                tag.insert(sharedtypes::TagObject {
-                    namespace: sharedtypes::GenericNamespaceObj {
-                        name: "".into(),
-                        description: None,
-                    },
-                    tag: "".to_string(),
-                    tag_type: sharedtypes::TagType::ParseUrl((
-                        sharedtypes::ScraperData {
-                            job: sharedtypes::JobScraper {
-                                site: LOCAL_NAME.to_string(),
-                                param: vec![sharedtypes::ScraperParam::Url(
-                                    url.as_str().to_string(),
-                                )],
-                                job_type: sharedtypes::DbJobType::Scraper,
-                            },
-                            system_data: BTreeMap::new(),
-                            user_data: BTreeMap::new(),
-                        },
-                        None,
-                    )),
-                    relates_to: None,
-                });
+        if let Some(a) = element.child_elements().next()
+            && let Some(url_relative) = a.value().attr("href")
+        {
+            let url = url_base.join(url_relative);
+            if url.is_err() {
+                continue;
             }
+            let url = url.unwrap();
+            tag.insert(sharedtypes::TagObject {
+                namespace: sharedtypes::GenericNamespaceObj {
+                    name: "".into(),
+                    description: None,
+                },
+                tag: "".to_string(),
+                tag_type: sharedtypes::TagType::ParseUrl((
+                    sharedtypes::ScraperData {
+                        job: sharedtypes::JobScraper {
+                            site: LOCAL_NAME.to_string(),
+                            param: vec![sharedtypes::ScraperParam::Url(url.as_str().to_string())],
+                            job_type: sharedtypes::DbJobType::Scraper,
+                        },
+                        system_data: BTreeMap::new(),
+                        user_data: BTreeMap::new(),
+                    },
+                    None,
+                )),
+                relates_to: None,
+            });
         }
     }
 }
@@ -147,72 +144,68 @@ fn parse_from_pool_page(
 
     // Parses everything from the main page.
     for element in fragment.select(&selector) {
-        if let Some(link) = element.children().next() {
-            if let Some(rel) = link.value().as_element() {
-                if let Some(url_relative) = rel.attr("href") {
-                    let url_finished = url_base.join(url_relative);
-                    if url_finished.is_err() {
-                        continue;
-                    }
-                    let url_finished = url_finished.clone().unwrap();
-                    let url_segments = url_finished.path_segments();
-                    if url_segments.is_none() {
-                        continue;
-                    }
-                    let mut url_segments = url_segments.unwrap();
-
-                    // view handler for root
-                    let post_id = if url_relative.contains("/view/") {
-                        let _ = url_segments.next();
-                        url_segments.next()
-                    } else {
-                        let _ = url_segments.next();
-                        let _ = url_segments.next();
-                        url_segments.next()
-                    };
-
-                    let url_finished = url_finished.as_str().to_string();
-
-                    // Catch to stop adding the same url back into the db
-                    if url_finished == source_url {
-                        continue;
-                    }
-
-                    let early_stop = match post_id {
-                        None => None,
-                        Some(post_id) => {
-                            Some(sharedtypes::SkipIf::FileTagRelationship(sharedtypes::Tag {
-                                namespace: sharedtypes::GenericNamespaceObj {
-                                    name: "ychan_post_id".into(),
-                                    description: Some("A unique post id from ychan".into()),
-                                },
-                                tag: post_id.into(),
-                            }))
-                        }
-                    };
-
-                    tag.insert(sharedtypes::TagObject {
-                        namespace: sharedtypes::GenericNamespaceObj {
-                            name: "".into(),
-                            description: None,
-                        },
-                        tag: "".to_string(),
-                        tag_type: sharedtypes::TagType::ParseUrl((
-                            sharedtypes::ScraperData {
-                                job: sharedtypes::JobScraper {
-                                    site: LOCAL_NAME.to_string(),
-                                    param: vec![sharedtypes::ScraperParam::Url(url_finished)],
-                                    job_type: sharedtypes::DbJobType::Scraper,
-                                },
-                                system_data: BTreeMap::new(),
-                                user_data: BTreeMap::new(),
-                            },
-                            early_stop,
-                        )),
-                        relates_to: None,
-                    });
-                }
+        if let Some(link) = element.children().next()
+            && let Some(rel) = link.value().as_element()
+            && let Some(url_relative) = rel.attr("href")
+        {
+            let url_finished = url_base.join(url_relative);
+            if url_finished.is_err() {
+                continue;
             }
+            let url_finished = url_finished.clone().unwrap();
+            let url_segments = url_finished.path_segments();
+            if url_segments.is_none() {
+                continue;
+            }
+            let mut url_segments = url_segments.unwrap();
+
+            // view handler for root
+            let post_id = if url_relative.contains("/view/") {
+                let _ = url_segments.next();
+                url_segments.next()
+            } else {
+                let _ = url_segments.next();
+                let _ = url_segments.next();
+                url_segments.next()
+            };
+
+            let url_finished = url_finished.as_str().to_string();
+
+            // Catch to stop adding the same url back into the db
+            if url_finished == source_url {
+                continue;
+            }
+
+            let early_stop = post_id.map(|post_id| {
+                sharedtypes::SkipIf::FileTagRelationship(sharedtypes::Tag {
+                    namespace: sharedtypes::GenericNamespaceObj {
+                        name: "ychan_post_id".into(),
+                        description: Some("A unique post id from ychan".into()),
+                    },
+                    tag: post_id.into(),
+                })
+            });
+
+            tag.insert(sharedtypes::TagObject {
+                namespace: sharedtypes::GenericNamespaceObj {
+                    name: "".into(),
+                    description: None,
+                },
+                tag: "".to_string(),
+                tag_type: sharedtypes::TagType::ParseUrl((
+                    sharedtypes::ScraperData {
+                        job: sharedtypes::JobScraper {
+                            site: LOCAL_NAME.to_string(),
+                            param: vec![sharedtypes::ScraperParam::Url(url_finished)],
+                            job_type: sharedtypes::DbJobType::Scraper,
+                        },
+                        system_data: BTreeMap::new(),
+                        user_data: BTreeMap::new(),
+                    },
+                    early_stop,
+                )),
+                relates_to: None,
+            });
         }
     }
 
@@ -295,57 +288,50 @@ fn parse_from_file_page<'a>(
     // Will get author, submitted date
     let selector = Selector::parse(r#"table[class="info"]"#).unwrap();
     for info_frag in fragment.select(&selector) {
-        if let Some(tbody) = info_frag.first_child() {
-            if let Some(tr) = tbody.next_sibling() {
-                if let Some(td) = tr.first_child() {
-                    if let Some(main_info) = td.first_child() {
-                        let text_list: Vec<Text> = main_info
-                            .children()
-                            .filter_map(|noderef| noderef.value().as_text().map(|t| t.clone()))
-                            .collect();
-                        if let Some(author) = text_list.get(1) {
-                            let tag = sharedtypes::TagObject {
-                                namespace: sharedtypes::GenericNamespaceObj {
-                                    name: "ychan_author".into(),
-                                    description: Some(
-                                        "A person on ychan who uploaded the image".into(),
-                                    ),
-                                },
-                                tag: author.trim().to_string(),
-                                tag_type: sharedtypes::TagType::Normal,
-                                relates_to: None,
-                            };
+        if let Some(tbody) = info_frag.first_child()
+            && let Some(tr) = tbody.next_sibling()
+            && let Some(td) = tr.first_child()
+            && let Some(main_info) = td.first_child()
+        {
+            let text_list: Vec<Text> = main_info
+                .children()
+                .filter_map(|noderef| noderef.value().as_text().cloned())
+                .collect();
+            if let Some(author) = text_list.get(1) {
+                let tag = sharedtypes::TagObject {
+                    namespace: sharedtypes::GenericNamespaceObj {
+                        name: "ychan_author".into(),
+                        description: Some("A person on ychan who uploaded the image".into()),
+                    },
+                    tag: author.trim().to_string(),
+                    tag_type: sharedtypes::TagType::Normal,
+                    relates_to: None,
+                };
 
-                            file_tags.push(tag);
-                        }
-                        if let Some(post_time) = text_list.get(3) {
-                            // The garbage format that ychan uses for their date
-                            let fmt = "%b%d/%y, %H:%M";
+                file_tags.push(tag);
+            }
+            if let Some(post_time) = text_list.get(3) {
+                // The garbage format that ychan uses for their date
+                let fmt = "%b%d/%y, %H:%M";
 
-                            if let Ok(post_timestamp) =
-                                NaiveDateTime::parse_from_str(post_time.trim(), fmt)
-                            {
-                                let dt_utc = Utc.from_utc_datetime(&post_timestamp);
+                if let Ok(post_timestamp) = NaiveDateTime::parse_from_str(post_time.trim(), fmt) {
+                    let dt_utc = Utc.from_utc_datetime(&post_timestamp);
 
-                                // Get UNIX timestamp (seconds since epoch)
-                                let unix_timestamp = dt_utc.timestamp();
-                                let tag = sharedtypes::TagObject {
-                                    namespace: sharedtypes::GenericNamespaceObj {
-                                        name: "ychan_post_timestamp".into(),
-                                        description: Some(
-                                            "A timestamp of when the image was uploaded to ychan"
-                                                .into(),
-                                        ),
-                                    },
-                                    tag: unix_timestamp.to_string(),
-                                    tag_type: sharedtypes::TagType::Normal,
-                                    relates_to: None,
-                                };
+                    // Get UNIX timestamp (seconds since epoch)
+                    let unix_timestamp = dt_utc.timestamp();
+                    let tag = sharedtypes::TagObject {
+                        namespace: sharedtypes::GenericNamespaceObj {
+                            name: "ychan_post_timestamp".into(),
+                            description: Some(
+                                "A timestamp of when the image was uploaded to ychan".into(),
+                            ),
+                        },
+                        tag: unix_timestamp.to_string(),
+                        tag_type: sharedtypes::TagType::Normal,
+                        relates_to: None,
+                    };
 
-                                file_tags.push(tag);
-                            }
-                        }
-                    }
+                    file_tags.push(tag);
                 }
             }
         }
@@ -354,51 +340,84 @@ fn parse_from_file_page<'a>(
     // Should only ever get one board and subboard and the post id
     let selector = Selector::parse(r#"meta[property="og:url"]"#).unwrap();
     for element in fragment.select(&selector) {
-        if let Some(page_url) = element.attr("content") {
-            if let Ok(url) = Url::parse(&page_url) {
-                let url_segments = url.path_segments();
-                if url_segments.is_none() {
-                    continue;
-                }
-                let mut url_segments = url_segments.unwrap();
-                let board = url_segments.next();
-                let sub_board = url_segments.next();
-                let post_id = url_segments.next();
-                if let Some(board) = board
-                    && let Some(sub_board) = sub_board
-                    && let Some(post_id) = post_id
-                {
-                    let tag = sharedtypes::TagObject {
+        if let Some(page_url) = element.attr("content")
+            && let Ok(url) = Url::parse(page_url)
+        {
+            let url_segments = url.path_segments();
+            if url_segments.is_none() {
+                continue;
+            }
+            let mut url_segments = url_segments.unwrap();
+            let board = url_segments.next();
+            let sub_board = url_segments.next();
+            let post_id = url_segments.next();
+            if let Some(board) = board
+                && let Some(sub_board) = sub_board
+                && let Some(post_id) = post_id
+            {
+                let tag = sharedtypes::TagObject {
+                    namespace: sharedtypes::GenericNamespaceObj {
+                        name: "ychan_post_id".into(),
+                        description: Some("A unique post id from ychan".into()),
+                    },
+                    tag: post_id.to_string(),
+                    tag_type: sharedtypes::TagType::Normal,
+                    relates_to: Some(sharedtypes::SubTag {
                         namespace: sharedtypes::GenericNamespaceObj {
-                            name: "ychan_post_id".into(),
-                            description: Some("A unique post id from ychan".into()),
+                            name: "ychan_subboard".to_string(),
+                            description: Some("The subboard that the image was posted to".into()),
                         },
-                        tag: post_id.to_string(),
+                        tag: sub_board.to_string(),
                         tag_type: sharedtypes::TagType::Normal,
-                        relates_to: Some(sharedtypes::SubTag {
+                        limit_to: Some(sharedtypes::Tag {
                             namespace: sharedtypes::GenericNamespaceObj {
-                                name: "ychan_subboard".to_string(),
+                                name: "ychan_board".into(),
                                 description: Some(
-                                    "The subboard that the image was posted to".into(),
+                                    "The mainboard that the image was posted to.".into(),
                                 ),
                             },
-                            tag: sub_board.to_string(),
-                            tag_type: sharedtypes::TagType::Normal,
-                            limit_to: Some(sharedtypes::Tag {
-                                namespace: sharedtypes::GenericNamespaceObj {
-                                    name: "ychan_board".into(),
-                                    description: Some(
-                                        "The mainboard that the image was posted to.".into(),
-                                    ),
-                                },
-                                tag: board.into(),
-                            }),
+                            tag: board.into(),
                         }),
-                    };
+                    }),
+                };
 
-                    file_tags.push(tag);
-                }
+                file_tags.push(tag);
             }
+        }
+    }
+
+    let selector = Selector::parse(r#"div[class="sink"]"#).unwrap();
+    let mut info_frag = fragment.select(&selector);
+    info_frag.next();
+    info_frag.next();
+
+    if let Some(message_block) = info_frag.next() {
+        let mut message_string = String::new();
+        for children in message_block.children() {
+            match children.value() {
+                scraper::Node::Text(message) => {
+                    message_string.push_str(&message.replace('\n', ""));
+                }
+                scraper::Node::Element(e) => {
+                    if e.name() == "br" {
+                        message_string.push('\n');
+                    }
+                }
+                _ => {}
+            }
+        }
+        if !message_string.is_empty() {
+            let tag = sharedtypes::TagObject {
+                namespace: sharedtypes::GenericNamespaceObj {
+                    name: "ychan_post_message".into(),
+                    description: Some("A message of a post on ychan".into()),
+                },
+                tag: message_string.to_string(),
+                tag_type: sharedtypes::TagType::Normal,
+                relates_to: None,
+            };
+
+            file_tags.push(tag);
         }
     }
 }
