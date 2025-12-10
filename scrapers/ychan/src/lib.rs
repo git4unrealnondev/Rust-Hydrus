@@ -22,7 +22,7 @@ pub fn get_global_info() -> Vec<sharedtypes::GlobalPluginScraper> {
     defaultscraper.name = LOCAL_NAME.into();
     defaultscraper.storage_type = Some(sharedtypes::ScraperOrPlugin::Scraper(
         sharedtypes::ScraperInfo {
-            ratelimit: (2, Duration::from_secs(1)),
+            ratelimit: (4, Duration::from_secs(1)),
             sites: vec![LOCAL_NAME.into(), LOCAL_NAME.to_lowercase()],
             priority: DEFAULT_PRIORITY,
             num_threads: None,
@@ -129,6 +129,44 @@ fn parse_from_root_page(
                 )),
                 relates_to: None,
             });
+        }
+    }
+    // Rips any top level from the threads area
+    let selector = Selector::parse(r#"div[class="boardpages"]"#).unwrap();
+    let mut elements = fragment.select(&selector);
+    if let Some(span) = elements.next() {
+        for subchild in span.children() {
+            if let Some(a_element) = subchild.value().as_element() {
+                if let Some(url_relative) = a_element.attr("href") {
+                    let url = url_base.join(url_relative);
+                    if url.is_err() {
+                        continue;
+                    }
+                    let url = url.unwrap();
+                    tag.insert(sharedtypes::TagObject {
+                        namespace: sharedtypes::GenericNamespaceObj {
+                            name: "".into(),
+                            description: None,
+                        },
+                        tag: "".to_string(),
+                        tag_type: sharedtypes::TagType::ParseUrl((
+                            sharedtypes::ScraperData {
+                                job: sharedtypes::JobScraper {
+                                    site: LOCAL_NAME.to_string(),
+                                    param: vec![sharedtypes::ScraperParam::Url(
+                                        url.as_str().to_string(),
+                                    )],
+                                    job_type: sharedtypes::DbJobType::Scraper,
+                                },
+                                system_data: BTreeMap::new(),
+                                user_data: BTreeMap::new(),
+                            },
+                            None,
+                        )),
+                        relates_to: None,
+                    });
+                }
+            }
         }
     }
 }

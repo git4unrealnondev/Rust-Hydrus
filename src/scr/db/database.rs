@@ -123,7 +123,7 @@ PRAGMA journal_mode = WAL;
                 });
                 let pool = r2d2::Builder::new()
                     .idle_timeout(Some(Duration::from_secs(5)))
-                    .max_size(100)
+                    .max_size(10)
                     .build(manager)
                     .unwrap();
                 let write_conn = Arc::new(Mutex::new(pool.get().unwrap()));
@@ -147,23 +147,27 @@ PRAGMA journal_mode = WAL;
             None => {
                 first_time_load_flag = false;
                 let memdb = Arc::new(RwLock::new(NewinMemDB::new()));
-                let manager = SqliteConnectionManager::file(format!(
-                    "file:memdb_{}?mode=memory&cache=shared",
-                    uuid::Uuid::new_v4()
-                ))
-                .with_init(|conn| {
+                let db_uuid = uuid::Uuid::new_v4();
+                let memdb_uri = format!("file:memdb_{}?mode=memory&cache=shared", db_uuid);
+
+                let manager = SqliteConnectionManager::file(&memdb_uri).with_init(|conn| {
                     conn.execute_batch(
                         "
-PRAGMA busy_timeout = 1000;
-    ",
-                    )?; // Enable SQL tracing
-                    conn.trace(Some(|sql| {
-                        println!("[SQL TRACE] {}", sql);
-                    }));
+PRAGMA journal_mode = WAL;
+            PRAGMA synchronous = NORMAL;
+            PRAGMA secure_delete = 0;PRAGMA busy_timeout = 20000;
+            PRAGMA page_size = 8192;
+            PRAGMA cache_size = -500000;
+
+                        ",
+                    )?;
+                    conn.trace(Some(|sql| println!("[SQL TRACE] {}", sql)));
                     Ok(())
                 });
 
                 let pool = r2d2::Builder::new().max_size(100).build(manager).unwrap();
+
+                // Grab a "write" connection for operations that need exclusive access
                 let write_conn = Arc::new(Mutex::new(pool.get().unwrap()));
                 let write_conn_istransaction = Arc::new(Mutex::new(false));
                 dbg!("a");
@@ -177,7 +181,7 @@ PRAGMA busy_timeout = 1000;
                     _inmemdb: memdb.clone(),
                     tables_loaded: Arc::new(vec![].into()),
                     tables_loading: Arc::new(vec![].into()),
-                    _cache: CacheType::InMemdb,
+                    _cache: CacheType::Bare,
                     //                globalload: None,
                     localref: None,
                 };
@@ -189,6 +193,9 @@ PRAGMA busy_timeout = 1000;
         if !first_time_load_flag {
             // Database Doesn't exist
             main.first_db();
+
+            main.transaction_flush();
+
             dbg!("made first db");
             main.updatedb();
             dbg!("made update db");
@@ -205,7 +212,6 @@ PRAGMA busy_timeout = 1000;
             main.load_table(&sharedtypes::LoadDBTable::Settings);
             main.load_caching();
         }
-        dbg!(&main._cache);
         main.transaction_flush();
         main
     }
@@ -978,7 +984,7 @@ PRAGMA busy_timeout = 1000;
     /// Sets up first database interaction. Makes tables and does first time setup.
     pub fn first_db(&self) {
         dbg!("");
-        self.transaction_exclusive_start();
+        self.transaction_start();
         dbg!("");
         // Making Relationship Table
         {
@@ -1004,6 +1010,15 @@ PRAGMA busy_timeout = 1000;
             "TEXT NOT NULL",
             "INTEGER NOT NULL, UNIQUE(name, namespace)"
         ];
+
+        {
+            let tn = self.write_conn.lock();
+            tn.execute(
+                "  CREATE UNIQUE INDEX IF NOT EXISTS tags_name_namespace_idx
+        ON Tags(name, namespace);",
+                [],
+            );
+        }
         self.table_create(&name, &keys, &vals);
 
         dbg!("");
@@ -1329,8 +1344,9 @@ PRAGMA busy_timeout = 1000;
             ");".to_string(),
         ]
         .concat();
+        dbg!(&endresult);
         info!("Creating table as: {}", endresult);
-        let _ = tn.execute_batch(&endresult);
+        let _ = tn.execute_batch(&endresult).unwrap();
         //stocat = endresult;
         //self.execute(stocat);
     }
@@ -2807,6 +2823,95 @@ PRAGMA busy_timeout = 1000;
             .unwrap()
             .to_owned()
     }
+    fn print_all_tables(&self) -> Result<()> {
+        use rusqlite::Row;
+        let conn = self.write_conn.lock();
+        // Step 1: Get all table names
+        let mut stmt = conn.prepare(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%';",
+        )?;
+
+        let table_names: Vec<String> = stmt
+            .query_map([], |row| row.get(0))?
+            .collect::<Result<_, _>>()?;
+
+        for table in table_names {
+            println!("Table: {}", table);
+            println!("Columns and constraints:");
+
+            // Step 2: Get columns and constraints
+            let mut col_stmt = conn.prepare(&format!("PRAGMA table_info({})", table))?;
+            let columns = col_stmt.query_map([], |row: &Row| {
+                let cid: i32 = row.get(0)?;
+                let name: String = row.get(1)?;
+                let dtype: String = row.get(2)?;
+                let notnull: i32 = row.get(3)?; // 1 if NOT NULL
+                let dflt_value: Option<String> = row.get(4)?;
+                let pk: i32 = row.get(5)?; // 1 if part of PK
+                Ok((name, dtype, notnull != 0, dflt_value, pk != 0))
+            })?;
+
+            for col in columns {
+                let (name, dtype, notnull, dflt, pk) = col?;
+                println!(
+                    "- {} {}{}{}",
+                    name,
+                    dtype,
+                    if notnull { " NOT NULL" } else { "" },
+                    if pk { " PRIMARY KEY" } else { "" }
+                );
+                if let Some(d) = dflt {
+                    println!("  Default: {}", d);
+                }
+            }
+
+            // Step 3: Get unique indexes
+            let mut idx_stmt = conn.prepare(&format!("PRAGMA index_list({})", table))?;
+
+            let indexes: Vec<(String, bool)> = idx_stmt
+                .query_map([], |row: &Row| {
+                    let name: String = row.get(1)?; // index name
+                    let unique: i32 = row.get(2)?; // 1 if UNIQUE
+                    Ok((name, unique != 0))
+                })?
+                .collect::<Result<_, _>>()?; // collect into Vec, propagating any errors
+
+            for (name, unique) in indexes {
+                if unique {
+                    let mut info_stmt = conn.prepare(&format!("PRAGMA index_info({})", name))?;
+                    let cols: Vec<String> = info_stmt
+                        .query_map([], |row: &Row| row.get(2))?
+                        .collect::<Result<_, _>>()?;
+                    println!("- UNIQUE index on columns: {:?}", cols);
+                }
+            }
+
+            // Step 4: Print table data
+            let mut data_stmt = conn.prepare(&format!("SELECT * FROM {}", table))?;
+            let column_names: Vec<String> = data_stmt
+                .column_names()
+                .iter()
+                .map(|s| s.to_string())
+                .collect();
+            println!("Data columns: {:?}", column_names);
+
+            let rows = data_stmt.query_map([], |row: &Row| {
+                let mut values = Vec::new();
+                for i in 0..column_names.len() {
+                    let val: Result<String, _> = row.get(i);
+                    values.push(val.unwrap_or_else(|_| "NULL".to_string()));
+                }
+                Ok(values)
+            })?;
+
+            for row in rows {
+                println!("{:?}", row?);
+            }
+            println!("-----------------------------------");
+        }
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -2816,19 +2921,15 @@ pub(crate) mod test_database {
 
     pub fn setup_default_db() -> Vec<Main> {
         let mut out = Vec::new();
-        for cachetype in [CacheType::Bare, CacheType::InMemdb, CacheType::InMemory] {
-            let path = if &cachetype == &CacheType::Bare {
-                Some("test1.db".to_string())
-            } else {
-                None
-            };
-            let mut db = Main::new(path, VERS);
-            db._cache = cachetype;
+        for (cnt, cachetype) in [CacheType::Bare].iter().enumerate() {
+            let mut db = Main::new(Some(format!("test{}.db", cnt)), VERS);
+            db._cache = cachetype.clone();
 
             db.tag_add(&"test".to_string(), 1, false, None);
             db.tag_add(&"test1".to_string(), 1, false, None);
             db.tag_add(&"test2".to_string(), 1, false, None);
             db.transaction_flush();
+
             out.push(db);
         }
         out

@@ -734,26 +734,16 @@ HAVING COUNT(r.fileid) {dir} ?;"
     /// Adds tags into sql database
     pub(super) fn tag_add_no_id_sql(&self, tag: &str, namespace: usize) -> usize {
         let sql = r#"
-        INSERT INTO Tags (name, namespace)
-        VALUES (?, ?)
-        ON CONFLICT(name, namespace) DO NOTHING
-        RETURNING id;
-    "#;
+INSERT INTO Tags(name, namespace)
+VALUES (?, ?)
+ON CONFLICT(name, namespace) DO UPDATE SET name=excluded.name
+RETURNING id;
+"#;
 
         let conn = self.write_conn.lock();
 
-        match conn.query_row(sql, params![tag, namespace], |row| row.get(0)) {
-            Ok(id) => id, // insert succeeded → return new id
-            Err(_) => {
-                // insert was ignored → fetch existing id
-                conn.query_row(
-                    "SELECT id FROM Tags WHERE name = ? AND namespace = ?",
-                    params![tag, namespace],
-                    |row| row.get(0),
-                )
-                .unwrap()
-            }
-        }
+        conn.query_row(sql, params![tag, namespace], |row| row.get(0))
+            .unwrap()
     }
 
     /// Adds namespace to the SQL database

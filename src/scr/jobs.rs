@@ -364,7 +364,7 @@ pub(crate) mod test_database {
     ///
     /// Sets up for globalloading
     ///
-    fn get_globalload(db: Main, jobs: Arc<RwLock<Jobs>>) -> Arc<RwLock<GlobalLoad>> {
+    fn get_globalload(db: Main, jobs: Arc<RwLock<Jobs>>) -> GlobalLoad {
         test_globalload::emulate_loaded(db, jobs)
     }
 
@@ -395,7 +395,7 @@ pub(crate) mod test_database {
     fn insert_duplicate_job() {
         for mut job in create_default() {
             let globalload = get_globalload(job.db.clone(), Arc::new(RwLock::new(job.clone())));
-            let globalload_sites = globalload.read().return_all_sites();
+            let globalload_sites = globalload.return_all_sites();
             job.jobs_load(globalload_sites);
             let mut scraper = sharedtypes::return_default_globalpluginparser();
             scraper.storage_type = Some(sharedtypes::ScraperOrPlugin::Scraper(
@@ -421,7 +421,7 @@ pub(crate) mod test_database {
     fn jobs_remove_job() {
         for mut job in create_default() {
             let globalload = get_globalload(job.db.clone(), Arc::new(RwLock::new(job.clone())));
-            let globalload_sites = globalload.read().return_all_sites();
+            let globalload_sites = globalload.return_all_sites();
             job.jobs_load(globalload_sites);
             let mut scraper = sharedtypes::return_default_globalpluginparser();
             scraper.storage_type = Some(sharedtypes::ScraperOrPlugin::Scraper(

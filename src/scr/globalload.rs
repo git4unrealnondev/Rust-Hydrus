@@ -1368,7 +1368,7 @@ pub fn scraper_file_return(
 pub(crate) mod test_globalload {
 
     use super::*;
-    pub fn emulate_loaded(db: database::Main, jobs: Arc<RwLock<Jobs>>) -> Arc<RwLock<GlobalLoad>> {
+    pub fn emulate_loaded(db: database::Main, jobs: Arc<RwLock<Jobs>>) -> GlobalLoad {
         GlobalLoad::new(db, jobs)
     }
 }
