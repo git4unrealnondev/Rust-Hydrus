@@ -112,17 +112,17 @@ fn parse_post(
         tag_type: sharedtypes::TagType::Normal,
         relates_to: post_subtag.clone(),
     };
-    if let Some(str_comment) = input_post["content"].as_str() {
-        if !str_comment.is_empty() {
-            let content = sharedtypes::TagObject {
-                namespace: get_genericnamespaceobj(Returntype::PostContent, sitetype),
-                tag: input_post["content"].to_string(),
-                tag_type: sharedtypes::TagType::Normal,
-                relates_to: post_subtag.clone(),
-            };
+    if let Some(str_comment) = input_post["content"].as_str()
+        && !str_comment.is_empty()
+    {
+        let content = sharedtypes::TagObject {
+            namespace: get_genericnamespaceobj(Returntype::PostContent, sitetype),
+            tag: input_post["content"].to_string(),
+            tag_type: sharedtypes::TagType::Normal,
+            relates_to: post_subtag.clone(),
+        };
 
-            object.tag.insert(content);
-        }
+        object.tag.insert(content);
     }
     let userid = sharedtypes::TagObject {
         namespace: get_genericnamespaceobj(Returntype::UserId, sitetype),
@@ -276,72 +276,72 @@ pub fn parser(
                         });
                     }
                 }
-            } else if jobtype == "post" {
-                if let Ok(parsed_json) = json::parse(html_input) {
-                    if parsed_json.is_empty() {
-                        return Err(sharedtypes::ScraperReturn::Nothing);
-                    }
-                    parse_post(
-                        &parsed_json["post"],
-                        &"kemono.cr".into(),
-                        &Sitetype::Kemono,
-                        &mut out,
-                    );
+            } else if jobtype == "post"
+                && let Ok(parsed_json) = json::parse(html_input)
+            {
+                if parsed_json.is_empty() {
+                    return Err(sharedtypes::ScraperReturn::Nothing);
                 }
+                parse_post(
+                    &parsed_json["post"],
+                    &"kemono.cr".into(),
+                    &Sitetype::Kemono,
+                    &mut out,
+                );
             }
         }
         return Ok(out);
     }
 
     // Handles the main creators page scraping. After we determine if theirs a user here
-    if let Some(user) = scraperdata.user_data.get("Potiential User") {
-        if let Ok(parsed_json) = json::parse(html_input) {
-            if parsed_json.is_array() && scraperdata.job.param.len() == 1 {
-                for item in parsed_json.members() {
-                    let name = item["name"].to_string();
-                    if name.contains(user) {
-                        let mut scraperdata = scraperdata.clone();
+    if let Some(user) = scraperdata.user_data.get("Potiential User")
+        && let Ok(parsed_json) = json::parse(html_input)
+        && parsed_json.is_array()
+        && scraperdata.job.param.len() == 1
+    {
+        for item in parsed_json.members() {
+            let name = item["name"].to_string();
+            if name.contains(user) {
+                let mut scraperdata = scraperdata.clone();
 
-                        scraperdata.user_data.clear();
+                scraperdata.user_data.clear();
 
-                        scraperdata.user_data.insert("confirmed user".into(), name);
-                        scraperdata
-                            .user_data
-                            .insert("confirmed user id".into(), item["id"].to_string());
-                        scraperdata
-                            .user_data
-                            .insert("confirmed service".into(), item["service"].to_string());
+                scraperdata.user_data.insert("confirmed user".into(), name);
+                scraperdata
+                    .user_data
+                    .insert("confirmed user id".into(), item["id"].to_string());
+                scraperdata
+                    .user_data
+                    .insert("confirmed service".into(), item["service"].to_string());
 
-                        let mut tag = HashSet::new();
-                        let site = scraperdata.job.site;
+                let mut tag = HashSet::new();
+                let site = scraperdata.job.site;
 
-                        let url = format!(
-                            "https://kemono.cr/api/v1/{}/user/{}/posts",
-                            item["service"], item["id"]
-                        );
+                let url = format!(
+                    "https://kemono.cr/api/v1/{}/user/{}/posts",
+                    item["service"], item["id"]
+                );
 
-                        scraperdata.job = sharedtypes::JobScraper {
-                            site: site.clone(),
-                            param: vec![sharedtypes::ScraperParam::Url(url.clone())],
-                            job_type: sharedtypes::DbJobType::Scraper,
-                        };
+                scraperdata.job = sharedtypes::JobScraper {
+                    site: site.clone(),
+                    param: vec![sharedtypes::ScraperParam::Url(url.clone())],
+                    job_type: sharedtypes::DbJobType::Scraper,
+                };
 
-                        tag.insert(sharedtypes::TagObject {
-                            namespace: sharedtypes::GenericNamespaceObj {
-                                name: "do not parse".into(),
-                                description: None,
-                            },
-                            tag: url.clone(),
-                            tag_type: sharedtypes::TagType::ParseUrl((scraperdata.clone(), None)),
-                            relates_to: None,
-                        });
-                        return Ok(sharedtypes::ScraperObject {
-                            file: HashSet::new(),
-                            tag,
-                            flag: vec![],
-                        });
-                    }
-                }
+                tag.insert(sharedtypes::TagObject {
+                    namespace: sharedtypes::GenericNamespaceObj {
+                        name: "do not parse".into(),
+                        description: None,
+                    },
+                    tag: url.clone(),
+                    tag_type: sharedtypes::TagType::ParseUrl((scraperdata.clone(), None)),
+                    relates_to: None,
+                });
+                return Ok(sharedtypes::ScraperObject {
+                    file: HashSet::new(),
+                    tag,
+                    flag: vec![],
+                });
             }
         }
     }
@@ -470,10 +470,10 @@ fn parse_type(inp: &str) -> Option<Componenttype> {
     let mut site_str = None;
     let site_regex = Regex::new(r"[a-z]+\.(su|party|cr)").unwrap();
 
-    if let Some(reg_match) = site_regex.captures(inp) {
-        if let Some(reg) = reg_match.get(0) {
-            site_str = Some(reg.as_str().to_string());
-        }
+    if let Some(reg_match) = site_regex.captures(inp)
+        && let Some(reg) = reg_match.get(0)
+    {
+        site_str = Some(reg.as_str().to_string());
     }
 
     let mut component = Componenttype {

@@ -434,7 +434,18 @@ impl GlobalLoad {
                     sharedtypes::ScraperObject,
                     sharedtypes::ScraperReturn,
                 >,
-            > = unsafe { scraper_library.get(b"parser\0").unwrap() };
+            > = {
+                unsafe {
+                    match scraper_library.get(b"parser\0") {
+                        Err(err) => {
+                            return Err(sharedtypes::ScraperReturn::Stop(
+                                "Missing parser block in scraper".to_string(),
+                            ));
+                        }
+                        Ok(out) => out,
+                    }
+                }
+            };
             unsafe { temp(url_output, source_url, scraperdata) }
         } else {
             Err(sharedtypes::ScraperReturn::Nothing)

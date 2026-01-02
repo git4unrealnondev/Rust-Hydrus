@@ -146,27 +146,37 @@ pub fn client_create(
     modifers: Vec<sharedtypes::ScraperModifiers>,
     is_text_download: bool,
 ) -> Client {
-    //let useragent = "RustHydrusV1 0".to_string();
-    let useragent =
-        "User-Agent Mozilla/5.0 (X11; Linux x86_64; rv:141.0) Gecko/20100101 Firefox/141.0"
-            .to_string();
+    let useragent = "RustHydrus V1.0".to_string();
+    // let useragent =
+    //     "User-Agent Mozilla/5.0 (X11; Linux x86_64; rv:141.0) Gecko/20100101 Firefox/141.0"
+    //         .to_string();
 
-    let jar = cookie::Jar::default();
-    // The client that does the downloading
-    let mut client = reqwest::blocking::ClientBuilder::new()
-        //.cookie_provider(jar.into())
-        .cookie_store(false)
-        .user_agent(useragent)
-        .gzip(true)
-        .brotli(true)
-        .deflate(true)
-        .zstd(true)
-        .connect_timeout(time::Duration::from_secs(15))
-        .timeout(time::Duration::from_secs(120));
+    // let jar = cookie::Jar::default();
 
-    client = process_modifiers(client, modifers, is_text_download);
+    loop {
+        // The client that does the downloading
+        let mut client = reqwest::blocking::ClientBuilder::new()
+            //.cookie_provider(jar.into())
+            .cookie_store(false)
+            .user_agent(&useragent)
+            .gzip(true)
+            .brotli(true)
+            .deflate(true)
+            .zstd(true)
+            .connect_timeout(time::Duration::from_secs(15))
+            .timeout(time::Duration::from_secs(120));
 
-    client.build().unwrap()
+        client = process_modifiers(client, modifers.clone(), is_text_download);
+
+        match client.build() {
+            Ok(out) => {
+                return out;
+            }
+            Err(_) => {
+                std::thread::sleep(Duration::from_secs(1));
+            }
+        }
+    }
 }
 
 /// Downloads text into db as responses. Filters responses by default limit if

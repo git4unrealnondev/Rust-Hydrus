@@ -415,10 +415,10 @@ Worker: {id} JobId: {} -- While trying to parse parameters we got this error: {:
                                             &scraperdata,
                                             &scraper,
                                         ),
-                                        Err(_) => {
+                                        Err(err) => {
                                             logging::error_log(format!(
-                                                "Worker: {} -- While processing job {:?} was unable to download text.",
-                                                &id, &job
+                                                "Worker: {} -- While processing job {:?} was unable to download text. Had err {:?}",
+                                                &id, &job, err
                                             ));
                                             break 'urlloop;
                                         }
@@ -440,7 +440,7 @@ Worker: {id} JobId: {} -- While trying to parse parameters we got this error: {:
                                             // let temp = scraper_data.clone().job;
                                             // job_params.lock().unwrap().remove(&scraper_data);
                                             logging::error_log(format!("Stopping job: {:?}", stop));
-                                            continue;
+                                            break 'urlloop;
                                         }
                                         Err(ScraperReturn::Timeout(time)) => {
                                             let time_dur = Duration::from_secs(time);
