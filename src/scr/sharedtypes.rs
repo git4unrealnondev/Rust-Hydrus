@@ -423,9 +423,11 @@ pub enum ScraperType {
     Automatic,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 #[allow(dead_code)]
 pub enum ScraperReturn {
+    // Valid data from the system
+    Data(ScraperObject),
     // STOP IMMEDIENTLY: ISSUE WITH SITE : PANICS no save
     EMCStop(String),
     // Hit nothing to search. Move to next job.

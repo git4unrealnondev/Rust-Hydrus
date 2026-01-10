@@ -509,7 +509,7 @@ fn parse_pools(
     js: &json::JsonValue,
     scraperdata: &sharedtypes::ScraperData,
     site: &Site,
-) -> Result<sharedtypes::ScraperObject, sharedtypes::ScraperReturn> {
+) -> Vec<sharedtypes::ScraperReturn> {
     let mut files: HashSet<sharedtypes::FileObject> = HashSet::default();
     let mut tag: HashSet<sharedtypes::TagObject> = HashSet::default();
 
@@ -713,11 +713,13 @@ fn parse_pools(
         });
     }
 
-    Ok(sharedtypes::ScraperObject {
-        file: files,
-        tag,
-        flag: vec![],
-    })
+    vec![sharedtypes::ScraperReturn::Data(
+        sharedtypes::ScraperObject {
+            file: files,
+            tag,
+            flag: vec![],
+        },
+    )]
 }
 
 ///
@@ -728,7 +730,7 @@ pub fn parser(
     html_input: &str,
     _: &str,
     scraperdata: &sharedtypes::ScraperData,
-) -> Result<sharedtypes::ScraperObject, sharedtypes::ScraperReturn> {
+) -> Vec<sharedtypes::ScraperReturn> {
     //let vecvecstr: AHashMap<String, AHashMap<String, Vec<String>>> = AHashMap::new();
 
     let site_a = scraperdata.user_data.get("loaded_site");
@@ -736,11 +738,11 @@ pub fn parser(
         Some(sitename) => match string_to_site(sitename) {
             Some(out) => out,
             None => {
-                return Err(sharedtypes::ScraperReturn::Nothing);
+                return vec![sharedtypes::ScraperReturn::Nothing];
             }
         },
         None => {
-            return Err(sharedtypes::ScraperReturn::Nothing);
+            return vec![sharedtypes::ScraperReturn::Nothing];
         }
     };
 
@@ -748,21 +750,21 @@ pub fn parser(
     let js = match json::parse(html_input) {
         Err(err) => {
             if html_input.contains("Please confirm you are not a robot.") {
-                return Err(sharedtypes::ScraperReturn::Timeout(20));
+                return vec![sharedtypes::ScraperReturn::Timeout(20)];
             } else if html_input.contains("502: Bad gateway")
                 | html_input.contains("SSL handshake failed")
             {
-                return Err(sharedtypes::ScraperReturn::Timeout(10));
+                return vec![sharedtypes::ScraperReturn::Timeout(10)];
             } else if html_input.contains(&format!(
                 "{} Maintenance",
                 site_to_string(&site).to_lowercase()
             )) {
-                return Err(sharedtypes::ScraperReturn::Timeout(240));
+                return vec![sharedtypes::ScraperReturn::Timeout(240)];
             }
-            return Err(sharedtypes::ScraperReturn::Stop(format!(
+            return vec![sharedtypes::ScraperReturn::Stop(format!(
                 "Unknown Error: {}",
                 err
-            )));
+            ))];
         }
         Ok(out) => out,
     };
@@ -774,7 +776,7 @@ pub fn parser(
     //println!("Parsing");
 
     if js["posts"].is_empty() & js["posts"].is_array() {
-        return Err(sharedtypes::ScraperReturn::Nothing);
+        return vec![sharedtypes::ScraperReturn::Nothing];
     } else if js["posts"].is_null() {
         let pool = parse_pools(&js, scraperdata, &site);
         return pool;
@@ -949,12 +951,19 @@ pub fn parser(
         };
         files.insert(file);
     }
-    Ok(sharedtypes::ScraperObject {
-        file: files,
-        tag: HashSet::new(),
-        flag: vec![],
-    })
-    //return Ok(vecvecstr);
+
+    let mut out = vec![sharedtypes::ScraperReturn::Data(
+        sharedtypes::ScraperObject {
+            file: files,
+            tag: HashSet::new(),
+            flag: vec![],
+        },
+    )];
+    if js["posts"].len() <= 74 {
+        out.push(sharedtypes::ScraperReturn::Nothing)
+    }
+
+    out
 }
 ///
 /// Should this scraper handle anything relating to downloading.
@@ -1067,7 +1076,7 @@ pub fn db_upgrade_call_3(site: &Site) {
             let mut vec_poolpos = Vec::new();
             let mut hashset_fileid = HashSet::new();
             for each in client::parents_get(crate::client::types::ParentsType::Tag, *tid) {
-                if let Some(tag_nns) = client::tag_get_id(each) {
+                if let Some(tag_nns) = client::tag_get_id(each.tag_id) {
                     // Removes the spare poolid tag as a position that I added for some
                     // reason. lol
                     if tag_nns.namespace == poolposition_nsid {
@@ -1079,7 +1088,7 @@ pub fn db_upgrade_call_3(site: &Site) {
 
                         vec_poolpos.push(each);
                     } else if tag_nns.namespace == fileid_nsid {
-                        hashset_fileid.insert(each);
+                        hashset_fileid.insert(each.tag_id);
                     }
                 }
             }
@@ -1095,7 +1104,9 @@ pub fn db_upgrade_call_3(site: &Site) {
 
                 // Removes the parents and children from tag_ids
                 for tid_iter in tag_id.clone().iter() {
-                    if parent_table.contains(tid_iter) || children_table.contains(tid_iter) {
+                    if parent_table.contains(&tid_iter.tag_id)
+                        || children_table.contains(&tid_iter.tag_id)
+                    {
                         tag_id.remove(tid_iter);
                     }
                 }
@@ -1113,13 +1124,13 @@ pub fn db_upgrade_call_3(site: &Site) {
                         // Adds relation if it exists properly
                         for tid_iter in tag_id.iter() {
                             client::parents_delete(sharedtypes::DbParentsObj {
-                                tag_id: *tid_iter,
+                                tag_id: tid_iter.tag_id,
                                 relate_tag_id: *fid,
                                 limit_to: None,
                             });
-                            if position_table.contains(tid_iter) {
+                            if position_table.contains(&tid_iter.tag_id) {
                                 pos = Some(sharedtypes::DbParentsObj {
-                                    tag_id: *tid_iter,
+                                    tag_id: tid_iter.tag_id,
                                     relate_tag_id: *fid,
                                     limit_to: Some(*tid),
                                 });
@@ -1136,39 +1147,22 @@ pub fn db_upgrade_call_3(site: &Site) {
                         dbg!("MORE THEN 2 ITEMS IN HERE", &tag_id);
                         dbg!(&fid, tid);
                         for tid_iter in tag_id.iter() {
-                            if pool_table.contains(tid_iter) {
+                            if pool_table.contains(&tid_iter.tag_id) {
                                 let mut job = sharedtypes::return_default_jobsobj();
                                 job.site = site_to_string_prefix(site);
                                 job.param = vec![sharedtypes::ScraperParam::Url(format!(
                                     "https://{}.net/pools.json?search[id]={}",
                                     site_to_string(site).to_lowercase(),
-                                    client::tag_get_id(*tid_iter).unwrap().name
+                                    client::tag_get_id(tid_iter.tag_id).unwrap().name
                                 ))];
                                 job.jobmanager = sharedtypes::DbJobsManager {
                                     jobtype: sharedtypes::DbJobType::Scraper,
                                     recreation: None,
                                 };
                                 client::job_add(job);
-                                /*client::job_add(
-                                    None,
-                                    0,
-                                    0,
-                                    site_to_string_prefix(site),
-                                    vec![sharedtypes::ScraperParam::Url(format!(
-                                        "https://{}.net/pools.json?search[id]={}",
-                                        site_to_string(site).to_lowercase(),
-                                        client::tag_get_id(*tid_iter).unwrap().name
-                                    ))],
-                                    BTreeMap::new(),
-                                    BTreeMap::new(),
-                                    sharedtypes::DbJobsManager {
-                                        jobtype: sharedtypes::DbJobType::Scraper,
-                                        recreation: None,
-                                    },
-                                );*/
                             }
                             client::parents_delete(sharedtypes::DbParentsObj {
-                                tag_id: *tid_iter,
+                                tag_id: tid_iter.tag_id,
                                 relate_tag_id: *fid,
                                 limit_to: None,
                             });

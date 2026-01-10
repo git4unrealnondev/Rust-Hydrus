@@ -12,6 +12,7 @@ use crate::sharedtypes::DEFAULT_PRIORITY;
 
 pub const SITE: &str = "Danbooru";
 pub const SITE_URL: &str = "danbooru.donmai.us";
+pub const DANBOORU_POST_LIMIT: usize = 20;
 
 ///
 /// Reutrns an internal scraper object.
@@ -58,7 +59,6 @@ pub fn url_dump(
     params: &[sharedtypes::ScraperParam],
     scraperdata: &sharedtypes::ScraperData,
 ) -> Vec<(String, sharedtypes::ScraperData)> {
-    dbg!(&params);
     let mut ret = Vec::new();
     let hardlimit = 1000;
     for i in 1..hardlimit {
@@ -84,11 +84,8 @@ fn build_url(params: &[sharedtypes::ScraperParam], pagenum: u32) -> Option<Strin
         }
     }
 
-    match login_info {
-        Some(login_info) => {
-            url = url + &format!("login={}&api_key={}&", "not going", "to impliment this")
-        }
-        None => {}
+    if let Some(login_info) = login_info {
+        url = url + &format!("login={}&api_key={}&", "not going", "to impliment this")
     }
 
     url = url + &format!("page={}&tags=", pagenum);
@@ -116,7 +113,7 @@ pub fn parser(
     html_input: &str,
     _source_url: &str,
     scraperdata: &sharedtypes::ScraperData,
-) -> Result<sharedtypes::ScraperObject, sharedtypes::ScraperReturn> {
+) -> Vec<sharedtypes::ScraperReturn> {
     let mut tag = HashSet::new();
     let mut file = HashSet::new();
 
@@ -124,13 +121,13 @@ pub fn parser(
 
     if let Ok(js) = json::parse(html_input) {
         if js.is_empty() {
-            return Err(sharedtypes::ScraperReturn::Nothing);
+            return vec![sharedtypes::ScraperReturn::Nothing];
         }
         // Early exit checking if theirs an error or if the post list is empty
         if !js.is_array() || js.is_null() {
-            return Err(sharedtypes::ScraperReturn::Stop(
+            return vec![sharedtypes::ScraperReturn::Stop(
                 "Could not parse an array of posts from the html returned".to_string(),
-            ));
+            )];
         }
 
         for item in js.members() {
@@ -138,15 +135,15 @@ pub fn parser(
             parse_pool(item, scraperdata, &mut tag);
         }
     } else {
-        return Err(sharedtypes::ScraperReturn::Stop(
+        return vec![sharedtypes::ScraperReturn::Stop(
             "Failed to parse the html returned".to_string(),
-        ));
+        )];
     }
 
     if !post_ids.is_empty() {
         let mut post_ids_string = String::new();
 
-        for post_id in post_ids {
+        for post_id in post_ids.iter() {
             post_ids_string += &format!("id:{} ", post_id);
         }
         post_ids_string.truncate(post_ids_string.len() - 1);
@@ -177,11 +174,18 @@ pub fn parser(
         });
     }
 
-    Ok(sharedtypes::ScraperObject {
-        file,
-        tag,
-        flag: vec![],
-    })
+    let mut out = vec![sharedtypes::ScraperReturn::Data(
+        sharedtypes::ScraperObject {
+            file,
+            tag,
+            flag: vec![],
+        },
+    )];
+    if post_ids.len() <= DANBOORU_POST_LIMIT {
+        out.push(sharedtypes::ScraperReturn::Nothing);
+    }
+
+    out
 }
 
 /// Determines if we should do external lookups for children or pools
@@ -403,15 +407,16 @@ fn parse_post(
         };
 
         // Stupid way of doing it but i already coded it. Could of pulled from json
-        let relates_to = match scraperdata.user_data.get("parent-id") {
-            None => None,
-            Some(parent_id) => Some(sharedtypes::SubTag {
-                namespace: danbooru_id_namespace.clone(),
-                tag: parent_id.to_string(),
-                limit_to: None,
-                tag_type: sharedtypes::TagType::Normal,
-            }),
-        };
+        let relates_to =
+            scraperdata
+                .user_data
+                .get("parent-id")
+                .map(|parent_id| sharedtypes::SubTag {
+                    namespace: danbooru_id_namespace.clone(),
+                    tag: parent_id.to_string(),
+                    limit_to: None,
+                    tag_type: sharedtypes::TagType::Normal,
+                });
 
         tag_list.push(sharedtypes::TagObject {
             namespace: danbooru_id_namespace,

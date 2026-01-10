@@ -29,6 +29,7 @@ use std::thread;
 use std::time::Duration;
 use thread_control::*;
 
+use std::ops::ControlFlow;
 pub struct Threads {
     _workers: usize,
     worker: HashMap<usize, Worker>,
@@ -423,111 +424,92 @@ Worker: {id} JobId: {} -- While trying to parse parameters we got this error: {:
                                             break 'urlloop;
                                         }
                                     };
-                                    out_st = match st {
-                                        Ok(objectscraper) => objectscraper,
-                                        Err(ScraperReturn::Nothing) => {
-                                            // job_params.lock().unwrap().remove(&scraper_data);
-                                            logging::info_log(format!(
-                                                "Worker: {id} JobId: {} -- Exiting loop due to nothing.",
-                                                jobid
-                                            ));
-                                            break 'urlloop;
-                                        }
-                                        Err(ScraperReturn::EMCStop(emc)) => {
-                                            panic!("EMC STOP DUE TO: {}", emc);
-                                        }
-                                        Err(ScraperReturn::Stop(stop)) => {
-                                            // let temp = scraper_data.clone().job;
-                                            // job_params.lock().unwrap().remove(&scraper_data);
-                                            logging::error_log(format!("Stopping job: {:?}", stop));
-                                            break 'urlloop;
-                                        }
-                                        Err(ScraperReturn::Timeout(time)) => {
-                                            let time_dur = Duration::from_secs(time);
-                                            thread::sleep(time_dur);
-                                            continue;
-                                        }
-                                    };
+                                    out_st = st;
                                 } else {
-                                    loop {
-                                        match globalload.text_scraping(
-                                            url_string,
-                                            &scraperdata.job.param,
-                                            &scraperdata,
-                                            &scraper,
-                                        ) {
-                                            Ok(scraperobj) => {
-                                                out_st = scraperobj;
-                                                break;
-                                            }
-                                            Err(scraperreturn) => match scraperreturn {
-                                                sharedtypes::ScraperReturn::Timeout(time) => {
-                                                    thread::sleep(Duration::from_secs(time))
-                                                }
-                                                _ => {
-                                                    logging::error_log(format!(
-                                                        "Worker: {} -- While processing job {:?} was unable to download text.",
-                                                        &id, &job
-                                                    ));
-                                                    break 'urlloop;
-                                                }
-                                            },
-                                        }
-                                    }
+                                    out_st = globalload.text_scraping(
+                                        url_string,
+                                        &scraperdata.job.param,
+                                        &scraperdata,
+                                        &scraper,
+                                    )
                                 }
                             } else {
                                 // Finished checking everything for URLs and other stuff.
                                 break 'errloop;
                             }
-                            for flag in out_st.flag {
-                                match flag {
-                                    sharedtypes::Flags::Redo => {
-                                        should_remove_original_job = false;
+                            for out_st in out_st {
+                                match out_st {
+                                    sharedtypes::ScraperReturn::Data(out_st) => {
+                                        for flag in out_st.flag {
+                                            match flag {
+                                                sharedtypes::Flags::Redo => {
+                                                    should_remove_original_job = false;
+                                                }
+                                            }
+                                        }
+
+                                        // Extracts any jobs from the tags field
+                                        for tag in out_st.tag.iter() {
+                                            parse_jobs(
+                                                tag,
+                                                None,
+                                                jobstorage.clone(),
+                                                database.clone(),
+                                                &scraper,
+                                                &id,
+                                                &jobid,
+                                                globalload.clone(),
+                                            );
+                                        }
+                                        // Spawns the multithreaded pool
+                                        let pool = ThreadPool::default();
+
+                                        // Parses files from urls
+                                        for mut file in out_st.file {
+                                            let ratelimiter_obj = ratelimiter_main.clone();
+                                            let globalload = globalload.clone();
+                                            let db = database.clone();
+                                            let client = client_file.clone();
+                                            let jobstorage = jobstorage.clone();
+                                            let scraper = scraper.clone();
+                                            pool.execute(move || {
+                                                main_file_loop(
+                                                    &mut file,
+                                                    db,
+                                                    ratelimiter_obj,
+                                                    globalload,
+                                                    client,
+                                                    jobstorage,
+                                                    &scraper,
+                                                    &id,
+                                                    &jobid,
+                                                );
+                                            });
+                                            // End of err catching loop. break 'errloop;
+                                        }
+                                        pool.join();
+                                    }
+                                    sharedtypes::ScraperReturn::Nothing => {
+                                        logging::info_log(format!(
+                                            "Worker: {id} JobId: {} -- Exiting loop due to nothing.",
+                                            jobid
+                                        ));
+                                        break 'urlloop;
+                                    }
+                                    sharedtypes::ScraperReturn::EMCStop(emc) => {
+                                        panic!("EMC STOP DUE TO: {}", emc);
+                                    }
+                                    sharedtypes::ScraperReturn::Stop(stop) => {
+                                        logging::error_log(format!("Stopping job: {:?}", stop));
+                                        break 'urlloop;
+                                    }
+                                    sharedtypes::ScraperReturn::Timeout(time) => {
+                                        let time_dur = Duration::from_secs(time);
+                                        thread::sleep(time_dur);
+                                        continue;
                                     }
                                 }
                             }
-
-                            // Extracts any jobs from the tags field
-                            for tag in out_st.tag.iter() {
-                                parse_jobs(
-                                    tag,
-                                    None,
-                                    jobstorage.clone(),
-                                    database.clone(),
-                                    &scraper,
-                                    &id,
-                                    &jobid,
-                                    globalload.clone(),
-                                );
-                            }
-                            // Spawns the multithreaded pool
-                            let pool = ThreadPool::default();
-
-                            // Parses files from urls
-                            for mut file in out_st.file {
-                                let ratelimiter_obj = ratelimiter_main.clone();
-                                let globalload = globalload.clone();
-                                let db = database.clone();
-                                let client = client_file.clone();
-                                let jobstorage = jobstorage.clone();
-                                let scraper = scraper.clone();
-                                pool.execute(move || {
-                                    main_file_loop(
-                                        &mut file,
-                                        db,
-                                        ratelimiter_obj,
-                                        globalload,
-                                        client,
-                                        jobstorage,
-                                        &scraper,
-                                        &id,
-                                        &jobid,
-                                    );
-                                });
-                                // End of err catching loop. break 'errloop;
-                            }
-                            pool.join();
-                            break 'errloop;
                         }
                     }
                     {
@@ -535,7 +517,6 @@ Worker: {id} JobId: {} -- While trying to parse parameters we got this error: {:
                             jobstorage
                                 .write()
                                 .jobs_remove_dbjob(&scraper, &currentjob, &id);
-                        } else {
                         }
                         {
                             jobstorage.write().jobs_remove_job(&scraper, &currentjob);

@@ -336,7 +336,7 @@ impl GlobalLoad {
         actual_params: &[sharedtypes::ScraperParam],
         scraperdata: &sharedtypes::ScraperData,
         scraper: &GlobalPluginScraper,
-    ) -> Result<sharedtypes::ScraperObject, sharedtypes::ScraperReturn> {
+    ) -> Vec<sharedtypes::ScraperReturn> {
         if let Some(lib) = self.library_get(scraper) {
             let lib = lib.read();
             let temp: libloading::Symbol<
@@ -344,14 +344,11 @@ impl GlobalLoad {
                     &str,
                     &[sharedtypes::ScraperParam],
                     &sharedtypes::ScraperData,
-                ) -> Result<
-                    sharedtypes::ScraperObject,
-                    sharedtypes::ScraperReturn,
-                >,
+                ) -> Vec<sharedtypes::ScraperReturn>,
             > = unsafe { lib.get(b"text_scraping\0").unwrap() };
             unsafe { temp(url_output, actual_params, scraperdata) }
         } else {
-            Err(sharedtypes::ScraperReturn::Nothing)
+            vec![sharedtypes::ScraperReturn::Nothing]
         }
     }
 
@@ -422,7 +419,7 @@ impl GlobalLoad {
         source_url: &str,
         scraperdata: &sharedtypes::ScraperData,
         scraper: &GlobalPluginScraper,
-    ) -> Result<sharedtypes::ScraperObject, sharedtypes::ScraperReturn> {
+    ) -> Vec<sharedtypes::ScraperReturn> {
         if let Some(scraper_library_rwlock) = self.library_get(scraper) {
             let scraper_library = scraper_library_rwlock.read();
             let temp: libloading::Symbol<
@@ -430,17 +427,14 @@ impl GlobalLoad {
                     &str,
                     &str,
                     &sharedtypes::ScraperData,
-                ) -> Result<
-                    sharedtypes::ScraperObject,
-                    sharedtypes::ScraperReturn,
-                >,
+                ) -> Vec<sharedtypes::ScraperReturn>,
             > = {
                 unsafe {
                     match scraper_library.get(b"parser\0") {
                         Err(err) => {
-                            return Err(sharedtypes::ScraperReturn::Stop(
+                            return vec![sharedtypes::ScraperReturn::Stop(
                                 "Missing parser block in scraper".to_string(),
-                            ));
+                            )];
                         }
                         Ok(out) => out,
                     }
@@ -448,7 +442,7 @@ impl GlobalLoad {
             };
             unsafe { temp(url_output, source_url, scraperdata) }
         } else {
-            Err(sharedtypes::ScraperReturn::Nothing)
+            vec![sharedtypes::ScraperReturn::Nothing]
         }
     }
 

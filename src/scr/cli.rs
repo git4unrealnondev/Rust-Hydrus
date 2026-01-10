@@ -1,9 +1,9 @@
 extern crate clap;
 
 use rayon::prelude::*;
+use std::collections::HashSet;
 use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
-use std::collections::HashSet;
 use strfmt::Format;
 use walkdir::WalkDir;
 
@@ -469,8 +469,6 @@ pub fn main(data: database::Main) {
                 }
             },
             cli_structs::TasksStruct::Database(db) => {
-                
-
                 let dbstore = data.clone();
                 match db {
                     cli_structs::Database::CheckSourceUrls(source_url_enum) => {
