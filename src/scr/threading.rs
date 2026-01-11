@@ -398,9 +398,10 @@ Worker: {id} JobId: {} -- While trying to parse parameters we got this error: {:
                     };
 
                     'urlloop: for (scraperparam, scraperdata) in urlload {
+                        dbg!(&scraperparam, &scraperdata);
                         'errloop: loop {
                             let resp;
-                            let out_st;
+                            let out_sts;
                             if let sharedtypes::ScraperParam::Url(ref url_string) = scraperparam {
                                 if !scraper.should_handle_text_scraping {
                                     resp = task::block_on(download::dltext_new(
@@ -424,9 +425,9 @@ Worker: {id} JobId: {} -- While trying to parse parameters we got this error: {:
                                             break 'urlloop;
                                         }
                                     };
-                                    out_st = st;
+                                    out_sts = st;
                                 } else {
-                                    out_st = globalload.text_scraping(
+                                    out_sts = globalload.text_scraping(
                                         url_string,
                                         &scraperdata.job.param,
                                         &scraperdata,
@@ -437,11 +438,11 @@ Worker: {id} JobId: {} -- While trying to parse parameters we got this error: {:
                                 // Finished checking everything for URLs and other stuff.
                                 break 'errloop;
                             }
-                            for out_st in out_st {
+                            for out_st in out_sts.iter() {
                                 match out_st {
                                     // Valid data from the scraper
                                     sharedtypes::ScraperReturn::Data(out_st) => {
-                                        for flag in out_st.flag {
+                                        for flag in out_st.flag.iter() {
                                             match flag {
                                                 sharedtypes::Flags::Redo => {
                                                     should_remove_original_job = false;
@@ -466,7 +467,7 @@ Worker: {id} JobId: {} -- While trying to parse parameters we got this error: {:
                                         let pool = ThreadPool::default();
 
                                         // Parses files from urls
-                                        for mut file in out_st.file {
+                                        for mut file in out_st.file.clone() {
                                             let ratelimiter_obj = ratelimiter_main.clone();
                                             let globalload = globalload.clone();
                                             let db = database.clone();
@@ -495,7 +496,13 @@ Worker: {id} JobId: {} -- While trying to parse parameters we got this error: {:
                                             "Worker: {id} JobId: {} -- Exiting loop due to nothing.",
                                             jobid
                                         ));
-                                        break 'urlloop;
+
+                                        // If the last item is nothing then stop
+                                        if *out_st == out_sts[out_sts.len() - 1] {
+                                            break 'urlloop;
+                                        }
+
+                                        break 'errloop;
                                     }
                                     // Emergency stop should never use as it halts the program
                                     sharedtypes::ScraperReturn::EMCStop(emc) => {
@@ -508,10 +515,14 @@ Worker: {id} JobId: {} -- While trying to parse parameters we got this error: {:
                                     }
                                     // Waits a specified time before retrying
                                     sharedtypes::ScraperReturn::Timeout(time) => {
-                                        let time_dur = Duration::from_secs(time);
+                                        let time_dur = Duration::from_secs(*time);
                                         thread::sleep(time_dur);
                                         continue;
                                     }
+                                }
+                                // If the last item is data then process the next item
+                                if *out_st == out_sts[out_sts.len() - 1] {
+                                    break 'errloop;
                                 }
                             }
                         }

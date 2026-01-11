@@ -423,7 +423,7 @@ pub enum ScraperType {
     Automatic,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 #[allow(dead_code)]
 pub enum ScraperReturn {
     // Valid data from the system
@@ -441,14 +441,14 @@ pub enum ScraperReturn {
 ///
 /// Kinda stupid. Will see if I need this in the future
 ///
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Flags {
     Redo,
 }
 
 /// What the scraper passes between loaded 3rd party scrapers and the internal
 /// scrpaer.
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct ScraperObject {
     pub file: HashSet<FileObject>,
     pub tag: HashSet<TagObject>,
@@ -790,7 +790,9 @@ pub enum FileSource {
 }
 
 /// Represents one file
-#[derive(Debug, Eq, Hash, PartialEq, Deserialize, Serialize, bincode::Encode, bincode::Decode)]
+#[derive(
+    Debug, Eq, Hash, PartialEq, Deserialize, Serialize, bincode::Encode, bincode::Decode, Clone,
+)]
 pub struct FileObject {
     pub source: Option<FileSource>,
     // Hash of file
