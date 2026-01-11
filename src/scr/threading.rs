@@ -439,6 +439,10 @@ Worker: {id} JobId: {} -- While trying to parse parameters we got this error: {:
                                 // Finished checking everything for URLs and other stuff.
                                 break 'errloop;
                             }
+                            // If we get nothing in then treat it as if we have nothing and stop job
+                            if out_sts.is_empty() {
+                                break 'urlloop;
+                            }
                             for out_st in out_sts.iter() {
                                 match out_st {
                                     // Valid data from the scraper
