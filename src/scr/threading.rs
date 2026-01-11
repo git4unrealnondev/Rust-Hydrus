@@ -439,6 +439,7 @@ Worker: {id} JobId: {} -- While trying to parse parameters we got this error: {:
                             }
                             for out_st in out_st {
                                 match out_st {
+                                    // Valid data from the scraper
                                     sharedtypes::ScraperReturn::Data(out_st) => {
                                         for flag in out_st.flag {
                                             match flag {
@@ -485,10 +486,10 @@ Worker: {id} JobId: {} -- While trying to parse parameters we got this error: {:
                                                     &jobid,
                                                 );
                                             });
-                                            // End of err catching loop. break 'errloop;
                                         }
                                         pool.join();
                                     }
+                                    // Nothing was returned so we stop job searching
                                     sharedtypes::ScraperReturn::Nothing => {
                                         logging::info_log(format!(
                                             "Worker: {id} JobId: {} -- Exiting loop due to nothing.",
@@ -496,13 +497,16 @@ Worker: {id} JobId: {} -- While trying to parse parameters we got this error: {:
                                         ));
                                         break 'urlloop;
                                     }
+                                    // Emergency stop should never use as it halts the program
                                     sharedtypes::ScraperReturn::EMCStop(emc) => {
                                         panic!("EMC STOP DUE TO: {}", emc);
                                     }
+                                    // Stops the job same thing as nothing but gives a reason
                                     sharedtypes::ScraperReturn::Stop(stop) => {
                                         logging::error_log(format!("Stopping job: {:?}", stop));
                                         break 'urlloop;
                                     }
+                                    // Waits a specified time before retrying
                                     sharedtypes::ScraperReturn::Timeout(time) => {
                                         let time_dur = Duration::from_secs(time);
                                         thread::sleep(time_dur);

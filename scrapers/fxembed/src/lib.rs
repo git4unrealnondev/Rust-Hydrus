@@ -196,7 +196,7 @@ pub fn parser(
     html_input: &str,
     source_url: &str,
     scraperdata: &sharedtypes::ScraperData,
-) -> Result<sharedtypes::ScraperObject, sharedtypes::ScraperReturn> {
+) -> Vec<sharedtypes::ScraperReturn> {
     let mut out = sharedtypes::ScraperObject {
         file: HashSet::new(),
         tag: HashSet::new(),
@@ -217,12 +217,12 @@ pub fn parser(
 
     let source_urledited = match scraperdata.user_data.get("post_source_edited") {
         Some(out) => out.to_string(),
-        None => return Ok(out),
+        None => return vec![sharedtypes::ScraperReturn::Data(out)],
     };
 
     let source_url = match scraperdata.user_data.get("post_source") {
         Some(out) => out.to_string(),
-        None => return Ok(out),
+        None => return vec![sharedtypes::ScraperReturn::Data(out)],
     };
 
     // Filters for the source urls
@@ -366,7 +366,7 @@ pub fn parser(
     if DEBUG {
         dbg!(&out);
     }
-    Ok(out)
+    vec![sharedtypes::ScraperReturn::Data(out)]
 }
 
 ///
