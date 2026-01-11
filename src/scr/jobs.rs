@@ -175,6 +175,7 @@ impl Jobs {
         out.sort_by_key(|key| key.priority);
         out.reverse();
 
+        out.truncate(10);
         out
     }
 

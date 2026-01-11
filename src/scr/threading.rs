@@ -198,7 +198,6 @@ impl Worker {
                     break 'bigloop;
                 }
 
-                jobstorage.truncate(10);
 
                 for mut job in jobsstorage {
                     let jobid = job.id.unwrap();
