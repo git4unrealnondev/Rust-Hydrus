@@ -1241,6 +1241,21 @@ fn determine_site_type(
 /// Removes any duplicate source urls that may exist inside of the db that are ours
 ///
 fn client_clear_duplicate_sources() {
+    let setting_name = "scraper-e6-check-duplicates".to_string();
+    if let Some(setting) = client::settings_get_name(setting_name.to_string()) {
+        if setting.param == Some("false".to_string()) {
+            return;
+        }
+    } else {
+        client::setting_add(
+            setting_name.clone(),
+            Some("Should e6 check that if their are duplicate records".to_string()),
+            None,
+            Some("true".to_string()),
+            true,
+        );
+    }
+
     let file_hash_md5_nsid = match client::namespace_get("FileHash-MD5".to_string()) {
         Some(id) => id,
         None => return,
@@ -1285,6 +1300,13 @@ fn client_clear_duplicate_sources() {
         }
     }
     client::transaction_flush();
+    client::setting_add(
+        setting_name,
+        Some("Should e6 check that if their are duplicate records".to_string()),
+        None,
+        Some("false".to_string()),
+        true,
+    );
 }
 
 ///
