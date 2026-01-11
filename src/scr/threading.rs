@@ -398,7 +398,6 @@ Worker: {id} JobId: {} -- While trying to parse parameters we got this error: {:
                     };
 
                     'urlloop: for (scraperparam, scraperdata) in urlload {
-                        dbg!(&scraperparam, &scraperdata);
                         'errloop: loop {
                             let resp;
                             let out_sts;
