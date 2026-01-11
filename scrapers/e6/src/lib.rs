@@ -1243,7 +1243,7 @@ fn determine_site_type(
 fn client_clear_duplicate_sources() {
     let setting_name = "scraper-e6-check-duplicates".to_string();
     if let Some(setting) = client::settings_get_name(setting_name.to_string()) {
-        if setting.param == Some("false".to_string()) {
+        if setting.param == Some("False".to_string()) {
             return;
         }
     } else {
@@ -1304,7 +1304,7 @@ fn client_clear_duplicate_sources() {
         setting_name,
         Some("Should e6 check that if their are duplicate records".to_string()),
         None,
-        Some("false".to_string()),
+        Some("False".to_string()),
         true,
     );
 }
