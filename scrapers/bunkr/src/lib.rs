@@ -284,8 +284,15 @@ pub fn parser(
                             for tag in file_tag {
                                 tag_out.insert(tag);
                             }
-
-                            continue 'fragloop;
+                            out.push(sharedtypes::ScraperReturn::Data(
+                                sharedtypes::ScraperObject {
+                                    file: file_out,
+                                    tag: tag_out,
+                                    flag,
+                                },
+                            ));
+                            out.push(sharedtypes::ScraperReturn::Nothing);
+                            return out;
                         }
                         match download_file(&url, source_url) {
                             Ok(filevec) => {
