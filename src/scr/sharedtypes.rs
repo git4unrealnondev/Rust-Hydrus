@@ -436,6 +436,8 @@ pub enum ScraperReturn {
     Stop(String),
     // Wait X seconds before retrying.
     Timeout(u64),
+    // Sends job back into queue with x waiting time
+    RetryLater(u64),
 }
 
 ///

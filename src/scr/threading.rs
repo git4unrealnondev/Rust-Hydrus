@@ -198,7 +198,6 @@ impl Worker {
                     break 'bigloop;
                 }
 
-
                 for mut job in jobsstorage {
                     let jobid = job.id.unwrap();
                     should_remove_original_job = true;
@@ -523,6 +522,14 @@ Worker: {id} JobId: {} -- While trying to parse parameters we got this error: {:
                                         let time_dur = Duration::from_secs(*time);
                                         thread::sleep(time_dur);
                                         continue;
+                                    }
+                                    // Puts the job back into the queu x seconds later
+                                    sharedtypes::ScraperReturn::RetryLater(time) => {
+                                        let mut data = job.clone();
+                                        data.time = crate::time_func::time_secs();
+                                        data.reptime = Some(*time as usize);
+                                        database.jobs_update_db(data);
+                                        should_remove_original_job = false;
                                     }
                                 }
                                 // If the last item is data then process the next item

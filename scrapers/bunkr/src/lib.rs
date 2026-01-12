@@ -84,6 +84,9 @@ pub fn parser(
 ) -> Vec<sharedtypes::ScraperReturn> {
     let mut out = vec![];
 
+    let mut flag = Vec::new();
+    let mut file_out = HashSet::new();
+    let mut tag_out = HashSet::new();
     let fragment = Html::parse_fragment(html_input);
     if source_url.contains("bunkr-albums") {
         let selector = Selector::parse(r#"a[aria-label="watch"][href]"#).unwrap();
@@ -154,6 +157,14 @@ pub fn parser(
         }
     } else {
         // This section handles the albums page
+        //
+        let mut album_name = None;
+        let selector = Selector::parse(r#"h1[class="truncate"]"#).unwrap();
+        for span in fragment.select(&selector) {
+            let album_name_temp = span.text().collect::<String>().to_string();
+            let album_name_temp = album_name_temp.trim();
+            album_name = Some(album_name_temp.to_string());
+        }
 
         let selector = Selector::parse(r#"span[class="ic-clock ic-before text-xs before:text-sm before:opacity-60 inline-flex items-center gap-1 py-1 px-2 rounded-full border border-soft theDate"]"#).unwrap();
         let mut times = Vec::new();
@@ -191,6 +202,11 @@ pub fn parser(
                 scraperdata
                     .user_data
                     .insert("bunkr-album-id".to_string(), albumid.to_string());
+                if let Some(ref name) = album_name {
+                    scraperdata
+                        .user_data
+                        .insert("bunkr-album-name".to_string(), name.to_string());
+                }
 
                 if let Some(time) = time {
                     scraperdata
@@ -229,9 +245,6 @@ pub fn parser(
         }
         let selector = Selector::parse(r#"div[id="fileTracker"]"#).unwrap();
 
-        let mut flag = Vec::new();
-        let mut file_out = HashSet::new();
-        let mut tag_out = HashSet::new();
         'fragloop: for a in fragment.select(&selector) {
             if let Some(file_id) = a.value().attr("data-file-id") {
                 let api_url = "https://apidl.bunkr.ru/api/_001_v2";
@@ -258,6 +271,11 @@ pub fn parser(
                     if let Some(ref tag) = filename {
                         let fileid = source_url.rsplit('/').next().unwrap();
                         let file_tag = make_file_tags(fileid, tag, scraperdata);
+
+                        for tag in make_general_tags(fileid, tag, scraperdata) {
+                            tag_out.insert(tag);
+                        }
+
                         if !should_download_file(fileid) {
                             client::log(format!(
                                 "scraper-bunkr: Cannot download because I fileid wasn't valid {}",
@@ -283,8 +301,10 @@ pub fn parser(
                                     tag_out.insert(tag);
                                 }
                                 match err.to_string().as_str() {
-                                    "Server is in maintence mode" => {
-                                        flag.push(sharedtypes::Flags::Redo);
+                                    "Server is in maintence mode" | "Too many retries" => {
+                                        out.push(sharedtypes::ScraperReturn::RetryLater(3600)); // wait one hour
+                                        return out;
+                                        // flag.push(sharedtypes::Flags::Redo);
                                     }
                                     _ => {}
                                 }
@@ -309,6 +329,42 @@ pub fn parser(
     }
 
     out
+}
+
+fn make_general_tags(
+    fileid: &str,
+    tag: &String,
+    scraperdata: &sharedtypes::ScraperData,
+) -> Vec<sharedtypes::TagObject> {
+    let limit_to = scraperdata
+        .user_data
+        .get("bunkr-album-time")
+        .map(|time| sharedtypes::Tag {
+            tag: time.to_string(),
+            namespace: sharedtypes::GenericNamespaceObj {
+                name: "bunkr-album-time".to_string(),
+                description: Some("Last time the bunkr album was modified".to_string()),
+            },
+        });
+    let relates_to = scraperdata.user_data.get("bunkr-album-id").map(|tag| sharedtypes::SubTag {
+            namespace: sharedtypes::GenericNamespaceObj {
+                name: "bunkr-album-id".to_string(),
+                description: Some(
+                    "A unique album id for bunkr. Sometimes its called a slug internally. Often used as a root for the album".to_string(),),},
+            tag: tag.to_string(),
+            tag_type: sharedtypes::TagType::Normal,
+            limit_to,
+        });
+
+    vec![sharedtypes::TagObject {
+        namespace: sharedtypes::GenericNamespaceObj {
+            name: "bunkr-album-name".to_string(),
+            description: Some("A name for a bunkr album".to_string()),
+        },
+        tag: fileid.to_string(),
+        tag_type: sharedtypes::TagType::Normal,
+        relates_to,
+    }]
 }
 
 fn make_file_tags(

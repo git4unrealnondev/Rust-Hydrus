@@ -76,7 +76,6 @@ fn pause() {
 fn makedb(dbloc: &str) -> database::Main {
     // Setting up DB VARS
     let path = dbloc.to_string();
-    
 
     // let dbexist = Path::new(&path).exists(); dbcon is database connector let mut
     // dbcon = scr::database::dbinit(&path);
