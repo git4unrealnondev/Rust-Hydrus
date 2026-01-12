@@ -131,7 +131,7 @@ pub fn parser(
                     site: LOCAL_NAME.to_string(),
                     param: vec![sharedtypes::ScraperParam::Url(format!(
                         "{}{}",
-                        MAIN_SITE, href
+                        "https://bunkr-albums.io", href
                     ))],
                     job_type: sharedtypes::DbJobType::Scraper,
                 };
