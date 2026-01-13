@@ -463,8 +463,15 @@ fn download_file(url: &String, pretty_url: &str) -> Result<Vec<u8>> {
         //client::log(format!("scraper-bunkr: Waiting {} seconds for ratelimit random", sleep));
         //std::thread::sleep(Duration::from_secs(sleep));
         client::log(format!("scraper-bunkr: Downloading {}", pretty_url));
-        let response_temp = ureq::get(url)
-            .header(
+
+let agent: Agent = Agent::config_builder()
+        .timeout_global(Some(Duration::from_secs(50)))
+        .build()
+        .into();
+
+    // 2. Use the agent to perform the GET request
+    let response_temp = agent.get(url)
+ .header(
                 "Accept",
                 "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
             )
@@ -474,8 +481,10 @@ fn download_file(url: &String, pretty_url: &str) -> Result<Vec<u8>> {
                 "User-Agent",
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:146.0) Gecko/20100101 Firefox/146.0",
             )
-            .call();
-        if let Ok(response_out) = response_temp {
+
+        .call();
+
+               if let Ok(response_out) = response_temp {
             response = response_out;
             break;
         }
