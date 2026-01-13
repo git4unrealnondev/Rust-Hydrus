@@ -7,8 +7,10 @@ use std::time::Duration;
 //use ahash::HashSet;
 //use ahash::HashSet;
 
-#[path = "../../../src/scr/sharedtypes.rs"]
+#[path = "../../../src/sharedtypes.rs"]
 mod sharedtypes;
+#[path = "../../../src/client.rs"]
+mod client;
 
 use crate::sharedtypes::DEFAULT_PRIORITY;
 #[macro_export]
@@ -979,8 +981,6 @@ fn gen_source_from_md5_ext(md5: &String, ext: &String, site: &Site) -> String {
 
     format!("{}/{}/{}/{}.{}", base, &md5[0..2], &md5[2..4], &md5, ext)
 }
-#[path = "../../../src/scr/intcoms/client.rs"]
-mod client;
 pub fn db_upgrade_call_3(site: &Site) {
     dbg!("{} GOING TO LOCK DB DOES THIS WORKY", site_to_string(site));
     client::load_table(sharedtypes::LoadDBTable::All);
@@ -1252,7 +1252,7 @@ fn client_clear_duplicate_sources() {
             Some("Should e6 check that if their are duplicate records".to_string()),
             None,
             Some("true".to_string()),
-            true,
+            
         );
     }
 
@@ -1305,7 +1305,7 @@ fn client_clear_duplicate_sources() {
         Some("Should e6 check that if their are duplicate records".to_string()),
         None,
         Some("False".to_string()),
-        true,
+        
     );
 }
 
@@ -1453,7 +1453,7 @@ pub fn on_start(site_struct: &sharedtypes::GlobalPluginScraper) {
                                             ));
                                         }
                                         let tagid_new =
-                                            client::tag_add(tag.name, *legacy_ns, true, None);
+                                            client::tag_add(tag.name, *legacy_ns,  None);
 
                                         client::file_relationship_migrate(
                                             *fileid, tagid, tagid_new,
@@ -1463,7 +1463,7 @@ pub fn on_start(site_struct: &sharedtypes::GlobalPluginScraper) {
                             }
                             /*let old_tag = client::tag_get_id(tagid).unwrap();
                             let new_tag_id =
-                                client::tag_add(old_tag.name, main_nsid.unwrap(), true, None);
+                                client::tag_add(old_tag.name, main_nsid.unwrap(),  None);
                             client::relationship_add(*fileid, new_tag_id);
                             client::relationship_remove(*fileid, tagid);*/
                         } else {

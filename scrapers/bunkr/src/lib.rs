@@ -10,9 +10,9 @@ use std::io::Read;
 use std::io::Write;
 use std::{collections::HashSet, time::Duration};
 use ureq::{Agent, ResponseExt};
-#[path = "../../../src/scr/intcoms/client.rs"]
+#[path = "../../../src/client.rs"]
 mod client;
-#[path = "../../../src/scr/sharedtypes.rs"]
+#[path = "../../../src/sharedtypes.rs"]
 mod sharedtypes;
 
 pub const LOCAL_NAME: &str = "Bunkr";
