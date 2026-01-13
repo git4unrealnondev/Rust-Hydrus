@@ -6,9 +6,9 @@ use url::Url;
 
 use crate::sharedtypes::DEFAULT_PRIORITY;
 
-#[path = "../../../src/scr/intcoms/client.rs"]
+#[path = "../../../src/client.rs"]
 mod client;
-#[path = "../../../src/scr/sharedtypes.rs"]
+#[path = "../../../src/sharedtypes.rs"]
 mod sharedtypes;
 
 pub const LOCAL_NAME: &str = "FxEmbed";

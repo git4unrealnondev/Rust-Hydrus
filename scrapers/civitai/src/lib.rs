@@ -12,7 +12,7 @@ use std::time::Duration;
 //use ahash::HashSet;
 //use ahash::HashSet;
 
-#[path = "../../../src/scr/sharedtypes.rs"]
+#[path = "../../../src/sharedtypes.rs"]
 mod sharedtypes;
 
 #[macro_export]
@@ -413,7 +413,7 @@ pub fn image_parsing(
     scraperdatafile.job = sharedtypes::JobScraper {
         site: scraperdata.job.site.clone(),
         param: Vec::new(),
-        original_param: get_votable_tags_url(file_id_temp, VotableTagsType::Image),
+        //original_param: get_votable_tags_url(file_id_temp, VotableTagsType::Image),
         job_type: sharedtypes::DbJobType::Scraper,
     };
     let tag = sharedtypes::TagObject {
@@ -434,8 +434,10 @@ pub fn url_dump(
     scraperdata: &sharedtypes::ScraperData,
 ) -> Vec<(String, sharedtypes::ScraperData)> {
     let mut ret = Vec::new();
+    panic!();
     dbg!(params, scraperdata);
-    let urltype = get_urltype(&scraperdata.job.original_param);
+    let urltype = Some("pass");
+    //let urltype = get_urltype(&scraperdata.job.original_param);
     if let Some(urltype) = urltype {
         match urltype {
             UrlType::Models((model_number, model_version)) => {
@@ -609,13 +611,13 @@ pub fn tags_image_parsing(
     }
 
     let file = sharedtypes::FileObject {
-        source_url: Some(
+        source: Some( sharedtypes::FileSource::Url(
             scraperdata
                 .user_data
                 .get("file_source_url")
                 .unwrap()
                 .to_string(),
-        ),
+        )),
         hash: sharedtypes::HashesSupported::None,
         tag_list: tags_vec,
         skip_if: Vec::new(),
@@ -738,7 +740,7 @@ pub fn model_data_parsing(
                 scraperdatafile.job = sharedtypes::JobScraper {
                     site: scraperdata.job.site.clone(),
                     param: Vec::new(),
-                    original_param: next_infinite_url.clone(),
+           //         original_param: next_infinite_url.clone(),
                     job_type: sharedtypes::DbJobType::Scraper,
                 };
                 scraperdatafile
@@ -801,7 +803,7 @@ pub fn image_infinite_parsing(
         scraperdatafile.job = sharedtypes::JobScraper {
             site: scraperdata.job.site.clone(),
             param: Vec::new(),
-            original_param: next_infinite_url.clone(),
+          //  original_param: next_infinite_url.clone(),
             job_type: sharedtypes::DbJobType::Scraper,
         };
         scraperdatafile
@@ -936,7 +938,7 @@ pub fn image_infinite_parsing(
                 scraperdatafile.job = sharedtypes::JobScraper {
                     site: scraperdata.job.site.clone(),
                     param: Vec::new(),
-                    original_param: get_votable_tags_url(file_id_temp, VotableTagsType::Image),
+                   // original_param: get_votable_tags_url(file_id_temp, VotableTagsType::Image),
                     job_type: sharedtypes::DbJobType::Scraper,
                 };
 
@@ -961,7 +963,7 @@ pub fn image_infinite_parsing(
         }
 
         let file = sharedtypes::FileObject {
-            source_url: Some(file_source_url),
+            source: Some(sharedtypes::FileSource::Url(file_source_url)),
             hash: sharedtypes::HashesSupported::None,
             tag_list: file_tags,
             skip_if: skip_if,
@@ -1005,6 +1007,7 @@ pub fn parser(
         sharedtypes::ScraperObject {
             file: files,
             tag: tags,
+            flag: vec![]
         },
         scraperdata.clone(),
     ))
@@ -1018,7 +1021,7 @@ pub fn scraper_download_get() -> bool {
     false
 }
 
-#[path = "../../../src/scr/intcoms/client.rs"]
+#[path = "../../../src/client.rs"]
 mod client;
 
 #[no_mangle]

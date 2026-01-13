@@ -1,4 +1,4 @@
-#[path = "../../../src/scr/sharedtypes.rs"]
+#[path = "../../../src/sharedtypes.rs"]
 mod sharedtypes;
 
 static PLUGIN_NAME: &str = "SleepyDev";

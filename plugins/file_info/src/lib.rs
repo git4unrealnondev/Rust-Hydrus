@@ -5,10 +5,10 @@ use std::time::{Duration, UNIX_EPOCH};
 use struct_iterable::Iterable;
 use strum::{EnumIter, IntoEnumIterator};
 
-#[path = "../../../src/scr/sharedtypes.rs"]
+#[path = "../../../src/sharedtypes.rs"]
 mod sharedtypes;
 
-#[path = "../../../src/scr/intcoms/client.rs"]
+#[path = "../../../src/client.rs"]
 mod client;
 
 static PLUGIN_NAME: &str = "File Info";

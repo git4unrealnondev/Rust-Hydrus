@@ -3,10 +3,10 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use strum::{EnumIter, IntoEnumIterator};
 
-#[path = "../../../src/scr/sharedtypes.rs"]
+#[path = "../../../src/sharedtypes.rs"]
 mod sharedtypes;
 
-#[path = "../../../src/scr/intcoms/client.rs"]
+#[path = "../../../src/client.rs"]
 mod client;
 static PLUGIN_NAME: &str = "File Hash";
 
@@ -202,7 +202,6 @@ fn check_existing_db() {
                     get_set(table).description,
                     None,
                     Some("True".to_string()),
-                    true,
                 );
                 client::transaction_flush();
                 client::settings_get_name(get_set(table).name).unwrap()
@@ -275,7 +274,6 @@ fn check_existing_db() {
                 get_set(table).description,
                 None,
                 Some("False".to_string()),
-                true,
             );
             client::transaction_flush();
         } else {
@@ -299,8 +297,7 @@ fn check_existing_db() {
                         "FileHash - Hashtype: {:?} Hash: {} Fileid: {}",
                         &hashtype, &hash, modern.0
                     ));
-                    let tid =
-                        client::tag_add(hash, *utable_storage.get(&hashtype).unwrap(), true, None);
+                    let tid = client::tag_add(hash, *utable_storage.get(&hashtype).unwrap(), None);
                     client::relationship_add(*modern.0, tid);
                     let mut hashed_lock = hashed_id.lock().unwrap();
 
@@ -335,7 +332,6 @@ fn check_existing_db() {
                         get_set(table).description,
                         None,
                         Some("True".to_string()),
-                        true,
                     );
                 }
                 Some(name) => {
@@ -345,7 +341,6 @@ fn check_existing_db() {
                             get_set(table).description,
                             None,
                             Some("False".to_string()),
-                            true,
                         );
                     }
                 }

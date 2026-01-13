@@ -121,7 +121,7 @@ pub enum Database {
     /// Cleans up any source urls that may be bad
     CheckSourceUrls(sharedtypes::CheckSourceUrlsEnum),
     /// Adds extensions to files in db.
-    AddExtensions
+    AddExtensions,
 }
 /// Removes a namespace, tags & relationships from db.
 #[derive(Debug, Subcommand)]

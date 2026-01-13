@@ -1,8 +1,8 @@
 #![allow(dead_code)]
 #![allow(unused_variables)]
-use crate::database::database::Main;
 use super::download;
 use super::sharedtypes;
+use crate::database::database::Main;
 use crate::helpers;
 use crate::logging;
 use ahash::AHashMap;

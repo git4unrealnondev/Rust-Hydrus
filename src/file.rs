@@ -1,14 +1,14 @@
-use std::fs;
-use std::io::{Cursor, Error};
-use std::path::{Path, PathBuf};
-use crate::enclave;
-use crate::database::database::{Main};
+use crate::database::database::Main;
 use crate::download::{hash_file, process_archive_files};
+use crate::enclave;
 use crate::globalload::GlobalLoad;
 use crate::threading::parse_tags;
 use crate::{Arc, RwLock, logging, sharedtypes};
+use std::fs;
 use std::fs::File;
 use std::io::{self, BufRead};
+use std::io::{Cursor, Error};
+use std::path::{Path, PathBuf};
 
 /// Returns OK or Err if file size is eq to inint.
 pub fn size_eq(input: String, inint: u64) -> std::io::Result<()> {

@@ -2,8 +2,8 @@ use rayon::iter::IntoParallelRefIterator;
 use rayon::iter::ParallelIterator;
 
 use blurhash::encode;
-use image::imageops::resize;
 use image::imageops::FilterType;
+use image::imageops::resize;
 use image::{self, DynamicImage};
 
 // Default image width to scale to before encoding to blurhash
@@ -18,9 +18,9 @@ static PLUGIN_NAME: &str = "blurhash";
 static DB_NAME: &str = "BlurHash-blurhash";
 static PLUGIN_DESCRIPTION: &str = "Introduces Blurhash imaging support.";
 
-#[path = "../../../src/scr/intcoms/client.rs"]
+#[path = "../../../src/client.rs"]
 mod client;
-#[path = "../../../src/scr/sharedtypes.rs"]
+#[path = "../../../src/sharedtypes.rs"]
 mod sharedtypes;
 
 #[no_mangle]
@@ -30,12 +30,12 @@ pub fn get_global_info() -> Vec<sharedtypes::GlobalPluginScraper> {
     main.version = 0;
     main.storage_type = Some(sharedtypes::ScraperOrPlugin::Plugin(
         sharedtypes::PluginInfo2 {
-            com_type: sharedtypes::PluginThreadType::SpawnInline,
             com_channel: true,
+            redirect: None,
         },
     ));
     main.callbacks = vec![
-        sharedtypes::GlobalCallbacks::Start,
+        sharedtypes::GlobalCallbacks::Start(sharedtypes::StartupThreadType::Spawn),
         sharedtypes::GlobalCallbacks::Download,
     ];
     let out = vec![main];
@@ -71,7 +71,6 @@ pub fn on_start() {
                 .into(),
                 None,
                 Some("True".to_string()),
-                true,
             );
             client::transaction_flush();
             "True".to_string()
@@ -87,7 +86,6 @@ pub fn on_start() {
                     .into(),
                     None,
                     Some("True".to_string()),
-                    true,
                 );
                 "True".to_string()
             }
@@ -113,11 +111,9 @@ pub fn on_start() {
     let utable;
     {
         utable = match client::namespace_get(DB_NAME.to_string()) {
-            None => client::namespace_put(
-                DB_NAME.to_string(),
-                Some(PLUGIN_DESCRIPTION.to_string()),
-                true,
-            ),
+            None => {
+                client::namespace_put(DB_NAME.to_string(), Some(PLUGIN_DESCRIPTION.to_string()))
+            }
             Some(id) => id,
         }
     }
@@ -147,8 +143,8 @@ pub fn on_start() {
                     "BlurHash - Adding fid: {} to blurhash HASH: {}",
                     &fid.0, &string_blurhash
                 ));
-                let tagid = client::tag_add(string_blurhash, utable, true, None);
-                client::relationship_add(*fid.0, tagid, true);
+                let tagid = client::tag_add(string_blurhash, utable, None);
+                client::relationship_add(*fid.0, tagid);
             } else {
                 client::log_no_print(format!(
                     "{} Cannot load FID: {} as an image.",
@@ -166,7 +162,6 @@ pub fn on_start() {
         .into(),
         None,
         Some("False".to_string()),
-        true,
     );
     client::transaction_flush();
 }
@@ -186,29 +181,28 @@ pub fn on_download(
             let string_blurhash = downloadparse(good_lmimg);
 
             let plugin_output = sharedtypes::DBPluginOutput {
-                file: Some(vec![sharedtypes::PluginFileObj {
+                file: vec![sharedtypes::PluginFileObj {
                     id: None,
                     hash: Some(hash_in.to_string()),
                     ext: Some(ext_in.to_string()),
                     location: None,
-                }]),
-                jobs: None,
-                namespace: Some(vec![sharedtypes::DbPluginNamespace {
-                    name: DB_NAME.to_string(),
-                    description: Some(PLUGIN_DESCRIPTION.to_string()),
-                }]),
-                parents: None,
-                setting: None,
-                tag: Some(vec![sharedtypes::DBPluginTagOut {
-                    name: string_blurhash.to_string(),
-                    namespace: DB_NAME.to_string(),
-                    parents: None,
-                }]),
-                relationship: Some(vec![sharedtypes::DbPluginRelationshipObj {
+                }],
+                jobs: vec![],
+                setting: vec![],
+                tag: vec![sharedtypes::TagObject {
+                    namespace: sharedtypes::GenericNamespaceObj {
+                        name: DB_NAME.to_string(),
+                        description: Some(PLUGIN_DESCRIPTION.to_string()),
+                    },
+                    tag: string_blurhash.to_string(),
+                    tag_type: sharedtypes::TagType::Normal,
+                    relates_to: None,
+                }],
+                relationship: vec![sharedtypes::DbPluginRelationshipObj {
                     file_hash: hash_in.to_string(),
                     tag_name: string_blurhash,
                     tag_namespace: DB_NAME.to_string(),
-                }]),
+                }],
             };
 
             output.push(sharedtypes::DBPluginOutputEnum::Add(vec![plugin_output]));

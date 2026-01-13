@@ -10,7 +10,8 @@ pub const DEFAULT_LOC_SCRAPER: &str = "scrapers";
 extern crate ratelimit;
 
 pub mod cli;
-pub mod database;pub use database::*;  //
+pub mod database;
+pub use database::*; //
 pub mod download;
 pub mod file;
 pub mod globalload;

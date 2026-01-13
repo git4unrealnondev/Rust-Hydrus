@@ -14,9 +14,9 @@ use std::{
     time::Duration,
 };
 
-#[path = "../../../src/scr/intcoms/client.rs"]
+#[path = "../../../src/client.rs"]
 mod client;
-#[path = "../../../src/scr/sharedtypes.rs"]
+#[path = "../../../src/sharedtypes.rs"]
 mod sharedtypes;
 
 use crate::sharedtypes::DEFAULT_PRIORITY;

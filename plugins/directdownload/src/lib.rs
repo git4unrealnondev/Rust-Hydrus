@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-#[path = "../../../src/scr/sharedtypes.rs"]
+#[path = "../../../src/sharedtypes.rs"]
 mod sharedtypes;
 
 #[macro_export]

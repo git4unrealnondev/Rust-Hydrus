@@ -1,4 +1,5 @@
-use crate::database;use crate::Main;
+use crate::Main;
+use crate::database;
 use crate::logging;
 use crate::sharedtypes;
 use crate::time_func;

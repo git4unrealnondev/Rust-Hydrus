@@ -5,7 +5,7 @@ use std::time::Duration;
 //use ahash::HashSet;
 //use ahash::HashSet;
 
-#[path = "../../../src/scr/sharedtypes.rs"]
+#[path = "../../../src/sharedtypes.rs"]
 mod sharedtypes;
 
 mod boards;

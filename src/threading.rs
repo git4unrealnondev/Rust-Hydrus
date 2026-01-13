@@ -592,7 +592,7 @@ pub fn parse_tags(
                     database.relationship_add(id, tag_id);
                 }
             }
-           
+
             url_return
         }
         sharedtypes::TagType::ParseUrl((jobscraped, skippy)) => {
@@ -744,7 +744,7 @@ fn download_add_to_db(
                 });
                 fileid = database.file_add(file);
                 let source_url_ns_id = database.create_default_source_url_ns_id();
-                let tagid = database.tag_add(source, source_url_ns_id,  None);
+                let tagid = database.tag_add(source, source_url_ns_id, None);
                 database.relationship_add(fileid, tagid);
             }
             return Some(fileid);

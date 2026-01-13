@@ -11,7 +11,9 @@ use std::collections::{HashMap, HashSet};
 use std::io::BufReader;
 use std::time::Duration;
 
-use crate::types;
+#[path = "types.rs"]
+pub mod types;
+//use crate::types;
 /// See the database reference for this function. I'm a lazy turd just check it
 /// their
 pub fn search_db_files(

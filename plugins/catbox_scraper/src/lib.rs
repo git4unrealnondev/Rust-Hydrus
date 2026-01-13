@@ -9,9 +9,9 @@ use std::collections::hash_map;
 use std::time::Duration;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-#[path = "../../../src/scr/intcoms/client.rs"]
+#[path = "../../../src/client.rs"]
 mod client;
-#[path = "../../../src/scr/sharedtypes.rs"]
+#[path = "../../../src/sharedtypes.rs"]
 mod sharedtypes;
 
 use crate::sharedtypes::DEFAULT_PRIORITY;
@@ -364,7 +364,7 @@ pub fn on_start(parserscraper: &sharedtypes::GlobalPluginScraper) {
     let should_search_regex;
     match client::settings_get_name("Catbox Collection Regex Has Searched".into()) {
         None => {
-            client::setting_add("Catbox Collection Regex Has Searched".into(), Some("Should the catbox regex be run on all tags in db to find any tags that are applicable?".into()), None, Some("True".into()), true);
+            client::setting_add("Catbox Collection Regex Has Searched".into(), Some("Should the catbox regex be run on all tags in db to find any tags that are applicable?".into()), None, Some("True".into()));
             should_search_regex = true;
         }
         Some(setting) => {
@@ -475,8 +475,7 @@ pub fn on_start(parserscraper: &sharedtypes::GlobalPluginScraper) {
                     // Should already exist in db.
                     // let url_ns = client::namespace_put("Catbox Collection", None, false);
 
-                    let url_id =
-                        client::tag_add(item.to_string(), catbox_collection_nsid, true, None);
+                    let url_id = client::tag_add(item.to_string(), catbox_collection_nsid, None);
                     for tagid in tagidlist {
                         client::parents_put(sharedtypes::DbParentsObj {
                             tag_id: url_id,
@@ -502,7 +501,7 @@ pub fn on_start(parserscraper: &sharedtypes::GlobalPluginScraper) {
                 .to_string(),
         );
 
-        client::setting_add("Catbox Collection Regex Has Searched".into(), Some("Should the catbox regex be run on all tags in db to find any tags that are applicable?".into()), None, Some("False".into()), true);
+        client::setting_add("Catbox Collection Regex Has Searched".into(), Some("Should the catbox regex be run on all tags in db to find any tags that are applicable?".into()), None, Some("False".into()) );
     }
 }
 

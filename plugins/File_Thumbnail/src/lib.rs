@@ -26,9 +26,9 @@ pub enum VideoSpacing {
     Duration(usize), // Number of ms before attempting to take a frame
 }
 
-#[path = "../../../src/scr/intcoms/client.rs"]
+#[path = "../../../src/client.rs"]
 mod client;
-#[path = "../../../src/scr/sharedtypes.rs"]
+#[path = "../../../src/sharedtypes.rs"]
 mod sharedtypes;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
@@ -218,7 +218,6 @@ pub fn on_start() {
                 .into(),
                 None,
                 Some("True".to_string()),
-                true,
             );
             "True".to_string()
         }
@@ -233,7 +232,6 @@ pub fn on_start() {
                     .into(),
                     None,
                     Some("True".to_string()),
-                    true,
                 );
                 "True".to_string()
             }
@@ -303,8 +301,7 @@ pub fn on_start() {
             file_ids.par_iter().for_each(|fid| {
                 let _ = std::panic::catch_unwind(|| {
                     if let Some(thumb_hash) = process_fid(fid, &location, &utable) {
-                        let _ =
-                            client::relationship_file_tag_add(*fid, thumb_hash, utable, true, None);
+                        let _ = client::relationship_file_tag_add(*fid, thumb_hash, utable, None);
                     }
                 });
             });
@@ -320,7 +317,6 @@ pub fn on_start() {
         .into(),
         None,
         Some("False".to_string()),
-        true,
     );
     client::transaction_flush();
 }
@@ -382,7 +378,6 @@ pub fn file_thumbnailer_generate_thumbnail_fid(
                                     *inp,
                                     file_thumb_hash,
                                     utable,
-                                    true,
                                     None,
                                 );
                             }
@@ -582,7 +577,6 @@ fn setup_thumbnail_default() -> PathBuf {
         format!("From plugin {} {}", PLUGIN_NAME, PLUGIN_DESCRIPTION).into(),
         None,
         Some(finpath.clone()),
-        true,
     );
     let final_location = Path::new(&finpath).to_path_buf();
     final_location
@@ -640,7 +634,6 @@ fn setup_thumbnail_location() -> Option<PathBuf> {
                 format!("From plugin {} {}", PLUGIN_NAME, PLUGIN_DESCRIPTION).into(),
                 None,
                 Some(finpath.clone()),
-                true,
             );
             finpath
         }
@@ -651,7 +644,6 @@ fn setup_thumbnail_location() -> Option<PathBuf> {
                     format!("From plugin {} {}", PLUGIN_NAME, PLUGIN_DESCRIPTION).into(),
                     None,
                     Some(finpath.clone()),
-                    true,
                 );
                 finpath
             }

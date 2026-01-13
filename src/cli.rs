@@ -3,15 +3,17 @@ extern crate clap;
 use rayon::prelude::*;
 use std::collections::HashSet;
 use std::collections::{BTreeMap, HashMap};
-use std::path::Path;
+use std::fs::rename;
+use std::path::{self, Path};
 use strfmt::Format;
 use walkdir::WalkDir;
 
 // use std::str::pattern::Searcher;
 use crate::Mutex;
+use crate::database::database::Main;
 use crate::download;
 use crate::file::find_sidecar;
-use crate::sharedtypes::{DEFAULT_CACHECHECK, DEFAULT_CACHETIME, DEFAULT_PRIORITY};use crate::database::database::Main;
+use crate::sharedtypes::{DEFAULT_CACHECHECK, DEFAULT_CACHETIME, DEFAULT_PRIORITY};
 use crate::{
     database, logging, pause,
     sharedtypes::{self},
@@ -471,14 +473,34 @@ pub fn main(data: Main) {
             cli_structs::TasksStruct::Database(db) => {
                 let dbstore = data.clone();
                 match db {
+                    // Adds extensions back onto files if they dont have them
                     cli_structs::Database::AddExtensions => {
-
+                        let mut ext_cache = HashMap::new();
                         for file_id in data.file_get_list_id().iter() {
-                            if let Some(file) = data.get_file(file_id) {
+                            if let Some(ref file) = data.get_file(file_id) {
+                                let file_path = Path::new(file);
+                                if file_path.extension().is_none() {
+                                    let file_obj = data.file_get_id(file_id);
+                                    let file_db = match file_obj {
+                                        Some(sharedtypes::DbFileStorage::Exist(file)) => file,
+                                        _ => continue,
+                                    };
+
+                                    let ext = match ext_cache.get(&file_db.ext_id) {
+                                        None => match data.extension_get_string(&file_db.ext_id) {
+                                            None => continue,
+                                            Some(ext) => {
+                                                ext_cache.insert(file_db.ext_id, ext.clone());
+                                                ext
+                                            }
+                                        },
+                                        Some(ext) => ext.clone(),
+                                    };
+
+                                    let new_path = file_path.with_extension(ext);
+                                    rename(file_path, new_path).unwrap();
+                                }
                             }
-                            
-
-
                         }
                     }
                     cli_structs::Database::CheckSourceUrls(source_url_enum) => {

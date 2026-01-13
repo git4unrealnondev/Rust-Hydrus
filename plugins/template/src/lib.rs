@@ -1,7 +1,7 @@
 static PLUGIN_NAME: &str = "TITLE";
 static PLUGIN_DESCRIPTION: &str = "DESCRIPTION";
 
-#[path = "../../../src/scr/sharedtypes.rs"]
+#[path = "../../../src/sharedtypes.rs"]
 mod sharedtypes;
 
 #[no_mangle]

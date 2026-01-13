@@ -741,8 +741,7 @@ impl GlobalLoad {
                             }
                         }
                         for (file_id, tag_id) in temp_vec {
-                            self.db
-                                .relationship_add(file_id.unwrap(), tag_id.unwrap());
+                            self.db.relationship_add(file_id.unwrap(), tag_id.unwrap());
                         }
                     }
                 }

@@ -6,7 +6,7 @@ use crate::sharedtypes::DEFAULT_PRIORITY;
 use std::collections::BTreeMap;
 
 use chrono::{NaiveDateTime, TimeZone, Utc};
-#[path = "../../../src/scr/sharedtypes.rs"]
+#[path = "../../../src/sharedtypes.rs"]
 mod sharedtypes;
 
 pub const LOCAL_NAME: &str = "YChan";
