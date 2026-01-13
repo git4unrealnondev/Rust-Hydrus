@@ -1,15 +1,7 @@
 #![allow(dead_code)]
 
-// use crate::scr::sharedtypes::jobs_add; use
-// crate::scr::sharedtypes::AllFields::EJobsAdd; use crate::scr::tasks;
 use log::{error, warn};
-//use scraper::db_upgrade_call;
-//use scraper::on_start;
-//use std::sync::Mutex;
-//use tracing_mutex::stdsync::{Mutex, RwLock};
 use parking_lot::{Mutex, RwLock};
-
-// use std::sync::{data, Mutex};
 use std::{sync::Arc, thread, time};
 
 pub const VERS: usize = 9;
@@ -17,46 +9,33 @@ pub const DEFAULT_LOC_PLUGIN: &str = "plugins";
 pub const DEFAULT_LOC_SCRAPER: &str = "scrapers";
 extern crate ratelimit;
 
-#[path = "./scr/cli.rs"]
 pub mod cli;
-#[path = "./scr/db/database.rs"]
-pub mod database;
-#[path = "./scr/download.rs"]
+pub mod database;pub use database::*;  //
 pub mod download;
-#[path = "./scr/file.rs"]
 pub mod file;
-#[path = "./scr/globalload.rs"]
 pub mod globalload;
-#[path = "./scr/jobs.rs"]
 pub mod jobs;
-#[path = "./scr/logging.rs"]
 pub mod logging;
 //#[path = "./scr/plugins.rs"]
 //pub mod plugins;
-#[path = "./scr/reimport.rs"]
 pub mod reimport;
 //#[path = "./scr/scraper.rs"]
 //pub mod scraper;
-#[path = "./scr/sharedtypes.rs"]
 pub mod sharedtypes;
-#[path = "./scr/tasks.rs"]
 pub mod tasks;
-#[path = "./scr/threading.rs"]
 pub mod threading;
-#[path = "./scr/time_func.rs"]
 pub mod time_func;
 
 // Needed for the plugin coms system.
 //#[path = "./scr/bypasses.rs"]
 //pub mod bypasses;
-#[path = "./scr/intcoms/client.rs"]
 pub mod client;
-#[path = "./scr/db/helpers.rs"]
 pub mod helpers;
-#[path = "./scr/os.rs"]
 pub mod os;
-#[path = "./scr/intcoms/server.rs"]
 pub mod server;
+pub mod types;
+
+use crate::database::database::Main;
 
 // pub mod scr { pub mod cli; pub mod database; pub mod download; pub mod file; pub
 // pub mod jobs; pub mod logging; pub mod plugins; pub mod scraper; pub mod
@@ -73,13 +52,13 @@ fn pause() {
 }
 
 /// Creates DB from database.rs allows function calls.
-fn makedb(dbloc: &str) -> database::Main {
+fn makedb(dbloc: &str) -> Main {
     // Setting up DB VARS
     let path = dbloc.to_string();
 
     // let dbexist = Path::new(&path).exists(); dbcon is database connector let mut
     // dbcon = scr::database::dbinit(&path);
-    database::Main::new(Some(path), VERS)
+    Main::new(Some(path), VERS)
     // let dbcon = database.load_mem(&mut data._conn);
 }
 

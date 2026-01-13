@@ -1,4 +1,4 @@
-use crate::database::Main;
+use crate::database::database::Main;
 use crate::logging;
 use crate::sharedtypes;
 use crate::sharedtypes::{DEFAULT_CACHECHECK, DEFAULT_CACHETIME, DEFAULT_PRIORITY};

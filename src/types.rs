@@ -60,8 +60,8 @@ pub struct Coms {
 #[derive(Debug, Serialize, Deserialize, bincode::Encode, bincode::Decode)]
 pub enum SupportedDBRequests {
     GetTagId(usize),
-    PutTag(String, usize, bool, Option<usize>),
-    PutTagRelationship(usize, String, usize, bool, Option<usize>),
+    PutTag(String, usize,Option<usize>),
+    PutTagRelationship(usize, String, usize,Option<usize>),
     GetTagName((String, usize)),
     RelationshipAdd(usize, usize),
     RelationshipRemove(usize, usize),
@@ -75,7 +75,7 @@ pub enum SupportedDBRequests {
     GetNamespaceTagIDs(usize),
     GetNamespaceString(usize),
     SettingsGetName(String),
-    SettingsSet(String, Option<String>, Option<usize>, Option<String>, bool),
+    SettingsSet(String, Option<String>, Option<usize>, Option<String>),
     LoadTable(sharedtypes::LoadDBTable),
     TestUsize(),
     GetFileListId(),

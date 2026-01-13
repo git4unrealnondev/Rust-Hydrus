@@ -1,7 +1,6 @@
 #![allow(dead_code)]
 #![allow(unused_variables)]
-
-use super::database;
+use crate::database::database::Main;
 use super::download;
 use super::sharedtypes;
 use crate::helpers;
@@ -30,7 +29,7 @@ pub fn import_files(
     tn: &Transaction<'_>,
     location: &String,
     csvdata: sharedtypes::CsvCopyMvHard,
-    db: &mut database::Main,
+    db: &mut Main,
 ) {
     if !Path::new(&location).exists() {
         error!("Path: {} Doesn't exist. Exiting. Check logs", &location);
@@ -120,8 +119,8 @@ pub fn import_files(
         });
         let file_id = db.file_add(file);
         let namespace_id = db.namespace_add(&row.namespace, &None);
-        let tag_id = db.tag_add(&row.tag, namespace_id, true, Some(row.id));
-        db.relationship_add(file_id.to_owned(), tag_id.to_owned(), true);
+        let tag_id = db.tag_add(&row.tag, namespace_id, Some(row.id));
+        db.relationship_add(file_id.to_owned(), tag_id.to_owned());
     }
     println!("Clearing any files from any move ops.");
     info!("Clearing any files from any move ops.");

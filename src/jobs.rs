@@ -1,4 +1,4 @@
-use crate::database;
+use crate::database;use crate::Main;
 use crate::logging;
 use crate::sharedtypes;
 use crate::time_func;
@@ -18,13 +18,13 @@ struct PreviouslySeenObj {
 
 #[derive(Clone)]
 pub struct Jobs {
-    db: database::Main,
+    db: Main,
     site_job: HashMap<sharedtypes::GlobalPluginScraper, HashSet<sharedtypes::DbJobsObj>>,
     previously_seen: HashMap<sharedtypes::GlobalPluginScraper, HashSet<PreviouslySeenObj>>,
 }
 
 impl Jobs {
-    pub fn new(db: database::Main) -> Self {
+    pub fn new(db: Main) -> Self {
         Jobs {
             db,
             site_job: HashMap::new(),
@@ -342,8 +342,8 @@ pub(crate) mod test_database {
     use std::sync::Arc;
     use std::time::Duration;
 
-    use crate::database::Main;
-    use crate::database::test_database;
+    use crate::Main;
+    use crate::database::database::test_database;
     use crate::globalload::{GlobalLoad, test_globalload};
     use crate::sharedtypes::DbJobsObj;
     use crate::sharedtypes::{self, DEFAULT_PRIORITY};

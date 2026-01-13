@@ -120,6 +120,8 @@ pub enum Database {
     #[clap(subcommand)]
     /// Cleans up any source urls that may be bad
     CheckSourceUrls(sharedtypes::CheckSourceUrlsEnum),
+    /// Adds extensions to files in db.
+    AddExtensions
 }
 /// Removes a namespace, tags & relationships from db.
 #[derive(Debug, Subcommand)]

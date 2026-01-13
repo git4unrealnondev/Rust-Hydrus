@@ -1,4 +1,4 @@
-use crate::database::Main;
+use crate::database::database::Main;
 use crate::globalload;
 use crate::globalload::GlobalLoad;
 use crate::logging::error_log;
@@ -636,10 +636,10 @@ pub fn write_to_disk(
     }
 
     // Gives file extension
-    //let file_ext = FileFormat::from_bytes(bytes).extension().to_string();
+    let file_ext = FileFormat::from_bytes(bytes).extension().to_string();
 
     local_location.set_file_name(sha512hash);
-    //local_location.set_extension(file_ext);
+    local_location.set_extension(file_ext);
 
     // Proper error handleing for if we have an error while downloading
     let mut file_path;

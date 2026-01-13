@@ -11,7 +11,7 @@ use walkdir::WalkDir;
 use crate::Mutex;
 use crate::download;
 use crate::file::find_sidecar;
-use crate::sharedtypes::{DEFAULT_CACHECHECK, DEFAULT_CACHETIME, DEFAULT_PRIORITY};
+use crate::sharedtypes::{DEFAULT_CACHECHECK, DEFAULT_CACHETIME, DEFAULT_PRIORITY};use crate::database::database::Main;
 use crate::{
     database, logging, pause,
     sharedtypes::{self},
@@ -105,7 +105,7 @@ fn parse_string_to_scraperparam(input: &str) -> Vec<sharedtypes::ScraperParam> {
 }
 
 /// Returns the main argument and parses data.
-pub fn main(data: database::Main) {
+pub fn main(data: Main) {
     //pub fn main(data: database::Main, scraper: Arc<RwLock<GlobalLoad>>) {
     let args = cli_structs::MainWrapper::parse();
     if args.a.is_none() {
@@ -471,6 +471,16 @@ pub fn main(data: database::Main) {
             cli_structs::TasksStruct::Database(db) => {
                 let dbstore = data.clone();
                 match db {
+                    cli_structs::Database::AddExtensions => {
+
+                        for file_id in data.file_get_list_id().iter() {
+                            if let Some(file) = data.get_file(file_id) {
+                            }
+                            
+
+
+                        }
+                    }
                     cli_structs::Database::CheckSourceUrls(source_url_enum) => {
                         data.check_default_source_urls(source_url_enum);
                     }

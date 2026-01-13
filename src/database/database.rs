@@ -7,7 +7,7 @@ use crate::globalload::GlobalLoad;
 use crate::helpers::check_url;
 use crate::helpers::getfinpath;
 use crate::logging;
-use crate::sharedtypes;
+use crate::sharedtypes;use crate::helpers;
 use crate::sharedtypes::DEFAULT_CACHECHECK;
 use crate::sharedtypes::ScraperParam;
 use eta::{Eta, TimeAcc};
@@ -28,12 +28,6 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
-pub mod enclave;
-pub mod fuzzy_search;
-pub mod helpers;
-pub mod inmemdbnew;
-pub mod sqlitedb;
-pub mod updatehandler;
 
 use crate::database::inmemdbnew::NewinMemDB;
 /// I dont want to keep writing .to_string on EVERY vector of strings. Keeps me
@@ -61,18 +55,18 @@ pub enum CacheType {
 #[derive(Clone)]
 /// Holder of database self variables
 pub struct Main {
-    _dbpath: Option<String>,
-    _vers: usize,
-    pool: Pool<SqliteConnectionManager>,
-    write_conn: Arc<Mutex<PooledConnection<SqliteConnectionManager>>>,
-    write_conn_istransaction: Arc<Mutex<bool>>,
-    _active_vers: usize,
-    _inmemdb: Arc<RwLock<NewinMemDB>>,
-    tables_loaded: Arc<RwLock<Vec<sharedtypes::LoadDBTable>>>,
-    tables_loading: Arc<RwLock<Vec<sharedtypes::LoadDBTable>>>,
-    _cache: CacheType,
+   pub(super)  _dbpath: Option<String>,
+  pub(super)   _vers: usize,
+  pub(super)   pool: Pool<SqliteConnectionManager>,
+   pub(super)  write_conn: Arc<Mutex<PooledConnection<SqliteConnectionManager>>>,
+  pub(super)   write_conn_istransaction: Arc<Mutex<bool>>,
+   pub(super)  _active_vers: usize,
+   pub(super)  _inmemdb: Arc<RwLock<NewinMemDB>>,
+   pub(super)  tables_loaded: Arc<RwLock<Vec<sharedtypes::LoadDBTable>>>,
+   pub(super)  tables_loading: Arc<RwLock<Vec<sharedtypes::LoadDBTable>>>,
+   pub(super)  _cache: CacheType,
     //pub globalload: Option<GlobalLoad>,
-    localref: Option<Arc<RwLock<Main>>>,
+  pub(super)   localref: Option<Arc<RwLock<Main>>>,
 }
 
 /// Contains DB functions.
@@ -234,7 +228,7 @@ PRAGMA journal_mode = WAL;
     ///
     /// Starts an exclusive write transaction
     ///
-    fn transaction_exclusive_start(&self) {
+    pub(super) fn transaction_exclusive_start(&self) {
         self.transaction_flush();
 
         let mut transaction = self.write_conn_istransaction.lock();
@@ -248,7 +242,7 @@ PRAGMA journal_mode = WAL;
     ///
     /// Starts an exclusive write transaction
     ///
-    fn transaction_start(&self) {
+   pub(super)  fn transaction_start(&self) {
         self.transaction_flush();
 
         let mut transaction = self.write_conn_istransaction.lock();
@@ -275,7 +269,7 @@ PRAGMA journal_mode = WAL;
     ///
     /// Gets one tnection from the sqlite pool
     ///
-    fn get_database_connection(&self) -> PooledConnection<SqliteConnectionManager> {
+   pub(super)  fn get_database_connection(&self) -> PooledConnection<SqliteConnectionManager> {
         loop {
             match self.pool.get() {
                 Ok(out) => {
@@ -575,7 +569,6 @@ PRAGMA journal_mode = WAL;
                 Some("The location that the DB get's backed up to".to_string()),
                 None,
                 Some(newbackupfolder),
-                true,
             )
         }
         self.transaction_flush();
@@ -960,7 +953,7 @@ PRAGMA journal_mode = WAL;
     }
 
     /// Vacuums database. cleans everything.
-    fn vacuum(&self) {
+   pub(super)  fn vacuum(&self) {
         logging::info_log("Starting Vacuum db!".to_string());
         {
             self.transaction_flush();
@@ -971,7 +964,7 @@ PRAGMA journal_mode = WAL;
     }
 
     /// Analyzes the sqlite database. Shouldn't need this but will be nice for indexes
-    fn analyze(&self) {
+   pub(super)  fn analyze(&self) {
         logging::info_log("Starting to analyze db!".to_string());
         {
             self.transaction_flush();
@@ -1135,36 +1128,31 @@ PRAGMA journal_mode = WAL;
             Some("Number of transactional items before pushing to db.".to_string()),
             Some(3000),
             None,
-            true,
         );
         self.setting_add(
             "VERSION".to_string(),
             Some("Version that the database is currently on.".to_string()),
             Some(self._vers),
             None,
-            true,
         );
-        self.setting_add("DEFAULTRATELIMIT".to_string(), None, Some(5), None, true);
+        self.setting_add("DEFAULTRATELIMIT".to_string(), None, Some(5), None);
         self.setting_add(
             "FilesLoc".to_string(),
             None,
             None,
             Some("Files".to_string()),
-            true,
         );
         self.setting_add(
             "DEFAULTUSERAGENT".to_string(),
             None,
             None,
             Some("DIYHydrus/1.0".to_string()),
-            true,
         );
         self.setting_add(
             "pluginloadloc".to_string(),
             Some("Where plugins get loaded into.".to_string()),
             None,
             Some(crate::DEFAULT_LOC_PLUGIN.to_string()),
-            true,
         );
 
         self.setting_add(
@@ -1172,7 +1160,6 @@ PRAGMA journal_mode = WAL;
             Some("Where scrapers get loaded into.".to_string()),
             None,
             Some(crate::DEFAULT_LOC_SCRAPER.to_string()),
-            true,
         );
 
         self.setup_default_cache();
@@ -1191,7 +1178,6 @@ PRAGMA journal_mode = WAL;
             Some("The database caching options. Supports: Bare, InMemdb and InMemory".to_string()),
             None,
             Some("Bare".to_string()),
-            true,
         );
     }
 
@@ -1209,7 +1195,6 @@ PRAGMA journal_mode = WAL;
                         Some("Where scrapers get loaded into.".to_string()),
                         None,
                         Some(crate::DEFAULT_LOC_SCRAPER.to_string()),
-                        true,
                     );
                     Path::new(crate::DEFAULT_LOC_SCRAPER).to_path_buf()
                 }
@@ -1220,7 +1205,6 @@ PRAGMA journal_mode = WAL;
                     Some("Where scrapers get loaded into.".to_string()),
                     None,
                     Some(crate::DEFAULT_LOC_SCRAPER.to_string()),
-                    true,
                 );
                 Path::new(crate::DEFAULT_LOC_SCRAPER).to_path_buf()
             }
@@ -1241,7 +1225,6 @@ PRAGMA journal_mode = WAL;
                         Some("Where plugins get loaded into.".to_string()),
                         None,
                         Some(crate::DEFAULT_LOC_PLUGIN.to_string()),
-                        true,
                     );
                     Path::new(crate::DEFAULT_LOC_PLUGIN).to_path_buf()
                 }
@@ -1252,7 +1235,6 @@ PRAGMA journal_mode = WAL;
                     Some("Where plugins get loaded into.".to_string()),
                     None,
                     Some(crate::DEFAULT_LOC_PLUGIN.to_string()),
-                    true,
                 );
                 Path::new(crate::DEFAULT_LOC_PLUGIN).to_path_buf()
             }
@@ -1352,7 +1334,7 @@ PRAGMA journal_mode = WAL;
     }
 
     /// Alters a tables name
-    fn alter_table(&self, original_table: &String, new_table: &String) {
+   pub(super)  fn alter_table(&self, original_table: &String, new_table: &String) {
         self.transaction_start();
         let tn = self.write_conn.lock();
         tn.execute(
@@ -1362,7 +1344,7 @@ PRAGMA journal_mode = WAL;
     }
 
     /// Checks if table exists in DB if it do then delete.
-    fn check_table_exists(&self, table: String) -> bool {
+   pub(super)  fn check_table_exists(&self, table: String) -> bool {
         let mut out = false;
         let query_string = format!("SELECT * FROM sqlite_master WHERE type='table' AND name=? ;",);
         dbg!("setup");
@@ -1383,7 +1365,7 @@ PRAGMA journal_mode = WAL;
     }
 
     /// Gets the names of a collumn in a table
-    fn db_table_collumn_getnames(&self, table: &String) -> Vec<String> {
+  pub(super)   fn db_table_collumn_getnames(&self, table: &String) -> Vec<String> {
         let mut out: Vec<String> = Vec::new();
         {
             let tn = self.get_database_connection();
@@ -1398,7 +1380,7 @@ PRAGMA journal_mode = WAL;
     }
 
     /// Sets DB Version
-    fn db_version_set(&mut self, version: usize) {
+    pub(super) fn db_version_set(&mut self, version: usize) {
         logging::log(format!("Setting DB Version to: {}", &version));
         self._active_vers = version;
         self.setting_add(
@@ -1406,11 +1388,10 @@ PRAGMA journal_mode = WAL;
             Some("Version that the database is currently on.".to_string()),
             Some(version),
             None,
-            true,
         );
     }
 
-    fn db_drop_table(&self, table: &String) {
+   pub(super)  fn db_drop_table(&self, table: &String) {
         self.transaction_exclusive_start();
         let tn = self.write_conn.lock();
         let query_string = format!("DROP TABLE IF EXISTS {};", table);
@@ -1902,7 +1883,7 @@ PRAGMA journal_mode = WAL;
     }
 
     /// Adds namespace into DB. Returns the ID of the namespace.
-    fn namespace_add_inmemdb(&self, name: String, description: Option<String>) -> usize {
+   pub(super)  fn namespace_add_inmemdb(&self, name: String, description: Option<String>) -> usize {
         let namespace_grab = {
             let inmemdb = self._inmemdb.read();
             inmemdb.namespace_get(&name).copied()
@@ -1926,14 +1907,14 @@ PRAGMA journal_mode = WAL;
     }
 
     /// Wrapper for inmemdb adding
-    fn parents_add_db(&self, parent: sharedtypes::DbParentsObj) -> usize {
+   pub(super)  fn parents_add_db(&self, parent: sharedtypes::DbParentsObj) -> usize {
         self._inmemdb.write().parents_put(parent)
     }
 
     ///
     /// Gets a parent id if they exist
     ///
-    fn parents_get(&self, parent: &sharedtypes::DbParentsObj) -> Option<usize> {
+   pub(super)  fn parents_get(&self, parent: &sharedtypes::DbParentsObj) -> Option<usize> {
         match self._cache {
             CacheType::Bare => {
                 let tagid = self.parents_get_id_list_sql(parent);
@@ -2042,8 +2023,8 @@ PRAGMA journal_mode = WAL;
             _ => {
                 self.transaction_exclusive_start();
                 for tag in tags.iter() {
-                    let tid = self.tag_add_tagobject(tag, true);
-                    self.relationship_add(fid, tid, true);
+                    let tid = self.tag_add_tagobject(tag);
+                    self.relationship_add(fid, tid);
                 }
                 self.transaction_flush();
             }
@@ -2053,19 +2034,19 @@ PRAGMA journal_mode = WAL;
     ///
     /// More modern way to add a file into the db
     ///
-    pub fn tag_add_tagobject(&self, tag: &sharedtypes::TagObject, addtodb: bool) -> usize {
+    pub fn tag_add_tagobject(&self, tag: &sharedtypes::TagObject) -> usize {
         let mut limit_to = None;
 
         let nsid = self.namespace_add_namespaceobject(tag.namespace.clone());
-        let tag_id = self.tag_add(&tag.tag, nsid, true, None);
+        let tag_id = self.tag_add(&tag.tag, nsid,  None);
 
         // Parent tag adding
         if let Some(subtag) = &tag.relates_to {
             let nsid = self.namespace_add_namespaceobject(subtag.namespace.clone());
-            let relate_tag_id = self.tag_add(&subtag.tag, nsid, addtodb, None);
+            let relate_tag_id = self.tag_add(&subtag.tag, nsid,  None);
             if let Some(limitto) = &subtag.limit_to {
                 let nsid = self.namespace_add_namespaceobject(limitto.namespace.clone());
-                limit_to = Some(self.tag_add(&limitto.tag, nsid, addtodb, None));
+                limit_to = Some(self.tag_add(&limitto.tag, nsid, None));
             }
             let par = sharedtypes::DbParentsObj {
                 tag_id,
@@ -2083,7 +2064,6 @@ PRAGMA journal_mode = WAL;
         &self,
         tags: &String,
         namespace: usize,
-        addtodb: bool,
         id: Option<usize>,
     ) -> usize {
         match self._cache {
@@ -2108,10 +2088,8 @@ PRAGMA journal_mode = WAL;
                 match tags_grab {
                     None => {
                         let tag_id = self.tag_add_db(tags, &namespace, id);
-                        if addtodb {
                             self.tag_add_sql(&tag_id, tags, &namespace);
                             self.transaction_flush();
-                        }
                         tag_id
                     }
                     Some(tag_id) => tag_id,
@@ -2121,19 +2099,19 @@ PRAGMA journal_mode = WAL;
     }
 
     /// Wrapper for inmemdb relationship adding
-    fn relationship_add_db(&self, file: usize, tag: usize) {
+   pub(super)  fn relationship_add_db(&self, file: usize, tag: usize) {
         self._inmemdb.write().relationship_add(file, tag);
     }
 
     /// Adds relationship into DB. Inherently trusts user user to not duplicate stuff.
-    pub fn relationship_add(&self, file: usize, tag: usize, addtodb: bool) {
+    pub fn relationship_add(&self, file: usize, tag: usize, ) {
         match self._cache {
             CacheType::Bare => {
                 self.relationship_add_sql(&file, &tag);
             }
             _ => {
                 let existcheck = self._inmemdb.read().relationship_get(&file, &tag);
-                if addtodb && !existcheck {
+                if  !existcheck {
                     // println!("relationship a ");
                     self.relationship_add_sql(&file, &tag);
                 }
@@ -2246,7 +2224,7 @@ PRAGMA journal_mode = WAL;
     }
 
     /// Wrapper for inmemdb insert.
-    fn setting_add_db(
+   pub(super)  fn setting_add_db(
         &self,
         name: String,
         pretty: Option<String>,
@@ -2266,11 +2244,8 @@ PRAGMA journal_mode = WAL;
         pretty: Option<String>,
         num: Option<usize>,
         param: Option<String>,
-        addtodb: bool,
     ) {
-        if addtodb {
             self.setting_add_sql(name.to_string(), &pretty, num, &param);
-        }
 
         // Adds setting into memdbb
         self.setting_add_db(name, pretty, num, param);
@@ -2352,7 +2327,7 @@ PRAGMA journal_mode = WAL;
             _ => {
                 let fileids = self.relationship_get_fileid(old_tag_id);
                 for file_id in fileids {
-                    self.relationship_add(file_id, *new_tag_id, true);
+                    self.relationship_add(file_id, *new_tag_id);
                     self.relationship_remove(&file_id, old_tag_id);
                 }
             }
@@ -2375,7 +2350,7 @@ PRAGMA journal_mode = WAL;
                 self.migrate_relationship_file_tag_sql(file_id, old_tag_id, new_tag_id);
             }
             _ => {
-                self.relationship_add(*file_id, *new_tag_id, true);
+                self.relationship_add(*file_id, *new_tag_id);
                 self.relationship_remove(file_id, old_tag_id);
             }
         }
@@ -2398,7 +2373,7 @@ PRAGMA journal_mode = WAL;
         self.parents_migration(old_tag_id, new_tag_id);
         self.migrate_relationship_tag(old_tag_id, new_tag_id);
         self.tag_remove(old_tag_id);
-        self.tag_add(&tag.name.clone(), tag.namespace, true, Some(*new_tag_id));
+        self.tag_add(&tag.name.clone(), tag.namespace, Some(*new_tag_id));
     }
 
     /// Handles transactional pushes.
@@ -2925,9 +2900,9 @@ pub(crate) mod test_database {
             let mut db = Main::new(Some(format!("test{}.db", cnt)), VERS);
             db._cache = cachetype.clone();
 
-            db.tag_add(&"test".to_string(), 1, false, None);
-            db.tag_add(&"test1".to_string(), 1, false, None);
-            db.tag_add(&"test2".to_string(), 1, false, None);
+            db.tag_add(&"test".to_string(), 1,  None);
+            db.tag_add(&"test1".to_string(), 1,  None);
+            db.tag_add(&"test2".to_string(), 1, None);
             db.transaction_flush();
 
             out.push(db);
@@ -2938,7 +2913,7 @@ pub(crate) mod test_database {
     #[test]
     fn db_relationship() {
         for mut main in setup_default_db() {
-            main.relationship_add(0, 0, true);
+            main.relationship_add(0, 0);
             dbg!(&main._cache, main.relationship_get_fileid(&0));
             assert_eq!(main.relationship_get_fileid(&0).len(), 1);
             assert_eq!(main.relationship_get_tagid(&0).len(), 1);
@@ -2969,7 +2944,7 @@ pub(crate) mod test_database {
             dbg!(main.tag_id_get(&3));
             dbg!(main.tag_id_get(&4));
             assert_eq!(main.tags_max_id(), 4);
-            let id = main.tag_add(&"test3".to_string(), 3, false, None);
+            let id = main.tag_add(&"test3".to_string(), 3,  None);
             assert_eq!(id, 4);
 
             assert!(main.tag_id_get(&2).is_some());
@@ -2980,7 +2955,7 @@ pub(crate) mod test_database {
         let test_id = 10;
         for mut main in setup_default_db() {
             let max_tag = main.tags_max_id();
-            let id = main.tag_add(&"test3".to_string(), 3, false, Some(test_id));
+            let id = main.tag_add(&"test3".to_string(), 3,  Some(test_id));
             let parents_id = main.parents_add(sharedtypes::DbParentsObj {
                 tag_id: id,
                 relate_tag_id: 3,

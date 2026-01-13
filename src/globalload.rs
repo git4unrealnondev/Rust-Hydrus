@@ -1,6 +1,6 @@
 use crate::RwLock;
 use crate::{
-    database::{self, Main},
+    database::database::{self, Main},
     jobs::Jobs,
     logging, server,
     sharedtypes::{self, GlobalPluginScraper},
@@ -113,7 +113,7 @@ enum LoadableType {
 }
 
 impl GlobalLoad {
-    pub fn new(db: database::Main, jobs: Arc<RwLock<Jobs>>) -> Self {
+    pub fn new(db: Main, jobs: Arc<RwLock<Jobs>>) -> Self {
         logging::log("Starting IPC Server.".to_string());
 
         GlobalLoad {
@@ -289,7 +289,7 @@ impl GlobalLoad {
                         let mut tag_id_map = HashMap::new();
                         {
                             for tag in &tags_to_add {
-                                tag_id_map.insert(tag.clone(), db.tag_add_tagobject(tag, true));
+                                tag_id_map.insert(tag.clone(), db.tag_add_tagobject(tag));
                             }
                         }
 
@@ -314,7 +314,7 @@ impl GlobalLoad {
                                         db.file_get_hash(&rel.file_hash),
                                         db.tag_get_name(rel.tag_name.clone(), ns_id),
                                     ) {
-                                        db.relationship_add(file_id, tag_id, true);
+                                        db.relationship_add(file_id, tag_id);
                                     }
                                 }
                             }
@@ -322,7 +322,7 @@ impl GlobalLoad {
                     }
                 }
                 sharedtypes::DBPluginOutputEnum::Del(_) => {} // handle deletes similarly if needed
-                sharedtypes::DBPluginOutputEnum::None => {}
+                sharedtypes::DBPluginOutputEnum::Set(_) => {} // Sets the tags relationships or jobs
             }
         }
     }
@@ -704,7 +704,7 @@ impl GlobalLoad {
                                 self.plugin_on_tag(&tag);
                             }
                             {
-                                self.db.tag_add_tagobject(&tag, true);
+                                self.db.tag_add_tagobject(&tag);
                             }
                         }
                         for settings in names.setting {
@@ -713,7 +713,6 @@ impl GlobalLoad {
                                 settings.pretty,
                                 settings.num,
                                 settings.param,
-                                true,
                             );
                         }
 
@@ -743,12 +742,12 @@ impl GlobalLoad {
                         }
                         for (file_id, tag_id) in temp_vec {
                             self.db
-                                .relationship_add(file_id.unwrap(), tag_id.unwrap(), true);
+                                .relationship_add(file_id.unwrap(), tag_id.unwrap());
                         }
                     }
                 }
                 sharedtypes::DBPluginOutputEnum::Del(name) => for _names in name {},
-                sharedtypes::DBPluginOutputEnum::None => {}
+                sharedtypes::DBPluginOutputEnum::Set(_) => {}
             }
         }
     }

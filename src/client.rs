@@ -11,8 +11,7 @@ use std::collections::{HashMap, HashSet};
 use std::io::BufReader;
 use std::time::Duration;
 
-pub mod types;
-
+use crate::types;
 /// See the database reference for this function. I'm a lazy turd just check it
 /// their
 pub fn search_db_files(
@@ -128,10 +127,9 @@ pub fn setting_add(
     pretty: Option<String>,
     num: Option<usize>,
     param: Option<String>,
-    addtodb: bool,
 ) -> bool {
     init_data_request(&types::SupportedRequests::Database(
-        types::SupportedDBRequests::SettingsSet(name, pretty, num, param, addtodb),
+        types::SupportedDBRequests::SettingsSet(name, pretty, num, param),
     ))
 }
 
@@ -299,9 +297,9 @@ pub fn location_get() -> String {
 
 /// See the database reference for this function. I'm a lazy turd just check it
 /// their
-pub fn tag_add(tag: String, namespace_id: usize, addtodb: bool, id: Option<usize>) -> usize {
+pub fn tag_add(tag: String, namespace_id: usize, id: Option<usize>) -> usize {
     init_data_request(&types::SupportedRequests::Database(
-        types::SupportedDBRequests::PutTag(tag, namespace_id, addtodb, id),
+        types::SupportedDBRequests::PutTag(tag, namespace_id, id),
     ))
 }
 ///
@@ -385,11 +383,10 @@ pub fn relationship_file_tag_add(
     fileid: usize,
     tag: String,
     namespace_id: usize,
-    addtodb: bool,
     id: Option<usize>,
 ) -> bool {
     init_data_request(&types::SupportedRequests::Database(
-        types::SupportedDBRequests::PutTagRelationship(fileid, tag, namespace_id, addtodb, id),
+        types::SupportedDBRequests::PutTagRelationship(fileid, tag, namespace_id, id),
     ))
 }
 

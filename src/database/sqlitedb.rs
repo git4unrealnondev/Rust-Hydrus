@@ -1,5 +1,4 @@
-use crate::database::CacheType;
-use crate::database::Main;
+use crate::database::database::{CacheType, Main};
 use crate::error;
 use crate::logging;
 use crate::sharedtypes;
@@ -1433,7 +1432,7 @@ RETURNING id;
                                 // logging::info_log(&format!( "Already have tag {:?} adding {} {} {}", id,
                                 // res.name, res.namespace, res.id )); continue;
                                 // delete_tags.insert((res.name.clone(), res.namespace.clone())); }
-                                self.tag_add(&res.name, res.namespace, false, Some(res.id));
+                                self.tag_add(&res.name, res.namespace, Some(res.id));
                             } else {
                                 error!("Bad Tag cant load {:?}", each);
                             }

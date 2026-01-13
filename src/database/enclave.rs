@@ -1,4 +1,4 @@
-use crate::database::Main;
+use crate::database::database::Main;
 use crate::download;
 use crate::file::folder_make;
 use crate::logging;
@@ -227,8 +227,8 @@ impl Main {
         });
         let fileid = self.file_add(filestorage);
         if let Some(source_url) = source_url {
-            let tagid = self.tag_add(source_url, source_url_ns_id, true, None);
-            self.relationship_add(fileid, tagid, true);
+            let tagid = self.tag_add(source_url, source_url_ns_id, None);
+            self.relationship_add(fileid, tagid);
         }
 
         self.enclave_file_mapping_add(&fileid, enclave_id);

@@ -734,7 +734,7 @@ pub struct DbPluginRelationshipObj {
 pub enum DBPluginOutputEnum {
     Add(Vec<DBPluginOutput>),
     Del(Vec<DBPluginOutput>),
-    None,
+    Set(Vec<DBPluginOutput>),
 }
 
 #[derive(PartialEq, Debug)]
@@ -772,7 +772,6 @@ pub enum FileAction {
 pub struct DBPluginOutput {
     // Adds a tag to DB
     pub tag: Vec<TagObject>,
-
     // Adds a setting
     pub setting: Vec<DbSettingObj>,
     // Adds a relationship into the DB.

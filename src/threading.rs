@@ -1,4 +1,4 @@
-use crate::database;
+use crate::Main;
 use crate::download;
 use crate::download::hash_bytes;
 use crate::download::process_bytes;
@@ -59,7 +59,7 @@ impl Threads {
     pub fn startwork(
         &mut self,
         jobstorage: Arc<RwLock<crate::jobs::Jobs>>,
-        db: database::Main,
+        db: Main,
         scrapermanager: sharedtypes::GlobalPluginScraper,
         globalload: GlobalLoad,
     ) {
@@ -158,7 +158,7 @@ impl Worker {
     fn new(
         id: usize,
         jobstorage: Arc<RwLock<crate::jobs::Jobs>>,
-        database: database::Main,
+        database: Main,
         scraper: sharedtypes::GlobalPluginScraper,
         globalload: GlobalLoad,
         threadflagcontrol: Control,
@@ -225,7 +225,6 @@ impl Worker {
                                                 None,
                                                 None,
                                                 api_namespace.clone(),
-                                                true,
                                             );
                                             database.transaction_flush();
                                         }
@@ -235,7 +234,6 @@ impl Worker {
                                                 None,
                                                 None,
                                                 api_body.clone(),
-                                                true,
                                             );
                                             database.transaction_flush();
                                         }
@@ -360,9 +358,7 @@ impl Worker {
                                 }
                                 Err(err) => {
                                     logging::error_log(format!(
-                                        "
-Worker: {id} JobId: {} -- While trying to parse parameters we got this error: {:?}
-                                        ",
+                                        "Worker: {id} JobId: {} -- While trying to parse parameters we got this error: {:?}",
                                         jobid, err
                                     ));
                                     logging::error_log(format!(
@@ -575,7 +571,7 @@ enum SkipResult {
 
 /// Parses tags and adds the tags into the database.
 pub fn parse_tags(
-    database: database::Main,
+    database: Main,
     tag: &sharedtypes::TagObject,
     file_id: Option<usize>,
     worker_id: &usize,
@@ -589,19 +585,14 @@ pub fn parse_tags(
                 // Runs regex mostly
                 manager.plugin_on_tag(tag);
             }
-            let tag_id = database.tag_add_tagobject(tag, true);
+            let tag_id = database.tag_add_tagobject(tag);
             match file_id {
                 None => {}
                 Some(id) => {
-                    database.relationship_add(id, tag_id, true);
+                    database.relationship_add(id, tag_id);
                 }
             }
-            /*if let Some(fid) = file_id {
-                database
-                    .unwrap()
-                    .relationship_tag_add(fid, vec![tag.clone()]);
-            }*/
-
+           
             url_return
         }
         sharedtypes::TagType::ParseUrl((jobscraped, skippy)) => {
@@ -703,7 +694,7 @@ fn download_add_to_db(
     location: String,
     globalload: GlobalLoad,
     client: Arc<RwLock<Client>>,
-    database: database::Main,
+    database: Main,
     file: &mut sharedtypes::FileObject,
     worker_id: &usize,
     job_id: &usize,
@@ -753,8 +744,8 @@ fn download_add_to_db(
                 });
                 fileid = database.file_add(file);
                 let source_url_ns_id = database.create_default_source_url_ns_id();
-                let tagid = database.tag_add(source, source_url_ns_id, true, None);
-                database.relationship_add(fileid, tagid, true);
+                let tagid = database.tag_add(source, source_url_ns_id,  None);
+                database.relationship_add(fileid, tagid);
             }
             return Some(fileid);
         }
@@ -772,7 +763,7 @@ fn parse_jobs(
     tag: &sharedtypes::TagObject,
     fileid: Option<usize>,
     jobstorage: Arc<RwLock<crate::jobs::Jobs>>,
-    database: database::Main,
+    database: Main,
     scraper: &sharedtypes::GlobalPluginScraper,
 
     worker_id: &usize,
@@ -820,7 +811,7 @@ fn parse_jobs(
 fn parse_skipif(
     file_tag: &sharedtypes::SkipIf,
     file_url_source: &String,
-    database: database::Main,
+    database: Main,
     worker_id: &usize,
     job_id: &usize,
 ) -> Option<usize> {
@@ -881,7 +872,7 @@ fn parse_skipif(
 /// Main file checking loop manages the downloads
 pub fn main_file_loop(
     file: &mut sharedtypes::FileObject,
-    database: database::Main,
+    database: Main,
     ratelimiter_obj: Arc<Mutex<Ratelimiter>>,
     globalload: GlobalLoad,
     client: Arc<RwLock<Client>>,

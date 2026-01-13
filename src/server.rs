@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 #![allow(unused_variables)]
-
+use crate::Main;
 use crate::database;
 use crate::download;
 use crate::globalload::GlobalLoad;
@@ -23,7 +23,7 @@ use std::{
     sync::mpsc::Sender,
 };
 
-mod types;
+use crate::types;
 
 pub fn main(notify: Sender<()>) -> anyhow::Result<()> {
     // Define a function that checks for errors in incoming connections. We'll use
@@ -145,7 +145,7 @@ pub struct PluginIpcInteract {
 
 /// This is going to be the main way to talk to the plugin system and stuffins.
 impl PluginIpcInteract {
-    pub fn new(main_db: database::Main, globalload: GlobalLoad, jobs: Arc<RwLock<Jobs>>) -> Self {
+    pub fn new(main_db: Main, globalload: GlobalLoad, jobs: Arc<RwLock<Jobs>>) -> Self {
         PluginIpcInteract {
             db_interface: DbInteract {
                 database: main_db,
@@ -156,7 +156,7 @@ impl PluginIpcInteract {
     }
 
     /// Spawns a listener for events.
-    pub fn spawn_listener(&mut self, main_db: database::Main) -> anyhow::Result<()> {
+    pub fn spawn_listener(&mut self, main_db: Main) -> anyhow::Result<()> {
         // Define a function that checks for errors in incoming connections. We'll use
         // this to filter through connections that fail on initialization for one reason
         // or another.
@@ -300,7 +300,7 @@ another process and try again.",
 fn handle_client(
     stream: LocalSocketStream,
     worker_id: &usize,
-    db: database::Main,
+    db: Main,
     globalload: GlobalLoad,
     jobmanager: Arc<RwLock<Jobs>>,
 ) {
@@ -335,7 +335,7 @@ fn handle_client(
 
 #[derive(Clone)]
 struct DbInteract {
-    database: database::Main,
+    database: Main,
     globalload: GlobalLoad,
     jobmanager: Arc<RwLock<Jobs>>,
 }
@@ -357,7 +357,7 @@ fn data_size_to_b<T: serde::Serialize>(data_object: &T) -> Vec<u8> {
 /// pretty mint.
 pub fn dbactions_to_function(
     dbaction: types::SupportedDBRequests,
-    database: database::Main,
+    database: Main,
     globalload: GlobalLoad,
     jobmanager: Arc<RwLock<Jobs>>,
 ) -> Vec<u8> {
@@ -553,7 +553,7 @@ pub fn dbactions_to_function(
         }
         types::SupportedDBRequests::RelationshipAdd(file, tag) => {
             let unwrappy = database;
-            unwrappy.relationship_add(file, tag, true);
+            unwrappy.relationship_add(file, tag);
             data_size_to_b(&true)
         }
         types::SupportedDBRequests::RelationshipRemove(file, tag) => {
@@ -562,15 +562,15 @@ pub fn dbactions_to_function(
             data_size_to_b(&true)
         }
 
-        types::SupportedDBRequests::PutTag(tags, namespace_id, addtodb, id) => {
+        types::SupportedDBRequests::PutTag(tags, namespace_id, id) => {
             let unwrappy = database;
-            let tmep = unwrappy.tag_add(&tags, namespace_id, addtodb, id);
+            let tmep = unwrappy.tag_add(&tags, namespace_id, id);
             data_size_to_b(&tmep)
         }
-        types::SupportedDBRequests::PutTagRelationship(fid, tags, namespace_id, addtodb, id) => {
+        types::SupportedDBRequests::PutTagRelationship(fid, tags, namespace_id, id) => {
             let unwrappy = database;
-            let tmep = unwrappy.tag_add(&tags, namespace_id, addtodb, id);
-            unwrappy.relationship_add(fid, tmep, addtodb);
+            let tmep = unwrappy.tag_add(&tags, namespace_id, id);
+            unwrappy.relationship_add(fid, tmep);
             data_size_to_b(&true)
         }
         types::SupportedDBRequests::GetDBLocation() => {
@@ -578,9 +578,9 @@ pub fn dbactions_to_function(
             let tmep = unwrappy.location_get();
             data_size_to_b(&tmep)
         }
-        types::SupportedDBRequests::SettingsSet(name, pretty, num, param, addtodb) => {
+        types::SupportedDBRequests::SettingsSet(name, pretty, num, param) => {
             let unwrappy = database;
-            unwrappy.setting_add(name, pretty, num, param, addtodb);
+            unwrappy.setting_add(name, pretty, num, param);
             unwrappy.transaction_flush();
             data_size_to_b(&true)
         }
