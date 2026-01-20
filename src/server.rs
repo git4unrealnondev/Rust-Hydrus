@@ -362,6 +362,13 @@ pub fn dbactions_to_function(
     jobmanager: Arc<RwLock<Jobs>>,
 ) -> Vec<u8> {
     match dbaction {
+        types::SupportedDBRequests::GetFileIdsWhereExtensionIs(file_extension_type) => {
+            let file_ids = match file_extension_type {
+                sharedtypes::FileExtensionType::Image => database.extensions_images_get_fileid(),
+                sharedtypes::FileExtensionType::Video => database.extensions_videos_get_fileid(),
+            };
+            data_size_to_b(&file_ids)
+        }
         types::SupportedDBRequests::GetRelationshipTagidWhereNamespace((
             namespace_id,
             count,

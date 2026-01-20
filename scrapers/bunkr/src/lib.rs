@@ -166,77 +166,7 @@ pub fn parser(
             album_name = Some(album_name_temp.to_string());
         }
 
-        let selector = Selector::parse(r#"span[class="ic-clock ic-before text-xs before:text-sm before:opacity-60 inline-flex items-center gap-1 py-1 px-2 rounded-full border border-soft theDate"]"#).unwrap();
-        let mut times = Vec::new();
-        for span in fragment.select(&selector) {
-            // Define the format of the input string
-            let format = "%H:%M:%S %d/%m/%Y";
-
-            let internal_time = &span.text().collect::<String>();
-
-            // Parse without timezone
-            let naive = NaiveDateTime::parse_from_str(internal_time.trim(), format).unwrap();
-
-            // Interpret the naive datetime as UTC
-            let utc_dt: DateTime<Utc> = DateTime::<Utc>::from_utc(naive, Utc);
-
-            // Unix timestamp (seconds since epoch)
-            let unix_timestamp = utc_dt.timestamp();
-
-            times.push(unix_timestamp);
-        }
-
-        times.sort();
-        times.reverse();
-        let time = times.first();
-
-        // Handles the files page
-        let selector = Selector::parse(r#"a[aria-label="download"][href]"#).unwrap();
-
-        for a in fragment.select(&selector) {
-            if let Some(href) = a.value().attr("href") {
-                let url = format!("{}{}", MAIN_SITE, &href);
-                let mut tag = HashSet::new();
-                let mut scraperdata = scraperdata.clone();
-                let albumid = source_url.rsplit('/').next().unwrap();
-                scraperdata
-                    .user_data
-                    .insert("bunkr-album-id".to_string(), albumid.to_string());
-                if let Some(ref name) = album_name {
-                    scraperdata
-                        .user_data
-                        .insert("bunkr-album-name".to_string(), name.to_string());
-                }
-
-                if let Some(time) = time {
-                    scraperdata
-                        .user_data
-                        .insert("bunkr-album-time".to_string(), time.to_string());
-                }
-                scraperdata.job = sharedtypes::JobScraper {
-                    site: LOCAL_NAME.to_string(),
-                    param: vec![sharedtypes::ScraperParam::Url(url)],
-                    job_type: sharedtypes::DbJobType::Scraper,
-                };
-                let temp_tag = sharedtypes::TagObject {
-                    namespace: sharedtypes::GenericNamespaceObj {
-                        name: "".to_string(),
-                        description: None,
-                    },
-                    tag: href.to_string(),
-                    tag_type: sharedtypes::TagType::ParseUrl((scraperdata, None)),
-                    relates_to: None,
-                };
-                tag.insert(temp_tag);
-                out.push(sharedtypes::ScraperReturn::Data(
-                    sharedtypes::ScraperObject {
-                        file: HashSet::new(),
-                        tag,
-                        flag: vec![],
-                    },
-                ));
-            }
-        }
+        let mut is_file = false;
 
         let title_selector = Selector::parse("h1.truncate").unwrap();
         let mut filename = None;
@@ -246,6 +176,7 @@ pub fn parser(
         let selector = Selector::parse(r#"div[id="fileTracker"]"#).unwrap();
 
         'fragloop: for a in fragment.select(&selector) {
+            is_file = true;
             if let Some(file_id) = a.value().attr("data-file-id") {
                 let api_url = "https://apidl.bunkr.ru/api/_001_v2";
                 let data_json = format!("{{\"id\":\"{}\"}}", file_id);
@@ -326,6 +257,82 @@ pub fn parser(
                 }
             }
         }
+
+        let selector = Selector::parse(r#"span[class="ic-clock ic-before text-xs before:text-sm before:opacity-60 inline-flex items-center gap-1 py-1 px-2 rounded-full border border-soft theDate"]"#).unwrap();
+        let mut times = Vec::new();
+
+        if !is_file {
+            for span in fragment.select(&selector) {
+                // Define the format of the input string
+                let format = "%H:%M:%S %d/%m/%Y";
+
+                let internal_time = &span.text().collect::<String>();
+
+                // Parse without timezone
+                let naive = NaiveDateTime::parse_from_str(internal_time.trim(), format).unwrap();
+
+                // Interpret the naive datetime as UTC
+                let utc_dt: DateTime<Utc> = DateTime::<Utc>::from_utc(naive, Utc);
+
+                // Unix timestamp (seconds since epoch)
+                let unix_timestamp = utc_dt.timestamp();
+
+                times.push(unix_timestamp);
+            }
+
+            times.sort();
+            times.reverse();
+            let time = times.first();
+
+            // Handles the files page
+            let selector = Selector::parse(r#"a[aria-label="download"][href]"#).unwrap();
+
+            for a in fragment.select(&selector) {
+                if let Some(href) = a.value().attr("href") {
+                    let url = format!("{}{}", MAIN_SITE, &href);
+                    let mut tag = HashSet::new();
+                    let mut scraperdata = scraperdata.clone();
+                    let albumid = source_url.rsplit('/').next().unwrap();
+                    scraperdata
+                        .user_data
+                        .insert("bunkr-album-id".to_string(), albumid.to_string());
+                    if let Some(ref name) = album_name {
+                        scraperdata
+                            .user_data
+                            .insert("bunkr-album-name".to_string(), name.to_string());
+                    }
+
+                    if let Some(time) = time {
+                        scraperdata
+                            .user_data
+                            .insert("bunkr-album-time".to_string(), time.to_string());
+                    }
+                    scraperdata.job = sharedtypes::JobScraper {
+                        site: LOCAL_NAME.to_string(),
+                        param: vec![sharedtypes::ScraperParam::Url(url)],
+                        job_type: sharedtypes::DbJobType::Scraper,
+                    };
+                    let temp_tag = sharedtypes::TagObject {
+                        namespace: sharedtypes::GenericNamespaceObj {
+                            name: "".to_string(),
+                            description: None,
+                        },
+                        tag: href.to_string(),
+                        tag_type: sharedtypes::TagType::ParseUrl((scraperdata, None)),
+                        relates_to: None,
+                    };
+                    tag.insert(temp_tag);
+                    out.push(sharedtypes::ScraperReturn::Data(
+                        sharedtypes::ScraperObject {
+                            file: HashSet::new(),
+                            tag,
+                            flag: vec![],
+                        },
+                    ));
+                }
+            }
+        }
+
         out.push(sharedtypes::ScraperReturn::Data(
             sharedtypes::ScraperObject {
                 file: file_out,
@@ -464,14 +471,15 @@ fn download_file(url: &String, pretty_url: &str) -> Result<Vec<u8>> {
         //std::thread::sleep(Duration::from_secs(sleep));
         client::log(format!("scraper-bunkr: Downloading {}", pretty_url));
 
-let agent: Agent = Agent::config_builder()
-        .timeout_global(Some(Duration::from_secs(50)))
-        .build()
-        .into();
+        let agent: Agent = Agent::config_builder()
+            .timeout_global(Some(Duration::from_secs(50)))
+            .build()
+            .into();
 
-    // 2. Use the agent to perform the GET request
-    let response_temp = agent.get(url)
- .header(
+        // 2. Use the agent to perform the GET request
+        let response_temp = agent
+            .get(url)
+            .header(
                 "Accept",
                 "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
             )
@@ -481,10 +489,9 @@ let agent: Agent = Agent::config_builder()
                 "User-Agent",
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:146.0) Gecko/20100101 Firefox/146.0",
             )
+            .call();
 
-        .call();
-
-               if let Ok(response_out) = response_temp {
+        if let Ok(response_out) = response_temp {
             response = response_out;
             break;
         }

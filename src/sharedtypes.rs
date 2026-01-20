@@ -68,6 +68,12 @@ pub enum EnclaveCondition {
     TagNameAndNamespace((String, String)),
 }
 
+#[derive(Debug, Deserialize, Serialize, bincode::Encode, bincode::Decode)]
+pub enum FileExtensionType {
+    Image,
+    Video,
+}
+
 ///
 /// Manages the conditions that determines which enclave stop processing at
 ///

@@ -1,4 +1,4 @@
-use crate::{sharedtypes, Site};
+use crate::{Site, sharedtypes};
 use base64::Engine;
 use json::JsonValue;
 use rand::distributions::{Alphanumeric, DistString};

@@ -67,6 +67,15 @@ pub fn get_file_raw(fileid: usize) -> Option<DbFileStorage> {
     ))
 }
 
+///
+/// Returns all filesids of type
+///
+pub fn get_fileid_where_extension(extype: sharedtypes::FileExtensionType) -> HashSet<usize> {
+    init_data_request(&types::SupportedRequests::Database(
+        types::SupportedDBRequests::GetFileIdsWhereExtensionIs(extype),
+    ))
+}
+
 pub fn get_file_ext(fileext: usize) -> Option<String> {
     init_data_request(&types::SupportedRequests::Database(
         types::SupportedDBRequests::GetFileExt(fileext),

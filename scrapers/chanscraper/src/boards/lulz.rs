@@ -1,4 +1,4 @@
-use crate::{sharedtypes, ChanFile, Site};
+use crate::{ChanFile, Site, sharedtypes};
 use base64::Engine;
 use json::JsonValue;
 use strum_macros::EnumString; // 0.8use

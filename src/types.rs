@@ -107,6 +107,7 @@ pub enum SupportedDBRequests {
     GetFileRaw(usize),
     GetRelationshipFileidWhereNamespace((usize, usize, sharedtypes::GreqLeqOrEq)),
     GetRelationshipTagidWhereNamespace((usize, usize, sharedtypes::GreqLeqOrEq)),
+    GetFileIdsWhereExtensionIs(sharedtypes::FileExtensionType),
 }
 
 /// A descriptor for the parents and the type of data that we're sending

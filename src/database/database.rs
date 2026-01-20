@@ -23,6 +23,7 @@ pub use rusqlite::{Connection, Result, Transaction, params, types::Null};
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::collections::HashSet;
+use std::collections::hash_set;
 use std::panic;
 use std::path::Path;
 use std::path::PathBuf;
@@ -392,7 +393,6 @@ PRAGMA journal_mode = WAL;
                         .unwrap();
                         if self.file_get_hash(&hash).is_some() {
                             let mut cleaned_filepath = entry.path().to_path_buf();
-                            cleaned_filepath.set_extension("");
 
                             let cleaned_filename = cleaned_filepath.as_path().file_name().unwrap();
 
@@ -439,7 +439,6 @@ PRAGMA journal_mode = WAL;
                         }
                     } else {
                         let mut cleaned_filepath = entry.path().to_path_buf();
-                        cleaned_filepath.set_extension("");
 
                         let cleaned_filename = cleaned_filepath.as_path().file_name().unwrap();
 
@@ -1599,10 +1598,27 @@ PRAGMA journal_mode = WAL;
                 }
             }
         }
-        // fiex = tn.prepare("SELECT * FROM File").unwrap(); files = fiex .query_map([],
-        // |row| { Ok(sharedtypes::DbFileObj { id: row.get(0).unwrap(), hash:
-        // row.get(1).unwrap(), ext: row.get(2).unwrap(), location: row.get(3).unwrap(),
-        // }) }) .unwrap();
+    }
+
+    ///
+    /// Convience function to get a list of files that are images
+    ///
+    pub fn extensions_images_get_fileid(&self) -> HashSet<usize> {
+        let exts = &["jpg".to_string(), "png".to_string(), "tiff".to_string()];
+        self.extensions_get_fileid_extstr_sql(exts)
+    }
+
+    ///
+    /// Convience function to get a list of files that are images
+    ///
+    pub fn extensions_videos_get_fileid(&self) -> HashSet<usize> {
+        let exts = &[
+            "mkv".to_string(),
+            "webm".to_string(),
+            "gif".to_string(),
+            "mp4".to_string(),
+        ];
+        self.extensions_get_fileid_extstr_sql(exts)
     }
 
     ///

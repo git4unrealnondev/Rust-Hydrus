@@ -1,5 +1,5 @@
 use json::JsonValue;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 
 //use ahash::HashSet;
@@ -48,6 +48,59 @@ pub fn get_site(inp: &str) -> Option<Box<dyn Site>> {
     }
 }
 
+#[no_mangle]
+pub fn overall_ordering(
+    input: &sharedtypes::CallbackInfoInput,
+) -> HashMap<String, sharedtypes::CallbackCustomDataReturning> {
+    let mut out = HashMap::new();
+
+    dbg!(&input);
+    for name in input.data_name.iter() {
+        // Returns the order of the items from catbox
+        if name == "return_order" {
+            let temp = vec![
+                sharedtypes::CallbackCustomDataReturning::String(
+                    "Parent-Namespace-tag_id-Maybe".to_string(),
+                ),
+                sharedtypes::CallbackCustomDataReturning::String("Thread_Comment".to_string()),
+                sharedtypes::CallbackCustomDataReturning::VString(vec![
+                    "Thread_Post_Id".to_string(),
+                    "Thread_ID".to_string(),
+                ]),
+                sharedtypes::CallbackCustomDataReturning::String(
+                    "Parent-Namespace-relate-Maybe".to_string(),
+                ),
+                sharedtypes::CallbackCustomDataReturning::String("Thread_Post_Id".to_string()),
+                sharedtypes::CallbackCustomDataReturning::VString(vec![
+                    "Thread_Post_Timestamp".to_string(),
+                    "Thread_ID".to_string(),
+                ]),
+                // Gets the attachments name
+                sharedtypes::CallbackCustomDataReturning::String(
+                    "Parent-Namespace-relate_tag_to-Maybe".to_string(),
+                ),
+                sharedtypes::CallbackCustomDataReturning::String("Thread_Post_Id".to_string()),
+                sharedtypes::CallbackCustomDataReturning::VString(vec![
+                    "Thread_Post_Original_MD5".to_string(),
+                ]),
+                sharedtypes::CallbackCustomDataReturning::String(
+                    "Parent-Namespace-relate-Maybe".to_string(),
+                ),
+                sharedtypes::CallbackCustomDataReturning::String("Thread_Post_Id".to_string()),
+                sharedtypes::CallbackCustomDataReturning::VString(vec![
+                    "Thread_Attachment_Name".to_string(),
+                ]),
+            ];
+            out.insert(
+                "return_order".to_string(),
+                sharedtypes::CallbackCustomDataReturning::VCallback(temp),
+            );
+        }
+    }
+
+    out
+}
+
 use crate::sharedtypes::DEFAULT_PRIORITY;
 
 #[no_mangle]
@@ -66,6 +119,14 @@ pub fn get_global_info() -> Vec<sharedtypes::GlobalPluginScraper> {
             ))],
         },
     ));
+    fourchan.callbacks = vec![sharedtypes::GlobalCallbacks::Callback(
+        sharedtypes::CallbackInfo {
+            func: "overall_ordering".to_string(),
+            vers: 0,
+            data_name: vec!["return_order".to_string(), "return_styling".to_string()],
+            data: vec![],
+        },
+    )];
 
     let mut lulz = sharedtypes::return_default_globalpluginparser();
     lulz.name = "lulz.net".into();
@@ -241,7 +302,7 @@ pub fn parser(
     html_input: &str,
     _: &str,
     scraperdata: &sharedtypes::ScraperData,
-) -> Result<sharedtypes::ScraperObject, sharedtypes::ScraperReturn> {
+) -> Vec<sharedtypes::ScraperReturn> {
     let mut scraper_data = scraperdata.clone();
     let mut out = sharedtypes::ScraperObject {
         file: HashSet::new(),
@@ -488,7 +549,7 @@ pub fn parser(
             .insert("Stop".to_string(), "Stop".to_string());
     }
 
-    Ok(out)
+    vec![sharedtypes::ScraperReturn::Data(out)]
 }
 ///
 /// Should this scraper handle anything relating to downloading.

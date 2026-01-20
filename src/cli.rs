@@ -475,6 +475,7 @@ pub fn main(data: Main) {
                 match db {
                     // Adds extensions back onto files if they dont have them
                     cli_structs::Database::AddExtensions => {
+                        logging::info_log("Starting to add extensions to files may take a bit.");
                         let mut ext_cache = HashMap::new();
                         for file_id in data.file_get_list_id().iter() {
                             if let Some(ref file) = data.get_file(file_id) {
@@ -498,6 +499,11 @@ pub fn main(data: Main) {
                                     };
 
                                     let new_path = file_path.with_extension(ext);
+                                    logging::info_log(format!(
+                                        "{} -> {}",
+                                        file_path.to_string_lossy().to_string(),
+                                        new_path.to_string_lossy().to_string()
+                                    ));
                                     rename(file_path, new_path).unwrap();
                                 }
                             }

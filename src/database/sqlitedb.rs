@@ -938,6 +938,50 @@ RETURNING id;
     }
 
     ///
+    /// Convience function to search by extension strings
+    ///
+    pub fn extensions_get_fileid_extstr_sql(&self, extensions: &[String]) -> HashSet<usize> {
+        let mut ext_id_vec = Vec::new();
+        for ext in extensions.iter() {
+            if let Some(ext_id) = self.extension_get_id(ext) {
+                ext_id_vec.push(ext_id);
+            }
+        }
+        self.extension_get_fileid_extid_sql(&ext_id_vec)
+    }
+
+    ///
+    /// Gets all fileids where a list of extension ids exist
+    ///
+    pub fn extension_get_fileid_extid_sql(&self, extensions: &[usize]) -> HashSet<usize> {
+        let conn = self.pool.get().unwrap();
+        if extensions.is_empty() {
+            return HashSet::new();
+        }
+
+        let placeholders = std::iter::repeat("?")
+            .take(extensions.len())
+            .collect::<Vec<_>>()
+            .join(", ");
+
+        let sql = format!(
+            "SELECT id
+         FROM File
+         WHERE extension IN ({})",
+            placeholders
+        );
+
+        let mut stmt = conn.prepare(&sql).unwrap();
+
+        wait_until_sqlite_ok!(
+            stmt.query_map([], |row| row.get::<_, usize>(0))
+                .unwrap()
+                .collect::<Result<HashSet<usize>, _>>()
+        )
+        .unwrap_or(HashSet::new())
+    }
+
+    ///
     /// Adds a extension and an id OPTIONAL into the db
     ///
     pub fn extension_put_id_ext_sql(&self, id: Option<usize>, ext: &str) -> usize {
