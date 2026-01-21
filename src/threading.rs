@@ -195,6 +195,7 @@ impl Worker {
                         "Worker {} -- Stopping loop because we have no jobs.",
                         &id
                     ));
+                    database.transaction_flush();
                     break 'bigloop;
                 }
 

@@ -317,10 +317,10 @@ fn handle_client(
             }
         };
 
-        logging::log(format!(
+       /* logging::log(format!(
             "Threadded - Worker {} got a connection {:?}",
             worker_id, &plugin_supportedrequests
-        ));
+        ));*/
 
         // Default
         match plugin_supportedrequests {

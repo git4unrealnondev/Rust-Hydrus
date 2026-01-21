@@ -156,14 +156,19 @@ pub fn parser(
             }
         }
     } else {
-        // This section handles the albums page
-        //
+        // This section handles the files page
+        // Gets the download info for it
         let mut album_name = None;
         let selector = Selector::parse(r#"h1[class="truncate"]"#).unwrap();
         for span in fragment.select(&selector) {
             let album_name_temp = span.text().collect::<String>().to_string();
             let album_name_temp = album_name_temp.trim();
             album_name = Some(album_name_temp.to_string());
+        }
+
+        // Overrides the scraping info if we already have this
+        if let Some(albumname) = scraperdata.user_data.get("bunkr-album-name") {
+            album_name = Some(albumname.to_string());
         }
 
         let mut is_file = false;
@@ -203,13 +208,15 @@ pub fn parser(
                         let fileid = source_url.rsplit('/').next().unwrap();
                         let file_tag = make_file_tags(fileid, tag, scraperdata);
 
-                        for tag in make_general_tags(fileid, tag, scraperdata) {
-                            tag_out.insert(tag);
+                        if let Some(ref album_name) = album_name {
+                            for tag in make_general_tags(album_name, tag, scraperdata) {
+                                tag_out.insert(tag);
+                            }
                         }
 
                         if !should_download_file(fileid) {
                             client::log(format!(
-                                "scraper-bunkr: Cannot download because I fileid wasn't valid {}",
+                                "scraper-bunkr: Cannot download because a bunkr id already exists {}",
                                 fileid
                             ));
                             for tag in file_tag {
@@ -262,37 +269,63 @@ pub fn parser(
         let mut times = Vec::new();
 
         if !is_file {
-            for span in fragment.select(&selector) {
-                // Define the format of the input string
-                let format = "%H:%M:%S %d/%m/%Y";
+            let time = match scraperdata.user_data.get("bunkr-album-time") {
+                Some(time) => Some(time.clone()),
+                None => {
+                    for span in fragment.select(&selector) {
+                        // Define the format of the input string
+                        let format = "%H:%M:%S %d/%m/%Y";
 
-                let internal_time = &span.text().collect::<String>();
+                        let internal_time = &span.text().collect::<String>();
 
-                // Parse without timezone
-                let naive = NaiveDateTime::parse_from_str(internal_time.trim(), format).unwrap();
+                        // Parse without timezone
+                        let naive =
+                            NaiveDateTime::parse_from_str(internal_time.trim(), format).unwrap();
 
-                // Interpret the naive datetime as UTC
-                let utc_dt: DateTime<Utc> = DateTime::<Utc>::from_utc(naive, Utc);
+                        // Interpret the naive datetime as UTC
+                        let utc_dt: DateTime<Utc> = DateTime::<Utc>::from_utc(naive, Utc);
 
-                // Unix timestamp (seconds since epoch)
-                let unix_timestamp = utc_dt.timestamp();
+                        // Unix timestamp (seconds since epoch)
+                        let unix_timestamp = utc_dt.timestamp();
 
-                times.push(unix_timestamp);
-            }
+                        times.push(unix_timestamp);
+                    }
 
-            times.sort();
-            times.reverse();
-            let time = times.first();
+                    times.sort();
+                    times.reverse();
+                    times.first().map(|a| a.to_string())
+                }
+            };
 
-            // Handles the files page
-            let selector = Selector::parse(r#"a[aria-label="download"][href]"#).unwrap();
+            let albumid = match scraperdata.user_data.get("bunkr-album-id") {
+                Some(out) => out,
+                None => source_url.rsplit('/').next().unwrap(),
+            };
 
-            for a in fragment.select(&selector) {
-                if let Some(href) = a.value().attr("href") {
-                    let url = format!("{}{}", MAIN_SITE, &href);
+            {
+                let mut pagenum_largest = 1;
+                let mut pagenum_storage = Vec::new();
+
+                let selector = Selector::parse(r#"nav.pagination a"#).unwrap();
+                for a in fragment.select(&selector) {
+                    if let Some(href) = a.value().attr("href") {
+                        let pagenum_ref = match scraperdata.user_data.get("bunkr-page-current") {
+                            Some(out) => out.parse::<u32>().unwrap(),
+                            None => 1,
+                        };
+
+                        if let Some(pagenum) = extract_page(href) {
+                            if pagenum > pagenum_ref {
+                                pagenum_largest = pagenum;
+                                pagenum_storage.push(pagenum);
+                            }
+                        }
+                    }
+                }
+                for pagenum in pagenum_storage {
+                    let url = format!("{}?page={}", source_url, &pagenum);
                     let mut tag = HashSet::new();
                     let mut scraperdata = scraperdata.clone();
-                    let albumid = source_url.rsplit('/').next().unwrap();
                     scraperdata
                         .user_data
                         .insert("bunkr-album-id".to_string(), albumid.to_string());
@@ -302,7 +335,71 @@ pub fn parser(
                             .insert("bunkr-album-name".to_string(), name.to_string());
                     }
 
-                    if let Some(time) = time {
+                    scraperdata.user_data.insert(
+                        "bunkr-page-current".to_string(),
+                        pagenum_largest.to_string(),
+                    );
+
+                    if let Some(ref time) = time {
+                        scraperdata
+                            .user_data
+                            .insert("bunkr-album-time".to_string(), time.to_string());
+                    }
+                    scraperdata.job = sharedtypes::JobScraper {
+                        site: LOCAL_NAME.to_string(),
+                        param: vec![sharedtypes::ScraperParam::Url(url)],
+                        job_type: sharedtypes::DbJobType::Scraper,
+                    };
+                    let temp_tag = sharedtypes::TagObject {
+                        namespace: sharedtypes::GenericNamespaceObj {
+                            name: "".to_string(),
+                            description: None,
+                        },
+                        tag: "".to_string(),
+                        tag_type: sharedtypes::TagType::ParseUrl((scraperdata, None)),
+                        relates_to: None,
+                    };
+                    tag.insert(temp_tag);
+                    out.push(sharedtypes::ScraperReturn::Data(
+                        sharedtypes::ScraperObject {
+                            file: HashSet::new(),
+                            tag,
+                            flag: vec![],
+                        },
+                    ));
+                }
+            }
+            // Scrapes the files from the albums page
+            let selector = Selector::parse(r#"a[aria-label="download"][href]"#).unwrap();
+
+            for a in fragment.select(&selector) {
+                if let Some(href) = a.value().attr("href") {
+                    // Skips if we already have a fileid that relates to the file
+                    if let Some(fileid) = href.rsplit('/').next() {
+                        if !should_download_file(fileid)
+                            && scraperdata.system_data.get("recursion").is_none()
+                        {
+                            client::log_no_print(format!(
+                                "Scraper - Bunkr - Skipping file download because bunkr file id exists: {}",
+                                fileid
+                            ));
+                            continue;
+                        }
+                    }
+                    let url = format!("{}{}", MAIN_SITE, &href);
+                    let mut tag = HashSet::new();
+                    let mut scraperdata = scraperdata.clone();
+                    //let albumid = source_url.rsplit('/').next().unwrap();
+                    scraperdata
+                        .user_data
+                        .insert("bunkr-album-id".to_string(), albumid.to_string());
+                    if let Some(ref name) = album_name {
+                        scraperdata
+                            .user_data
+                            .insert("bunkr-album-name".to_string(), name.to_string());
+                    }
+
+                    if let Some(ref time) = time {
                         scraperdata
                             .user_data
                             .insert("bunkr-album-time".to_string(), time.to_string());
@@ -346,7 +443,7 @@ pub fn parser(
 }
 
 fn make_general_tags(
-    fileid: &str,
+    album_name: &str,
     tag: &String,
     scraperdata: &sharedtypes::ScraperData,
 ) -> Vec<sharedtypes::TagObject> {
@@ -375,7 +472,7 @@ fn make_general_tags(
             name: "bunkr-album-name".to_string(),
             description: Some("A name for a bunkr album".to_string()),
         },
-        tag: fileid.to_string(),
+        tag: album_name.to_string(),
         tag_type: sharedtypes::TagType::Normal,
         relates_to,
     }]
@@ -460,6 +557,7 @@ struct ApiFileDownloadResponse {
     url: String,
 }
 
+/// Handles downloading a file and returns a Vec if we're good
 fn download_file(url: &String, pretty_url: &str) -> Result<Vec<u8>> {
     let mut out = Vec::new();
 
@@ -571,4 +669,9 @@ fn decrypt_url(input: ApiFileDownloadResponse) -> Result<String> {
     // Decode as UTF-8
     let decoded = String::from_utf8(output)?;
     Ok(decoded)
+}
+
+/// Extracts the page number from the string
+fn extract_page(href: &str) -> Option<u32> {
+    href.split("page=").nth(1)?.parse().ok()
 }
