@@ -18,7 +18,7 @@ pub const SITE: &str = "createporn";
 ///
 #[unsafe(no_mangle)]
 pub fn get_global_info() -> Vec<sharedtypes::GlobalPluginScraper> {
-    let site_names = ["createaifurry"];
+    let site_names = ["createaifurry", "createhentai", "createporn"];
     let mut out = Vec::new();
     for site_name in site_names {
         let site_url = format!("https://www.{}.com", site_name);
@@ -26,7 +26,7 @@ pub fn get_global_info() -> Vec<sharedtypes::GlobalPluginScraper> {
         createporn.name = format!("createporn_{}", &site_name);
         createporn.storage_type = Some(sharedtypes::ScraperOrPlugin::Scraper(
             sharedtypes::ScraperInfo {
-                ratelimit: (4, Duration::from_secs(1)),
+                ratelimit: (6, Duration::from_secs(1)),
                 sites: vec![site_name.to_string()],
                 priority: sharedtypes::DEFAULT_PRIORITY,
                 num_threads: None,
@@ -74,7 +74,7 @@ pub fn get_global_info() -> Vec<sharedtypes::GlobalPluginScraper> {
 ///
 #[unsafe(no_mangle)]
 pub fn url_dump(
-    params: &[sharedtypes::ScraperParam],
+    _: &[sharedtypes::ScraperParam],
     scraperdata: &sharedtypes::ScraperData,
 ) -> Vec<(String, sharedtypes::ScraperData)> {
     let mut ret = Vec::new();
@@ -82,23 +82,33 @@ pub fn url_dump(
         if let crate::sharedtypes::ScraperParam::Normal(temp) = param {
             let url = Url::parse(temp).ok();
 
-            // Early exit if we see a post
-            if temp.contains("/post/") {
-                ret.push((temp.to_string(), scraperdata.clone()));
-                continue;
-            }
             if let Some(url) = url {
-                let is_animated = url.path() == "/gifs";
+                let is_searching = url.path().contains("search");
+                let is_animated = url.path().contains("/gif");
+
+                // Early exit if we see a post
+                if temp.contains("/post/") && !is_searching && !is_animated {
+                    ret.push((temp.to_string(), scraperdata.clone()));
+                    continue;
+                }
 
                 let mut filter = None;
                 let mut kind = None;
                 let mut style = None;
+                let mut search = None;
+                let mut limit = if is_searching {
+                    Some("20".to_string())
+                } else {
+                    None
+                };
 
                 for (key, value) in url.query_pairs() {
                     match key.as_ref() {
                         "filter" => filter = Some(value.into_owned()),
                         "type" => kind = Some(value.into_owned()),
                         "style" => style = Some(value.into_owned()),
+                        "search" => search = Some(value.into_owned()),
+                        "limit" => limit = Some(value.into_owned()),
                         _ => {}
                     }
                 }
@@ -108,15 +118,40 @@ pub fn url_dump(
                 }
 
                 let mut api_url = "https://api.createporn.com/post/".to_string();
-                if is_animated {
+                if is_searching {
+                    api_url.push_str("search")
+                } else if is_animated {
                     api_url.push_str("gifs")
                 } else {
                     api_url.push_str("feed")
                 }
-                if filter.is_some() || kind.is_some() || style.is_some() {
+                if filter.is_some() || kind.is_some() || style.is_some() || search.is_some() {
                     api_url.push('?');
                 }
                 let mut should_add_amp = false;
+                if let Some(limit) = limit {
+                    if should_add_amp {
+                        api_url.push('&');
+                    } else {
+                        should_add_amp = true;
+                    }
+                    api_url.push_str("limit=");
+                    api_url.push_str(&limit);
+                }
+                if let Some(search) = search {
+                    let search = search.replace(' ', "+");
+                    if should_add_amp {
+                        api_url.push('&');
+                    } else {
+                        should_add_amp = true;
+                    }
+                    api_url.push_str("searchQuery=");
+                    api_url.push_str(&search);
+                    if is_animated {
+                        api_url.push_str("&type=gif");
+                    }
+                }
+
                 if let Some(filter) = filter {
                     if should_add_amp {
                         api_url.push('&');
@@ -132,20 +167,22 @@ pub fn url_dump(
                     } else {
                         should_add_amp = true;
                     }
-
-                    api_url.push_str("type=");
+                    if is_searching {
+                        api_url.push_str("sort=");
+                    } else {
+                        api_url.push_str("type=");
+                    }
                     api_url.push_str(&kind);
                 }
                 if let Some(style) = style {
-                    if should_add_amp {
-                        api_url.push('&');
-                    } else {
-                        should_add_amp = true;
+                    if style != "all" {
+                        if should_add_amp {
+                            api_url.push('&');
+                        }
+                        api_url.push_str("generatorId=");
+                        api_url.push_str(&style);
                     }
-                    api_url.push_str("generatorId=");
-                    api_url.push_str(&style);
                 }
-
                 ret.push((api_url, scraperdata.clone()));
             }
         }
@@ -321,51 +358,51 @@ pub fn parser(
         // next.js so its hydrating
         let html = scraper::Html::parse_document(html_input);
         let selector = Selector::parse("script").unwrap();
-        if let Some(frag) = html.select(&selector).nth_back(2)
-            && let Some(text) = frag.text().next()
-        {
-            let mut text = text.to_string();
-            text.pop();
-            let text = text.trim();
-            let text = text.replace("self.__next_f.push(", "");
+        for frag in html.select(&selector) {
+            if let Some(text) = frag.text().next() {
+                let mut text = text.to_string();
+                text.pop();
+                let text = text.trim();
+                let text = text.replace("self.__next_f.push(", "");
 
-            let json_str = match text.find(':') {
-                Some(idx) => &text[idx + 1..],
-                None => &text,
-            };
-            let json_str = json_str.trim();
-            let json_str = json_str.replace("\\\"", "\"");
-            let json_str = unescape(&json_str).unwrap_or_else(|| json_str.to_string());
-            let json_str = json_str
-                .trim()
-                // Remove trailing quote if the string ends with ']"'
-                .trim_end_matches("\"]")
-                // Remove trailing comma if it exists before the final bracket
-                .trim_end_matches(',')
-                // Optional: remove surrounding quotes if the whole thing is wrapped in quotes
-                .trim_matches('"');
-            if let Ok(json) = json::parse(json_str) {
-                for child in json.members() {
-                    // Parse JSON
-                    let v = json::parse(&child.to_string()).ok();
-                    if v.is_none() {
-                        continue;
-                    }
-                    let v = v.unwrap();
-                    let mut posts = Vec::new();
-                    find_posts(&v, &mut posts);
+                let json_str = match text.find(':') {
+                    Some(idx) => &text[idx + 1..],
+                    None => &text,
+                };
+                let json_str = json_str.trim();
+                let json_str = json_str.replace("\\\"", "\"");
+                let json_str = unescape(&json_str).unwrap_or_else(|| json_str.to_string());
+                let json_str = json_str
+                    .trim()
+                    // Remove trailing quote if the string ends with ']"'
+                    .trim_end_matches("\"]")
+                    // Remove trailing comma if it exists before the final bracket
+                    .trim_end_matches(',')
+                    // Optional: remove surrounding quotes if the whole thing is wrapped in quotes
+                    .trim_matches('"');
+                if let Ok(json) = json::parse(json_str) {
+                    for child in json.members() {
+                        // Parse JSON
+                        let v = json::parse(&child.to_string()).ok();
+                        if v.is_none() {
+                            continue;
+                        }
+                        let v = v.unwrap();
+                        let mut posts = Vec::new();
+                        find_posts(&v, &mut posts);
 
-                    for post in posts {
-                        //let _id = post["_id"].as_str().unwrap_or("");
-                        //let url = post["imageUrl"].as_str().unwrap_or("");
-                        //let _prompt = post["customPrompt"].as_str().unwrap_or("");
-                        let mut tags: Vec<sharedtypes::TagObject> = Vec::new();
-                        // Extracts out the tags from an entry
-                        for (tag_id, json_val) in post["tags"].entries() {
-                            if let Some((entry, val)) = json_val.entries().next() {
-                                if let Some(val) = val.as_str() {
+                        for post in posts {
+                            //let _id = post["_id"].as_str().unwrap_or("");
+                            //let url = post["imageUrl"].as_str().unwrap_or("");
+                            //let _prompt = post["customPrompt"].as_str().unwrap_or("");
+                            let mut tags: Vec<sharedtypes::TagObject> = Vec::new();
+                            // Extracts out the tags from an entry
+                            for (tag_id, json_val) in post["tags"].entries() {
+                                if let Some((_, val)) = json_val.entries().next()
+                                    && let Some(val) = val.as_str()
+                                {
                                     tags.push(sharedtypes::TagObject{
-namespace: sharedtypes::GenericNamespaceObj{
+                                            namespace: sharedtypes::GenericNamespaceObj{
                                                 name: format!("createporn_{}_tag_name", scraperdata.job.site),
                                                 description: Some("A tag's name thats directly from the site.".to_string())
                                             },
@@ -385,70 +422,69 @@ namespace: sharedtypes::GenericNamespaceObj{
                                         });
                                 }
                             }
-                        }
 
-                        let mut file_id_storage = None;
-                        if let Some(id) = post["_id"].as_str() {
-                            file_id_storage = Some(id.to_string());
-                            if !id.is_empty() {
-                                tags.push(sharedtypes::TagObject {
-                                    namespace: sharedtypes::GenericNamespaceObj {
-                                        name: format!("createporn_{}_id", scraperdata.job.site),
-                                        description: Some(
-                                            "A file's unique id inside of the createporn site"
-                                                .to_string(),
-                                        ),
-                                    },
-                                    tag: id.to_string(),
-                                    tag_type: sharedtypes::TagType::Normal,
-                                    relates_to: None,
-                                });
-                            }
-                        }
-
-                        if let Some(id) = post["prompt"].as_str() {
-                            if !id.is_empty() {
-                                tags.push(sharedtypes::TagObject {
-                                    namespace: sharedtypes::GenericNamespaceObj {
-                                        name: format!(
-                                            "createporn_{}_prompt",
-                                            scraperdata.job.site
-                                        ),
-                                        description: Some(
-                                            "A posts prompt that was used to generate the image or video"
-                                                .to_string(),
-                                        ),
-                                    },
-                                    tag: id.to_string(),
-                                    tag_type: sharedtypes::TagType::Normal,
-                                    relates_to: None,
-                                });
-                            }
-                        }
-                        if let Some(id) = post["customPrompt"].as_str() {
-                            if !id.is_empty() {
-                                tags.push(sharedtypes::TagObject {
-                                    namespace: sharedtypes::GenericNamespaceObj {
-                                        name: format!(
-                                            "createporn_{}_prompt",
-                                            scraperdata.job.site
-                                        ),
-                                        description: Some(
-                                            "A posts prompt that was used to generate the image or video"
-                                                .to_string(),
-                                        ),
-                                    },
-                                    tag: id.to_string(),
-                                    tag_type: sharedtypes::TagType::Normal,
-                                    relates_to: None,
-                                });
-                                //Attempting to get the individual prompts from a custom prompt
-                                for tag in id.split(&['.', ',']) {
-                                    let tag = tag.trim();
-                                    if tag.is_empty() {
-                                        continue;
-                                    }
+                            let mut file_id_storage = None;
+                            if let Some(id) = post["_id"].as_str() {
+                                file_id_storage = Some(id.to_string());
+                                if !id.is_empty() {
                                     tags.push(sharedtypes::TagObject {
+                                        namespace: sharedtypes::GenericNamespaceObj {
+                                            name: format!("createporn_{}_id", scraperdata.job.site),
+                                            description: Some(
+                                                "A file's unique id inside of the createporn site"
+                                                    .to_string(),
+                                            ),
+                                        },
+                                        tag: id.to_string(),
+                                        tag_type: sharedtypes::TagType::Normal,
+                                        relates_to: None,
+                                    });
+                                }
+                            }
+
+                            if let Some(id) = post["prompt"].as_str() {
+                                if !id.is_empty() {
+                                    tags.push(sharedtypes::TagObject {
+                                    namespace: sharedtypes::GenericNamespaceObj {
+                                        name: format!(
+                                            "createporn_{}_prompt",
+                                            scraperdata.job.site
+                                        ),
+                                        description: Some(
+                                            "A posts prompt that was used to generate the image or video"
+                                                .to_string(),
+                                        ),
+                                    },
+                                    tag: id.to_string(),
+                                    tag_type: sharedtypes::TagType::Normal,
+                                    relates_to: None,
+                                });
+                                }
+                            }
+                            if let Some(id) = post["customPrompt"].as_str() {
+                                if !id.is_empty() {
+                                    tags.push(sharedtypes::TagObject {
+                                    namespace: sharedtypes::GenericNamespaceObj {
+                                        name: format!(
+                                            "createporn_{}_prompt",
+                                            scraperdata.job.site
+                                        ),
+                                        description: Some(
+                                            "A posts prompt that was used to generate the image or video"
+                                                .to_string(),
+                                        ),
+                                    },
+                                    tag: id.to_string(),
+                                    tag_type: sharedtypes::TagType::Normal,
+                                    relates_to: None,
+                                });
+                                    //Attempting to get the individual prompts from a custom prompt
+                                    for tag in smart_split(id) {
+                                        let tag = tag.trim();
+                                        if tag.is_empty() {
+                                            continue;
+                                        }
+                                        tags.push(sharedtypes::TagObject {
                                     namespace: sharedtypes::GenericNamespaceObj {
                                         name: format!(
                                             "createporn_{}_prompt_individual",
@@ -463,13 +499,13 @@ namespace: sharedtypes::GenericNamespaceObj{
                                     tag_type: sharedtypes::TagType::Normal,
                                     relates_to: None,
                                 });
+                                    }
                                 }
                             }
-                        }
 
-                        if let Some(id) = post["gifPrompt"].as_str() {
-                            if !id.is_empty() {
-                                tags.push(sharedtypes::TagObject {
+                            if let Some(id) = post["gifPrompt"].as_str() {
+                                if !id.is_empty() {
+                                    tags.push(sharedtypes::TagObject {
                                     namespace: sharedtypes::GenericNamespaceObj {
                                         name: format!(
                                             "createporn_{}_promptgif",
@@ -484,47 +520,46 @@ namespace: sharedtypes::GenericNamespaceObj{
                                     tag_type: sharedtypes::TagType::Normal,
                                     relates_to: None,
                                 });
-                            }
-                        }
-                        //dbg!(&post);
-
-                        if let Some(iso_time) = post["createdAt"].as_str() {
-                            // Parse the ISO 8601 string into a DateTime<Utc>
-                            let dt: DateTime<Utc> =
-                                iso_time.parse().expect("Invalid datetime format");
-
-                            // If you want milliseconds
-                            let unix_ms = dt.timestamp_millis();
-
-                            tags.push(sharedtypes::TagObject {
-                                namespace: sharedtypes::GenericNamespaceObj {
-                                    name: format!(
-                                        "createporn_{}_createdAt_timestamp",
-                                        scraperdata.job.site
-                                    ),
-                                    description: Some(
-                                        "When a post was created on the site".to_string(),
-                                    ),
-                                },
-                                tag: unix_ms.to_string(),
-                                tag_type: sharedtypes::TagType::Normal,
-                                relates_to: None,
-                            });
-                        }
-
-                        let mut id_storage = None;
-                        for (entry, val) in post["generator"].entries() {
-                            if entry.contains("_id") {
-                                id_storage = Some(val.to_string());
-                            }
-                            if val.is_empty() {
-                                continue;
+                                }
                             }
 
-                            if entry.contains("shortName")
-                                && let Some(ref id) = id_storage
-                            {
+                            if let Some(iso_time) = post["createdAt"].as_str() {
+                                // Parse the ISO 8601 string into a DateTime<Utc>
+                                let dt: DateTime<Utc> =
+                                    iso_time.parse().expect("Invalid datetime format");
+
+                                // If you want milliseconds
+                                let unix_ms = dt.timestamp_millis();
+
                                 tags.push(sharedtypes::TagObject {
+                                    namespace: sharedtypes::GenericNamespaceObj {
+                                        name: format!(
+                                            "createporn_{}_createdAt_timestamp",
+                                            scraperdata.job.site
+                                        ),
+                                        description: Some(
+                                            "When a post was created on the site".to_string(),
+                                        ),
+                                    },
+                                    tag: unix_ms.to_string(),
+                                    tag_type: sharedtypes::TagType::Normal,
+                                    relates_to: None,
+                                });
+                            }
+
+                            let mut id_storage = None;
+                            for (entry, val) in post["generator"].entries() {
+                                if entry.contains("_id") {
+                                    id_storage = Some(val.to_string());
+                                }
+                                if val.is_empty() {
+                                    continue;
+                                }
+
+                                if entry.contains("shortName")
+                                    && let Some(ref id) = id_storage
+                                {
+                                    tags.push(sharedtypes::TagObject {
                                     namespace: sharedtypes::GenericNamespaceObj {
                                         name: format!(
                                             "createporn_{}_generator",
@@ -550,34 +585,35 @@ namespace: sharedtypes::GenericNamespaceObj{
 
                                         ),
                                 });
-                                break;
+                                    break;
+                                }
                             }
-                        }
 
-                        if let Some(url) = post["imageUrl"].as_str() {
-                            let mut tag = HashSet::new();
-                            if let Some(file_id) = file_id_storage {
-                                add_username_search(
-                                    url.to_string(),
-                                    file_id,
-                                    scraperdata,
-                                    &mut tags,
-                                );
+                            if let Some(url) = post["imageUrl"].as_str() {
+                                let tag = HashSet::new();
+                                if let Some(file_id) = file_id_storage {
+                                    add_username_search(
+                                        url.to_string(),
+                                        file_id,
+                                        scraperdata,
+                                        &mut tags,
+                                    );
+                                }
+                                let mut file = HashSet::new();
+                                file.insert(sharedtypes::FileObject {
+                                    source: Some(sharedtypes::FileSource::Url(url.to_string())),
+                                    hash: sharedtypes::HashesSupported::None,
+                                    tag_list: tags,
+                                    skip_if: vec![],
+                                });
+                                out.push(sharedtypes::ScraperReturn::Data(
+                                    sharedtypes::ScraperObject {
+                                        file,
+                                        tag,
+                                        flag: vec![],
+                                    },
+                                ));
                             }
-                            let mut file = HashSet::new();
-                            file.insert(sharedtypes::FileObject {
-                                source: Some(sharedtypes::FileSource::Url(url.to_string())),
-                                hash: sharedtypes::HashesSupported::None,
-                                tag_list: tags,
-                                skip_if: vec![],
-                            });
-                            out.push(sharedtypes::ScraperReturn::Data(
-                                sharedtypes::ScraperObject {
-                                    file,
-                                    tag,
-                                    flag: vec![],
-                                },
-                            ));
                         }
                     }
                 }
@@ -586,6 +622,49 @@ namespace: sharedtypes::GenericNamespaceObj{
     }
 
     out
+}
+
+/// Strips out , and . if they look like delimiters
+fn smart_split(input: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut buf = String::new();
+    let chars: Vec<char> = input.chars().collect();
+
+    for i in 0..chars.len() {
+        let c = chars[i];
+
+        match c {
+            ',' => {
+                push_buf(&mut out, &mut buf);
+            }
+            '.' => {
+                let prev = chars.get(i.wrapping_sub(1));
+                let next = chars.get(i + 1);
+
+                let is_decimal = prev.map_or(false, |p| p.is_ascii_digit())
+                    && next.map_or(false, |n| n.is_ascii_digit());
+
+                if is_decimal {
+                    buf.push('.');
+                } else {
+                    // Treat as delimiter (handles ".", ". ", " . ")
+                    push_buf(&mut out, &mut buf);
+                }
+            }
+            _ => buf.push(c),
+        }
+    }
+
+    push_buf(&mut out, &mut buf);
+    out
+}
+
+fn push_buf(out: &mut Vec<String>, buf: &mut String) {
+    let s = buf.trim();
+    if !s.is_empty() {
+        out.push(s.to_string());
+    }
+    buf.clear();
 }
 
 /// Adds a username to search for
@@ -615,7 +694,6 @@ fn add_username_search(
                 tag: file_id.to_string(),
             })
         });
-
 
     tag.push(sharedtypes::TagObject {
         namespace: sharedtypes::GenericNamespaceObj {
