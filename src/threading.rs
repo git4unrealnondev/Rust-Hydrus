@@ -7,8 +7,8 @@ use crate::globalload::GlobalLoad;
 use crate::logging;
 
 use crate::logging::info_log;
-use crate::sharedtypes;
-use crate::sharedtypes::ScraperReturn;
+use crate::sharedtypes;use rayon::iter::IntoParallelRefMutIterator;
+use crate::sharedtypes::ScraperReturn;use rayon::iter::IntoParallelRefIterator;use rayon::iter::ParallelIterator;
 use async_std::task;
 use file_format::FileFormat;
 
@@ -179,13 +179,11 @@ impl Worker {
             let modifiers = download::get_modifiers(&scraper);
 
             let client_text = Arc::new(RwLock::new(download::client_create(
-                modifiers.clone(),
-                true,
+                modifiers.clone(),true
             )));
             let client_file = Arc::new(RwLock::new(download::client_create(modifiers, false)));
-            let mut should_remove_original_job;
             'bigloop: loop {
-                let jobsstorage;
+                let mut jobsstorage;
                 {
                     jobsstorage = jobstorage.read().jobs_get_priority_order(&scraper).clone();
                 }
@@ -199,7 +197,9 @@ impl Worker {
                     break 'bigloop;
                 }
 
-                for mut job in jobsstorage {
+                //for mut job in jobsstorage {
+                jobsstorage.par_iter_mut().for_each(| job|{
+            let mut should_remove_original_job;
                     let jobid = job.id.unwrap();
                     should_remove_original_job = true;
                     let currentjob = job.clone();
@@ -373,7 +373,7 @@ impl Worker {
                             out
                         }
                         sharedtypes::DbJobType::Plugin => {
-                            continue;
+                            return;
                         }
                         sharedtypes::DbJobType::NoScrape => {
                             let mut out = Vec::new();
@@ -546,7 +546,7 @@ impl Worker {
                             jobstorage.write().jobs_remove_job(&scraper, &currentjob);
                         }
                     }
-                }
+                } );
             }
             threadflagcontrol.stop();
             jobstorage.write().clear_previously_seen_cache(&scraper);

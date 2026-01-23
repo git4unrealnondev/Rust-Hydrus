@@ -74,7 +74,7 @@ pub fn ratelimiter_create(
 ///
 pub fn get_modifiers(
     scraper: &sharedtypes::GlobalPluginScraper,
-) -> Vec<sharedtypes::ScraperModifiers> {
+) -> Vec<sharedtypes::TargetModifiers> {
     let mut out = Vec::new();
 
     if let Some(scrapertype) = &scraper.storage_type
@@ -109,14 +109,17 @@ pub fn ratelimiter_wait(ratelimit_object: &Arc<Mutex<Ratelimiter>>) {
 
 fn process_modifiers(
     client: ClientBuilder,
-    modifers: Vec<sharedtypes::ScraperModifiers>,
-    is_text_download: bool,
+    target: Vec<sharedtypes::TargetModifiers>,
+    is_text_download: bool
 ) -> ClientBuilder {
     let mut client = client;
-    for modifer in modifers {
-        match modifer {
-            sharedtypes::ScraperModifiers::MediaHeader((key, val)) => {
-                if !is_text_download {
+    for modifer in target {
+        let is_text_modifier = modifer.target == sharedtypes::ModifierTarget::Text ;
+        if is_text_modifier != is_text_download {
+            continue;
+        }
+        match modifer.modifier {
+            sharedtypes::ScraperModifiers::Header((key, val)) => {
                     let key = key.clone();
                     let val = val.clone();
                     let mut headers = HeaderMap::new();
@@ -125,16 +128,8 @@ fn process_modifiers(
                     headers.insert(header_key, header_val);
                     client = client.default_headers(headers);
                 }
-            }
-            sharedtypes::ScraperModifiers::MediaUseragent(useragent) => {
-                if !is_text_download {
+            sharedtypes::ScraperModifiers::Useragent(useragent) => {
                     client = client.user_agent(useragent);
-                }
-            }
-            sharedtypes::ScraperModifiers::TextUseragent(useragent) => {
-                if is_text_download {
-                    client = client.user_agent(useragent);
-                }
             }
         }
     }
@@ -143,8 +138,8 @@ fn process_modifiers(
 
 /// Creates Client that the downloader will use.
 pub fn client_create(
-    modifers: Vec<sharedtypes::ScraperModifiers>,
-    is_text_download: bool,
+    modifers: Vec<sharedtypes::TargetModifiers>,
+    is_text_download: bool
 ) -> Client {
     let useragent = "RustHydrus V1.0".to_string();
     // let useragent =

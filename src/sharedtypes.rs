@@ -209,7 +209,7 @@ pub struct ScraperInfo {
     pub priority: usize,
     // How many threads should we use to scrape a page. If none then use as many threads as on cpu
     pub num_threads: Option<usize>,
-    pub modifiers: Vec<ScraperModifiers>,
+    pub modifiers: Vec<TargetModifiers>,
 }
 
 ///
@@ -218,11 +218,24 @@ pub struct ScraperInfo {
 #[derive(Debug, Clone, Eq, Hash, PartialEq)]
 pub enum ScraperModifiers {
     // A useragent to use when scraping text or pulling siteinfo
-    TextUseragent(String),
-    // A useragent to use when downloading media
-    MediaUseragent(String),
-    //,Adds a header to a media download
-    MediaHeader((String, String)),
+    Useragent(String),
+    //,Adds a header to a download
+    Header((String, String)),
+}
+
+///
+/// Determines if we should apply this to a text or media entry
+///
+#[derive(Debug, Clone, Eq, Hash, PartialEq)]
+pub struct TargetModifiers {
+    pub target: ModifierTarget,
+    pub modifier: ScraperModifiers,
+}
+
+#[derive(Debug, Clone, Eq, Hash, PartialEq)]
+pub enum ModifierTarget {
+    Text,
+    Media,
 }
 
 ///

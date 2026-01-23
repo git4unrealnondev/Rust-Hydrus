@@ -85,12 +85,20 @@ pub fn get_global_info() -> Vec<sharedtypes::GlobalPluginScraper> {
             num_threads: None,
             modifiers: vec![
                 // Emulates discord when reaching out to fxembed service to pull info
-                sharedtypes::ScraperModifiers::TextUseragent(
-                    "Mozilla/5.0 (compatible; Discordbot/2.0; +https://discordapp.com)".to_string(),
-                ),
-                sharedtypes::ScraperModifiers::MediaUseragent(
-                    "Mozilla/5.0 (compatible; Discordbot/2.0; +https://discordapp.com)".to_string(),
-                ),
+                sharedtypes::TargetModifiers {
+                    target: sharedtypes::ModifierTarget::Text,
+                    modifier: sharedtypes::ScraperModifiers::Useragent(
+                        "Mozilla/5.0 (compatible; Discordbot/2.0; +https://discordapp.com)"
+                            .to_string(),
+                    ),
+                },
+                sharedtypes::TargetModifiers {
+                    target: sharedtypes::ModifierTarget::Media,
+                    modifier: sharedtypes::ScraperModifiers::Useragent(
+                        "Mozilla/5.0 (compatible; Discordbot/2.0; +https://discordapp.com)"
+                            .to_string(),
+                    ),
+                },
             ],
         },
     ));
