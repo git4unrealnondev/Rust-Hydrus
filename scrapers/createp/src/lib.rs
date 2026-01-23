@@ -59,6 +59,10 @@ pub fn get_global_info() -> Vec<sharedtypes::GlobalPluginScraper> {
                             site_url,
                         )),
                     },
+                    sharedtypes::TargetModifiers {
+                        target: sharedtypes::ModifierTarget::Media,
+                        modifier: sharedtypes::ScraperModifiers::Timeout(10),
+                    },
                 ],
             },
         ));

@@ -131,6 +131,9 @@ fn process_modifiers(
             sharedtypes::ScraperModifiers::Useragent(useragent) => {
                 client = client.user_agent(useragent);
             }
+            sharedtypes::ScraperModifiers::Timeout(timeout) => {
+                client = client.timeout(time::Duration::from_secs(timeout));
+            }
         }
     }
     client

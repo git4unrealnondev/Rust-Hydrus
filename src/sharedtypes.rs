@@ -188,6 +188,8 @@ pub struct ScraperInfo {
 pub enum ScraperModifiers {
     // A useragent to use when scraping text or pulling siteinfo
     Useragent(String),
+    // Timeout when making a request in seconds
+    Timeout(u64),
     //,Adds a header to a download
     Header((String, String)),
 }
