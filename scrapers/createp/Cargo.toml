@@ -21,8 +21,6 @@ crate-type = ["dylib"]
 json = "0.12.4"
 bincode = { version = "2.0.1", features = ["serde","alloc"] }
 chrono = "0.4.31"
-serde = { version = "1.0.192", features = ["derive"] }
 url = "2.5.8"
-anyhow = "1.0.100"
 scraper = "0.25.0"
 unescape = "0.1.0"

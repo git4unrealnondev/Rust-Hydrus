@@ -110,26 +110,26 @@ pub fn ratelimiter_wait(ratelimit_object: &Arc<Mutex<Ratelimiter>>) {
 fn process_modifiers(
     client: ClientBuilder,
     target: Vec<sharedtypes::TargetModifiers>,
-    is_text_download: bool
+    is_text_download: bool,
 ) -> ClientBuilder {
     let mut client = client;
     for modifer in target {
-        let is_text_modifier = modifer.target == sharedtypes::ModifierTarget::Text ;
+        let is_text_modifier = modifer.target == sharedtypes::ModifierTarget::Text;
         if is_text_modifier != is_text_download {
             continue;
         }
         match modifer.modifier {
             sharedtypes::ScraperModifiers::Header((key, val)) => {
-                    let key = key.clone();
-                    let val = val.clone();
-                    let mut headers = HeaderMap::new();
-                    let header_key = HeaderName::from_str(&key).unwrap();
-                    let header_val = HeaderValue::from_str(&val).unwrap();
-                    headers.insert(header_key, header_val);
-                    client = client.default_headers(headers);
-                }
+                let key = key.clone();
+                let val = val.clone();
+                let mut headers = HeaderMap::new();
+                let header_key = HeaderName::from_str(&key).unwrap();
+                let header_val = HeaderValue::from_str(&val).unwrap();
+                headers.insert(header_key, header_val);
+                client = client.default_headers(headers);
+            }
             sharedtypes::ScraperModifiers::Useragent(useragent) => {
-                    client = client.user_agent(useragent);
+                client = client.user_agent(useragent);
             }
         }
     }
@@ -139,7 +139,7 @@ fn process_modifiers(
 /// Creates Client that the downloader will use.
 pub fn client_create(
     modifers: Vec<sharedtypes::TargetModifiers>,
-    is_text_download: bool
+    is_text_download: bool,
 ) -> Client {
     let useragent = "RustHydrus V1.0".to_string();
     // let useragent =
@@ -221,11 +221,20 @@ pub async fn dltext_new(
                 return Err(Box::new(url::ParseError::Overflow));
             }
         }
-        cnt += 1;
         match futureresult {
             Ok(res) => {
                 // Exit for error codes 400
                 if let Err(err) = res.error_for_status_ref() {
+                    if err.is_timeout() {
+                        let time_secs = 5;
+                        std::thread::sleep(std::time::Duration::from_secs(time_secs));
+                        logging::error_log(format!(
+                            "Worker: {} -- While processing job {:?} was unable to download text. Had err {:?} sleeping for {} seconds.",
+                            &worker_id, &url_string, err, time_secs
+                        ));
+
+                        continue;
+                    }
                     return Err(Box::new(err));
                 } else {
                     let res_url = res.url().to_string();
@@ -234,15 +243,28 @@ pub async fn dltext_new(
                             return Ok((text, res_url));
                         }
                         Err(_) => {
+                            cnt += 1;
                             continue;
                         }
                     }
                 }
             }
-            Err(_) => {
-                return Err(Box::new(futureresult.err().unwrap()));
+            Err(err) => {
+                if err.is_timeout() {
+                    let time_secs = 5;
+                    std::thread::sleep(std::time::Duration::from_secs(time_secs));
+                    logging::error_log(format!(
+                        "Worker: {} -- While processing job {:?} was unable to download text. Had err {:?} sleeping for {} seconds.",
+                        &worker_id, &url_string, err, time_secs
+                    ));
+
+                    cnt += 1;
+                    continue;
+                }
+                // return Err(Box::new(futureresult.err().unwrap()));
             }
         }
+        cnt += 1;
     }
 }
 

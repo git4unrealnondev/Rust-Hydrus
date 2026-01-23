@@ -57,10 +57,11 @@ fuzz-search = "0.1.0"
 
 [features]
 default = ["exe_build"]
-exe_build = ["regex", "clap"]
+exe_build = ["regex", "clap", "serde"]
 # Enables sending and recieving regex
 regex = []
 clap = []
+serde = []
 
 [profile.release]
 opt-level = 3

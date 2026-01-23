@@ -7,10 +7,13 @@ use crate::globalload::GlobalLoad;
 use crate::logging;
 
 use crate::logging::info_log;
-use crate::sharedtypes;use rayon::iter::IntoParallelRefMutIterator;
-use crate::sharedtypes::ScraperReturn;use rayon::iter::IntoParallelRefIterator;use rayon::iter::ParallelIterator;
+use crate::sharedtypes;
+use crate::sharedtypes::ScraperReturn;
 use async_std::task;
 use file_format::FileFormat;
+use rayon::iter::IntoParallelRefIterator;
+use rayon::iter::IntoParallelRefMutIterator;
+use rayon::iter::ParallelIterator;
 
 // use log::{error, info};
 use ratelimit::Ratelimiter;
@@ -179,7 +182,8 @@ impl Worker {
             let modifiers = download::get_modifiers(&scraper);
 
             let client_text = Arc::new(RwLock::new(download::client_create(
-                modifiers.clone(),true
+                modifiers.clone(),
+                true,
             )));
             let client_file = Arc::new(RwLock::new(download::client_create(modifiers, false)));
             'bigloop: loop {
