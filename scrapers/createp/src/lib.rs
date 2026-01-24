@@ -92,124 +92,98 @@ pub fn url_dump(
     ret
 }
 
-fn parse_url(temp: &String) -> Option<String> {
-    let url = Url::parse(temp).ok();
 
-    if let Some(url) = url {
-        let url_query = url.query().unwrap_or_default();
-        let is_searching = url.path().contains("search");
-        let is_animated = url.path().contains("/gif") || url_query.contains("type=gif");
-        let is_user = url.path().contains("/user");
+fn parse_url(temp: &str) -> Option<String> {
+    let url = Url::parse(temp).ok()?;
 
-        // Early exit if we see a post
-        if (temp.contains("/post/") || temp.contains("/gif/")) && !is_searching {
-            //ret.push((temp.to_string(), scraperdata.clone()));
-            return Some(temp.to_string());
-        }
+    let path = url.path();
+    let query = url.query().unwrap_or("");
 
-        let mut filter = None;
-        let mut kind = None;
-        let mut style = None;
-        let mut search = None;
-        let mut limit = if is_searching {
-            Some("20".to_string())
-        } else {
-            None
-        };
+    let is_searching = path.contains("search");
+    let is_animated = path.contains("/gif") || query.contains("type=gif");
+    let is_user = path.contains("/user");
 
-        for (key, value) in url.query_pairs() {
-            match key.as_ref() {
-                "filter" => filter = Some(value.into_owned()),
-                "type" => kind = Some(value.into_owned()),
-                "style" => style = Some(value.into_owned()),
-                "search" => search = Some(value.into_owned()),
-                "limit" => limit = Some(value.into_owned()),
-                _ => {}
-            }
-        }
-
-        let mut api_url = url::Url::parse("https://api.createporn.com/post/").unwrap();
-        if kind.is_none() {
-            kind = match filter {
-                None => Some("hot".to_string()),
-                Some(ref out) => Some(out.clone()),
-            };
-        }
-        if is_user {
-            if is_animated {
-                api_url.set_path("post/profile-gifs");
-            } else {
-                api_url.set_path("post/profile-images");
-            }
-            if is_user && let Some(user_id) = url.path_segments().unwrap().next_back() {
-                api_url.query_pairs_mut().append_pair("user", user_id);
-
-                let sort = if let Some(ref filter) = filter {
-                    filter
-                } else {
-                    &"top".to_string()
-                };
-
-                api_url.query_pairs_mut().append_pair("sort", sort);
-            }
-        } else if is_searching {
-            api_url.set_path("post/search");
-        } else if !is_animated {
-            api_url.set_path("post/feed");
-        } else {
-            api_url.set_path("post/gifs");
-        }
-
-        // Stupid hack
-        if is_searching && is_animated {
-            kind = Some("gif".to_string());
-        }
-
-        if let Some(ref limit) = limit
-            && is_searching
-        {
-            api_url.query_pairs_mut().append_pair("limit", limit);
-        }
-
-        if let Some(ref search) = search
-            && is_searching
-        {
-            api_url.query_pairs_mut().append_pair("searchQuery", search);
-        }
-
-        if let Some(ref kind) = kind
-            && is_searching
-            && is_animated
-        {
-            api_url.query_pairs_mut().append_pair("type", kind);
-        }
-        if let Some(ref filter) = filter
-            && is_searching
-        {
-            api_url.query_pairs_mut().append_pair("sort", filter);
-        }
-
-        if let Some(ref kind) = kind
-            && !is_searching
-            && !is_user
-        {
-            api_url.query_pairs_mut().append_pair("type", kind);
-        }
-
-        if let Some(ref style) = style
-            && style != "all"
-        {
-            if is_animated {
-                api_url.query_pairs_mut().append_pair("style", style);
-            } else {
-                api_url.query_pairs_mut().append_pair("generatorId", style);
-            }
-        }
-
-        Some(api_url.to_string())
-    } else {
-        None
+    // Early exit for direct posts
+    if (temp.contains("/post/") || temp.contains("/gif/")) && !is_searching {
+        return Some(temp.to_string());
     }
+
+    let mut filter = None;
+    let mut kind = None;
+    let mut style = None;
+    let mut search = None;
+    let mut limit = is_searching.then(|| "20".to_string());
+
+    for (key, value) in url.query_pairs() {
+        let value = value.into_owned();
+        match key.as_ref() {
+            "filter" => filter = Some(value),
+            "type" => kind = Some(value),
+            "style" => style = Some(value),
+            "search" => search = Some(value),
+            "limit" => limit = Some(value),
+            _ => {}
+        }
+    }
+
+    let mut api_url = Url::parse("https://api.createporn.com/post/").unwrap();
+
+    // Default kind
+    if kind.is_none() {
+        kind = Some(filter.clone().unwrap_or_else(|| "hot".to_string()));
+    }
+
+    match (is_user, is_searching, is_animated) {
+        (true, _, true) => api_url.set_path("post/profile-gifs"),
+        (true, _, false) => api_url.set_path("post/profile-images"),
+        (_, true, _) => api_url.set_path("post/search"),
+        (_, false, true) => api_url.set_path("post/gifs"),
+        _ => api_url.set_path("post/feed"),
+    }
+
+    if is_user
+        && let Some(user_id) = url.path_segments()?.next_back() {
+            api_url
+                .query_pairs_mut()
+                .append_pair("user", user_id)
+                .append_pair("sort", filter.as_deref().unwrap_or("top"));
+        }
+
+    // Hack preserved
+    if is_searching && is_animated {
+        kind = Some("gif".to_string());
+    }
+{
+    let mut qp = api_url.query_pairs_mut();
+
+    if is_searching {
+        if let Some(l) = &limit {
+            qp.append_pair("limit", l);
+        }
+        if let Some(s) = &search {
+            qp.append_pair("searchQuery", s);
+        }
+        if let Some(f) = &filter {
+            qp.append_pair("sort", f);
+        }
+        if is_animated
+            && let Some(k) = &kind {
+                qp.append_pair("type", k);
+            }
+    } else if !is_user
+        && let Some(k) = &kind {
+            qp.append_pair("type", k);
+        }
+
+    if let Some(s) = &style
+        && s != "all" {
+            qp.append_pair(
+                if is_animated { "style" } else { "generatorId" },
+                s,
+            );
+        }}
+
+    Some(api_url.to_string())
 }
 
 #[unsafe(no_mangle)]
@@ -478,8 +452,8 @@ pub fn parser(
                                 user_id_storage = Some(user_id.to_string());
                             }
 
-                            if let Some(id) = post["_id"].as_str() {
-                                if !id.is_empty() {
+                            if let Some(id) = post["_id"].as_str()
+                                && !id.is_empty() {
                                     tags.push(sharedtypes::TagObject {
                                         namespace: sharedtypes::GenericNamespaceObj {
                                             name: format!("createporn_{}_id", scraperdata.job.site),
@@ -493,7 +467,6 @@ pub fn parser(
                                         relates_to: None,
                                     });
                                 }
-                            }
 
                             if let Some(id) = post["prompt"].as_str()
                                 && !id.is_empty()
@@ -696,8 +669,8 @@ fn smart_split(input: &str) -> Vec<String> {
                 let prev = chars.get(i.wrapping_sub(1));
                 let next = chars.get(i + 1);
 
-                let is_decimal = prev.map_or(false, |p| p.is_ascii_digit())
-                    && next.map_or(false, |n| n.is_ascii_digit());
+                let is_decimal = prev.is_some_and(|p| p.is_ascii_digit())
+                    && next.is_some_and(|n| n.is_ascii_digit());
 
                 if is_decimal {
                     buf.push('.');
