@@ -2,37 +2,27 @@ use crate::Main;
 use crate::download;
 use crate::download::hash_bytes;
 use crate::download::process_bytes;
-use crate::globalload;
 use crate::globalload::GlobalLoad;
 use crate::logging;
-
 use crate::logging::info_log;
 use crate::sharedtypes;
-use crate::sharedtypes::ScraperReturn;
+use crate::Mutex;
+use crate::RwLock;
+
 use async_std::task;
 use file_format::FileFormat;
-use rayon::iter::IntoParallelRefIterator;
 use rayon::iter::IntoParallelRefMutIterator;
 use rayon::iter::ParallelIterator;
-
-// use log::{error, info};
 use ratelimit::Ratelimiter;
 use reqwest::blocking::Client;
 use std::collections::BTreeSet;
 use std::collections::HashMap;
 use std::sync::Arc;
-//use std::sync::RwLock;
-
-// use std::sync::Mutex;
 use rusty_pool::ThreadPool;
-//use std::sync::Mutex;
-use crate::Mutex;
-use crate::RwLock;
 use std::thread;
 use std::time::Duration;
 use thread_control::*;
 
-use std::ops::ControlFlow;
 pub struct Threads {
     _workers: usize,
     worker: HashMap<usize, Worker>,

@@ -83,15 +83,19 @@ pub fn url_dump(
 ) -> Vec<(String, sharedtypes::ScraperData)> {
     let mut ret = Vec::new();
     for param in scraperdata.job.param.iter() {
+        if let crate::sharedtypes::ScraperParam::Url(temp) = param
+            && let Some(url) = parse_url(temp)
+        {
+            ret.push((url.clone(), scraperdata.clone()));
+        }
         if let crate::sharedtypes::ScraperParam::Normal(temp) = param
             && let Some(url) = parse_url(temp)
         {
-            ret.push((url, scraperdata.clone()));
+            ret.push((url.clone(), scraperdata.clone()));
         }
     }
     ret
 }
-
 
 fn parse_url(temp: &str) -> Option<String> {
     let url = Url::parse(temp).ok()?;
@@ -104,7 +108,7 @@ fn parse_url(temp: &str) -> Option<String> {
     let is_user = path.contains("/user");
 
     // Early exit for direct posts
-    if (temp.contains("/post/") || temp.contains("/gif/")) && !is_searching {
+    if (temp.contains("/post/") || temp.contains("/gif/")) && (!is_searching && !is_user) {
         return Some(temp.to_string());
     }
 
@@ -141,47 +145,43 @@ fn parse_url(temp: &str) -> Option<String> {
         _ => api_url.set_path("post/feed"),
     }
 
-    if is_user
-        && let Some(user_id) = url.path_segments()?.next_back() {
-            api_url
-                .query_pairs_mut()
-                .append_pair("user", user_id)
-                .append_pair("sort", filter.as_deref().unwrap_or("top"));
-        }
+    if is_user && let Some(user_id) = url.path_segments()?.next_back() {
+        api_url
+            .query_pairs_mut()
+            .append_pair("user", user_id)
+            .append_pair("sort", filter.as_deref().unwrap_or("top"));
+    }
 
     // Hack preserved
     if is_searching && is_animated {
         kind = Some("gif".to_string());
     }
-{
-    let mut qp = api_url.query_pairs_mut();
+    {
+        let mut qp = api_url.query_pairs_mut();
 
-    if is_searching {
-        if let Some(l) = &limit {
-            qp.append_pair("limit", l);
-        }
-        if let Some(s) = &search {
-            qp.append_pair("searchQuery", s);
-        }
-        if let Some(f) = &filter {
-            qp.append_pair("sort", f);
-        }
-        if is_animated
-            && let Some(k) = &kind {
+        if is_searching {
+            if let Some(l) = &limit {
+                qp.append_pair("limit", l);
+            }
+            if let Some(s) = &search {
+                qp.append_pair("searchQuery", s);
+            }
+            if let Some(f) = &filter {
+                qp.append_pair("sort", f);
+            }
+            if is_animated && let Some(k) = &kind {
                 qp.append_pair("type", k);
             }
-    } else if !is_user
-        && let Some(k) = &kind {
+        } else if !is_user && let Some(k) = &kind {
             qp.append_pair("type", k);
         }
 
-    if let Some(s) = &style
-        && s != "all" {
-            qp.append_pair(
-                if is_animated { "style" } else { "generatorId" },
-                s,
-            );
-        }}
+        if let Some(s) = &style
+            && s != "all"
+        {
+            qp.append_pair(if is_animated { "style" } else { "generatorId" }, s);
+        }
+    }
 
     Some(api_url.to_string())
 }
@@ -258,7 +258,7 @@ pub fn parser(
                             job_type: sharedtypes::DbJobType::Scraper,
                         },
 
-                        system_data: BTreeMap::new(),
+                        system_data: scraperdata.system_data.clone(),
                         user_data: BTreeMap::new(),
                     },
                     None,
@@ -307,6 +307,7 @@ pub fn parser(
                     })
                 });
 
+
                 // Adds job for getting file details
                 tag.insert(sharedtypes::TagObject {
                     namespace: sharedtypes::GenericNamespaceObj {
@@ -322,7 +323,7 @@ pub fn parser(
                                 job_type: sharedtypes::DbJobType::Scraper,
                             },
 
-                            system_data: BTreeMap::new(),
+                            system_data: scraperdata.system_data.clone(),
                             user_data: BTreeMap::new(),
                         },
                         should_grab_post,
@@ -453,20 +454,21 @@ pub fn parser(
                             }
 
                             if let Some(id) = post["_id"].as_str()
-                                && !id.is_empty() {
-                                    tags.push(sharedtypes::TagObject {
-                                        namespace: sharedtypes::GenericNamespaceObj {
-                                            name: format!("createporn_{}_id", scraperdata.job.site),
-                                            description: Some(
-                                                "A file's unique id inside of the createporn site"
-                                                    .to_string(),
-                                            ),
-                                        },
-                                        tag: id.to_string(),
-                                        tag_type: sharedtypes::TagType::Normal,
-                                        relates_to: None,
-                                    });
-                                }
+                                && !id.is_empty()
+                            {
+                                tags.push(sharedtypes::TagObject {
+                                    namespace: sharedtypes::GenericNamespaceObj {
+                                        name: format!("createporn_{}_id", scraperdata.job.site),
+                                        description: Some(
+                                            "A file's unique id inside of the createporn site"
+                                                .to_string(),
+                                        ),
+                                    },
+                                    tag: id.to_string(),
+                                    tag_type: sharedtypes::TagType::Normal,
+                                    relates_to: None,
+                                });
+                            }
 
                             if let Some(id) = post["prompt"].as_str()
                                 && !id.is_empty()
@@ -535,7 +537,7 @@ pub fn parser(
                                 tags.push(sharedtypes::TagObject {
                                     namespace: sharedtypes::GenericNamespaceObj {
                                         name: format!(
-                                            "createporn_{}_promptgif",
+                                            "createporn_{}_prompt_gif",
                                             scraperdata.job.site
                                         ),
                                         description: Some(
@@ -546,7 +548,28 @@ pub fn parser(
                                     tag: id.to_string(),
                                     tag_type: sharedtypes::TagType::Normal,
                                     relates_to: None,
+                                }); //Attempting to get the individual prompts from a custom prompt
+                                for tag in smart_split(id) {
+                                    let tag = tag.trim();
+                                    if tag.is_empty() {
+                                        continue;
+                                    }
+                                    tags.push(sharedtypes::TagObject {
+                                    namespace: sharedtypes::GenericNamespaceObj {
+                                        name: format!(
+                                            "createporn_{}_prompt_gif_individual",
+                                            scraperdata.job.site
+                                        ),
+                                        description: Some(
+                                            "An individual post's prompt that was used to generate video"
+                                                .to_string(),
+                                        ),
+                                    },
+                                    tag: tag.to_string(),
+                                    tag_type: sharedtypes::TagType::Normal,
+                                    relates_to: None,
                                 });
+                                }
                             }
 
                             if let Some(iso_time) = post["createdAt"].as_str() {
@@ -695,12 +718,16 @@ fn push_buf(out: &mut Vec<String>, buf: &mut String) {
     buf.clear();
 }
 
-/// Adds the username to search for posts by the user
-fn add_username_post_search(
+/// Adds a username to search for
+fn add_username_search(
+    image_url: String,
     user_id: String,
     scraperdata: &sharedtypes::ScraperData,
     tag: &mut Vec<sharedtypes::TagObject>,
 ) {
+    let mut user_data = BTreeMap::new();
+    user_data.insert("file_url".to_string(), image_url);
+
     // Supports searching the users for their posts
     if scraperdata
         .system_data
@@ -713,66 +740,31 @@ fn add_username_post_search(
         // Supports getting the users posts and animated "gifs"
         for user_change_url in ["", "?type=gif"] {
             let user_post_url = format!("{}{}", user_base_url, user_change_url);
-            tag.push(sharedtypes::TagObject {
-                namespace: sharedtypes::GenericNamespaceObj {
-                    name: "".to_string(),
-                    description: None,
-                },
-                tag: user_post_url.clone(),
-                tag_type: sharedtypes::TagType::ParseUrl((
-                    sharedtypes::ScraperData {
-                        job: sharedtypes::JobScraper {
-                            site: scraperdata.job.site.to_string(),
-                            param: vec![sharedtypes::ScraperParam::Url(user_post_url)],
-                            job_type: sharedtypes::DbJobType::Scraper,
-                        },
-
-                        system_data: BTreeMap::new(),
-                        user_data: BTreeMap::new(),
+            if let Some(scrape_url) = parse_url(&user_post_url) {
+                tag.push(sharedtypes::TagObject {
+                    namespace: sharedtypes::GenericNamespaceObj {
+                        name: "".to_string(),
+                        description: None,
                     },
-                    None,
-                )),
-                relates_to: None,
-            });
+                    tag: scrape_url.clone(),
+                    tag_type: sharedtypes::TagType::ParseUrl((
+                        sharedtypes::ScraperData {
+                            job: sharedtypes::JobScraper {
+                                site: scraperdata.job.site.to_string(),
+                                param: vec![sharedtypes::ScraperParam::Url(scrape_url)],
+                                job_type: sharedtypes::DbJobType::Scraper,
+                            },
+
+                            system_data: scraperdata.system_data.clone(),
+                            user_data: BTreeMap::new(),
+                        },
+                        None,
+                    )),
+                    relates_to: None,
+                });
+            }
         }
     }
-}
-
-/// Adds a username to search for
-fn add_username_search(
-    image_url: String,
-    user_id: String,
-    scraperdata: &sharedtypes::ScraperData,
-    tag: &mut Vec<sharedtypes::TagObject>,
-) {
-    let mut user_data = BTreeMap::new();
-    user_data.insert("file_url".to_string(), image_url);
-
-    add_username_post_search(user_id.clone(), scraperdata, tag);
-
-    let username_url = format!("https://{}.com/user/{}", scraperdata.job.site, user_id);
-
-    tag.push(sharedtypes::TagObject {
-        namespace: sharedtypes::GenericNamespaceObj {
-            name: "".to_string(),
-            description: None,
-        },
-        tag: username_url.clone(),
-        tag_type: sharedtypes::TagType::ParseUrl((
-            sharedtypes::ScraperData {
-                job: sharedtypes::JobScraper {
-                    site: scraperdata.job.site.to_string(),
-                    param: vec![sharedtypes::ScraperParam::Url(username_url)],
-                    job_type: sharedtypes::DbJobType::Scraper,
-                },
-
-                system_data: BTreeMap::new(),
-                user_data,
-            },
-            None,
-        )),
-        relates_to: None,
-    });
 }
 
 ///
@@ -851,6 +843,9 @@ mod tests {
             ),(
                 "https://www.createaifurry.com/gif/search?filter=top1&style=animecorev3&search=female".to_string(),
                 Some("https://api.createporn.com/post/search?limit=20&style=animecorev3&searchQuery=female&type=gif&sort=top1".to_string()),
+            ),(
+                "https://www.createaifurry.com/user/6860abf2415eadac56bab8b0?type=gif".to_string(),
+                Some("https://api.createporn.com/post/profile-gifs?user=6860abf2415eadac56bab8b0&sort=top".to_string()),
             ),
         ];
 
@@ -869,7 +864,6 @@ mod tests {
                     .into_owned()
                     .collect();
                 if param1 != param2 {
-                    dbg!(&param1, &param2);
                     assert_eq!(parse_url(url), valid.clone());
                 }
                 assert!(param1 == param2);
