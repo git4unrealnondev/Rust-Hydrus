@@ -34,3 +34,7 @@ lto=true
 codegenunits=1
 strip = true
 panic = "abort"
+
+[features]
+default = ["serde"]
+serde = []
