@@ -9,6 +9,7 @@ use std::collections::HashSet;
 use std::time::Duration;
 use unescape::unescape;
 use url::Url;
+use std::collections::HashMap;
 
 pub const SITE: &str = "createporn";
 
@@ -97,103 +98,6 @@ pub fn url_dump(
     ret
 }
 
-/*
-fn parse_url(temp: &str) -> Option<String> {
-    let url = Url::parse(temp).ok()?;
-
-    let path = url.path();
-    let query = url.query().unwrap_or("");
-
-    let is_searching = path.contains("search");
-    let is_animated = path.contains("/gif") || query.contains("type=gif");
-    let is_user = path.contains("/user");
-
-    // Early exit for direct posts
-    if (temp.contains("/post/") || temp.contains("/gif/")) && (!is_searching && !is_user) {
-        return Some(temp.to_string());
-    }
-
-    let mut filter = None;
-    let mut kind = None;
-    let mut style = None;
-    let mut search = None;
-    let mut limit = is_searching.then(|| "20".to_string());
-
-    for (key, value) in url.query_pairs() {
-        let value = value.into_owned();
-        match key.as_ref() {
-            "filter" => filter = Some(value),
-            "type" => kind = Some(value),
-            "style" => style = Some(value),
-            "search" => search = Some(value),
-            "limit" => limit = Some(value),
-            _ => {}
-        }
-    }
-
-    let mut api_url = Url::parse("https://api.createporn.com/post/").unwrap();
-
-
-        dbg!(&kind, &is_searching, &is_animated, &is_user);
-
-// Hack preserved
-
-  if is_searching && is_animated {
-        kind = Some("gif".to_string());
-    }
-
-
-    // Default kind
-    if kind.is_none() {
-        kind = Some(filter.clone().unwrap_or_else(|| "hot".to_string()));
-            }
-
-    match (is_user, is_searching, is_animated) {
-        (true, _, true) => api_url.set_path("post/profile-gifs"),
-        (true, _, false) => api_url.set_path("post/profile-images"),
-        (_, true, _) => api_url.set_path("post/search"),
-        (_, false, true) => api_url.set_path("post/gifs"),
-        _ => api_url.set_path("post/feed"),
-    }
-
-    if is_user && let Some(user_id) = url.path_segments()?.next_back() {
-        api_url
-            .query_pairs_mut()
-            .append_pair("user", user_id)
-            .append_pair("sort", filter.as_deref().unwrap_or("top"));
-    }
-
-        {
-        let mut qp = api_url.query_pairs_mut();
-
-        if is_searching {
-            if let Some(l) = &limit {
-                qp.append_pair("limit", l);
-            }
-            if let Some(s) = &search {
-                qp.append_pair("searchQuery", s);
-            }
-            if let Some(f) = &filter {
-                qp.append_pair("sort", f);
-            }
-            if is_animated && let Some(k) = &kind {
-                qp.append_pair("type", k);
-            }
-        } else if !is_user && let Some(k) = &kind {
-            qp.append_pair("type", k);
-        }
-
-        if let Some(s) = &style
-            && s != "all"
-        {
-            qp.append_pair(if is_animated { "style" } else { "generatorId" }, s);
-        }
-    }
-
-    Some(api_url.to_string())
-}*/
-
-use std::collections::HashMap;
 fn parse_url(input: &str) -> Option<String> {
     if input.is_empty() {
         return None;
@@ -245,7 +149,7 @@ fn parse_url(input: &str) -> Option<String> {
                 query.push(("searchQuery", q));
             }
 
-            query.push(("sort", filter.unwrap_or("new")));
+            query.push(("sort", filter.unwrap_or("hot")));
 
             // ONLY place where type=gif is valid
             if is_gif || ty == Some("gif") {
@@ -960,7 +864,13 @@ mod tests {
             ), (
             "https://www.createaifurry.com/?filter=new&type=image&style=all".to_string(),
                 Some("https://api.createporn.com/post/feed/new".to_string())
-        )
+        ), (
+            "https://www.createaifurry.com/post/search?search=nipple%20clamps&style=lineart".to_string(),
+                 Some("https://api.createporn.com/post/search?limit=20&style=lineart&searchQuery=nipple+clamps&sort=hot".to_string())
+        ),(
+                    "https://www.createaifurry.com/gif/search?filter=top6&style=lineart&search=nipple+clamps".to_string(),
+                    Some("https://api.createporn.com/post/search?limit=20&style=lineart&searchQuery=nipple+clamps&type=gif&sort=top6".to_string())
+                )
 
         ];
 
