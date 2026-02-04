@@ -142,7 +142,7 @@ fn parse_url(temp: &str) -> Option<String> {
         kind = Some("gif".to_string());
     }
 
-    
+
     // Default kind
     if kind.is_none() {
         kind = Some(filter.clone().unwrap_or_else(|| "hot".to_string()));
@@ -195,21 +195,16 @@ fn parse_url(temp: &str) -> Option<String> {
 
 use std::collections::HashMap;
 fn parse_url(input: &str) -> Option<String> {
-
-if input.is_empty() {
+    if input.is_empty() {
         return None;
     }
 
     let src = Url::parse(input).ok()?;
     let mut api = Url::parse("https://api.createporn.com").unwrap();
 
-    let segments: Vec<&str> = src
-        .path_segments()
-        .map(|s| s.collect())
-        .unwrap_or_default();
+    let segments: Vec<&str> = src.path_segments().map(|s| s.collect()).unwrap_or_default();
 
-    let params: HashMap<String, String> =
-        src.query_pairs().into_owned().collect();
+    let params: HashMap<String, String> = src.query_pairs().into_owned().collect();
 
     let filter = params.get("filter").map(String::as_str);
     let style = params.get("style").map(String::as_str);
@@ -258,9 +253,10 @@ if input.is_empty() {
             }
 
             if let Some(s) = style
-                && s != "all" {
-                    query.push(("style", s));
-                }
+                && s != "all"
+            {
+                query.push(("style", s));
+            }
         }
 
         /* -------- GIF FEED -------- */
@@ -268,19 +264,28 @@ if input.is_empty() {
             query.push(("type", filter.unwrap_or("hot")));
 
             if let Some(s) = style
-                && s != "all" {
-                    query.push(("style", s));
-                }
+                && s != "all"
+            {
+                query.push(("style", s));
+            }
         }
 
         /* -------- IMAGE FEED -------- */
         "/post/feed" => {
-            query.push(("type", filter.unwrap_or("hot")));
+            let sort = filter.unwrap_or("hot");
 
-            if let Some(s) = style
-                && s != "all" {
+            // "new" is a PATH segment, not a query param
+            if sort == "new" {
+                api.set_path("post/feed/new");
+            } else {
+                query.push(("type", sort));
+            }
+
+            if let Some(s) = style {
+                if s != "all" {
                     query.push(("generatorId", s));
                 }
+            }
         }
 
         _ => {}
@@ -289,7 +294,6 @@ if input.is_empty() {
     api.query_pairs_mut().extend_pairs(query);
     Some(api.into())
 }
-
 
 #[unsafe(no_mangle)]
 pub fn parser(
@@ -411,7 +415,6 @@ pub fn parser(
                         tag: files["_id"].to_string(),
                     })
                 });
-
 
                 // Adds job for getting file details
                 tag.insert(sharedtypes::TagObject {
@@ -954,7 +957,10 @@ mod tests {
             ),(
                 "https://www.createaifurry.com/gifs?filter=new&type=gif&style=all".to_string(),
                 Some("https://api.createporn.com/post/gifs?type=new".to_string()),
-            ),
+            ), (
+            "https://www.createaifurry.com/?filter=new&type=image&style=all".to_string(),
+                Some("https://api.createporn.com/post/feed/new".to_string())
+        )
 
         ];
 
