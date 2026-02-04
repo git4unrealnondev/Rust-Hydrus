@@ -97,6 +97,7 @@ pub fn url_dump(
     ret
 }
 
+/*
 fn parse_url(temp: &str) -> Option<String> {
     let url = Url::parse(temp).ok()?;
 
@@ -132,10 +133,20 @@ fn parse_url(temp: &str) -> Option<String> {
 
     let mut api_url = Url::parse("https://api.createporn.com/post/").unwrap();
 
+
+        dbg!(&kind, &is_searching, &is_animated, &is_user);
+
+// Hack preserved
+
+  if is_searching && is_animated {
+        kind = Some("gif".to_string());
+    }
+
+    
     // Default kind
     if kind.is_none() {
         kind = Some(filter.clone().unwrap_or_else(|| "hot".to_string()));
-    }
+            }
 
     match (is_user, is_searching, is_animated) {
         (true, _, true) => api_url.set_path("post/profile-gifs"),
@@ -152,11 +163,7 @@ fn parse_url(temp: &str) -> Option<String> {
             .append_pair("sort", filter.as_deref().unwrap_or("top"));
     }
 
-    // Hack preserved
-    if is_searching && is_animated {
-        kind = Some("gif".to_string());
-    }
-    {
+        {
         let mut qp = api_url.query_pairs_mut();
 
         if is_searching {
@@ -184,7 +191,105 @@ fn parse_url(temp: &str) -> Option<String> {
     }
 
     Some(api_url.to_string())
+}*/
+
+use std::collections::HashMap;
+fn parse_url(input: &str) -> Option<String> {
+
+if input.is_empty() {
+        return None;
+    }
+
+    let src = Url::parse(input).ok()?;
+    let mut api = Url::parse("https://api.createporn.com").unwrap();
+
+    let segments: Vec<&str> = src
+        .path_segments()
+        .map(|s| s.collect())
+        .unwrap_or_default();
+
+    let params: HashMap<String, String> =
+        src.query_pairs().into_owned().collect();
+
+    let filter = params.get("filter").map(String::as_str);
+    let style = params.get("style").map(String::as_str);
+    let search = params.get("search").map(String::as_str);
+    let ty = params.get("type").map(String::as_str);
+
+    let is_user = segments.first() == Some(&"user");
+    let is_search = segments.contains(&"search");
+    let is_gif = segments.iter().any(|s| *s == "gif" || *s == "gifs");
+
+    /* ---------------- PATH ---------------- */
+
+    match (is_user, is_search, is_gif) {
+        (true, _, true) => api.set_path("post/profile-gifs"),
+        (true, _, false) => api.set_path("post/profile-images"),
+        (_, true, _) => api.set_path("post/search"),
+        (_, false, true) => api.set_path("post/gifs"),
+        _ => api.set_path("post/feed"),
+    }
+
+    /* ---------------- QUERY ---------------- */
+
+    let mut query: Vec<(&str, &str)> = vec![];
+
+    match api.path() {
+        /* -------- USER -------- */
+        "/post/profile-images" | "/post/profile-gifs" => {
+            let user_id = segments.get(1)?;
+            query.push(("user", user_id));
+            query.push(("sort", filter.unwrap_or("top")));
+        }
+
+        /* -------- SEARCH -------- */
+        "/post/search" => {
+            query.push(("limit", "20"));
+
+            if let Some(q) = search {
+                query.push(("searchQuery", q));
+            }
+
+            query.push(("sort", filter.unwrap_or("new")));
+
+            // ONLY place where type=gif is valid
+            if is_gif || ty == Some("gif") {
+                query.push(("type", "gif"));
+            }
+
+            if let Some(s) = style
+                && s != "all" {
+                    query.push(("style", s));
+                }
+        }
+
+        /* -------- GIF FEED -------- */
+        "/post/gifs" => {
+            query.push(("type", filter.unwrap_or("hot")));
+
+            if let Some(s) = style
+                && s != "all" {
+                    query.push(("style", s));
+                }
+        }
+
+        /* -------- IMAGE FEED -------- */
+        "/post/feed" => {
+            query.push(("type", filter.unwrap_or("hot")));
+
+            if let Some(s) = style
+                && s != "all" {
+                    query.push(("generatorId", s));
+                }
+        }
+
+        _ => {}
+    }
+
+    api.query_pairs_mut().extend_pairs(query);
+    Some(api.into())
 }
+
 
 #[unsafe(no_mangle)]
 pub fn parser(
@@ -846,7 +951,11 @@ mod tests {
             ),(
                 "https://www.createaifurry.com/user/6860abf2415eadac56bab8b0?type=gif".to_string(),
                 Some("https://api.createporn.com/post/profile-gifs?user=6860abf2415eadac56bab8b0&sort=top".to_string()),
+            ),(
+                "https://www.createaifurry.com/gifs?filter=new&type=gif&style=all".to_string(),
+                Some("https://api.createporn.com/post/gifs?type=new".to_string()),
             ),
+
         ];
 
         // Checks to see if the params are equal and if they aren't then then we check the url
@@ -864,6 +973,7 @@ mod tests {
                     .into_owned()
                     .collect();
                 if param1 != param2 {
+                    dbg!(&param1, &param2);
                     assert_eq!(parse_url(url), valid.clone());
                 }
                 assert!(param1 == param2);
