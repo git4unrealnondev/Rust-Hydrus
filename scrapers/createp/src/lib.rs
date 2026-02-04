@@ -5,11 +5,11 @@ use chrono::Utc;
 use json::JsonValue;
 use scraper::Selector;
 use std::collections::BTreeMap;
+use std::collections::HashMap;
 use std::collections::HashSet;
 use std::time::Duration;
 use unescape::unescape;
 use url::Url;
-use std::collections::HashMap;
 
 pub const SITE: &str = "createporn";
 
@@ -304,21 +304,19 @@ pub fn parser(
 
                 // if we get recursion,true as an input then we should rescrape otherwise skip
 
-                let should_grab_post: Option<sharedtypes::SkipIf> = (scraperdata
-                    .system_data
-                    .get("recursion")
-                    != Some(&"true".to_string()))
-                .then(|| {
-                    sharedtypes::SkipIf::FileTagRelationship(sharedtypes::Tag {
-                        namespace: sharedtypes::GenericNamespaceObj {
-                            name: format!("createporn_{}_id", scraperdata.job.site),
-                            description: Some(
-                                "A file's unique id inside of the createporn site".to_string(),
-                            ),
-                        },
-                        tag: files["_id"].to_string(),
-                    })
-                });
+                let should_grab_post =
+                    match scraperdata.system_data.get("recursion").map(String::as_str) {
+                        Some("true") => None,
+                        _ => Some(sharedtypes::SkipIf::FileTagRelationship(sharedtypes::Tag {
+                            namespace: sharedtypes::GenericNamespaceObj {
+                                name: format!("createporn_{}_id", scraperdata.job.site),
+                                description: Some(
+                                    "A file's unique id inside of the createporn site".to_string(),
+                                ),
+                            },
+                            tag: files["_id"].to_string(),
+                        })),
+                    };
 
                 // Adds job for getting file details
                 tag.insert(sharedtypes::TagObject {
