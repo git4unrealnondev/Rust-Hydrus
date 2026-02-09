@@ -54,6 +54,11 @@ parking_lot = {version="0.12.5", features=["deadlock_detection"]}
 tokio = {version="1.48.0", features=["rt-multi-thread", "macros"]}
 uuid = "1.18.1"
 fuzz-search = "0.1.0"
+web_api = {path="generators/web_api"}
+warp = { version = "0.4.2", features = ["server"] }
+utoipa = "5.4.0"
+utoipa-swagger-ui = { version = "9.0.2", features = ["axum"] }
+utoipauto = "0.2.0"
 
 [features]
 default = ["exe_build"]
@@ -73,7 +78,8 @@ debug = false
 
 [build-dependencies]
 walkdir = "2.4.0"
-
+quote = "1.0.44"
+syn = { version = "2.0.114", features = ["full"] }
 
 [profile.release-with-debug]
 inherits = "release"

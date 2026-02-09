@@ -91,11 +91,11 @@ pub fn get_modifiers(
 ///
 /// Waits a bit for process control
 ///
-pub fn ratelimiter_wait(ratelimit_object: &Arc<Mutex<Ratelimiter>>) {
+pub fn ratelimiter_wait(ratelimit_object: &Arc<RwLock<Ratelimiter>>) {
     loop {
         let limit;
         {
-            let hold = ratelimit_object.lock();
+            let hold = ratelimit_object.read();
             limit = hold.try_wait();
         }
         match limit {
@@ -182,7 +182,7 @@ pub fn client_create(
 pub async fn dltext_new(
     url_string: &String,
     client: Arc<RwLock<Client>>,
-    ratelimiter_obj: &Arc<Mutex<Ratelimiter>>,
+    ratelimiter_obj: &Arc<RwLock<Ratelimiter>>,
     worker_id: &usize,
 ) -> Result<(String, String), Box<dyn Error>> {
     // let mut ret: Vec<AHashMap<String, AHashMap<String, Vec`<String>`>>> =
@@ -406,7 +406,7 @@ pub fn dlfile_new(
     db: Main,
     file: &mut sharedtypes::FileObject,
     globalload: Option<GlobalLoad>,
-    ratelimiter_obj: &Arc<Mutex<Ratelimiter>>,
+    ratelimiter_obj: &Arc<RwLock<Ratelimiter>>,
     source_url: &String,
     workerid: &usize,
     jobid: &usize,

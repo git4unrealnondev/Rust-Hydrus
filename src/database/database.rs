@@ -29,6 +29,9 @@ use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
+use utoipa::OpenApi;
+use utoipauto::utoipauto;
+use web_api::web_api;
 
 use crate::database::inmemdbnew::NewinMemDB;
 /// I dont want to keep writing .to_string on EVERY vector of strings. Keeps me
@@ -53,6 +56,7 @@ pub enum CacheType {
     // Will be use to query the DB directly. No caching.
     Bare,
 }
+
 #[derive(Clone)]
 /// Holder of database self variables
 pub struct Main {
@@ -70,302 +74,59 @@ pub struct Main {
     pub(super) localref: Option<Arc<RwLock<Main>>>,
 }
 
-/// Contains DB functions.
+/// Handles transactional pushes.
+pub fn transaction_execute(trans: &Transaction, inp: String) {
+    trans.execute(&inp, params![]).unwrap();
+}
+
+/// Read only items from the db
+#[web_api]
 impl Main {
-    /// Sets up new db instance.
-    pub fn new(path: Option<String>, vers: usize) -> Self {
-        // Initiates two tnections to the DB. Cheap workaround to avoid loading errors.
-        let mut first_time_load_flag = false;
-        let mut main = match path {
-            Some(ref file_path) => {
-                first_time_load_flag = Path::new(&file_path).exists();
-                let memdb = Arc::new(RwLock::new(NewinMemDB::new()));
-                let manager = SqliteConnectionManager::memory();
-                let pool = r2d2::Builder::new().max_size(20).build(manager).unwrap();
-                let write_conn = Arc::new(Mutex::new(pool.get().unwrap()));
-                let write_conn_istransaction = Arc::new(Mutex::new(false));
-                let memdbmain = Main {
-                    _dbpath: path.clone(),
-                    _vers: vers,
-                    pool,
-                    write_conn,
-                    write_conn_istransaction,
-                    _active_vers: 0,
-                    _inmemdb: memdb.clone(),
-                    tables_loaded: Arc::new(vec![].into()),
-                    tables_loading: Arc::new(vec![].into()),
-                    _cache: CacheType::Bare,
-                    // globalload: None,
-                    localref: None,
-                };
-                //                let tnection = dbinit(file_path);
-                let manager = SqliteConnectionManager::file(file_path).with_init(|conn| {
-                    conn.execute_batch(
-                        "
-PRAGMA journal_mode = WAL;
-            PRAGMA synchronous = NORMAL;
-            PRAGMA secure_delete = 0;PRAGMA busy_timeout = 20000;
-            PRAGMA page_size = 8192;
-            PRAGMA cache_size = -500000;
-    ",
-                    )?;
-
-                    // Enable SQL tracing
-                    /*   conn.trace(Some(|sql| {
-                        println!("[SQL TRACE] {}", sql);
-                    }));*/
-                    Ok(())
-                });
-                let pool = r2d2::Builder::new()
-                    .idle_timeout(Some(Duration::from_secs(5)))
-                    .max_size(10)
-                    .build(manager)
-                    .unwrap();
-                let write_conn = Arc::new(Mutex::new(pool.get().unwrap()));
-                let write_conn_istransaction = Arc::new(Mutex::new(false));
-                let main = Main {
-                    _dbpath: path,
-                    _vers: vers,
-                    pool,
-                    write_conn,
-                    write_conn_istransaction,
-                    _active_vers: 0,
-                    _inmemdb: memdb.clone(),
-                    tables_loaded: Arc::new(vec![].into()),
-                    tables_loading: Arc::new(vec![].into()),
-                    _cache: CacheType::InMemdb,
-                    //  globalload: None,
-                    localref: None,
-                };
-                main
-            }
-            None => {
-                first_time_load_flag = false;
-                let memdb = Arc::new(RwLock::new(NewinMemDB::new()));
-                let db_uuid = uuid::Uuid::new_v4();
-                let memdb_uri = format!("file:memdb_{}?mode=memory&cache=shared", db_uuid);
-
-                let manager = SqliteConnectionManager::file(&memdb_uri).with_init(|conn| {
-                    conn.execute_batch(
-                        "
-PRAGMA journal_mode = WAL;
-            PRAGMA synchronous = NORMAL;
-            PRAGMA secure_delete = 0;PRAGMA busy_timeout = 20000;
-            PRAGMA page_size = 8192;
-            PRAGMA cache_size = -500000;
-
-                        ",
-                    )?;
-                    conn.trace(Some(|sql| println!("[SQL TRACE] {}", sql)));
-                    Ok(())
-                });
-
-                let pool = r2d2::Builder::new().max_size(100).build(manager).unwrap();
-
-                // Grab a "write" connection for operations that need exclusive access
-                let write_conn = Arc::new(Mutex::new(pool.get().unwrap()));
-                let write_conn_istransaction = Arc::new(Mutex::new(false));
-                dbg!("a");
-                let main = Main {
-                    _dbpath: None,
-                    _vers: vers,
-                    pool,
-                    write_conn,
-                    write_conn_istransaction,
-                    _active_vers: 0,
-                    _inmemdb: memdb.clone(),
-                    tables_loaded: Arc::new(vec![].into()),
-                    tables_loading: Arc::new(vec![].into()),
-                    _cache: CacheType::Bare,
-                    //                globalload: None,
-                    localref: None,
-                };
-                main
-            }
-        };
-        // let path = String::from("./main.db");
-        // Sets default settings for db settings.
-        if !first_time_load_flag {
-            // Database Doesn't exist
-            main.first_db();
-
-            main.transaction_flush();
-
-            dbg!("made first db");
-            main.updatedb();
-            dbg!("made update db");
-            main.load_table(&sharedtypes::LoadDBTable::Settings);
-            dbg!("made loaded table db");
-            main.load_caching();
-            dbg!("cached  db");
-        } else {
-            // Database does exist.
-            logging::log(format!(
-                "Database Exists: {} : Skipping creation.",
-                first_time_load_flag
-            ));
-            main.load_table(&sharedtypes::LoadDBTable::Settings);
-            main.load_caching();
-        }
-        main.transaction_flush();
-        main
+    /// A test function to return 1
+    pub fn test(&self) -> u32 {
+        1
     }
 
     /// Returns the db version number
     pub fn db_vers_get(&self) -> usize {
         self._active_vers
     }
-
-    /// Clears in memdb structures
-    pub fn clear_cache(&self) {
+    ///
+    /// Returns a list of loaded tag ids
+    ///
+    pub fn tags_get_list_id(&self) -> HashSet<usize> {
         match self._cache {
-            CacheType::Bare => {}
-            _ => {
-                self._inmemdb.write().clear_all();
-            }
+            CacheType::Bare => self.tags_get_id_list_sql(),
+            _ => self._inmemdb.read().tags_get_list_id(),
         }
     }
 
-    ///
-    /// Starts an exclusive write transaction
-    ///
-    pub(super) fn transaction_exclusive_start(&self) {
-        self.transaction_flush();
-
-        let mut transaction = self.write_conn_istransaction.lock();
-        if !*transaction {
-            *transaction = true;
-            self.write_conn
-                .lock()
-                .execute("BEGIN EXCLUSIVE TRANSACTION", []);
-        }
-    }
-    ///
-    /// Starts an exclusive write transaction
-    ///
-    pub(super) fn transaction_start(&self) {
-        self.transaction_flush();
-
-        let mut transaction = self.write_conn_istransaction.lock();
-        if !*transaction {
-            *transaction = true;
-            self.write_conn.lock().execute("BEGIN TRANSACTION", []);
+    /// returns file id's based on relationships with a tag
+    pub fn relationship_get_fileid(&self, tag: &usize) -> HashSet<usize> {
+        match self._cache {
+            CacheType::Bare => self.relationship_get_fileid_sql(tag),
+            _ => self._inmemdb.read().relationship_get_fileid(tag),
         }
     }
 
-    ///
-    /// commits an exclusive write transaction
-    ///
-    pub fn transaction_flush(&self) {
-        logging::log("Flushing to disk");
-        let mut transaction = self.write_conn_istransaction.lock();
-        if *transaction {
-            let conn = self.write_conn.lock();
-            conn.execute("COMMIT", []);
-            *transaction = false;
-            dbg!("Flushing");
+    /// Gets one fileid from one tagid
+    pub fn relationship_get_one_fileid(&self, tag: &usize) -> Option<usize> {
+        //self._inmemdb.relationship_get_one_fileid(tag)
+        let temp = self.relationship_get_fileid(tag);
+        let out = temp.iter().next();
+        out.copied()
+    }
+
+    /// Returns tagid's based on relationship with a fileid.
+    pub fn relationship_get_tagid(&self, file_id: &usize) -> HashSet<usize> {
+        match self._cache {
+            CacheType::Bare => self.relationship_get_tagid_sql(file_id),
+            _ => self._inmemdb.read().relationship_get_tagid(file_id),
         }
     }
 
-    ///
-    /// Gets one tnection from the sqlite pool
-    ///
-    pub(super) fn get_database_connection(&self) -> PooledConnection<SqliteConnectionManager> {
-        loop {
-            match self.pool.get() {
-                Ok(out) => {
-                    return out;
-                }
-                Err(_) => {
-                    dbg!("a");
-                }
-            }
-        }
-    }
-
-    ///
-    /// Loads the cache configuration
-    ///
-    pub fn load_caching(&mut self) {
-        let temp;
-
-        loop {
-            let cache = match self.settings_get_name(&"dbcachemode".into()) {
-                None => {
-                    self.setup_default_cache();
-                    self.settings_get_name(&"dbcachemode".into())
-                        .unwrap()
-                        .param
-                        .clone()
-                }
-                Some(setting) => setting.param.clone(),
-            };
-
-            if let Some(ref cache) = cache {
-                let cachemode = match cache.as_str() {
-                    "Bare" => Some(CacheType::Bare),
-                    "InMemdb" => Some(CacheType::InMemdb),
-                    "InMemory" => Some(CacheType::InMemory),
-                    _ => {
-                        self.setup_default_cache();
-                        None
-                    }
-                };
-                if let Some(cachemode) = cachemode {
-                    temp = cachemode;
-                    break;
-                }
-            } else {
-                self.setup_default_cache();
-            }
-        }
-
-        self._cache = temp
-    }
-
-    ///
-    /// Sets up the default location to dump misbehaving files
-    ///
-    pub fn setup_defaut_misplaced_location(&self) -> String {
-        let mut conn = self.get_database_connection();
-        let tn = &conn.transaction().unwrap();
-        let loc = self.location_get();
-        let outpath = Path::new(&loc);
-        let out = outpath.parent().unwrap().join(Path::new("Files-Dump"));
-        file::folder_make(&out.to_string_lossy().to_string());
-        out.to_string_lossy().to_string()
-    }
-
-    ///
-    /// Checks the relationships table for any dead tagids
-    /// Only cleans the tags where they are linked to a fileid
-    ///
-    pub fn check_relationship_tag_relations(&self) {
-        self.load_table(&sharedtypes::LoadDBTable::Files);
-        self.load_table(&sharedtypes::LoadDBTable::Relationship);
-        self.load_table(&sharedtypes::LoadDBTable::Tags);
-        let mut flag = false;
-        logging::info_log("Relationship-Tag-Relations checker starting check");
-
-        for fid in self.file_get_list_id().iter() {
-            for tid in self.relationship_get_tagid(fid).iter() {
-                if self.tag_id_get(tid).is_none() {
-                    flag = true;
-                    logging::log(format!(
-                        "Relationship-Tag-Relations checker found bad tid {tid} relating to fid: {fid} deleting empty relationship"
-                    ));
-                    self.relationship_remove(fid, tid);
-                }
-            }
-        }
-
-        if flag {
-            logging::info_log("Relationship-Tag-Relations checker condensing tags");
-            self.condense_tags();
-            self.vacuum();
-        }
-        logging::info_log("Relationship-Tag-Relations checker ending check");
-        self.transaction_flush();
+    pub fn settings_get_name(&self, name: &String) -> Option<sharedtypes::DbSettingObj> {
+        self._inmemdb.read().settings_get_name(name).cloned()
     }
 
     ///
@@ -647,19 +408,6 @@ PRAGMA journal_mode = WAL;
     }
 
     ///
-    /// Adds a dead url into the db
-    ///
-    pub fn add_dead_url(&self, url: &String) {
-        self.add_dead_url_sql(url);
-        match self._cache {
-            CacheType::Bare => {}
-            _ => {
-                self._inmemdb.write().add_dead_source_url(url.to_string());
-            }
-        }
-    }
-
-    ///
     ///Checks if a url is dead
     ///
     pub fn check_dead_url(&self, url: &String) -> bool {
@@ -673,31 +421,6 @@ PRAGMA journal_mode = WAL;
         }
     }
 
-    /// Adds the job to the inmemdb
-    pub fn jobs_add_new_todb(&self, job: sharedtypes::DbJobsObj) {
-        match self._cache {
-            /*CacheType::Bare => {
-                self.jobs_add_sql( &job);
-            }*/
-            _ => {
-                self._inmemdb.write().jobref_new(job);
-            }
-        }
-    }
-
-    ///
-    /// Flips the running of a job by id
-    /// Returns the status of the job if it exists
-    ///
-    pub fn jobs_flip_running(&self, id: &usize) -> Option<bool> {
-        match self._cache {
-            CacheType::Bare => {
-                todo!("Bare implementation not implemineted");
-            }
-            _ => self._inmemdb.write().jobref_flip_isrunning(id),
-        }
-    }
-
     /// Gets all running jobs in the db
     pub fn jobs_get_isrunning(&self) -> HashSet<sharedtypes::DbJobsObj> {
         match self._cache {
@@ -707,45 +430,6 @@ PRAGMA journal_mode = WAL;
             _ => self._inmemdb.read().jobref_get_isrunning(),
         }
     }
-
-    /// File Sanity Checker This will check that the files by id will have a matching
-    /// location & hash.
-    pub fn db_sanity_check_file(&self) {
-        self.load_table(&sharedtypes::LoadDBTable::Files);
-        todo!("Need to fix this files are sucky");
-        let flist = self.file_get_list_id();
-        /*flist.par_iter().for_each(|feach| {
-            // Check is needed to support if the file with nonexistant info was gotten from db
-            if let Some(filestorage_obj) = self.file_get_id( feach) {
-                let fileinfo = match filestorage_obj {
-                    sharedtypes::DbFileStorage::Exist(file) => file,
-                    _ => {
-                        panic!("Pulled item that shouldnt exist: {:?}", filestorage_obj);
-                    }
-                };
-                loop {
-                    let location = self.storage_get_string( &fileinfo.storage_id).unwrap();
-                    let temppath = &format!("{}/{}", location, fileinfo.hash);
-                    if Path::new(temppath).exists() {
-                        let fil = std::fs::read(temppath).unwrap();
-                        let hinfo = download::hash_bytes(
-                            &bytes::Bytes::from(fil),
-                            &sharedtypes::HashesSupported::Sha512(fileinfo.hash.clone()),
-                        );
-                        if !hinfo.1 {
-                            dbg!(format!(
-                                "BAD HASH: ID: {}  HASH: {}   2ND HASH: {}",
-                                fileinfo.id, fileinfo.hash, hinfo.0
-                            ));
-                        }
-                    }
-                }
-            } else {
-                dbg!(format!("File ID: {} Does not exist.", &feach));
-            }
-        });*/
-    }
-
     ///
     /// Returns all locations currently inside of the db.
     ///
@@ -870,7 +554,7 @@ PRAGMA journal_mode = WAL;
         None
     }
 
-    /// Wrapper
+    /// Gets all jobs loaded in the db
     pub fn jobs_get_all(&self) -> HashMap<usize, sharedtypes::DbJobsObj> {
         match &self._cache {
             //CacheType::Bare => self.jobs_get_all_sql(),
@@ -896,61 +580,6 @@ PRAGMA journal_mode = WAL;
         }
     }
 
-    ///
-    ///Returns the max id of something inside of the db
-    ///
-    pub fn tags_max_id(&self) -> usize {
-        match self._cache {
-            CacheType::Bare => self.tags_max_return_sql(),
-            _ => self._inmemdb.read().tags_max_return(),
-        }
-    }
-
-    ///
-    /// Returns a list of loaded tag ids
-    ///
-    pub fn tags_get_list_id(&self) -> HashSet<usize> {
-        match self._cache {
-            CacheType::Bare => self.tags_get_id_list_sql(),
-            _ => self._inmemdb.read().tags_get_list_id(),
-        }
-    }
-
-    /// returns file id's based on relationships with a tag
-    pub fn relationship_get_fileid(&self, tag: &usize) -> HashSet<usize> {
-        match self._cache {
-            CacheType::Bare => self.relationship_get_fileid_sql(tag),
-            _ => self._inmemdb.read().relationship_get_fileid(tag),
-        }
-    }
-
-    pub fn relationship_get_one_fileid(&self, tag: &usize) -> Option<usize> {
-        //self._inmemdb.relationship_get_one_fileid(tag)
-        let temp = self.relationship_get_fileid(tag);
-        let out = temp.iter().next();
-        out.copied()
-    }
-
-    /// Returns tagid's based on relationship with a fileid.
-    pub fn relationship_get_tagid(&self, file_id: &usize) -> HashSet<usize> {
-        match self._cache {
-            CacheType::Bare => self.relationship_get_tagid_sql(file_id),
-            _ => self._inmemdb.read().relationship_get_tagid(file_id),
-        }
-    }
-
-    pub fn settings_get_name(&self, name: &String) -> Option<sharedtypes::DbSettingObj> {
-        self._inmemdb.read().settings_get_name(name).cloned()
-    }
-
-    /// Returns next jobid from _inmemdb
-    pub fn jobs_get_max(&self) -> usize {
-        match self._cache {
-            //  CacheType::Bare => self.jobs_return_count_sql(),
-            _ => *self._inmemdb.read().jobs_get_max(),
-        }
-    }
-
     /// Vacuums database. cleans everything.
     pub(super) fn vacuum(&self) {
         logging::info_log("Starting Vacuum db!".to_string());
@@ -971,6 +600,580 @@ PRAGMA journal_mode = WAL;
             tn.execute("ANALYZE", []);
         }
         logging::info_log("Finishing analyze db!".to_string());
+    }
+
+    ///
+    /// Convience function to get a list of files that are images
+    ///
+    pub fn extensions_images_get_fileid(&self) -> HashSet<usize> {
+        let exts = &["jpg".to_string(), "png".to_string(), "tiff".to_string()];
+        self.extensions_get_fileid_extstr_sql(exts)
+    }
+
+    ///
+    /// Convience function to get a list of files that are videos
+    ///
+    pub fn extensions_videos_get_fileid(&self) -> HashSet<usize> {
+        let exts = &[
+            "mkv".to_string(),
+            "webm".to_string(),
+            "gif".to_string(),
+            "mp4".to_string(),
+        ];
+        self.extensions_get_fileid_extstr_sql(exts)
+    }
+
+    ///
+    /// Gets an ID if a extension string exists
+    ///
+    pub fn extension_get_id(&self, ext: &String) -> Option<usize> {
+        match self._cache {
+            CacheType::Bare => self.extension_get_id_sql(ext),
+            _ => self._inmemdb.read().extension_get_id(ext).copied(),
+        }
+    }
+    ///
+    /// Gets an ID if a extension string exists
+    ///
+    pub fn extension_get_string(&self, ext_id: &usize) -> Option<String> {
+        match self._cache {
+            CacheType::Bare => self.extension_get_string_sql(ext_id),
+            _ => self._inmemdb.read().extension_get_string(ext_id).cloned(),
+        }
+    }
+    ///
+    /// Gets a fileid from a hash
+    ///
+    pub fn file_get_hash(&self, hash: &String) -> Option<usize> {
+        match self._cache {
+            CacheType::Bare => self.file_get_id_sql(hash),
+            _ => self._inmemdb.read().file_get_hash(hash).copied(),
+        }
+    }
+
+    /// Gets a file from storage from its id
+    pub fn file_get_id(&self, file_id: &usize) -> Option<sharedtypes::DbFileStorage> {
+        match self._cache {
+            CacheType::Bare => self.files_get_id_sql(file_id),
+            _ => self._inmemdb.read().file_get_id(file_id).cloned(),
+        }
+    }
+
+    /// Returns all file id's loaded in db
+    pub fn file_get_list_id(&self) -> HashSet<usize> {
+        match self._cache {
+            CacheType::Bare => self.file_get_list_id_sql(),
+            _ => self._inmemdb.read().file_get_list_id(),
+        }
+    }
+
+    pub fn file_get_list_all(&self) -> HashMap<usize, sharedtypes::DbFileStorage> {
+        match self._cache {
+            CacheType::Bare => {
+                let mut out = HashMap::new();
+                for fid in self.file_get_list_id() {
+                    if let Some(file) = self.file_get_id(&fid) {
+                        out.insert(fid, file);
+                    }
+                }
+                out
+            }
+            _ => self._inmemdb.read().file_get_list_all().clone(),
+        }
+    }
+
+    ///
+    /// Gets a tagid from a unique tag and namespace combo
+    ///
+    pub fn tag_get_name(&self, tag: String, namespace: usize) -> Option<usize> {
+        let tagobj = &sharedtypes::DbTagNNS {
+            name: tag,
+            namespace,
+        };
+
+        self.tag_get_name_tagobject(tagobj)
+    }
+
+    ///
+    /// Gets a tagid from a tagobject
+    ///
+    pub fn tag_get_name_tagobject(&self, tagobj: &sharedtypes::DbTagNNS) -> Option<usize> {
+        match self._cache {
+            CacheType::Bare => self.tags_get_id_sql(tagobj),
+            _ => self._inmemdb.read().tags_get_id(tagobj).copied(),
+        }
+    }
+
+    /// db get namespace wrapper
+    pub fn namespace_get(&self, namespace: &String) -> Option<usize> {
+        match self._cache {
+            CacheType::Bare => self.namespace_get_id_sql(namespace),
+            _ => self._inmemdb.read().namespace_get(namespace).copied(),
+        }
+    }
+
+    /// Returns namespace as a string from an ID returns None if it doesn't exist.
+    pub fn namespace_get_string(&self, ns_id: &usize) -> Option<sharedtypes::DbNamespaceObj> {
+        match self._cache {
+            CacheType::Bare => self.namespace_get_namespaceobj_sql(ns_id),
+            _ => self._inmemdb.read().namespace_id_get(ns_id).cloned(),
+        }
+    }
+
+    /// Gets all tag's assocated a singular namespace
+    pub fn namespace_get_tagids(&self, id: &usize) -> HashSet<usize> {
+        match self._cache {
+            CacheType::Bare => self.namespace_get_tagids_sql(id),
+            _ => self._inmemdb.read().namespace_get_tagids(id),
+        }
+    }
+
+    /// Checks if a tag exists in a namespace
+    pub fn namespace_contains_id(&self, namespace_id: &usize, tag_id: &usize) -> bool {
+        match self._cache {
+            CacheType::Bare => self.namespace_contains_id_sql(tag_id, namespace_id),
+            _ => self.namespace_get_tagids(namespace_id).contains(tag_id),
+        }
+    }
+
+    /// Retuns namespace id's
+    pub fn namespace_keys(&self) -> Vec<usize> {
+        match self._cache {
+            CacheType::Bare => self.namespace_keys_sql(),
+            _ => self._inmemdb.read().namespace_keys(),
+        }
+    }
+
+    ///
+    /// Gets a parent id if they exist
+    ///
+    pub(super) fn parents_get(&self, parent: &sharedtypes::DbParentsObj) -> Option<usize> {
+        match self._cache {
+            CacheType::Bare => {
+                let tagid = self.parents_get_id_list_sql(parent);
+
+                if tagid.is_empty() {
+                    None
+                } else {
+                    let tags: Vec<usize> = tagid.into_iter().collect();
+                    Some(tags[0])
+                }
+            }
+            _ => self._inmemdb.read().parents_get(parent).copied(),
+        }
+    }
+
+    /// Relates the list of relationships assoicated with tag
+    pub fn parents_rel_get(&self, relid: &usize) -> HashSet<usize> {
+        match self._cache {
+            CacheType::Bare => self.parents_tagid_get(relid),
+            _ => self._inmemdb.read().parents_rel_get(relid, None),
+        }
+    }
+
+    /// Relates the list of tags assoicated with relations
+    pub fn parents_tag_get(&self, tagid: &usize) -> HashSet<usize> {
+        match self._cache {
+            CacheType::Bare => self.parents_relatetagid_get(tagid),
+            _ => self._inmemdb.read().parents_tag_get(tagid, None),
+        }
+    }
+
+    /// Returns the location of the file storage path. Helper function
+    pub fn location_get(&self) -> String {
+        self.settings_get_name(&"FilesLoc".to_string())
+            .unwrap()
+            .param
+            .as_ref()
+            .unwrap()
+            .to_owned()
+    }
+}
+
+/// Contains DB functions.
+impl Main {
+    /// Sets up new db instance.
+    pub fn new(path: Option<String>, vers: usize) -> Self {
+        // Initiates two tnections to the DB. Cheap workaround to avoid loading errors.
+        let mut first_time_load_flag = false;
+        let mut main = match path {
+            Some(ref file_path) => {
+                first_time_load_flag = Path::new(&file_path).exists();
+                let memdb = Arc::new(RwLock::new(NewinMemDB::new()));
+                let manager = SqliteConnectionManager::memory();
+                let pool = r2d2::Builder::new().max_size(20).build(manager).unwrap();
+                let write_conn = Arc::new(Mutex::new(pool.get().unwrap()));
+                let write_conn_istransaction = Arc::new(Mutex::new(false));
+                let memdbmain = Main {
+                    _dbpath: path.clone(),
+                    _vers: vers,
+                    pool,
+                    write_conn,
+                    write_conn_istransaction,
+                    _active_vers: 0,
+                    _inmemdb: memdb.clone(),
+                    tables_loaded: Arc::new(vec![].into()),
+                    tables_loading: Arc::new(vec![].into()),
+                    _cache: CacheType::Bare,
+                    // globalload: None,
+                    localref: None,
+                };
+                //                let tnection = dbinit(file_path);
+                let manager = SqliteConnectionManager::file(file_path).with_init(|conn| {
+                    conn.execute_batch(
+                        "
+PRAGMA journal_mode = WAL;
+            PRAGMA synchronous = NORMAL;
+            PRAGMA secure_delete = 0;PRAGMA busy_timeout = 20000;
+            PRAGMA page_size = 8192;
+            PRAGMA cache_size = -500000;
+    ",
+                    )?;
+
+                    // Enable SQL tracing
+                    /*   conn.trace(Some(|sql| {
+                        println!("[SQL TRACE] {}", sql);
+                    }));*/
+                    Ok(())
+                });
+                let pool = r2d2::Builder::new()
+                    .idle_timeout(Some(Duration::from_secs(5)))
+                    .max_size(10)
+                    .build(manager)
+                    .unwrap();
+                let write_conn = Arc::new(Mutex::new(pool.get().unwrap()));
+                let write_conn_istransaction = Arc::new(Mutex::new(false));
+                let main = Main {
+                    _dbpath: path,
+                    _vers: vers,
+                    pool,
+                    write_conn,
+                    write_conn_istransaction,
+                    _active_vers: 0,
+                    _inmemdb: memdb.clone(),
+                    tables_loaded: Arc::new(vec![].into()),
+                    tables_loading: Arc::new(vec![].into()),
+                    _cache: CacheType::InMemdb,
+                    //  globalload: None,
+                    localref: None,
+                };
+                main
+            }
+            None => {
+                first_time_load_flag = false;
+                let memdb = Arc::new(RwLock::new(NewinMemDB::new()));
+                let db_uuid = uuid::Uuid::new_v4();
+                let memdb_uri = format!("file:memdb_{}?mode=memory&cache=shared", db_uuid);
+
+                let manager = SqliteConnectionManager::file(&memdb_uri).with_init(|conn| {
+                    conn.execute_batch(
+                        "
+PRAGMA journal_mode = WAL;
+            PRAGMA synchronous = NORMAL;
+            PRAGMA secure_delete = 0;PRAGMA busy_timeout = 20000;
+            PRAGMA page_size = 8192;
+            PRAGMA cache_size = -500000;
+
+                        ",
+                    )?;
+                    conn.trace(Some(|sql| println!("[SQL TRACE] {}", sql)));
+                    Ok(())
+                });
+
+                let pool = r2d2::Builder::new().max_size(100).build(manager).unwrap();
+
+                // Grab a "write" connection for operations that need exclusive access
+                let write_conn = Arc::new(Mutex::new(pool.get().unwrap()));
+                let write_conn_istransaction = Arc::new(Mutex::new(false));
+                dbg!("a");
+                let main = Main {
+                    _dbpath: None,
+                    _vers: vers,
+                    pool,
+                    write_conn,
+                    write_conn_istransaction,
+                    _active_vers: 0,
+                    _inmemdb: memdb.clone(),
+                    tables_loaded: Arc::new(vec![].into()),
+                    tables_loading: Arc::new(vec![].into()),
+                    _cache: CacheType::Bare,
+                    //                globalload: None,
+                    localref: None,
+                };
+                main
+            }
+        };
+        // let path = String::from("./main.db");
+        // Sets default settings for db settings.
+        if !first_time_load_flag {
+            // Database Doesn't exist
+            main.first_db();
+
+            main.transaction_flush();
+
+            dbg!("made first db");
+            main.updatedb();
+            dbg!("made update db");
+            main.load_table(&sharedtypes::LoadDBTable::Settings);
+            dbg!("made loaded table db");
+            main.load_caching();
+            dbg!("cached  db");
+        } else {
+            // Database does exist.
+            logging::log(format!(
+                "Database Exists: {} : Skipping creation.",
+                first_time_load_flag
+            ));
+            main.load_table(&sharedtypes::LoadDBTable::Settings);
+            main.load_caching();
+        }
+        main.transaction_flush();
+        main
+    }
+
+    /// Clears in memdb structures
+    pub fn clear_cache(&self) {
+        match self._cache {
+            CacheType::Bare => {}
+            _ => {
+                self._inmemdb.write().clear_all();
+            }
+        }
+    }
+
+    ///
+    /// Starts an exclusive write transaction
+    ///
+    pub(super) fn transaction_exclusive_start(&self) {
+        self.transaction_flush();
+
+        let mut transaction = self.write_conn_istransaction.lock();
+        if !*transaction {
+            *transaction = true;
+            self.write_conn
+                .lock()
+                .execute("BEGIN EXCLUSIVE TRANSACTION", []);
+        }
+    }
+    ///
+    /// Starts an exclusive write transaction
+    ///
+    pub(super) fn transaction_start(&self) {
+        self.transaction_flush();
+
+        let mut transaction = self.write_conn_istransaction.lock();
+        if !*transaction {
+            *transaction = true;
+            self.write_conn.lock().execute("BEGIN TRANSACTION", []);
+        }
+    }
+
+    ///
+    /// commits an exclusive write transaction
+    ///
+    pub fn transaction_flush(&self) {
+        logging::log("Flushing to disk");
+        let mut transaction = self.write_conn_istransaction.lock();
+        if *transaction {
+            let conn = self.write_conn.lock();
+            conn.execute("COMMIT", []);
+            *transaction = false;
+            dbg!("Flushing");
+        }
+    }
+
+    ///
+    /// Gets one tnection from the sqlite pool
+    ///
+    pub(super) fn get_database_connection(&self) -> PooledConnection<SqliteConnectionManager> {
+        loop {
+            match self.pool.get() {
+                Ok(out) => {
+                    return out;
+                }
+                Err(_) => {
+                    dbg!("a");
+                }
+            }
+        }
+    }
+
+    ///
+    /// Loads the cache configuration
+    ///
+    pub fn load_caching(&mut self) {
+        let temp;
+
+        loop {
+            let cache = match self.settings_get_name(&"dbcachemode".into()) {
+                None => {
+                    self.setup_default_cache();
+                    self.settings_get_name(&"dbcachemode".into())
+                        .unwrap()
+                        .param
+                        .clone()
+                }
+                Some(setting) => setting.param.clone(),
+            };
+
+            if let Some(ref cache) = cache {
+                let cachemode = match cache.as_str() {
+                    "Bare" => Some(CacheType::Bare),
+                    "InMemdb" => Some(CacheType::InMemdb),
+                    "InMemory" => Some(CacheType::InMemory),
+                    _ => {
+                        self.setup_default_cache();
+                        None
+                    }
+                };
+                if let Some(cachemode) = cachemode {
+                    temp = cachemode;
+                    break;
+                }
+            } else {
+                self.setup_default_cache();
+            }
+        }
+
+        self._cache = temp
+    }
+
+    ///
+    /// Sets up the default location to dump misbehaving files
+    ///
+    pub fn setup_defaut_misplaced_location(&self) -> String {
+        let mut conn = self.get_database_connection();
+        let loc = self.location_get();
+        let outpath = Path::new(&loc);
+        let out = outpath.parent().unwrap().join(Path::new("Files-Dump"));
+        file::folder_make(&out.to_string_lossy().to_string());
+        out.to_string_lossy().to_string()
+    }
+
+    ///
+    /// Checks the relationships table for any dead tagids
+    /// Only cleans the tags where they are linked to a fileid
+    ///
+    pub fn check_relationship_tag_relations(&self) {
+        self.load_table(&sharedtypes::LoadDBTable::Files);
+        self.load_table(&sharedtypes::LoadDBTable::Relationship);
+        self.load_table(&sharedtypes::LoadDBTable::Tags);
+        let mut flag = false;
+        logging::info_log("Relationship-Tag-Relations checker starting check");
+
+        for fid in self.file_get_list_id().iter() {
+            for tid in self.relationship_get_tagid(fid).iter() {
+                if self.tag_id_get(tid).is_none() {
+                    flag = true;
+                    logging::log(format!(
+                        "Relationship-Tag-Relations checker found bad tid {tid} relating to fid: {fid} deleting empty relationship"
+                    ));
+                    self.relationship_remove(fid, tid);
+                }
+            }
+        }
+
+        if flag {
+            logging::info_log("Relationship-Tag-Relations checker condensing tags");
+            self.condense_tags();
+            self.vacuum();
+        }
+        logging::info_log("Relationship-Tag-Relations checker ending check");
+        self.transaction_flush();
+    }
+
+    ///
+    /// Adds a dead url into the db
+    ///
+    pub fn add_dead_url(&self, url: &String) {
+        self.add_dead_url_sql(url);
+        match self._cache {
+            CacheType::Bare => {}
+            _ => {
+                self._inmemdb.write().add_dead_source_url(url.to_string());
+            }
+        }
+    }
+
+    /// Adds the job to the inmemdb
+    pub fn jobs_add_new_todb(&self, job: sharedtypes::DbJobsObj) {
+        match self._cache {
+            /*CacheType::Bare => {
+                self.jobs_add_sql( &job);
+            }*/
+            _ => {
+                self._inmemdb.write().jobref_new(job);
+            }
+        }
+    }
+
+    ///
+    /// Flips the running of a job by id
+    /// Returns the status of the job if it exists
+    ///
+    pub fn jobs_flip_running(&self, id: &usize) -> Option<bool> {
+        match self._cache {
+            CacheType::Bare => {
+                todo!("Bare implementation not implemineted");
+            }
+            _ => self._inmemdb.write().jobref_flip_isrunning(id),
+        }
+    }
+
+    /// File Sanity Checker This will check that the files by id will have a matching
+    /// location & hash.
+    pub fn db_sanity_check_file(&self) {
+        self.load_table(&sharedtypes::LoadDBTable::Files);
+        todo!("Need to fix this files are sucky");
+        let flist = self.file_get_list_id();
+        /*flist.par_iter().for_each(|feach| {
+            // Check is needed to support if the file with nonexistant info was gotten from db
+            if let Some(filestorage_obj) = self.file_get_id( feach) {
+                let fileinfo = match filestorage_obj {
+                    sharedtypes::DbFileStorage::Exist(file) => file,
+                    _ => {
+                        panic!("Pulled item that shouldnt exist: {:?}", filestorage_obj);
+                    }
+                };
+                loop {
+                    let location = self.storage_get_string( &fileinfo.storage_id).unwrap();
+                    let temppath = &format!("{}/{}", location, fileinfo.hash);
+                    if Path::new(temppath).exists() {
+                        let fil = std::fs::read(temppath).unwrap();
+                        let hinfo = download::hash_bytes(
+                            &bytes::Bytes::from(fil),
+                            &sharedtypes::HashesSupported::Sha512(fileinfo.hash.clone()),
+                        );
+                        if !hinfo.1 {
+                            dbg!(format!(
+                                "BAD HASH: ID: {}  HASH: {}   2ND HASH: {}",
+                                fileinfo.id, fileinfo.hash, hinfo.0
+                            ));
+                        }
+                    }
+                }
+            } else {
+                dbg!(format!("File ID: {} Does not exist.", &feach));
+            }
+        });*/
+    }
+
+    ///
+    ///Returns the max id of something inside of the db
+    ///
+    pub fn tags_max_id(&self) -> usize {
+        match self._cache {
+            CacheType::Bare => self.tags_max_return_sql(),
+            _ => self._inmemdb.read().tags_max_return(),
+        }
+    }
+
+    /// Returns next jobid from _inmemdb
+    pub fn jobs_get_max(&self) -> usize {
+        match self._cache {
+            //  CacheType::Bare => self.jobs_return_count_sql(),
+            _ => *self._inmemdb.read().jobs_get_max(),
+        }
     }
 
     /// Sets up first database interaction. Makes tables and does first time setup.
@@ -1601,46 +1804,6 @@ PRAGMA journal_mode = WAL;
     }
 
     ///
-    /// Convience function to get a list of files that are images
-    ///
-    pub fn extensions_images_get_fileid(&self) -> HashSet<usize> {
-        let exts = &["jpg".to_string(), "png".to_string(), "tiff".to_string()];
-        self.extensions_get_fileid_extstr_sql(exts)
-    }
-
-    ///
-    /// Convience function to get a list of files that are images
-    ///
-    pub fn extensions_videos_get_fileid(&self) -> HashSet<usize> {
-        let exts = &[
-            "mkv".to_string(),
-            "webm".to_string(),
-            "gif".to_string(),
-            "mp4".to_string(),
-        ];
-        self.extensions_get_fileid_extstr_sql(exts)
-    }
-
-    ///
-    /// Gets an ID if a extension string exists
-    ///
-    pub fn extension_get_id(&self, ext: &String) -> Option<usize> {
-        match self._cache {
-            CacheType::Bare => self.extension_get_id_sql(ext),
-            _ => self._inmemdb.read().extension_get_id(ext).copied(),
-        }
-    }
-    ///
-    /// Gets an ID if a extension string exists
-    ///
-    pub fn extension_get_string(&self, ext_id: &usize) -> Option<String> {
-        match self._cache {
-            CacheType::Bare => self.extension_get_string_sql(ext_id),
-            _ => self._inmemdb.read().extension_get_string(ext_id).cloned(),
-        }
-    }
-
-    ///
     /// Gets an extension id and creates it if it does not exist
     ///
     pub fn extension_put_string(&self, ext: &String) -> usize {
@@ -1770,54 +1933,6 @@ PRAGMA journal_mode = WAL;
         }
     }
 
-    ///
-    /// Gets a fileid from a hash
-    ///
-    pub fn file_get_hash(&self, hash: &String) -> Option<usize> {
-        match self._cache {
-            CacheType::Bare => self.file_get_id_sql(hash),
-            _ => self._inmemdb.read().file_get_hash(hash).copied(),
-        }
-    }
-
-    ///
-    /// Gets a tagid from a unique tag and namespace combo
-    ///
-    pub fn tag_get_name(&self, tag: String, namespace: usize) -> Option<usize> {
-        let tagobj = &sharedtypes::DbTagNNS {
-            name: tag,
-            namespace,
-        };
-
-        self.tag_get_name_tagobject(tagobj)
-    }
-
-    ///
-    /// Gets a tagid from a tagobject
-    ///
-    pub fn tag_get_name_tagobject(&self, tagobj: &sharedtypes::DbTagNNS) -> Option<usize> {
-        match self._cache {
-            CacheType::Bare => self.tags_get_id_sql(tagobj),
-            _ => self._inmemdb.read().tags_get_id(tagobj).copied(),
-        }
-    }
-
-    /// db get namespace wrapper
-    pub fn namespace_get(&self, namespace: &String) -> Option<usize> {
-        match self._cache {
-            CacheType::Bare => self.namespace_get_id_sql(namespace),
-            _ => self._inmemdb.read().namespace_get(namespace).copied(),
-        }
-    }
-
-    /// Returns namespace as a string from an ID returns None if it doesn't exist.
-    pub fn namespace_get_string(&self, ns_id: &usize) -> Option<sharedtypes::DbNamespaceObj> {
-        match self._cache {
-            CacheType::Bare => self.namespace_get_namespaceobj_sql(ns_id),
-            _ => self._inmemdb.read().namespace_id_get(ns_id).cloned(),
-        }
-    }
-
     /// Adds a file into the db sqlite. Do this first.
     pub fn file_add(&self, file: sharedtypes::DbFileStorage) -> usize {
         match file {
@@ -1854,15 +1969,6 @@ PRAGMA journal_mode = WAL;
                 }
                 id*/
             }
-        }
-    }
-
-    /// Wrapper for inmemdb function: file_get_id Returns info for file in Option
-    // DO NOT USE UNLESS NECISSARY. LOG(n2) * 3
-    pub fn file_get_id(&self, file_id: &usize) -> Option<sharedtypes::DbFileStorage> {
-        match self._cache {
-            CacheType::Bare => self.files_get_id_sql(file_id),
-            _ => self._inmemdb.read().file_get_id(file_id).cloned(),
         }
     }
 
@@ -1927,25 +2033,6 @@ PRAGMA journal_mode = WAL;
         self._inmemdb.write().parents_put(parent)
     }
 
-    ///
-    /// Gets a parent id if they exist
-    ///
-    pub(super) fn parents_get(&self, parent: &sharedtypes::DbParentsObj) -> Option<usize> {
-        match self._cache {
-            CacheType::Bare => {
-                let tagid = self.parents_get_id_list_sql(parent);
-
-                if tagid.is_empty() {
-                    None
-                } else {
-                    let tags: Vec<usize> = tagid.into_iter().collect();
-                    Some(tags[0])
-                }
-            }
-            _ => self._inmemdb.read().parents_get(parent).copied(),
-        }
-    }
-
     /// Wrapper for inmemdb and parents_add_db
     pub fn parents_add(&self, par: sharedtypes::DbParentsObj) -> usize {
         match self._cache {
@@ -1967,22 +2054,6 @@ PRAGMA journal_mode = WAL;
                 }
                 self.parents_add_db(par)
             }
-        }
-    }
-
-    /// Relates the list of relationships assoicated with tag
-    pub fn parents_rel_get(&self, relid: &usize) -> HashSet<usize> {
-        match self._cache {
-            CacheType::Bare => self.parents_tagid_get(relid),
-            _ => self._inmemdb.read().parents_rel_get(relid, None),
-        }
-    }
-
-    /// Relates the list of tags assoicated with relations
-    pub fn parents_tag_get(&self, tagid: &usize) -> HashSet<usize> {
-        match self._cache {
-            CacheType::Bare => self.parents_relatetagid_get(tagid),
-            _ => self._inmemdb.read().parents_tag_get(tagid, None),
         }
     }
 
@@ -2031,6 +2102,9 @@ PRAGMA journal_mode = WAL;
         self.namespace_add(&namespace_obj.name, &namespace_obj.description)
     }
 
+    ///
+    /// Adds tags to a file id
+    ///
     pub fn relationship_tag_add(&self, fid: usize, tags: Vec<sharedtypes::TagObject>) {
         match self._cache {
             CacheType::Bare => {
@@ -2267,21 +2341,7 @@ PRAGMA journal_mode = WAL;
         self._dbpath.clone()
     }
 
-    /// database searching advanced.
-    pub fn db_search_adv(&self, db_search: sharedtypes::DbSearchQuery) {
-        let namespaceone_unwrap = self.search_for_namespace(&db_search.tag_one);
 
-        // let namespacetwo_unwrap = self.search_for_namespace(db_search.tag_two);
-        if namespaceone_unwrap.is_none() {
-            logging::info_log(format!(
-                "Couldn't find namespace from search: {:?} {:?}",
-                db_search.tag_one, namespaceone_unwrap
-            ));
-            return;
-        }
-        let _namespaceone = namespaceone_unwrap.unwrap();
-        // let tagtwo = namespacetwo_unwrap.unwrap();
-    }
 
     /// Parses data from search query to return an id
     fn search_for_namespace(&self, search: &sharedtypes::DbSearchObject) -> Option<usize> {
@@ -2351,7 +2411,6 @@ PRAGMA journal_mode = WAL;
     ///
     pub fn migrate_relationship_file_tag(
         &self,
-
         file_id: &usize,
         old_tag_id: &usize,
         new_tag_id: &usize,
@@ -2385,11 +2444,6 @@ PRAGMA journal_mode = WAL;
         self.migrate_relationship_tag(old_tag_id, new_tag_id);
         self.tag_remove(old_tag_id);
         self.tag_add(&tag.name.clone(), tag.namespace, Some(*new_tag_id));
-    }
-
-    /// Handles transactional pushes.
-    pub fn transaction_execute(trans: &Transaction, inp: String) {
-        trans.execute(&inp, params![]).unwrap();
     }
 
     /// Removes tag & relationship from db.
@@ -2599,14 +2653,6 @@ PRAGMA journal_mode = WAL;
         self.delete_namespace_sql(id);
     }
 
-    /// Retuns namespace id's
-    pub fn namespace_keys(&self) -> Vec<usize> {
-        match self._cache {
-            CacheType::Bare => self.namespace_keys_sql(),
-            _ => self._inmemdb.read().namespace_keys(),
-        }
-    }
-
     ///
     /// Condenses and corrects file locations
     ///
@@ -2735,23 +2781,6 @@ PRAGMA journal_mode = WAL;
         self.vacuum();
     }
 
-    /// Gets all tag's assocated a singular namespace
-    pub fn namespace_get_tagids(&self, id: &usize) -> HashSet<usize> {
-        match self._cache {
-            CacheType::Bare => self.namespace_get_tagids_sql(id),
-            _ => self._inmemdb.read().namespace_get_tagids(id),
-        }
-    }
-
-    /// Checks if a tag exists in a namespace
-    //pub fn namespace_contains_id(&self, namespace_id: &usize) -> bool {
-    pub fn namespace_contains_id(&self, namespace_id: &usize, tag_id: &usize) -> bool {
-        match self._cache {
-            CacheType::Bare => self.namespace_contains_id_sql(tag_id, namespace_id),
-            _ => self.namespace_get_tagids(namespace_id).contains(tag_id),
-        }
-    }
-
     /*/// Recreates the db with only one ns in it.
     pub fn drop_recreate_ns(&self, id: &usize) {
         // self.load_table(&sharedtypes::LoadDBTable::Relationship);
@@ -2786,29 +2815,6 @@ PRAGMA journal_mode = WAL;
         self.transaction_flush();
     }*/
 
-    /// Returns all file id's loaded in db
-    pub fn file_get_list_id(&self) -> HashSet<usize> {
-        match self._cache {
-            CacheType::Bare => self.file_get_list_id_sql(),
-            _ => self._inmemdb.read().file_get_list_id(),
-        }
-    }
-
-    /// Returns all file objects in db.
-    pub fn file_get_list_all(&self) -> HashMap<usize, sharedtypes::DbFileStorage> {
-        let inmemdb = self._inmemdb.read();
-        inmemdb.file_get_list_all().clone()
-    }
-
-    /// Returns the location of the file storage path. Helper function
-    pub fn location_get(&self) -> String {
-        self.settings_get_name(&"FilesLoc".to_string())
-            .unwrap()
-            .param
-            .as_ref()
-            .unwrap()
-            .to_owned()
-    }
     fn print_all_tables(&self) -> Result<()> {
         use rusqlite::Row;
         let conn = self.write_conn.lock();

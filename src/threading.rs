@@ -1,4 +1,6 @@
 use crate::Main;
+use crate::Mutex;
+use crate::RwLock;
 use crate::download;
 use crate::download::hash_bytes;
 use crate::download::process_bytes;
@@ -6,19 +8,17 @@ use crate::globalload::GlobalLoad;
 use crate::logging;
 use crate::logging::info_log;
 use crate::sharedtypes;
-use crate::Mutex;
-use crate::RwLock;
 
 use async_std::task;
 use file_format::FileFormat;
+use ratelimit::Ratelimiter;
 use rayon::iter::IntoParallelRefMutIterator;
 use rayon::iter::ParallelIterator;
-use ratelimit::Ratelimiter;
 use reqwest::blocking::Client;
+use rusty_pool::ThreadPool;
 use std::collections::BTreeSet;
 use std::collections::HashMap;
 use std::sync::Arc;
-use rusty_pool::ThreadPool;
 use std::thread;
 use std::time::Duration;
 use thread_control::*;
@@ -141,8 +141,8 @@ pub fn create_ratelimiter(
     input: (u64, Duration),
     worker_id: &usize,
     job_id: &usize,
-) -> Arc<Mutex<Ratelimiter>> {
-    Arc::new(Mutex::new(download::ratelimiter_create(
+) -> Arc<RwLock<Ratelimiter>> {
+    Arc::new(RwLock::new(download::ratelimiter_create(
         worker_id, job_id, input.0, input.1,
     )))
 }
@@ -684,7 +684,7 @@ pub fn parse_tags(
 /// Downloads a file into the db if needed
 ///
 fn download_add_to_db(
-    ratelimiter_obj: Arc<Mutex<Ratelimiter>>,
+    ratelimiter_obj: Arc<RwLock<Ratelimiter>>,
     source: &String,
     location: String,
     globalload: GlobalLoad,
@@ -868,7 +868,7 @@ fn parse_skipif(
 pub fn main_file_loop(
     file: &mut sharedtypes::FileObject,
     database: Main,
-    ratelimiter_obj: Arc<Mutex<Ratelimiter>>,
+    ratelimiter_obj: Arc<RwLock<Ratelimiter>>,
     globalload: GlobalLoad,
     client: Arc<RwLock<Client>>,
     jobstorage: Arc<RwLock<crate::jobs::Jobs>>,

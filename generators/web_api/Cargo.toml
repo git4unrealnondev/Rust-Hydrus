@@ -1,0 +1,13 @@
+[package]
+name = "web_api"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+quote = "1.0.44"
+syn = { version = "2.0.114", features = ["full"] }
+
+prettyplease = "0.2.37"
+
+[lib]
+proc-macro = true
