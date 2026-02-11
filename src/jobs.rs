@@ -3,6 +3,7 @@ use crate::database;
 use crate::logging;
 use crate::sharedtypes;
 use crate::time_func;
+use std::collections::BTreeMap;
 use std::collections::{HashMap, HashSet};
 //use std::sync::Mutex;
 
@@ -14,7 +15,8 @@ struct PreviouslySeenObj {
     site: String,
     params: Vec<sharedtypes::ScraperParam>,
     time: usize,
-    reptime: Option<usize>,
+    reptime: usize,
+    user_data: BTreeMap<String, String>,
 }
 
 #[derive(Clone)]
@@ -54,6 +56,7 @@ impl Jobs {
             params: dbjobsobj.param.clone(),
             time: dbjobsobj.time,
             reptime: dbjobsobj.reptime,
+            user_data: dbjobsobj.user_data.clone(),
         };
 
         // Stupid prefilter because an item can be either a scraper or a plugin. Not sure how I
@@ -93,7 +96,7 @@ impl Jobs {
             }
         }
         let mut out = false;
-        if time_func::time_secs() >= dbjobsobj.time + dbjobsobj.reptime.unwrap() {
+        if time_func::time_secs() >= dbjobsobj.time + dbjobsobj.reptime {
             if dbjobsobj.id.is_none() {
                 let mut temp = dbjobsobj.clone();
                 temp.id = None;
@@ -339,7 +342,6 @@ impl Jobs {
 #[cfg(test)]
 pub(crate) mod test_database {
     use crate::RwLock;
-    use std::collections::BTreeMap;
     use std::sync::Arc;
     use std::time::Duration;
 
@@ -375,21 +377,13 @@ pub(crate) mod test_database {
     ///
     fn return_dbjobsobj() -> DbJobsObj {
         crate::sharedtypes::DbJobsObj {
-            id: Some(0),
-            time: 0,
-            reptime: Some(1),
-            priority: sharedtypes::DEFAULT_PRIORITY,
-            cachetime: sharedtypes::DEFAULT_CACHETIME,
-            cachechecktype: sharedtypes::DEFAULT_CACHECHECK,
+            reptime: 1,
             site: "test".to_string(),
-            param: vec![],
             jobmanager: crate::sharedtypes::DbJobsManager {
                 jobtype: crate::sharedtypes::DbJobType::Scraper,
-                recreation: None,
+                ..Default::default()
             },
-            isrunning: false,
-            system_data: BTreeMap::new(),
-            user_data: BTreeMap::new(),
+            ..Default::default()
         }
     }
 

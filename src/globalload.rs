@@ -334,7 +334,7 @@ impl GlobalLoad {
         &self,
         url_output: &str,
         actual_params: &[sharedtypes::ScraperParam],
-        scraperdata: &sharedtypes::ScraperData,
+        scraperdata: &sharedtypes::ScraperDataReturn,
         scraper: &GlobalPluginScraper,
     ) -> Vec<sharedtypes::ScraperReturn> {
         if let Some(lib) = self.library_get(scraper) {
@@ -343,7 +343,7 @@ impl GlobalLoad {
                 unsafe extern "C" fn(
                     &str,
                     &[sharedtypes::ScraperParam],
-                    &sharedtypes::ScraperData,
+                    &sharedtypes::ScraperDataReturn,
                 ) -> Vec<sharedtypes::ScraperReturn>,
             > = unsafe { lib.get(b"text_scraping\0").unwrap() };
             unsafe { temp(url_output, actual_params, scraperdata) }
@@ -372,9 +372,9 @@ impl GlobalLoad {
     pub fn url_dump(
         &self,
         params: &Vec<sharedtypes::ScraperParam>,
-        scraperdata: &sharedtypes::ScraperData,
+        scraperdata: &sharedtypes::ScraperDataReturn,
         scraper: &sharedtypes::GlobalPluginScraper,
-    ) -> Result<Vec<(String, sharedtypes::ScraperData)>, libloading::Error> {
+    ) -> Result<Vec<sharedtypes::ScraperDataReturn>, libloading::Error> {
         let mut out = Vec::new();
 
         if let Some(lib) = self.library_get(scraper) {
@@ -382,8 +382,8 @@ impl GlobalLoad {
             let temp: libloading::Symbol<
                 unsafe extern "C" fn(
                     &[sharedtypes::ScraperParam],
-                    &sharedtypes::ScraperData,
-                ) -> Vec<(String, sharedtypes::ScraperData)>,
+                    &sharedtypes::ScraperDataReturn,
+                ) -> Vec<sharedtypes::ScraperDataReturn>,
             > = unsafe { lib.get(b"url_dump\0")? };
             for item in unsafe { temp(params, scraperdata) } {
                 out.push(item);
@@ -417,7 +417,7 @@ impl GlobalLoad {
         &self,
         url_output: &str,
         source_url: &str,
-        scraperdata: &sharedtypes::ScraperData,
+        scraperdata: &sharedtypes::ScraperDataReturn,
         scraper: &GlobalPluginScraper,
     ) -> Vec<sharedtypes::ScraperReturn> {
         if let Some(scraper_library_rwlock) = self.library_get(scraper) {
@@ -426,7 +426,7 @@ impl GlobalLoad {
                 unsafe extern "C" fn(
                     &str,
                     &str,
-                    &sharedtypes::ScraperData,
+                    &sharedtypes::ScraperDataReturn,
                 ) -> Vec<sharedtypes::ScraperReturn>,
             > = {
                 unsafe {

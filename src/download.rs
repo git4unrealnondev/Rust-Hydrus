@@ -181,6 +181,7 @@ pub fn client_create(
 /// their's anything wrong with request.
 pub async fn dltext_new(
     url_string: &String,
+    post_data: Option<String>,
     client: Arc<RwLock<Client>>,
     ratelimiter_obj: &Arc<RwLock<Ratelimiter>>,
     worker_id: &usize,
@@ -209,7 +210,16 @@ pub async fn dltext_new(
             worker_id, &url_string
         ));
 
-        let futureresult = client.read().get(url).header("Accept", "text/css").send();
+        let futureresult = match post_data {
+            None => client.read().get(url).header("Accept", "text/css").send(),
+            Some(ref post_data_string) => client
+                .read()
+                .post(url)
+                .body(post_data_string.clone())
+                .header("Origin", "https://furry34.com")
+                .header("Content-Type", "application/json")
+                .send(),
+        };
 
         // let test = reqwest::get(url).await.unwrap().text(); let futurez =
         // futures::executor::block_on(futureresult); dbg!(&futureresult);

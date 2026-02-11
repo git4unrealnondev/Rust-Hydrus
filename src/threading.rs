@@ -297,7 +297,7 @@ impl Worker {
                             {
                                 let mut data = job.clone();
                                 data.time = crate::time_func::time_secs();
-                                data.reptime = Some(*timestamp);
+                                data.reptime = *timestamp;
                                 jobstorage
                                     .write()
                                     .jobs_decrement_count(&data, &scraper, &id);
@@ -310,46 +310,42 @@ impl Worker {
                             database.transaction_flush();
                         }
                     }
-
-                    // Legacy data holder for plugin system
-                    let job_holder_legacy = sharedtypes::JobScraper {
-                        site: job.site.clone(),
-                        param: job.param.clone(),
-                        job_type: job.jobmanager.jobtype,
-                    };
-
-                    // Legacy data holder obj for plguins
-                    let mut scraper_data_holder = sharedtypes::ScraperData {
-                        job: job_holder_legacy.clone(),
-                        system_data: job.system_data.clone(),
-                        user_data: job.user_data.clone(),
-                    };
-
                     // Loads anything passed from the scraper at compile time into the user_data
                     // field
                     if let Some(ref stored_info) = scraper.stored_info {
                         match stored_info {
                             sharedtypes::StoredInfo::Storage(storage) => {
                                 for (key, val) in storage.iter() {
-                                    scraper_data_holder
+                                    job
                                         .user_data
                                         .insert(key.to_string(), val.to_string());
                                 }
                             }
                         }
-                    }
+                    }let scraper_data_return_default = sharedtypes::ScraperDataReturn {
+                                job: job.clone(),
+                                ..Default::default()
+                            };
+
                     let urlload = match job.jobmanager.jobtype {
                         sharedtypes::DbJobType::Params => {
                             let mut out = Vec::new();
 
-                            match globalload.url_dump(&job.param, &scraper_data_holder, &scraper) {
+                            match globalload.url_dump(&job.param, &scraper_data_return_default, &scraper) {
                                 Ok(temp) => {
-                                    for (url, scraperdata) in temp {
+                                    for scraper_data_return in temp {
+                                        for param in scraper_data_return.job.param.iter() {
+                                            if let sharedtypes::ScraperParam::Url(_) | sharedtypes::ScraperParam::UrlPost(_) = param {
+                                                out.push((param.clone(), scraper_data_return.clone()));
+                                            }
+                                        }
+                                    }
+                                    /*for (url, scraperdata) in temp {
                                         out.push((
                                             sharedtypes::ScraperParam::Url(url),
                                             scraperdata,
                                         ));
-                                    }
+                                    }*/
                                 }
                                 Err(err) => {
                                     logging::error_log(format!(
@@ -371,8 +367,10 @@ impl Worker {
                         }
                         sharedtypes::DbJobType::NoScrape => {
                             let mut out = Vec::new();
-                            for item in job.param.iter() {
-                                out.push((item.clone(), scraper_data_holder.clone()));
+                            for param in job.param.iter() {if let sharedtypes::ScraperParam::Url(_) = param {
+                                                out.push((param.clone(), scraper_data_return_default.clone()));
+                                            }
+
                             }
                             out
                         }
@@ -382,12 +380,16 @@ impl Worker {
                         // .collect(), scraper_data_holder, ); parpms }
                         sharedtypes::DbJobType::Scraper => {
                             let mut out = Vec::new();
-                            for item in job.param.iter() {
-                                out.push((item.clone(), scraper_data_holder.clone()));
+                            for param in job.param.iter() {
+                                if let sharedtypes::ScraperParam::Url(_) | sharedtypes::ScraperParam::UrlPost(_) = param {
+                                                out.push((param.clone(), scraper_data_return_default.clone()));
+                                            }
+
                             }
                             out
                         }
                     };
+                    dbg!(&urlload);
 
                     'urlloop: for (scraperparam, scraperdata) in urlload {
                         'errloop: loop {
@@ -397,6 +399,7 @@ impl Worker {
                                 if !scraper.should_handle_text_scraping {
                                     resp = task::block_on(download::dltext_new(
                                         url_string,
+                                        None,
                                         client_text.clone(),
                                         &ratelimiter_obj,
                                         &id,
@@ -425,6 +428,33 @@ impl Worker {
                                         &scraper,
                                     )
                                 }
+                            } else if let sharedtypes::ScraperParam::UrlPost(ref url_post) = scraperparam {
+resp = task::block_on(download::dltext_new(
+                                        &url_post.url,
+                                        Some(url_post.post_data.clone()),
+                                        client_text.clone(),
+                                        &ratelimiter_obj,
+                                        &id,
+                                    ));
+                                    let st = match resp {
+                                        Ok((respstring, resp_url)) => globalload.parser_call(
+                                            &respstring,
+                                            &resp_url,
+                                            &scraperdata,
+                                            &scraper,
+                                        ),
+                                        Err(err) => {
+                                            logging::error_log(format!(
+                                                "Worker: {} -- While processing job {:?} was unable to download text. Had err {:?}",
+                                                &id, &job, err
+                                            ));
+                                            break 'urlloop;
+                                        }
+                                    };
+                                    out_sts = st;
+
+
+
                             } else {
                                 // Finished checking everything for URLs and other stuff.
                                 break 'errloop;
@@ -437,7 +467,7 @@ impl Worker {
                                 match out_st {
                                     // Valid data from the scraper
                                     sharedtypes::ScraperReturn::Data(out_st) => {
-                                        for flag in out_st.flag.iter() {
+                                        for flag in out_st.flags.iter() {
                                             match flag {
                                                 sharedtypes::Flags::Redo => {
                                                     should_remove_original_job = false;
@@ -445,8 +475,28 @@ impl Worker {
                                             }
                                         }
 
+                                        let mut should_flush=false;
+                                        // Loop thru jobs and add them if we have no skip conditions
+                                        'jobloop: for scraper_data_return in out_st.jobs.iter() {
+
+                                            for skip_condition in scraper_data_return.skip_conditions.iter() {
+                                                    if parse_skipif(skip_condition, &"Job too lazy to parse the site link if any".to_string(), database.clone(), &id, &jobid).is_some() {
+                                                    continue 'jobloop;
+                                                }
+                                                                                            }
+let mut job_storage = jobstorage.write();
+                                                job_storage.jobs_add(scraper.clone(), scraper_data_return.job.clone());
+                                                should_flush=true;
+
+                                        }
+
+                                        // If we are adding a job then do a flush
+                                        if should_flush {
+                                            database.transaction_flush();
+                                        }
+
                                         // Extracts any jobs from the tags field
-                                        for tag in out_st.tag.iter() {
+                                        for tag in out_st.tags.iter() {
                                             parse_jobs(
                                                 tag,
                                                 None,
@@ -462,7 +512,7 @@ impl Worker {
                                         let pool = ThreadPool::default();
 
                                         // Parses files from urls
-                                        for mut file in out_st.file.clone() {
+                                        for mut file in out_st.files.clone() {
                                             let ratelimiter_obj = ratelimiter_main.clone();
                                             let globalload = globalload.clone();
                                             let db = database.clone();
@@ -518,7 +568,7 @@ impl Worker {
                                     sharedtypes::ScraperReturn::RetryLater(time) => {
                                         let mut data = job.clone();
                                         data.time = crate::time_func::time_secs();
-                                        data.reptime = Some(*time as usize);
+                                        data.reptime = *time as usize;
                                         database.jobs_update_db(data);
                                         should_remove_original_job = false;
                                     }
@@ -590,7 +640,7 @@ pub fn parse_tags(
 
             url_return
         }
-        sharedtypes::TagType::ParseUrl((jobscraped, skippy)) => {
+        /* sharedtypes::TagType::ParseUrl((jobscraped, skippy)) => {
             match skippy {
                 None => {
                     url_return.insert(jobscraped.clone());
@@ -672,7 +722,7 @@ pub fn parse_tags(
 
             // Returns the url that we need to parse.
             url_return
-        }
+        }*/
         sharedtypes::TagType::Special => {
             // Do nothing will handle this later lol.
             url_return
@@ -774,21 +824,15 @@ fn parse_jobs(
         for data in urls_to_scrape {
             // Defualt job object
             let dbjob = sharedtypes::DbJobsObj {
-                id: None,
-                time: 0,
-                reptime: Some(0),
-                priority: sharedtypes::DEFAULT_PRIORITY,
-                cachetime: sharedtypes::DEFAULT_CACHETIME,
-                cachechecktype: sharedtypes::DEFAULT_CACHECHECK,
                 site: data.job.site,
                 param: data.job.param,
                 jobmanager: sharedtypes::DbJobsManager {
                     jobtype: data.job.job_type,
-                    recreation: None,
+                    ..Default::default()
                 },
-                isrunning: false,
                 system_data: data.system_data,
                 user_data: data.user_data,
+                ..Default::default()
             };
 
             joblock.jobs_add(scraper.clone(), dbjob);
@@ -804,13 +848,13 @@ fn parse_jobs(
 /// Parses weather we should skip downloading the file
 /// Returns a Some(usize) if the fileid exists
 fn parse_skipif(
-    file_tag: &sharedtypes::SkipIf,
+    skip_condition: &sharedtypes::SkipIf,
     file_url_source: &String,
     database: Main,
     worker_id: &usize,
     job_id: &usize,
 ) -> Option<usize> {
-    match file_tag {
+    match skip_condition {
         sharedtypes::SkipIf::FileHash(sha512hash) => {
             return database.file_get_hash(sha512hash);
         }

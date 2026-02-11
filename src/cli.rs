@@ -6,6 +6,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::fs::rename;
 use std::path::{self, Path};
 use strfmt::Format;
+use url::Url;
 use walkdir::WalkDir;
 
 // use std::str::pattern::Searcher;
@@ -100,7 +101,12 @@ fn parse_string_to_scraperparam(input: &str) -> Vec<sharedtypes::ScraperParam> {
     let mut out = Vec::new();
 
     for item in input.split(' ') {
-        out.push(sharedtypes::ScraperParam::Normal(item.to_string()));
+        // Gets a url if its a proper URL
+        if let Ok(url) = Url::parse(item) {
+            out.push(sharedtypes::ScraperParam::Url(url.to_string()));
+        } else {
+            out.push(sharedtypes::ScraperParam::Normal(item.to_string()));
+        }
     }
 
     out

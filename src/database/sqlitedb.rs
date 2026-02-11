@@ -358,7 +358,7 @@ HAVING COUNT(r.fileid) {dir} ?;"
                 params![
                     data.id.unwrap().to_string(),
                     data.time.to_string(),
-                    data.reptime.unwrap().to_string(),
+                    data.reptime.to_string(),
                     data.priority.to_string(),
                     serde_json::to_string(&data.cachetime).unwrap(),
                     serde_json::to_string(&data.cachechecktype).unwrap(),
@@ -1148,7 +1148,7 @@ RETURNING id;
             params![
                 data.id.unwrap().to_string(),
                 data.time.to_string(),
-                data.reptime.unwrap().to_string(),
+                data.reptime.to_string(),
                 serde_json::to_string(&data.jobmanager).unwrap(),
                 data.priority.to_string(),
                 serde_json::to_string(&data.cachetime).unwrap(),

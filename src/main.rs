@@ -39,7 +39,6 @@ pub mod types;
 
 use crate::database::database::Main;
 
-
 // pub mod scr { pub mod cli; pub mod database; pub mod download; pub mod file; pub
 // pub mod jobs; pub mod logging; pub mod plugins; pub mod scraper; pub mod
 // sharedtypes; pub pub mod tasks; pub mod threading; pub mod time; }
@@ -146,7 +145,7 @@ fn main() {
     let runtime = tokio::runtime::Runtime::new().expect("Failed to create Tokio runtime");
 
     // 2. Use block_on to run the async function and wait for its result
-   // let result = runtime.block_on(warp::serve(routes_with_fallback).run(([127, 0, 0, 1], 3030)));
+    // let result = runtime.block_on(warp::serve(routes_with_fallback).run(([127, 0, 0, 1], 3030)));
 
     let jobmanager = Arc::new(RwLock::new(jobs::Jobs::new(database.clone())));
 

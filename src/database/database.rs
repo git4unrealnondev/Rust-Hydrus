@@ -2254,7 +2254,7 @@ PRAGMA journal_mode = WAL;
 
         for each in self.jobs_get_all() {
             if time == each.1.time
-                && Some(reptime) == each.1.reptime
+                && reptime == each.1.reptime
                 && site == each.1.site
                 && param == each.1.param
             {
@@ -2265,7 +2265,7 @@ PRAGMA journal_mode = WAL;
         let jobs_obj: sharedtypes::DbJobsObj = sharedtypes::DbJobsObj {
             id: Some(id),
             time,
-            reptime: Some(reptime),
+            reptime,
             priority,
             cachetime,
             cachechecktype,
@@ -2340,8 +2340,6 @@ PRAGMA journal_mode = WAL;
     pub fn get_db_loc(&self) -> Option<String> {
         self._dbpath.clone()
     }
-
-
 
     /// Parses data from search query to return an id
     fn search_for_namespace(&self, search: &sharedtypes::DbSearchObject) -> Option<usize> {

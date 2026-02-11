@@ -2,8 +2,8 @@ use quote::{ToTokens, quote};
 use std::env;
 use std::fs::{File, read_to_string};
 use std::io::{self, Write};
-use syn::{Attribute, Lit, Meta, Visibility};
-use syn::{Expr, ImplItem, ItemImpl, parse_file};
+use syn::Visibility;
+use syn::{ImplItem, ItemImpl};
 
 fn generate_client_code(api_file: &str) -> io::Result<String> {
     // Read the file content and handle errors
@@ -21,7 +21,7 @@ fn generate_client_code(api_file: &str) -> io::Result<String> {
         }
         Err(e) => {
             eprintln!("Error parsing the file '{}': {}", api_file, e);
-            return Err(io::Error::new(io::ErrorKind::Other, "Failed to parse file"));
+            return Err(io::Error::other("Failed to parse file"));
         }
     };
 
@@ -52,14 +52,12 @@ fn generate_client_code(api_file: &str) -> io::Result<String> {
                     }
                     let mut documentation = Vec::new();
                     for attr in fn_item.attrs.iter() {
-                        if let Ok(name_value) = attr.meta.require_name_value() {
-                            if let syn::Expr::Lit(expr_lit) = &name_value.value {
-                                if let syn::Lit::Str(expr_string) = &expr_lit.lit {
-                                    if !expr_string.value().is_empty() {
-                                        documentation.push(expr_string.value());
-                                    }
-                                }
-                            }
+                        if let Ok(name_value) = attr.meta.require_name_value()
+                            && let syn::Expr::Lit(expr_lit) = &name_value.value
+                            && let syn::Lit::Str(expr_string) = &expr_lit.lit
+                            && !expr_string.value().is_empty()
+                        {
+                            documentation.push(expr_string.value());
                         }
                     }
                     let fn_name = &fn_item.sig.ident;
@@ -178,7 +176,8 @@ fn write_client_file(client_code: &str) -> io::Result<()> {
 }
 
 fn main() {
-    for file_path in ["./src/database/database.rs"] {
+    {
+        let file_path = "./src/database/database.rs";
         dbg!(&file_path);
         if let Ok(ref code) = generate_client_code(file_path) {
             let _ = write_client_file(code);

@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 #![allow(unused_variables)]
 #![allow(unexpected_cfgs)]
+use std::default::Default;
 
 #[cfg(feature = "regex")]
 use regex::Regex;
@@ -9,14 +10,14 @@ use regex::Regex;
 use clap::Subcommand;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, HashSet};
+use std::collections::BTreeMap;
+use std::collections::HashSet;
 #[cfg(feature = "clap")]
 use strum_macros::EnumIter;
 #[cfg(feature = "clap")]
 use strum_macros::{Display, EnumString};
-
 // Default priority for a scraper
-pub const DEFAULT_PRIORITY: usize = 5;
+pub const DEFAULT_PRIORITY: usize = 10;
 
 // Default cache time for a job.
 // If its None then do not cache the job
@@ -31,10 +32,13 @@ pub const DEFAULT_CACHECHECK: JobCacheType = JobCacheType::TimeReptimeParam;
 ///
 /// Note a direct match is also performed and if the job is seen then we ignore it.
 ///
-#[derive(Debug, Hash, Eq, PartialEq, Clone, bincode::Encode, bincode::Decode)]
+#[derive(
+    Debug, Hash, Eq, PartialEq, Clone, bincode::Encode, bincode::Decode, PartialOrd, Ord, Default,
+)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum JobCacheType {
     // Checks the time, reptime and param fields. If these match other jobs then we don't add
+    #[default]
     TimeReptimeParam,
     // Just checks the params field
     Param,
@@ -170,7 +174,7 @@ pub enum StoredInfo {
 ///
 /// Info for scrapers as apart of the Global merge
 ///
-#[derive(Debug, Clone, Eq, Hash, PartialEq)]
+#[derive(Debug, Clone, Eq, Hash, PartialEq, Default)]
 pub struct ScraperInfo {
     /// Ratelimit for this site
     pub ratelimit: (u64, std::time::Duration),
@@ -184,7 +188,8 @@ pub struct ScraperInfo {
 ///
 /// Modifiers to add to a scraper job
 ///
-#[derive(Debug, Clone, Eq, Hash, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Ord, PartialOrd, bincode::Encode, bincode::Decode)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum ScraperModifiers {
     // A useragent to use when scraping text or pulling siteinfo
     Useragent(String),
@@ -197,13 +202,15 @@ pub enum ScraperModifiers {
 ///
 /// Determines if we should apply this to a text or media entry
 ///
-#[derive(Debug, Clone, Eq, Hash, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Ord, PartialOrd, bincode::Encode, bincode::Decode)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct TargetModifiers {
     pub target: ModifierTarget,
     pub modifier: ScraperModifiers,
 }
 
-#[derive(Debug, Clone, Eq, Hash, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Ord, PartialOrd, bincode::Encode, bincode::Decode)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum ModifierTarget {
     Text,
     Media,
@@ -267,26 +274,6 @@ pub fn return_default_globalpluginparser() -> GlobalPluginScraper {
         stored_info: None,
         callbacks: vec![],
         storage_type: None,
-    }
-}
-
-pub fn return_default_jobsobj() -> DbJobsObj {
-    DbJobsObj {
-        id: None,
-        time: 0,
-        reptime: Some(0),
-        priority: DEFAULT_PRIORITY,
-        cachetime: DEFAULT_CACHETIME,
-        cachechecktype: DEFAULT_CACHECHECK,
-        site: "".to_string(),
-        param: Vec::new(),
-        jobmanager: DbJobsManager {
-            jobtype: DbJobType::NoScrape,
-            recreation: None,
-        },
-        isrunning: false,
-        system_data: BTreeMap::new(),
-        user_data: BTreeMap::new(),
     }
 }
 
@@ -414,7 +401,7 @@ pub enum ScraperType {
     Automatic,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Default)]
 #[allow(dead_code)]
 pub enum ScraperReturn {
     // Valid data from the system
@@ -422,6 +409,7 @@ pub enum ScraperReturn {
     // STOP IMMEDIENTLY: ISSUE WITH SITE : PANICS no save
     EMCStop(String),
     // Hit nothing to search. Move to next job.
+    #[default]
     Nothing,
     // Stop current job, Record issue Move to next.
     Stop(String),
@@ -441,11 +429,12 @@ pub enum Flags {
 
 /// What the scraper passes between loaded 3rd party scrapers and the internal
 /// scrpaer.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Default)]
 pub struct ScraperObject {
-    pub file: HashSet<FileObject>,
-    pub tag: HashSet<TagObject>,
-    pub flag: Vec<Flags>,
+    pub files: HashSet<FileObject>,
+    pub tags: HashSet<TagObject>,
+    pub jobs: HashSet<ScraperDataReturn>,
+    pub flags: Vec<Flags>,
 }
 
 /// Shared data to be passed for jobs
@@ -455,6 +444,16 @@ pub struct ScraperData {
     pub job: JobScraper,
     pub system_data: BTreeMap<String, String>,
     pub user_data: BTreeMap<String, String>,
+}
+
+/// Shared data to be returned from scrapers
+#[derive(
+    Debug, Clone, Eq, PartialEq, Hash, Ord, PartialOrd, bincode::Encode, bincode::Decode, Default,
+)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub struct ScraperDataReturn {
+    pub job: DbJobsObj,
+    pub skip_conditions: Vec<SkipIf>,
 }
 
 /// Defines what we need to reimport a file to derive a source URL. Currently only
@@ -533,7 +532,7 @@ pub struct DbNamespaceObj {
 // pub tag: Option`<String>`, pub name: Option`<String>`, pub description:
 // Option`<String>`, }
 /// Database Jobs object
-#[derive(Debug, Hash, Eq, PartialEq, Clone, bincode::Encode, bincode::Decode)]
+#[derive(Debug, Hash, Eq, PartialOrd, Ord, PartialEq, Clone, bincode::Encode, bincode::Decode)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct DbJobsObj {
     /// id of the job. If exist then we are gravy baby
@@ -541,14 +540,13 @@ pub struct DbJobsObj {
     /// time job was added into db
     pub time: usize,
     /// Time to run job
-    pub reptime: Option<usize>,
+    pub reptime: usize,
     // Determines which job we should run first. Higher values go first
     pub priority: usize,
     // How long should we keep a job in cache
     pub cachetime: Option<usize>,
     // How should we deduplicate jobs
     pub cachechecktype: JobCacheType,
-
     /// Site we're processing
     pub site: String,
     /// any params that need to get passed into the scraper, plugin, scraper etc
@@ -563,8 +561,29 @@ pub struct DbJobsObj {
     pub user_data: BTreeMap<String, String>,
 }
 
+impl Default for DbJobsObj {
+    fn default() -> Self {
+        Self {
+            id: None,
+            time: 0,
+            reptime: 0,
+            priority: DEFAULT_PRIORITY,
+            cachetime: DEFAULT_CACHETIME,
+            cachechecktype: JobCacheType::default(),
+            site: String::new(),
+            param: Vec::new(),
+            jobmanager: DbJobsManager::default(),
+            isrunning: false,
+            system_data: BTreeMap::new(),
+            user_data: BTreeMap::new(),
+        }
+    }
+}
+
 /// Manager on job type and logic
-#[derive(Debug, Hash, Eq, PartialEq, Clone, bincode::Encode, bincode::Decode, Ord, PartialOrd)]
+#[derive(
+    Debug, Hash, Eq, PartialEq, Clone, bincode::Encode, bincode::Decode, Ord, PartialOrd, Default,
+)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct DbJobsManager {
     pub jobtype: DbJobType,
@@ -585,7 +604,17 @@ pub enum DbJobRecreation {
 
 /// Type of job in db. Will be used to confirm what the scraping logic should work.
 #[derive(
-    Debug, Copy, Hash, Eq, PartialEq, Clone, bincode::Encode, bincode::Decode, Ord, PartialOrd,
+    Debug,
+    Copy,
+    Hash,
+    Eq,
+    PartialEq,
+    Clone,
+    bincode::Encode,
+    bincode::Decode,
+    Ord,
+    PartialOrd,
+    Default,
 )]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "PascalCase"))]
@@ -604,6 +633,7 @@ pub enum DbJobType {
     /// Something else sends to scraper.
     Scraper,
     /// Do Not Reachout to network to scrape this item
+    #[default]
     NoScrape,
 }
 
@@ -727,7 +757,7 @@ pub enum FileSource {
 }
 
 /// Represents one file
-#[derive(Debug, Eq, Hash, PartialEq, bincode::Encode, bincode::Decode, Clone)]
+#[derive(Debug, Eq, Hash, PartialEq, bincode::Encode, bincode::Decode, Clone, Default)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct FileObject {
     pub source: Option<FileSource>,
@@ -778,7 +808,7 @@ impl std::hash::Hash for RegexStorage {
 }
 
 /// Holder of Tag info. Keeps relationalship info into account.
-#[derive(Debug, Eq, PartialEq, Hash, Clone, bincode::Encode, bincode::Decode)]
+#[derive(Debug, Eq, PartialEq, Hash, Clone, bincode::Encode, bincode::Decode, Default)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct TagObject {
     pub namespace: GenericNamespaceObj,
@@ -796,7 +826,9 @@ pub struct SubTag {
     pub tag_type: TagType,
 }
 
-#[derive(Debug, Eq, PartialEq, Hash, Clone, bincode::Encode, bincode::Decode)]
+#[derive(
+    Debug, Eq, PartialEq, Hash, Clone, bincode::Encode, bincode::Decode, PartialOrd, Ord, Default,
+)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct GenericNamespaceObj {
     pub name: String,
@@ -804,23 +836,24 @@ pub struct GenericNamespaceObj {
 }
 
 /// Tag Type object. Represents metadata for parser.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 #[allow(dead_code)]
-#[derive(Eq, Hash, PartialEq, bincode::Encode, bincode::Decode)]
+#[derive(Eq, Hash, PartialEq, bincode::Encode, bincode::Decode, Ord, PartialOrd)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum TagType {
     // Normal tag.
+    #[default]
     Normal,
     // Do not run any regex on this pos
     NormalNoRegex,
     // Scraper to download and parse a new url.
-    ParseUrl((ScraperData, Option<SkipIf>)),
+    //ParseUrl((ScraperData, Option<SkipIf>)),
     // Probably will add support for something like file descriptors or plugin
     // specific things.
     Special,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, bincode::Encode, bincode::Decode)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, bincode::Encode, bincode::Decode, PartialOrd, Ord)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Tag {
     pub tag: String,
@@ -830,7 +863,7 @@ pub struct Tag {
 }
 
 /// Used for skipping a ParseUrl in TagType if a tag exists.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, bincode::Encode, bincode::Decode)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, bincode::Encode, bincode::Decode, PartialOrd, Ord)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum SkipIf {
     // If a relationship between any file and tag exists.
@@ -851,7 +884,7 @@ pub struct JobScraper {
 }
 
 /// Supported types of hashes in Rust Hydrus
-#[derive(Debug, Clone, bincode::Encode, bincode::Decode)]
+#[derive(Debug, Clone, bincode::Encode, bincode::Decode, Default)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[allow(dead_code)]
 #[derive(Eq, Hash, PartialEq)]
@@ -861,6 +894,7 @@ pub enum HashesSupported {
     Sha1(String),
     Sha256(String),
     Sha512(String),
+    #[default]
     None,
 }
 
@@ -1036,8 +1070,26 @@ pub enum PluginCommunicationChannel {
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Ord, PartialOrd, bincode::Encode, bincode::Decode)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum ScraperParam {
+    // User defined params like search terms
     Normal(String),
+    // A GET url not a POST
     Url(String),
+    // Special type of url. is designed for weird requests like POST JSON and such
+    UrlPost(UrlPost),
+    // Login info
     Login(LoginType),
+    // Some weird database call will look into later
     Database(String),
+}
+
+#[derive(
+    Debug, Clone, PartialEq, Eq, Hash, Ord, PartialOrd, bincode::Encode, bincode::Decode, Default,
+)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub struct UrlPost {
+    pub url: String,
+    // Any goofball request modifiers
+    pub modifiers: Vec<TargetModifiers>,
+    // any post data to send if needed
+    pub post_data: String,
 }

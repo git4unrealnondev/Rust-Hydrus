@@ -1,5 +1,4 @@
 use chrono::DateTime;
-use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::time::Duration;
@@ -7,10 +6,10 @@ use std::time::Duration;
 //use ahash::HashSet;
 //use ahash::HashSet;
 
-#[path = "../../../src/sharedtypes.rs"]
-mod sharedtypes;
 #[path = "../../../src/client.rs"]
 mod client;
+#[path = "../../../src/sharedtypes.rs"]
+mod sharedtypes;
 
 use crate::sharedtypes::DEFAULT_PRIORITY;
 #[macro_export]
@@ -513,7 +512,8 @@ fn parse_pools(
     site: &Site,
 ) -> Vec<sharedtypes::ScraperReturn> {
     let mut files: HashSet<sharedtypes::FileObject> = HashSet::default();
-    let mut tag: HashSet<sharedtypes::TagObject> = HashSet::default();
+    let mut tags: HashSet<sharedtypes::TagObject> = HashSet::default();
+    let mut jobs: HashSet<sharedtypes::ScraperDataReturn> = HashSet::default();
 
     // For each in tag pools pulled.
     for multpool in js.members() {
@@ -524,7 +524,7 @@ fn parse_pools(
         let tags_list: Vec<sharedtypes::TagObject> = Vec::new();
 
         // Add poolid if not exist
-        tag.insert(sharedtypes::TagObject {
+        tags.insert(sharedtypes::TagObject {
             namespace: nsobjplg(&NsIdent::PoolId, site),
             relates_to: None,
             tag: multpool["id"].to_string(),
@@ -532,7 +532,7 @@ fn parse_pools(
         });
 
         // Add pool creator
-        tag.insert(sharedtypes::TagObject {
+        tags.insert(sharedtypes::TagObject {
             namespace: nsobjplg(&NsIdent::PoolCreator, site),
             relates_to: Some(subgen(
                 &NsIdent::PoolId,
@@ -546,7 +546,7 @@ fn parse_pools(
         });
 
         // Add pool creator id
-        tag.insert(sharedtypes::TagObject {
+        tags.insert(sharedtypes::TagObject {
             namespace: nsobjplg(&NsIdent::PoolCreatorId, site),
             relates_to: Some(subgen(
                 &NsIdent::PoolCreator,
@@ -560,7 +560,7 @@ fn parse_pools(
         });
 
         // Add pool name
-        tag.insert(sharedtypes::TagObject {
+        tags.insert(sharedtypes::TagObject {
             namespace: nsobjplg(&NsIdent::PoolName, site),
             relates_to: Some(subgen(
                 &NsIdent::PoolId,
@@ -574,7 +574,7 @@ fn parse_pools(
         });
 
         // Add pool description
-        tag.insert(sharedtypes::TagObject {
+        tags.insert(sharedtypes::TagObject {
             namespace: nsobjplg(&NsIdent::Description, site),
             relates_to: Some(subgen(
                 &NsIdent::PoolId,
@@ -603,7 +603,7 @@ fn parse_pools(
         .timestamp()
         .to_string();
 
-        tag.insert(sharedtypes::TagObject {
+        tags.insert(sharedtypes::TagObject {
             namespace: nsobjplg(&NsIdent::PoolCreatedAt, site),
             relates_to: Some(subgen(
                 &NsIdent::PoolId,
@@ -616,7 +616,7 @@ fn parse_pools(
             tag_type: sharedtypes::TagType::Normal,
         });
 
-        tag.insert(sharedtypes::TagObject {
+        tags.insert(sharedtypes::TagObject {
             namespace: nsobjplg(&NsIdent::PoolUpdatedAt, site),
             relates_to: Some(subgen(
                 &NsIdent::PoolId,
@@ -631,7 +631,7 @@ fn parse_pools(
         for (cnt, postids) in multpool["post_ids"].members().enumerate() {
             if let Some(recursion) = scraperdata.system_data.get("recursion") {
                 if recursion == "false" {
-                    tag.insert(sharedtypes::TagObject {
+                    tags.insert(sharedtypes::TagObject {
                         namespace: nsobjplg(&NsIdent::PoolId, site),
                         relates_to: None,
                         tag: multpool["id"].to_string(),
@@ -639,7 +639,31 @@ fn parse_pools(
                     });
                 } else {
                     let lowercase_site = site_to_string(site).to_lowercase();
-                    tag.insert(sharedtypes::TagObject {
+                    let parse_url = format!(
+                        "https://{}.net/posts.json?tags=id:{}+status:any",
+                        lowercase_site, postids
+                    );
+                    jobs.insert(sharedtypes::ScraperDataReturn {
+                        job: sharedtypes::DbJobsObj {
+                            site: site_to_string_prefix(site).to_string(),
+                            param: vec![sharedtypes::ScraperParam::Url(parse_url)],
+                            priority: sharedtypes::DEFAULT_PRIORITY - 1,
+                            jobmanager: sharedtypes::DbJobsManager {
+                                jobtype: sharedtypes::DbJobType::Scraper,
+                                ..Default::default()
+                            },
+                            ..Default::default()
+                        },
+                        skip_conditions: vec![sharedtypes::SkipIf::FileTagRelationship(
+                            sharedtypes::Tag {
+                                tag: postids.to_string(),
+                                namespace: nsobjplg(&NsIdent::FileId, site),
+                            },
+                        )],
+                        ..Default::default()
+                    });
+
+                    /* tags.insert(sharedtypes::TagObject {
                         namespace: nsobjplg(&NsIdent::PoolId, site),
                         relates_to: None,
                         tag: multpool["id"].to_string(),
@@ -647,25 +671,44 @@ fn parse_pools(
                             (sharedtypes::ScraperData {
                                 job: sharedtypes::JobScraper {
                                     site: site_to_string_prefix(site),
-                                    param: vec![sharedtypes::ScraperParam::Url(format!(
-                                        "https://{}.net/posts.json?tags=id:{}+status:any",
-                                        lowercase_site, postids
-                                    ))],
+                                    param: vec![sharedtypes::ScraperParam::Url()],
                                     job_type: sharedtypes::DbJobType::Scraper,
                                 },
                                 system_data: BTreeMap::new(),
                                 user_data: BTreeMap::new(),
                             }),
-                            Some(sharedtypes::SkipIf::FileTagRelationship(sharedtypes::Tag {
-                                tag: postids.to_string(),
-                                namespace: nsobjplg(&NsIdent::FileId, site),
-                            })),
+                            Some(),
                         )),
-                    });
+                    });*/
                 }
             } else {
                 let lowercase_site = site_to_string(site).to_lowercase();
-                tag.insert(sharedtypes::TagObject {
+
+                let parse_url = format!(
+                    "https://{}.net/posts.json?tags=id:{}+status:any",
+                    lowercase_site, postids
+                );
+                jobs.insert(sharedtypes::ScraperDataReturn {
+                    job: sharedtypes::DbJobsObj {
+                        site: site_to_string_prefix(site).to_string(),
+                        param: vec![sharedtypes::ScraperParam::Url(parse_url)],
+                        priority: sharedtypes::DEFAULT_PRIORITY - 1,
+                        jobmanager: sharedtypes::DbJobsManager {
+                            jobtype: sharedtypes::DbJobType::Scraper,
+                            ..Default::default()
+                        },
+                        ..Default::default()
+                    },
+                    skip_conditions: vec![sharedtypes::SkipIf::FileTagRelationship(
+                        sharedtypes::Tag {
+                            tag: postids.to_string(),
+                            namespace: nsobjplg(&NsIdent::FileId, site),
+                        },
+                    )],
+                    ..Default::default()
+                });
+
+                /* tags.insert(sharedtypes::TagObject {
                     namespace: nsobjplg(&NsIdent::PoolId, site),
                     relates_to: None,
                     tag: multpool["id"].to_string(),
@@ -673,10 +716,7 @@ fn parse_pools(
                         (sharedtypes::ScraperData {
                             job: sharedtypes::JobScraper {
                                 site: site_to_string_prefix(site),
-                                param: vec![sharedtypes::ScraperParam::Url(format!(
-                                    "https://{}.net/posts.json?tags=id:{}+status:any",
-                                    lowercase_site, postids
-                                ))],
+                                param: vec![sharedtypes::ScraperParam::Url()],
                                 job_type: sharedtypes::DbJobType::Scraper,
                             },
                             system_data: BTreeMap::new(),
@@ -687,11 +727,11 @@ fn parse_pools(
                             namespace: nsobjplg(&NsIdent::FileId, site),
                         })),
                     )),
-                });
+                });*/
             }
 
             // Relates fileid to position in table with the restriction of the poolid
-            tag.insert(sharedtypes::TagObject {
+            tags.insert(sharedtypes::TagObject {
                 namespace: nsobjplg(&NsIdent::PoolPosition, site),
                 relates_to: Some(subgen(
                     &NsIdent::FileId,
@@ -717,9 +757,10 @@ fn parse_pools(
 
     vec![sharedtypes::ScraperReturn::Data(
         sharedtypes::ScraperObject {
-            file: files,
-            tag,
-            flag: vec![],
+            files,
+            tags,
+            jobs,
+            ..Default::default()
         },
     )]
 }
@@ -749,6 +790,7 @@ pub fn parser(
     };
 
     let mut files: HashSet<sharedtypes::FileObject> = HashSet::default();
+    let mut jobs: HashSet<sharedtypes::ScraperDataReturn> = HashSet::default();
     let js = match json::parse(html_input) {
         Err(err) => {
             if html_input.contains("Please confirm you are not a robot.") {
@@ -845,7 +887,20 @@ pub fn parser(
                         "https://{}.net/pools.json?search[id]={}",
                         lowercase_site, each
                     );
-                    tags_list.push(sharedtypes::TagObject {
+                    jobs.insert(sharedtypes::ScraperDataReturn {
+                        job: sharedtypes::DbJobsObj {
+                            site: site_to_string_prefix(&site).to_string(),
+                            param: vec![sharedtypes::ScraperParam::Url(parse_url)],
+                            priority: sharedtypes::DEFAULT_PRIORITY - 2,
+                            jobmanager: sharedtypes::DbJobsManager {
+                                jobtype: sharedtypes::DbJobType::Scraper,
+                                ..Default::default()
+                            },
+                            ..Default::default()
+                        },
+                        ..Default::default()
+                    });
+                    /* tags_list.push(sharedtypes::TagObject {
                         namespace: sharedtypes::GenericNamespaceObj {
                             name: "Do Not Add".to_string(),
                             description: Some("DO NOT PARSE ME".to_string()),
@@ -865,7 +920,7 @@ pub fn parser(
                             },
                             None,
                         )),
-                    });
+                    });*/
                 }
             }
         }
@@ -956,9 +1011,9 @@ pub fn parser(
 
     let mut out = vec![sharedtypes::ScraperReturn::Data(
         sharedtypes::ScraperObject {
-            file: files,
-            tag: HashSet::new(),
-            flag: vec![],
+            files,
+            jobs,
+            ..Default::default()
         },
     )];
     if js["posts"].len() <= 74 {
@@ -1148,16 +1203,18 @@ pub fn db_upgrade_call_3(site: &Site) {
                         dbg!(&fid, tid);
                         for tid_iter in tag_id.iter() {
                             if pool_table.contains(&tid_iter.tag_id) {
-                                let mut job = sharedtypes::return_default_jobsobj();
-                                job.site = site_to_string_prefix(site);
-                                job.param = vec![sharedtypes::ScraperParam::Url(format!(
-                                    "https://{}.net/pools.json?search[id]={}",
-                                    site_to_string(site).to_lowercase(),
-                                    client::tag_get_id(tid_iter.tag_id).unwrap().name
-                                ))];
-                                job.jobmanager = sharedtypes::DbJobsManager {
-                                    jobtype: sharedtypes::DbJobType::Scraper,
-                                    recreation: None,
+                                let job = sharedtypes::DbJobsObj {
+                                    site: site_to_string_prefix(site),
+                                    param: vec![sharedtypes::ScraperParam::Url(format!(
+                                        "https://{}.net/pools.json?search[id]={}",
+                                        site_to_string(site).to_lowercase(),
+                                        client::tag_get_id(tid_iter.tag_id).unwrap().name
+                                    ))],
+                                    jobmanager: sharedtypes::DbJobsManager {
+                                        jobtype: sharedtypes::DbJobType::Scraper,
+                                        recreation: None,
+                                    },
+                                    ..Default::default()
                                 };
                                 client::job_add(job);
                             }
@@ -1252,7 +1309,6 @@ fn client_clear_duplicate_sources() {
             Some("Should e6 check that if their are duplicate records".to_string()),
             None,
             Some("true".to_string()),
-            
         );
     }
 
@@ -1305,7 +1361,6 @@ fn client_clear_duplicate_sources() {
         Some("Should e6 check that if their are duplicate records".to_string()),
         None,
         Some("False".to_string()),
-        
     );
 }
 
@@ -1452,8 +1507,7 @@ pub fn on_start(site_struct: &sharedtypes::GlobalPluginScraper) {
                                                 &fileid, &tag.name, tag.namespace, legacy_ns
                                             ));
                                         }
-                                        let tagid_new =
-                                            client::tag_add(tag.name, *legacy_ns,  None);
+                                        let tagid_new = client::tag_add(tag.name, *legacy_ns, None);
 
                                         client::file_relationship_migrate(
                                             *fileid, tagid, tagid_new,
