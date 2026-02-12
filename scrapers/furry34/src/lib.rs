@@ -265,9 +265,9 @@ fn parse_post(
             }
         }
 
-        if let Some(url) = scraperdata.job.user_data.get("file_url") {
+        if let Some(url) = scraperdata.job.user_data.get("file_url_ideal") && let Some(url_nonideal) = scraperdata.job.user_data.get("file_url_non_ideal") {
             let file = sharedtypes::FileObject {
-                source: Some(sharedtypes::FileSource::Url(url.to_string())),
+                source: Some(sharedtypes::FileSource::Url(vec![url.to_string(), url_nonideal.to_string()])),
                 tag_list,
                 ..Default::default()
             };
@@ -388,7 +388,7 @@ fn parse_post(
 }
 
 /// Fixes media links for the urls
-fn fix_url_to_media(url: url::Url) -> url::Url {
+fn fix_url_to_media(url: &url::Url) -> url::Url {
     let mut url = url.clone();
 
     url.set_path(
@@ -400,6 +400,18 @@ fn fix_url_to_media(url: url::Url) -> url::Url {
 
     url
 }
+/// Fixes media links for the urls
+fn fix_url_parsed(url: &url::Url) -> url::Url {
+    let mut url = url.clone();
+
+    url.set_path(
+        &url.path()
+            .replace("//", "/"),
+    );
+
+    url
+}
+
 
 /// Extracts out the image or videos url
 fn parse_post_html(
@@ -430,12 +442,16 @@ fn parse_post_html(
                     _ => continue,
                 },
             };
-            let url = fix_url_to_media(url);
+            let url_ideal = fix_url_to_media(&url);
+            let url_nonideal = fix_url_parsed(&url);
 
             let mut user_data = BTreeMap::new();
 
             user_data.insert("post_id".to_string(), post_id.to_string());
-            user_data.insert("file_url".to_string(), url.to_string());
+
+            // Stupid workaround because some files cannot be "downloaded"
+            user_data.insert("file_url_ideal".to_string(), url_ideal.to_string());
+            user_data.insert("file_url_non_ideal".to_string(), url_nonideal.to_string());
 
             jobs.insert(sharedtypes::ScraperDataReturn {
                 job: sharedtypes::DbJobsObj {
@@ -488,7 +504,7 @@ pub fn parser(
             );
         }
     } else if let Some(_post_id) = scraperdata.job.user_data.get("post_id")
-        && let Some(_file_url) = scraperdata.job.user_data.get("file_url")
+        && let Some(_file_url) = scraperdata.job.user_data.get("file_url_ideal")
     {
         let jobs = HashSet::new();
         /*jobs.insert(sharedtypes::ScraperDataReturn {
