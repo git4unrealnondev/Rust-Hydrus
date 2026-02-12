@@ -116,7 +116,7 @@ pub fn url_dump(
     }
 
     // This code handles adding search terms into the query object
-    if !search_terms.is_empty() | scraperdata.job.user_data.contains_key("search_skip") {
+    if !search_terms.is_empty() | scraperdata.job.user_data.contains_key("search_skip") | (search_terms.is_empty() && out.is_empty()) {
         let mut job_user_data = scraperdata.job.user_data.clone();
         if let Some(_skip) = job_user_data.get("search_skip")
             && let Some(take) = job_user_data.get("search_take")
@@ -275,6 +275,7 @@ fn parse_post(
             files.insert(file);
         }
     } else {
+        // Parses the next search page
         for member in js["items"].members() {
             if let Some(post_id) = member["id"].as_u32() {
                 let post_url = format!("{SITE_BASE}post/{}", post_id);

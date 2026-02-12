@@ -586,7 +586,7 @@ impl Main {
         {
             self.transaction_flush();
             let tn = self.write_conn.lock();
-            tn.execute("VACUUM", []);
+            tn.execute("VACUUM", []).unwrap();
         }
         logging::info_log("Finishing Vacuum db!".to_string());
     }
@@ -597,7 +597,7 @@ impl Main {
         {
             self.transaction_flush();
             let tn = self.write_conn.lock();
-            tn.execute("ANALYZE", []);
+            tn.execute("ANALYZE", []).unwrap();
         }
         logging::info_log("Finishing analyze db!".to_string());
     }
@@ -952,7 +952,8 @@ PRAGMA journal_mode = WAL;
             *transaction = true;
             self.write_conn
                 .lock()
-                .execute("BEGIN EXCLUSIVE TRANSACTION", []);
+                .execute("BEGIN EXCLUSIVE TRANSACTION", [])
+                .unwrap();
         }
     }
     ///
@@ -964,7 +965,10 @@ PRAGMA journal_mode = WAL;
         let mut transaction = self.write_conn_istransaction.lock();
         if !*transaction {
             *transaction = true;
-            self.write_conn.lock().execute("BEGIN TRANSACTION", []);
+            self.write_conn
+                .lock()
+                .execute("BEGIN TRANSACTION", [])
+                .unwrap();
         }
     }
 
@@ -972,13 +976,12 @@ PRAGMA journal_mode = WAL;
     /// commits an exclusive write transaction
     ///
     pub fn transaction_flush(&self) {
-        logging::log("Flushing to disk");
         let mut transaction = self.write_conn_istransaction.lock();
         if *transaction {
+            logging::log("Flushing to disk");
             let conn = self.write_conn.lock();
-            conn.execute("COMMIT", []);
+            conn.execute("COMMIT", []).unwrap();
             *transaction = false;
-            dbg!("Flushing");
         }
     }
 
@@ -1212,7 +1215,8 @@ PRAGMA journal_mode = WAL;
                 "  CREATE UNIQUE INDEX IF NOT EXISTS tags_name_namespace_idx
         ON Tags(name, namespace);",
                 [],
-            );
+            )
+            .unwrap();
         }
         self.table_create(&name, &keys, &vals);
 
@@ -1530,7 +1534,7 @@ PRAGMA journal_mode = WAL;
         .concat();
         dbg!(&endresult);
         info!("Creating table as: {}", endresult);
-        let _ = tn.execute_batch(&endresult).unwrap();
+        tn.execute_batch(&endresult).unwrap();
         //stocat = endresult;
         //self.execute(stocat);
     }
@@ -1542,7 +1546,8 @@ PRAGMA journal_mode = WAL;
         tn.execute(
             "ALTER TABLE ? RENAME TO ?",
             params![original_table, new_table],
-        );
+        )
+        .unwrap();
     }
 
     /// Checks if table exists in DB if it do then delete.

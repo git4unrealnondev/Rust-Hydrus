@@ -62,7 +62,9 @@ impl Main {
             ));
             let condition_one = self.enclave_condition_list_get(&condition_list_id);
 
-            for (enclave_action_id, failed_enclave_action_id, condition_id) in condition_one {
+            while let Some((enclave_action_id, failed_enclave_action_id, condition_id)) =
+                condition_one
+            {
                 let (action_bool, action_name) =
                     self.enclave_condition_evaluate(&condition_id, file, bytes);
                 let run_option_action_id = if action_bool {

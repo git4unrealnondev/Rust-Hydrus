@@ -298,10 +298,11 @@ impl Worker {
                                 let mut data = job.clone();
                                 data.time = crate::time_func::time_secs();
                                 data.reptime = *timestamp;
+                                {
                                 jobstorage
                                     .write()
                                     .jobs_decrement_count(&data, &scraper, &id);
-
+                                }
                                 // Updates the database with the "new" object. Will have the same ID
                                 // but time and reptime will be consistient to when we should run this
                                 // job next
@@ -389,7 +390,6 @@ impl Worker {
                             out
                         }
                     };
-                    dbg!(&urlload);
 
                     'urlloop: for (scraperparam, scraperdata) in urlload {
                         'errloop: loop {
@@ -475,7 +475,6 @@ resp = task::block_on(download::dltext_new(
                                             }
                                         }
 
-                                        let mut should_flush=false;
                                         // Loop thru jobs and add them if we have no skip conditions
                                         'jobloop: for scraper_data_return in out_st.jobs.iter() {
 
@@ -486,13 +485,7 @@ resp = task::block_on(download::dltext_new(
                                                                                             }
 let mut job_storage = jobstorage.write();
                                                 job_storage.jobs_add(scraper.clone(), scraper_data_return.job.clone());
-                                                should_flush=true;
 
-                                        }
-
-                                        // If we are adding a job then do a flush
-                                        if should_flush {
-                                            database.transaction_flush();
                                         }
 
                                         // Extracts any jobs from the tags field
@@ -591,6 +584,7 @@ let mut job_storage = jobstorage.write();
                         }
                     }
                 } );
+                database.transaction_flush();
             }
             threadflagcontrol.stop();
             jobstorage.write().clear_previously_seen_cache(&scraper);
@@ -817,8 +811,6 @@ fn parse_jobs(
 ) {
     let urls_to_scrape = parse_tags(database.clone(), tag, fileid, worker_id, job_id, manager);
 
-    let should_flush = !urls_to_scrape.is_empty();
-
     {
         let mut joblock = jobstorage.write();
         for data in urls_to_scrape {
@@ -837,11 +829,6 @@ fn parse_jobs(
 
             joblock.jobs_add(scraper.clone(), dbjob);
         }
-    }
-
-    // Only flush if we got jobs in from this. Should only do this once
-    if should_flush {
-        database.transaction_flush();
     }
 }
 

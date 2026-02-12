@@ -704,7 +704,7 @@ HAVING COUNT(r.fileid) {dir} ?;"
                 .prepare("INSERT OR REPLACE INTO FileStorageLocations (location) VALUES (?)")
                 .unwrap();
 
-            wait_until_sqlite_ok!(prep.insert(params![location]));
+            wait_until_sqlite_ok!(prep.insert(params![location])).unwrap();
             wait_until_sqlite_ok!(tn.query_row(
                 "SELECT id from FileStorageLocations where location = ?",
                 params![location],
@@ -1508,10 +1508,10 @@ RETURNING id;
         self.transaction_start();
         {
             let tn = self.write_conn.lock();
-            let inp = "DELETE FROM Jobs WHERE id = ?";
+            //let inp = "DELETE FROM Jobs WHERE id = ? LIMIT 1";
+            let inp = "DELETE FROM Jobs WHERE id = (SELECT id FROM Jobs WHERE id = ? LIMIT 1 )";
             let _ = wait_until_sqlite_ok!(tn.execute(inp, params![id.to_string()])).unwrap();
         }
-        self.transaction_flush();
     }
 
     /// Removes a tag from sql table by name and namespace
