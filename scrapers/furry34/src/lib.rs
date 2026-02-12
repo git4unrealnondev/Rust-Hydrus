@@ -110,13 +110,17 @@ pub fn url_dump(
                 };
                 out.push(scraperdata);
             }
-        } else if let sharedtypes::ScraperParam::Normal(search_param) = param {
-            search_terms.push(search_param.clone());
-        }
+        } else if let sharedtypes::ScraperParam::Normal(search_param) = param
+            && !search_param.is_empty() {
+                search_terms.push(search_param.clone());
+            }
     }
 
     // This code handles adding search terms into the query object
-    if !search_terms.is_empty() | scraperdata.job.user_data.contains_key("search_skip") | (search_terms.is_empty() && out.is_empty()) {
+    if !search_terms.is_empty()
+        | scraperdata.job.user_data.contains_key("search_skip")
+        | (search_terms.is_empty() && out.is_empty())
+    {
         let mut job_user_data = scraperdata.job.user_data.clone();
         if let Some(_skip) = job_user_data.get("search_skip")
             && let Some(take) = job_user_data.get("search_take")
@@ -172,6 +176,7 @@ pub fn url_dump(
             }
         };
 
+        println!("{}", &data);
         let url = format!("{SITE_BASE}api/v2/post/search/root");
         let job = sharedtypes::DbJobsObj {
             priority: sharedtypes::DEFAULT_PRIORITY,
@@ -265,9 +270,14 @@ fn parse_post(
             }
         }
 
-        if let Some(url) = scraperdata.job.user_data.get("file_url_ideal") && let Some(url_nonideal) = scraperdata.job.user_data.get("file_url_non_ideal") {
+        if let Some(url) = scraperdata.job.user_data.get("file_url_ideal")
+            && let Some(url_nonideal) = scraperdata.job.user_data.get("file_url_non_ideal")
+        {
             let file = sharedtypes::FileObject {
-                source: Some(sharedtypes::FileSource::Url(vec![url.to_string(), url_nonideal.to_string()])),
+                source: Some(sharedtypes::FileSource::Url(vec![
+                    url.to_string(),
+                    url_nonideal.to_string(),
+                ])),
                 tag_list,
                 ..Default::default()
             };
@@ -350,7 +360,7 @@ fn parse_post(
             };
 
             let url = format!("{SITE_BASE}api/v2/post/search/root");
-
+            println!("{}", &data);
             jobs.insert(sharedtypes::ScraperDataReturn {
                 job: sharedtypes::DbJobsObj {
                     priority: sharedtypes::DEFAULT_PRIORITY,
@@ -404,14 +414,10 @@ fn fix_url_to_media(url: &url::Url) -> url::Url {
 fn fix_url_parsed(url: &url::Url) -> url::Url {
     let mut url = url.clone();
 
-    url.set_path(
-        &url.path()
-            .replace("//", "/"),
-    );
+    url.set_path(&url.path().replace("//", "/"));
 
     url
 }
-
 
 /// Extracts out the image or videos url
 fn parse_post_html(
