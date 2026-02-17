@@ -176,7 +176,6 @@ pub fn url_dump(
             }
         };
 
-        println!("{}", &data);
         let url = format!("{SITE_BASE}api/v2/post/search/root");
         let job = sharedtypes::DbJobsObj {
             priority: sharedtypes::DEFAULT_PRIORITY,
@@ -360,7 +359,6 @@ fn parse_post(
             };
 
             let url = format!("{SITE_BASE}api/v2/post/search/root");
-            println!("{}", &data);
             jobs.insert(sharedtypes::ScraperDataReturn {
                 job: sharedtypes::DbJobsObj {
                     priority: sharedtypes::DEFAULT_PRIORITY,
@@ -433,6 +431,8 @@ fn parse_post_html(
     let selector =
         Selector::parse(r#"img[class="img ng-star-inserted"], source[type="video/mp4"]"#).unwrap();
 
+    // Loops through all imgs and videos and parses out their "ideal" and original urls
+    // This is needed because the site doesn't give you the full file for some reason
     for element in document.select(&selector) {
         if let Some(src) = element.attr("src") {
             let url = match url::Url::parse(src) {
@@ -455,7 +455,7 @@ fn parse_post_html(
 
             user_data.insert("post_id".to_string(), post_id.to_string());
 
-            // Stupid workaround because some files cannot be "downloaded"
+            // Stupid workaround because some files cannot be "downloaded" on this api
             user_data.insert("file_url_ideal".to_string(), url_ideal.to_string());
             user_data.insert("file_url_non_ideal".to_string(), url_nonideal.to_string());
 
@@ -497,7 +497,6 @@ pub fn parser(
 ) -> Vec<sharedtypes::ScraperReturn> {
     let mut out = Vec::new();
 
-    //println!("{}", html_input);
     if let Ok(js) = json::parse(html_input) {
         if scraperdata.job.user_data.contains_key("search_offset")
             | scraperdata.job.user_data.contains_key("post_id")

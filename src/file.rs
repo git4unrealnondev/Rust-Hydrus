@@ -2,7 +2,6 @@ use crate::database::database::Main;
 use crate::download::{hash_file, process_archive_files};
 use crate::enclave;
 use crate::globalload::GlobalLoad;
-use crate::threading::parse_tags;
 use crate::{Arc, RwLock, logging, sharedtypes};
 use std::fs;
 use std::fs::File;
@@ -159,9 +158,13 @@ pub fn parse_file(
             }
 
             // imports all tags onto the file that we dl'ed
-            for tag in tag_list.iter() {
-                parse_tags(database.clone(), tag, fileid, &0, &0, manager_arc.clone());
+            if let Some(ref file_id) = fileid {
+
+            database.add_tags_to_fileid(file_id, &tag_list, &manager_arc);
             }
+            //for tag in tag_list.iter() {
+            //    parse_tags(database.clone(), tag, fileid, &0, &0, manager_arc.clone());
+            //}
 
             // NOTE COULD CAUSE LOCKING
             manager_arc.callback_on_import(&bytes, &sha512hash);
@@ -201,8 +204,11 @@ pub fn parse_file(
                     );
                     subfileid = database.file_get_hash(&sub_sha512hash);
                 }
+                if let Some(file_id) = subfileid {
+                    database.add_tags_to_fileid(&file_id, &tags, &manager_arc);
+                }
                 // imports all tags onto the file that we dl'ed
-                for tag in tags.iter() {
+              /*  for tag in tags.iter() {
                     parse_tags(
                         database.clone(),
                         tag,
@@ -211,7 +217,7 @@ pub fn parse_file(
                         &0,
                         manager_arc.clone(),
                     );
-                }
+                }*/
 
                 // NOTE COULD CAUSE LOCKING
                 manager_arc.callback_on_import(&file_bytes, &sub_sha512hash);

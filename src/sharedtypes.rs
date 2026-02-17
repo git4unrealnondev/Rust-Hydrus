@@ -440,7 +440,7 @@ pub struct ScraperObject {
 /// Shared data to be passed for jobs
 #[derive(Debug, Clone, Eq, PartialEq, Hash, Ord, PartialOrd, bincode::Encode, bincode::Decode)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub struct ScraperData {
+pub struct ScraperDataOld {
     pub job: JobScraper,
     pub system_data: BTreeMap<String, String>,
     pub user_data: BTreeMap<String, String>,
@@ -752,7 +752,7 @@ pub struct DBPluginOutput {
 #[derive(Debug, Eq, Hash, PartialEq, bincode::Encode, bincode::Decode, Clone)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum FileSource {
-    Url(String),
+    Url(Vec<String>),
     Bytes(Vec<u8>),
 }
 
@@ -873,6 +873,8 @@ pub enum SkipIf {
     FileNamespaceNumber((Tag, GenericNamespaceObj, usize)),
     // Skips a file if the hash X exists
     FileHash(String),
+    // Skips if no files are downloaded
+    NoFilesDownloaded,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Ord, PartialOrd, bincode::Encode, bincode::Decode)]

@@ -1208,6 +1208,7 @@ PRAGMA journal_mode = WAL;
             "TEXT NOT NULL",
             "INTEGER NOT NULL, UNIQUE(name, namespace)"
         ];
+        self.table_create(&name, &keys, &vals);
 
         {
             let tn = self.write_conn.lock();
@@ -1218,7 +1219,6 @@ PRAGMA journal_mode = WAL;
             )
             .unwrap();
         }
-        self.table_create(&name, &keys, &vals);
 
         dbg!("");
         // Making Parents Table. Relates tags to tag parents.
@@ -1761,6 +1761,30 @@ PRAGMA journal_mode = WAL;
                 self.file_add_sql(&file);
 
                 self._inmemdb.write().file_put(file)
+            }
+        }
+    }
+
+    ///
+    /// Adds all tags to a fileid
+    ///
+    pub fn add_tags_to_fileid(
+        &self,
+        file_id: &usize,
+        tags: &Vec<sharedtypes::TagObject>,
+        globalload: &GlobalLoad,
+    ) {
+        for tag in tags {
+            match &tag.tag_type {
+                sharedtypes::TagType::Normal | sharedtypes::TagType::NormalNoRegex => {
+                    if tag.tag_type != sharedtypes::TagType::NormalNoRegex {
+                        globalload.plugin_on_tag(tag);
+                    }
+
+                    let tag_id = self.tag_add_tagobject(tag);
+                    self.relationship_add(*file_id, tag_id);
+                }
+                sharedtypes::TagType::Special => {}
             }
         }
     }

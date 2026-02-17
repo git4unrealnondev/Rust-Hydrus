@@ -7,15 +7,15 @@ edition = "2021"
 
 [dependencies]
 strum = { version = "0.25.0", features = ["strum_macros"] }
-strum_macros = "0.25.1"
-serde = { version = "1.0.192", features = ["serde_derive"] }
+strum_macros = "0.25.3"
+serde = { version = "1.0.228", features = ["serde_derive"] }
 thumbnailer = {path= "thumbnailer"} 
 bincode = { version = "2.0.1", features = ["serde","alloc"] }
-serde_bytes = "0.11.14"
-interprocess = "2.1.0"
-anyhow = "1.0.83"
-sha2 = { version = "0.10.8", features = ["asm"] }
-rayon = "1.10.0"
+serde_bytes = "0.11.19"
+interprocess = "2.3.1"
+anyhow = "1.0.101"
+sha2 = { version = "0.10.9", features = ["asm"] }
+rayon = "1.11.0"
 file-format = "0.25.0"
 image = { version = "^0.25.9", default-features = true, features = ["jpeg", "png", "gif"] }
 webp-animation = { version = "0.9.0", features = ["image", "static"] }

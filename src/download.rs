@@ -405,7 +405,7 @@ pub enum FileReturnStatus {
     // If a URL is dead (400+) error
     DeadUrl(String),
     // File hash,ext
-    File((String, String)),
+    File((String, String, usize)),
     // Other issue. Try again later
     TryLater,
 }
@@ -426,7 +426,6 @@ pub fn dlfile_new(
     let mut hash = String::new();
     //let mut bytes: bytes::Bytes = Bytes::from(&b""[..]);
     let mut bytes: Option<bytes::Bytes> = None;
-    let mut cnt = 0;
 
     let should_scraper_download = match scraper {
         Some(scraper) => scraper.should_handle_file_download,
@@ -448,6 +447,7 @@ pub fn dlfile_new(
         }
         //return FileReturnStatus::TryLater;
     } else {
+        let mut cnt = 0;
         while boolloop {
             let mut hasher = Sha512::new();
             loop {
@@ -460,7 +460,7 @@ pub fn dlfile_new(
                     }
                     Some(fileurl) => fileurl,
                 };
-                let url = Url::parse(source_url);
+                let url = Url::parse(&source_url);
                 if url.is_err() {
                     error_log(format!("Error while parsing url {} {:?}", source_url, url));
                     return FileReturnStatus::DeadUrl(source_url.to_string());
@@ -475,24 +475,17 @@ pub fn dlfile_new(
                 loop {
                     match &futureresult {
                         Ok(result) => {
-                            /*if let Err(err) = result.error_for_status_ref() {
-                                match ddos_guard_bypass(result, client, source_url) {
-                                    Some(bypass_response) => futureresult = Ok(bypass_response),
-                                    None => {
-                                        if let Some(err_status) = err.status() {
-                                            if err_status.is_client_error() {
-                                                logging::error_log(&format!(
-                                        "Worker: {workerid} JobID: {jobid} -- Stopping file download due to: {:?}",
-                                        err
-                                    ));
-                                                return FileReturnStatus::DeadUrl(
-                                                    source_url.clone(),
-                                                );
-                                            }
-                                        }
+                            if let Err(err) = result.error_for_status_ref() {
+                                if let Some(status) = err.status() {
+                                    if status.is_client_error() {
+                                        logging::error_log(&format!(
+                                            "Worker: {workerid} JobID: {jobid} -- Stopping file download due to: {:?}",
+                                            err
+                                        ));
+                                        return FileReturnStatus::DeadUrl(source_url.clone());
                                     }
                                 }
-                            }*/
+                            }
                             break;
                         }
                         Err(_) => {
@@ -573,7 +566,7 @@ pub fn dlfile_new(
 
     if let Some(ref bytes) = bytes {
         let file_ext = FileFormat::from_bytes(bytes).extension().to_string();
-        process_bytes(
+        let file_id = process_bytes(
             bytes,
             globalload,
             &hash,
@@ -583,7 +576,7 @@ pub fn dlfile_new(
             Some(source_url),
         );
         logging::info_log(format!("Finished processing bytes"));
-        return FileReturnStatus::File((hash, file_ext));
+        return FileReturnStatus::File((hash, file_ext, file_id.unwrap()));
     }
 
     // If we don't donwload anything the default to try again later
@@ -601,14 +594,14 @@ pub fn process_bytes(
     db: Main,
     file: &mut sharedtypes::FileObject,
     source_url: Option<&String>,
-) {
+) -> Option<usize> {
+    let mut out = None;
     // NOTE run the download / file actions first then run the plugin_on_download second.
     // That way if theirs any data that needs to get processed then we can do it while theirs a
     // valid file hash inside of the db
     {
-        let enclave_id_list;
-        {
-            enclave_id_list = db.enclave_determine_processing(file, bytes, hash, source_url);
+        if let Some(file_id) = db.enclave_determine_processing(file, bytes, hash, source_url) {
+            out = Some(file_id);
         }
     }
 
@@ -622,6 +615,8 @@ pub fn process_bytes(
             globalload.plugin_on_download(db.clone(), bytes, hash, file_ext);
         }
     }
+
+    out
 }
 
 /// Hashes file from location string with specified hash into the hash of the file.

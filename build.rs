@@ -1,10 +1,10 @@
 use quote::{ToTokens, quote};
-use std::env;
-use std::fs::{File, read_to_string};
+use std::fs;
+use std::fs::read_to_string;
 use std::io::{self, Write};
+use std::path::Path;
 use syn::Visibility;
 use syn::{ImplItem, ItemImpl};
-
 fn generate_client_code(api_file: &str) -> io::Result<String> {
     // Read the file content and handle errors
     let content = read_to_string(api_file).map_err(|e| {
@@ -151,27 +151,28 @@ fn has_web_api_macro(attrs: &[syn::Attribute]) -> bool {
     }
     false
 }
-fn write_client_file(client_code: &str) -> io::Result<()> {
-    println!(
-        "Current working directory: {}",
-        env::current_dir().unwrap().display()
-    );
 
-    if std::path::Path::new("src/generated/client_api.rs").exists() {
-        std::fs::remove_file("src/generated/client_api.rs");
+fn write_client_file_if_changed(client_code: &str) -> io::Result<()> {
+    let client_path = Path::new("generated/client_api.rs");
+
+    // Check if file exists
+    if client_path.exists() {
+        let existing_code = fs::read_to_string(client_path)?;
+        if existing_code == client_code {
+            println!("cargo:warning=Client file unchanged, skipping write");
+            return Ok(()); // Nothing changed, skip writing
+        }
     }
 
-    // Write the formatted code to client.rs
-    let mut file = File::create("src/generated/client_api.rs").map_err(|e| {
-        eprintln!("Error creating client.rs: {}", e);
-        e
-    })?;
-    file.write_all(client_code.as_bytes()).map_err(|e| {
-        eprintln!("Error writing to client.rs: {}", e);
-        e
-    })?;
+    // Create parent directory if missing
+    if let Some(parent) = client_path.parent() {
+        fs::create_dir_all(parent)?;
+    }
 
-    println!("client.rs has been written successfully.");
+    // Write new code
+    let mut file = fs::File::create(client_path)?;
+    file.write_all(client_code.as_bytes())?;
+    println!("cargo:warning=Client file updated");
     Ok(())
 }
 
@@ -180,7 +181,7 @@ fn main() {
         let file_path = "./src/database/database.rs";
         dbg!(&file_path);
         if let Ok(ref code) = generate_client_code(file_path) {
-            let _ = write_client_file(code);
+            let _ = write_client_file_if_changed(code);
         }
     }
 

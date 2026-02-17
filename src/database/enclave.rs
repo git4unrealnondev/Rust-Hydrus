@@ -29,11 +29,11 @@ impl Main {
         sha512hash: &String,
         source_url: Option<&String>,
         enclave_name: &str,
-    ) -> bool {
+    ) -> Option<usize> {
         if let Some(enclave_id) = self.enclave_name_get_id(enclave_name) {
             return self.enclave_run_logic(file, bytes, sha512hash, source_url, &enclave_id);
         }
-        false
+        None
     }
 
     ///
@@ -46,7 +46,7 @@ impl Main {
         sha512hash: &String,
         source_url: Option<&String>,
         enclave_id: &usize,
-    ) -> bool {
+    ) -> Option<usize> {
         let loop_one;
         let source_url_ns_id;
         {
@@ -83,7 +83,7 @@ impl Main {
                             "Enclave FileHash {}: Running action name: {:?}",
                             &sha512hash, action_name
                         ));
-                        if !self.enclave_run_action(
+                        if let Some(file_id) = self.enclave_run_action(
                             &action_name,
                             file,
                             bytes,
@@ -92,13 +92,13 @@ impl Main {
                             source_url_ns_id,
                             &run_action_id,
                         ) {
-                            return true;
+                            return Some(file_id);
                         }
                     }
                 }
             }
         }
-        false
+        None
     }
 
     ///
@@ -110,15 +110,18 @@ impl Main {
         bytes: &Bytes,
         sha512hash: &String,
         source_url: Option<&String>,
-    ) -> Vec<usize> {
+    ) -> Option<usize> {
         logging::info_log(format!(
             "Enclave FileHash {}: Starting to process",
             &sha512hash
         ));
-        let out = Vec::new();
+        let mut out = None;
         'priorityloop: for priority_id in self.enclave_priority_get() {
             for enclave_id in self.enclave_get_id_from_priority(&priority_id) {
-                if self.enclave_run_logic(file, bytes, sha512hash, source_url, &enclave_id) {
+                if let Some(file_id) =
+                    self.enclave_run_logic(file, bytes, sha512hash, source_url, &enclave_id)
+                {
+                    out = Some(file_id);
                     break 'priorityloop;
                 }
             }
@@ -139,7 +142,7 @@ impl Main {
         source_url: Option<&String>,
         source_url_ns_id: usize,
         enclave_id: &usize,
-    ) -> bool {
+    ) -> Option<usize> {
         let download_location = { self.location_get() };
 
         match action {
@@ -148,7 +151,7 @@ impl Main {
                     "Enclave FileHash {} Putting at Default location {}",
                     &sha512hash, &download_location
                 ));
-                let _ = self.download_and_do_parsing(
+                let file_id = self.download_and_do_parsing(
                     bytes,
                     sha512hash,
                     source_url,
@@ -157,7 +160,7 @@ impl Main {
                     &download_location,
                     file,
                 );
-                return false;
+                return Some(file_id);
                 //Some(fileid)
             }
             sharedtypes::EnclaveAction::AddTagAndNamespace((
@@ -179,7 +182,7 @@ impl Main {
                     "Enclave FileHash {}: Downloading to Default location {}",
                     &sha512hash, &download_location
                 ));
-                let _ = self.download_and_do_parsing(
+                let file_id = self.download_and_do_parsing(
                     bytes,
                     sha512hash,
                     source_url,
@@ -188,12 +191,12 @@ impl Main {
                     &download_location,
                     file,
                 );
-                return false;
+                return Some(file_id);
                 //Some(fileid)
             }
             sharedtypes::EnclaveAction::DownloadToLocation(_) => {} //None,
         }
-        true
+        None
     }
 
     ///

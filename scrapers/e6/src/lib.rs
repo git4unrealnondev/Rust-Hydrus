@@ -442,9 +442,9 @@ pub fn url_get(params: &Vec<sharedtypes::ScraperParam>) -> Vec<String> {
 #[no_mangle]
 pub fn url_dump(
     params: &[sharedtypes::ScraperParam],
-    scraperdata: &sharedtypes::ScraperData,
-) -> Vec<(String, sharedtypes::ScraperData)> {
-    let site_a = scraperdata.user_data.get("loaded_site");
+    scraperdata: &sharedtypes::ScraperDataReturn,
+) -> Vec<sharedtypes::ScraperDataReturn> {
+    let site_a = scraperdata.job.user_data.get("loaded_site");
     let site = match site_a {
         Some(sitename) => match string_to_site(sitename) {
             Some(out) => out,
@@ -461,7 +461,21 @@ pub fn url_dump(
     let hardlimit = 751;
     for i in 1..hardlimit {
         let a = build_url(params, i, &site);
-        ret.push((a, scraperdata.clone()));
+        ret.push(sharedtypes::ScraperDataReturn {
+            job: sharedtypes::DbJobsObj {
+                site: site_to_string(&site),
+                priority: sharedtypes::DEFAULT_PRIORITY - 2,
+                param: vec![sharedtypes::ScraperParam::Url(a.to_string())],
+                jobmanager: sharedtypes::DbJobsManager {
+                    jobtype: sharedtypes::DbJobType::Scraper,
+                    ..Default::default()
+                },
+                user_data: scraperdata.job.user_data.clone(),
+                ..Default::default()
+            },
+            ..Default::default()
+        });
+        //ret.push((a, scraperdata.clone()));
     }
     ret
 }
@@ -508,7 +522,7 @@ fn json_sub_tag(
 }
 fn parse_pools(
     js: &json::JsonValue,
-    scraperdata: &sharedtypes::ScraperData,
+    scraperdata: &sharedtypes::ScraperDataReturn,
     site: &Site,
 ) -> Vec<sharedtypes::ScraperReturn> {
     let mut files: HashSet<sharedtypes::FileObject> = HashSet::default();
@@ -629,7 +643,7 @@ fn parse_pools(
             tag_type: sharedtypes::TagType::Normal,
         });
         for (cnt, postids) in multpool["post_ids"].members().enumerate() {
-            if let Some(recursion) = scraperdata.system_data.get("recursion") {
+            if let Some(recursion) = scraperdata.job.system_data.get("recursion") {
                 if recursion == "false" {
                     tags.insert(sharedtypes::TagObject {
                         namespace: nsobjplg(&NsIdent::PoolId, site),
@@ -772,11 +786,9 @@ fn parse_pools(
 pub fn parser(
     html_input: &str,
     _: &str,
-    scraperdata: &sharedtypes::ScraperData,
+    scraperdata: &sharedtypes::ScraperDataReturn,
 ) -> Vec<sharedtypes::ScraperReturn> {
-    //let vecvecstr: AHashMap<String, AHashMap<String, Vec<String>>> = AHashMap::new();
-
-    let site_a = scraperdata.user_data.get("loaded_site");
+    let site_a = scraperdata.job.user_data.get("loaded_site");
     let site = match site_a {
         Some(sitename) => match string_to_site(sitename) {
             Some(out) => out,
@@ -875,12 +887,12 @@ pub fn parser(
                     None,
                     sharedtypes::TagType::Normal,
                 );*/
-                let shouldparse = if let Some(recursion) = scraperdata.system_data.get("recursion")
-                {
-                    recursion != "false"
-                } else {
-                    true
-                };
+                let shouldparse =
+                    if let Some(recursion) = scraperdata.job.system_data.get("recursion") {
+                        recursion != "false"
+                    } else {
+                        true
+                    };
                 if shouldparse {
                     let lowercase_site = site_to_string(&site).to_lowercase();
                     let parse_url = format!(
@@ -900,27 +912,6 @@ pub fn parser(
                         },
                         ..Default::default()
                     });
-                    /* tags_list.push(sharedtypes::TagObject {
-                        namespace: sharedtypes::GenericNamespaceObj {
-                            name: "Do Not Add".to_string(),
-                            description: Some("DO NOT PARSE ME".to_string()),
-                        },
-                        relates_to: None,
-                        tag: parse_url.clone(),
-                        tag_type: sharedtypes::TagType::ParseUrl((
-                            sharedtypes::ScraperData {
-                                job: sharedtypes::JobScraper {
-                                    site: site_to_string_prefix(&site).to_string(),
-                                    param: vec![sharedtypes::ScraperParam::Url(parse_url)],
-                                    job_type: sharedtypes::DbJobType::Scraper,
-                                },
-
-                                system_data: BTreeMap::new(),
-                                user_data: BTreeMap::new(),
-                            },
-                            None,
-                        )),
-                    });*/
                 }
             }
         }
@@ -1001,7 +992,7 @@ pub fn parser(
             }
         };
         let file: sharedtypes::FileObject = sharedtypes::FileObject {
-            source: Some(sharedtypes::FileSource::Url(url)),
+            source: Some(sharedtypes::FileSource::Url(vec![url])),
             hash: sharedtypes::HashesSupported::Md5(js["posts"][inc]["file"]["md5"].to_string()),
             tag_list: tags_list,
             skip_if: Vec::new(),

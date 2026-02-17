@@ -21,7 +21,9 @@ pub const DEFAULT_SOURCE_TWIT: &str = "x.com";
 pub const DEFAULT_SOURCE_BSKY: &str = "bsky.app";
 
 // Regex to match a url when a tag comes in
-pub const REGEX_COLLECTIONS: &str = r"(http(s)?://)?(fxtwitter|skibidix|fixupx|fxbsky|x|xbsky|bsky|fixvx|cunnyx)\.(com|app|co)|(\.t\.co)[.a-zA-Z///_0-9]+";
+//pub const REGEX_COLLECTIONS: &str = r"(http(s)?://)?(fxtwitter|skibidix|fixupx|fxbsky|x|xbsky|bsky|fixvx|cunnyx)\.(com|app|co)|(\.t\.co)[.a-zA-Z///_0-9]+";
+
+pub const REGEX_COLLECTIONS: &str = r"(^|\s)(https?://(fxtwitter|skibidix|fixupx|fxbsky|x|xbsky|bsky|fixvx|cunnyx)\.(com|app|co)[^\s\]]*|https?://t\.co/[^\s\]]+)";
 
 // Sources for a url to attach data to
 const SOURCE_FILTER_ARRAY: [(&str, &str, Option<&str>); 1] =
@@ -164,13 +166,13 @@ fn fix_urls(parsed_url: &Url, original_url: &str) -> (String, String) {
 #[unsafe(no_mangle)]
 pub fn url_dump(
     _params: &[sharedtypes::ScraperParam],
-    scraperdata: &sharedtypes::ScraperData,
-) -> Vec<(String, sharedtypes::ScraperData)> {
+    scraperdata: &sharedtypes::ScraperDataReturn,
+) -> Vec<sharedtypes::ScraperDataReturn> {
     let mut out = vec![];
 
     if scraperdata.job.param.len() == 1 {
         for param in scraperdata.job.param.iter() {
-            if let sharedtypes::ScraperParam::Normal(temp) = param {
+            if let sharedtypes::ScraperParam::Normal(temp) | sharedtypes::ScraperParam::Url(temp) = param {
                 // Replaces any x or bsky links with the alternatives from fxembed
                 let mut url = temp.clone();
 
@@ -184,11 +186,18 @@ pub fn url_dump(
                 }
 
                 let mut scraperdata = scraperdata.clone();
-                scraperdata.user_data.insert("post_source".into(), stripped);
                 scraperdata
+                    .job
+                    .user_data
+                    .insert("post_source".into(), stripped);
+                scraperdata
+                    .job
                     .user_data
                     .insert("post_source_edited".into(), url.clone());
-                out.push((url.clone(), scraperdata.clone()));
+
+                scraperdata.job.param = vec![sharedtypes::ScraperParam::Url(url)];
+                out.push(scraperdata);
+                //out.push((url.clone(), scraperdata.clone()));
             }
         }
     }
@@ -203,13 +212,16 @@ pub fn url_dump(
 pub fn parser(
     html_input: &str,
     source_url: &str,
-    scraperdata: &sharedtypes::ScraperData,
+    scraperdata: &sharedtypes::ScraperDataReturn,
 ) -> Vec<sharedtypes::ScraperReturn> {
-    let mut out = sharedtypes::ScraperObject {
+    let mut files = HashSet::new();
+    let mut tags = HashSet::new();
+
+    /* let mut out = sharedtypes::ScraperObject {
         file: HashSet::new(),
         tag: HashSet::new(),
         flag: vec![],
-    };
+    };*/
 
     if DEBUG {
         dbg!(&html_input, scraperdata, source_url);
@@ -223,14 +235,14 @@ pub fn parser(
 
     let mut urlsource = None;
 
-    let source_urledited = match scraperdata.user_data.get("post_source_edited") {
+    let source_urledited = match scraperdata.job.user_data.get("post_source_edited") {
         Some(out) => out.to_string(),
-        None => return vec![sharedtypes::ScraperReturn::Data(out)],
+        None => return vec![sharedtypes::ScraperReturn::Nothing],
     };
 
-    let source_url = match scraperdata.user_data.get("post_source") {
+    let source_url = match scraperdata.job.user_data.get("post_source") {
         Some(out) => out.to_string(),
-        None => return vec![sharedtypes::ScraperReturn::Data(out)],
+        None => return vec![sharedtypes::ScraperReturn::Nothing],
     };
 
     // Filters for the source urls
@@ -280,7 +292,7 @@ pub fn parser(
             if mat == key {
                 let description = ns_description.map(|str| str.to_string());
 
-                out.tag.insert(sharedtypes::TagObject {
+                tags.insert(sharedtypes::TagObject {
                     namespace: sharedtypes::GenericNamespaceObj {
                         name: ns_name.into(),
                         description,
@@ -360,8 +372,8 @@ pub fn parser(
                         relates_to: position_sub,
                     };
 
-                    out.file.insert(sharedtypes::FileObject {
-                        source: Some(sharedtypes::FileSource::Url(indivimg)),
+                    files.insert(sharedtypes::FileObject {
+                        source: Some(sharedtypes::FileSource::Url(vec![indivimg])),
                         hash: sharedtypes::HashesSupported::None,
                         tag_list: vec![pos_tag],
                         skip_if: vec![],
@@ -371,6 +383,11 @@ pub fn parser(
         }
     }
 
+    let out = sharedtypes::ScraperObject {
+        files,
+        tags,
+        ..Default::default()
+    };
     if DEBUG {
         dbg!(&out);
     }
@@ -387,19 +404,13 @@ pub fn on_regex_match(
     regex_match: &str,
     _plugin_callback: &Option<sharedtypes::SearchType>,
 ) -> Vec<sharedtypes::DBPluginOutputEnum> {
-    let mut job = sharedtypes::return_default_jobsobj();
-    job.site = "fxembed".into();
-    job.jobmanager = sharedtypes::DbJobsManager {
-        jobtype: sharedtypes::DbJobType::Params,
-        recreation: None,
-    };
     let url_source_ns = sharedtypes::GenericNamespaceObj {
         name: "FxEmbed_SourceUrl".into(),
         description: Some("The original source of a post for something".into()),
     };
 
     let mut fixed_url;
-    if let Ok(parsed_url) = url::Url::parse(tag_name) {
+    if let Ok(parsed_url) = url::Url::parse(regex_match) {
         (_, fixed_url) = fix_urls(&parsed_url, tag_name);
     } else {
         client::log(format!("FxEmbed could not parse the url for: {}", tag_name));
@@ -409,7 +420,15 @@ pub fn on_regex_match(
     fixed_url = fixed_url.replace(DEFAULT_REPLACEMENT_NAME_TWIT, DEFAULT_SOURCE_TWIT);
     fixed_url = fixed_url.replace(DEFAULT_REPLACEMENT_NAME_BSKY, DEFAULT_SOURCE_BSKY);
 
-    job.param = vec![sharedtypes::ScraperParam::Normal(fixed_url.clone())];
+    let job = sharedtypes::DbJobsObj {
+        site: LOCAL_NAME.into(),
+        jobmanager: sharedtypes::DbJobsManager {
+            jobtype: sharedtypes::DbJobType::Params,
+            recreation: None,
+        },
+        param: vec![sharedtypes::ScraperParam::Url(fixed_url.clone())],
+        ..Default::default()
+    };
 
     let tag = sharedtypes::TagObject {
         namespace: url_source_ns,

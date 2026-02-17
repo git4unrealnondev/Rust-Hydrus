@@ -1509,8 +1509,8 @@ RETURNING id;
         {
             let tn = self.write_conn.lock();
             //let inp = "DELETE FROM Jobs WHERE id = ? LIMIT 1";
-            let inp = "DELETE FROM Jobs WHERE id = (SELECT id FROM Jobs WHERE id = ? LIMIT 1 )";
-            let _ = wait_until_sqlite_ok!(tn.execute(inp, params![id.to_string()])).unwrap();
+            let inp = "DELETE FROM Jobs WHERE id = ?";
+            let _ = wait_until_sqlite_ok!(tn.execute(inp, params![id])).unwrap();
         }
     }
 
