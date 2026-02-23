@@ -1,7 +1,9 @@
 #![allow(dead_code)]
 #![allow(unused_variables)]
 #![allow(unexpected_cfgs)]
+use std::default;
 use std::default::Default;
+use std::time::Duration;
 
 #[cfg(feature = "regex")]
 use regex::Regex;
@@ -407,7 +409,7 @@ pub enum ScraperReturn {
     // Valid data from the system
     Data(ScraperObject),
     // STOP IMMEDIENTLY: ISSUE WITH SITE : PANICS no save
-    EMCStop(String),
+    Fatal(String),
     // Hit nothing to search. Move to next job.
     #[default]
     Nothing,
@@ -416,14 +418,14 @@ pub enum ScraperReturn {
     // Wait X seconds before retrying.
     Timeout(u64),
     // Sends job back into queue with x waiting time
-    RetryLater(u64),
+    RetryLater(Duration),
 }
 
 ///
 /// Kinda stupid. Will see if I need this in the future
 ///
 #[derive(Debug, Clone, PartialEq)]
-pub enum Flags {
+pub enum ScraperFlags {
     Redo,
 }
 
@@ -434,7 +436,7 @@ pub struct ScraperObject {
     pub files: HashSet<FileObject>,
     pub tags: HashSet<TagObject>,
     pub jobs: HashSet<ScraperDataReturn>,
-    pub flags: Vec<Flags>,
+    pub flags: Vec<ScraperFlags>,
 }
 
 /// Shared data to be passed for jobs
@@ -763,9 +765,25 @@ pub struct FileObject {
     pub source: Option<FileSource>,
     // Hash of file
     pub hash: HashesSupported,
-    pub tag_list: Vec<TagObject>,
+    pub tag_list: Vec<FileTagAction>,
     // Skips downloading the file if a tag matches this.
     pub skip_if: Vec<SkipIf>,
+}
+
+#[derive(Debug, Eq, Hash, PartialEq, bincode::Encode, bincode::Decode, Clone, Default)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub struct FileTagAction {
+    pub operation: TagOperation,
+    pub tags: Vec<TagObject>,
+}
+
+#[derive(Debug, Eq, Hash, PartialEq, bincode::Encode, bincode::Decode, Clone, Default)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub enum TagOperation {
+    #[default]
+    Add,
+    Del,
+    Set,
 }
 
 #[derive(Debug, Eq, Hash, PartialEq, bincode::Encode, bincode::Decode)]

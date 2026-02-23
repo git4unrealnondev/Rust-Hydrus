@@ -101,29 +101,36 @@ pub fn parse_file(
                     description: Some("Original filename that was imported".into()),
                 },
             };
-            tag_list.push(sharedtypes::TagObject {
-                namespace: sharedtypes::GenericNamespaceObj {
-                    name: "SYSTEM_File_Name".into(),
-                    description: Some("Original filename that was imported".into()),
-                },
-                tag: file_location
-                    .file_name()
-                    .unwrap()
-                    .to_string_lossy()
-                    .to_string(),
-                tag_type: sharedtypes::TagType::Normal,
-                relates_to: None,
-            });
 
             // Inserts a tag thats just the location where the item was imported from
-            tag_list.push(sharedtypes::TagObject {
-                namespace: sharedtypes::GenericNamespaceObj {
-                    name: "SYSTEM_File_Import_Path".into(),
-                    description: Some("Where a file was imported from. Local to the system".into()),
-                },
-                tag: file_location.to_string_lossy().to_string(),
-                tag_type: sharedtypes::TagType::Normal,
-                relates_to: None,
+            tag_list.push(sharedtypes::FileTagAction {
+                operation: sharedtypes::TagOperation::Add,
+                tags: vec![
+                    sharedtypes::TagObject {
+                        namespace: sharedtypes::GenericNamespaceObj {
+                            name: "SYSTEM_File_Import_Path".into(),
+                            description: Some(
+                                "Where a file was imported from. Local to the system".into(),
+                            ),
+                        },
+                        tag: file_location.to_string_lossy().to_string(),
+                        tag_type: sharedtypes::TagType::Normal,
+                        relates_to: None,
+                    },
+                    sharedtypes::TagObject {
+                        namespace: sharedtypes::GenericNamespaceObj {
+                            name: "SYSTEM_File_Name".into(),
+                            description: Some("Original filename that was imported".into()),
+                        },
+                        tag: file_location
+                            .file_name()
+                            .unwrap()
+                            .to_string_lossy()
+                            .to_string(),
+                        tag_type: sharedtypes::TagType::Normal,
+                        relates_to: None,
+                    },
+                ],
             });
 
             let link_subtag = sharedtypes::SubTag {
@@ -158,10 +165,7 @@ pub fn parse_file(
             }
 
             // imports all tags onto the file that we dl'ed
-            if let Some(ref file_id) = fileid {
-
-            database.add_tags_to_fileid(file_id, &tag_list, &manager_arc);
-            }
+            database.add_tags_to_fileid(fileid, &tag_list);
             //for tag in tag_list.iter() {
             //    parse_tags(database.clone(), tag, fileid, &0, &0, manager_arc.clone());
             //}
@@ -204,11 +208,9 @@ pub fn parse_file(
                     );
                     subfileid = database.file_get_hash(&sub_sha512hash);
                 }
-                if let Some(file_id) = subfileid {
-                    database.add_tags_to_fileid(&file_id, &tags, &manager_arc);
-                }
+                database.add_tags_to_fileid(subfileid, &tags);
                 // imports all tags onto the file that we dl'ed
-              /*  for tag in tags.iter() {
+                /*  for tag in tags.iter() {
                     parse_tags(
                         database.clone(),
                         tag,
@@ -274,15 +276,15 @@ pub fn parse_sidecar(file_location: &Path, sidecar_location: &Path, database: Ma
     }
 }
 
-pub fn parse_sidecar_txt(sidecar_location: &Path) -> Vec<sharedtypes::TagObject> {
-    let mut out = Vec::new();
+pub fn parse_sidecar_txt(sidecar_location: &Path) -> Vec<sharedtypes::FileTagAction> {
+    let mut tags = Vec::new();
 
     if let Ok(file) = read_lines(sidecar_location) {
         for line in file.map(Result::ok) {
             match line {
                 None => {}
                 Some(line) => {
-                    out.push(sharedtypes::TagObject {
+                    tags.push(sharedtypes::TagObject {
                         namespace: sharedtypes::GenericNamespaceObj {
                             name: "SYSTEM_Sidecar_TXT".into(),
                             description: Some("Information from a sidecar file. TXT Import".into()),
@@ -296,10 +298,16 @@ pub fn parse_sidecar_txt(sidecar_location: &Path) -> Vec<sharedtypes::TagObject>
         }
     }
 
-    out
+    let action = sharedtypes::FileTagAction {
+        operation: sharedtypes::TagOperation::Add,
+        tags,
+    };
+
+    vec![action]
 }
 
-pub fn parse_sidecar_json(sidecar_location: &Path) -> Vec<sharedtypes::TagObject> {
+/// Holder function need to impliment
+pub fn parse_sidecar_json(sidecar_location: &Path) -> Vec<sharedtypes::FileTagAction> {
     let out = Vec::new();
     dbg!(&sidecar_location);
 

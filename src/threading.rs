@@ -469,7 +469,7 @@ impl Worker {
                                     sharedtypes::ScraperReturn::Data(out_st) => {
                                         for flag in out_st.flags.iter() {
                                             match flag {
-                                                sharedtypes::Flags::Redo => {
+                                                &sharedtypes::ScraperFlags::Redo => {
                                                     should_remove_original_job = false;
                                                 }
                                             }
@@ -494,8 +494,7 @@ impl Worker {
 
                                         // Adds tags into db
                                         for tag in out_st.tags.iter() {
-
-                                        database.tag_add_tagobject(tag);
+                                            database.tag_add_tagobject(tag);
                                         }
 
                                         // Parses files from urls
@@ -537,7 +536,7 @@ impl Worker {
                                         break 'errloop;
                                     }
                                     // Emergency stop should never use as it halts the program
-                                    sharedtypes::ScraperReturn::EMCStop(emc) => {
+                                    sharedtypes::ScraperReturn::Fatal(emc) => {
                                         panic!("EMC STOP DUE TO: {}", emc);
                                     }
                                     // Stops the job same thing as nothing but gives a reason
@@ -555,7 +554,7 @@ impl Worker {
                                     sharedtypes::ScraperReturn::RetryLater(time) => {
                                         let mut data = job.clone();
                                         data.time = crate::time_func::time_secs();
-                                        data.reptime = *time as usize;
+                                        data.reptime = time.as_secs() as usize;
                                         database.jobs_update_db(data);
                                         should_remove_original_job = false;
                                     }
@@ -618,11 +617,12 @@ pub fn parse_tags_old(
                 // Runs regex mostly
                 manager.plugin_on_tag(tag);
             }
-            let tag_id = database.tag_add_tagobject(tag);
-            match file_id {
-                None => {}
-                Some(id) => {
-                    database.relationship_add(id, tag_id);
+            if let Some(tag_id) = database.tag_add_tagobject(tag) {
+                match file_id {
+                    None => {}
+                    Some(id) => {
+                        database.relationship_add(id, tag_id);
+                    }
                 }
             }
 
@@ -782,7 +782,6 @@ fn download_add_to_db(
                         database.relationship_add(fileid, tagid);
                     }
             database.transaction_flush();*/
-            dbg!(&file_id);
             return Some(file_id);
         }
         download::FileReturnStatus::DeadUrl(dead_url) => {
@@ -893,7 +892,7 @@ pub fn main_file_loop(
 ) {
     let mut fileid = None;
 
-    let source_url_id = 0;
+    let source_url_id = database.create_default_source_url_ns_id();
 
     match file.source.clone() {
         Some(source) => match source {
@@ -912,17 +911,7 @@ pub fn main_file_loop(
                         if let Some(file_id) =
                             parse_skipif(file_tag, &source_url, database.clone(), worker_id, job_id)
                         {
-                                database.add_tags_to_fileid(&file_id, &file.tag_list, &globalload);
-                            //for tag in file.tag_list.iter() {
-                                /*parse_tags(
-                                    database.clone(),
-                                    tag,
-                                    Some(file_id),
-                                    worker_id,
-                                    job_id,
-                                    globalload.clone(),
-                                );*/
-                           // }
+                            database.add_tags_to_fileid(Some(file_id), &file.tag_list);
                             database.transaction_flush();
                             return;
                         }
@@ -1040,16 +1029,7 @@ pub fn main_file_loop(
         None => return,
     }
 
-    if let Some(ref file_id) = fileid {
-
-    database.add_tags_to_fileid(file_id, &file.tag_list, &globalload);
-    } else {
-        for tag in file.tag_list.iter() {
-
-        database.tag_add_tagobject(tag);
-        }
-    }
-
+    database.add_tags_to_fileid(fileid, &file.tag_list);
 
     /*for tag in file.tag_list.iter() {
         parse_tags(

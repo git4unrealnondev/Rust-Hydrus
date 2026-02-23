@@ -391,8 +391,10 @@ pub fn dbactions_to_function(
         types::SupportedDBRequests::CondenseTags() => {
             let unwrappy = database;
             unwrappy.transaction_flush();
-            unwrappy.condense_tags();
-            unwrappy.transaction_flush();
+            let mut write_conn = unwrappy.get_database_connection();
+            let mut tn = write_conn.transaction().unwrap();
+            unwrappy.condense_tags(&mut tn);
+            tn.commit().unwrap();
             data_size_to_b(&true)
         }
         types::SupportedDBRequests::TagDelete(tag_id) => {
@@ -409,8 +411,10 @@ pub fn dbactions_to_function(
 
         types::SupportedDBRequests::MigrateTag((old_tag_id, new_tag_id)) => {
             let unwrappy = database;
-            unwrappy.migrate_tag(&old_tag_id, &new_tag_id);
-            unwrappy.transaction_flush();
+            let mut write_conn = unwrappy.get_database_connection();
+            let mut tn = write_conn.transaction().unwrap();
+            unwrappy.migrate_tag(&old_tag_id, &new_tag_id, &mut tn);
+            tn.commit().unwrap();
             data_size_to_b(&true)
         }
         types::SupportedDBRequests::PutFileNoBlock((mut file, ratelimit)) => {

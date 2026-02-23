@@ -1,4 +1,5 @@
 use crate::database::database::Main;
+use crate::database::database::Transaction;
 use crate::download;
 use crate::file::folder_make;
 use crate::logging;
@@ -169,11 +170,14 @@ impl Main {
                 tag_type,
                 relates_to,
             )) => {
-                file.tag_list.push(sharedtypes::TagObject {
-                    namespace: namespace.clone(),
-                    tag: tag.clone(),
-                    tag_type: tag_type.clone(),
-                    relates_to: relates_to.clone(),
+                file.tag_list.push(sharedtypes::FileTagAction {
+                    operation: sharedtypes::TagOperation::Add,
+                    tags: vec![sharedtypes::TagObject {
+                        namespace: namespace.clone(),
+                        tag: tag.clone(),
+                        tag_type: tag_type.clone(),
+                        relates_to: relates_to.clone(),
+                    }],
                 });
                 //None
             }
@@ -266,12 +270,14 @@ impl Main {
                     }
                     sharedtypes::EnclaveCondition::TagNameAndNamespace((tag_name, namespace)) => {
                         let mut out = false;
-                        for tag in file.tag_list.iter() {
-                            if tag.tag.contains(&tag_name)
-                                && tag.namespace.name.contains(&namespace)
-                            {
-                                out = true;
-                                break;
+                        'tagaction: for tag_action in file.tag_list.iter() {
+                            for tag in tag_action.tags.iter() {
+                                if tag.tag.contains(&tag_name)
+                                    && tag.namespace.name.contains(&namespace)
+                                {
+                                    out = true;
+                                    break 'tagaction;
+                                }
                             }
                         }
                         out
@@ -326,24 +332,19 @@ impl Main {
     ///
     /// Creates tje database tables for a V5 upgrade
     ///
-    pub fn enclave_create_database_v5(&self) {
-        dbg!("c");
-        self.transaction_flush();
+    pub fn enclave_create_database_v5(&self, tn: &mut Transaction) {
         // Creates a location to store the location of files
         if !self.check_table_exists("FileStorageLocations".to_string()) {
             let keys = &vec_of_strings!("id", "location");
             let vals = &vec_of_strings!("INTEGER PRIMARY KEY", "TEXT NOT NULL");
-            self.table_create(&"FileStorageLocations".to_string(), keys, vals);
-            self.transaction_flush();
+            self.table_create(tn, &"FileStorageLocations".to_string(), keys, vals);
         }
 
-        dbg!("d");
         // Creates a location to store the location of the extension of a file
         if !self.check_table_exists("FileExtensions".to_string()) {
             let keys = &vec_of_strings!("id", "extension");
             let vals = &vec_of_strings!("INTEGER PRIMARY KEY", "TEXT NOT NULL UNIQUE");
-            self.table_create(&"FileExtensions".to_string(), keys, vals);
-            self.transaction_flush();
+            self.table_create(tn, &"FileExtensions".to_string(), keys, vals);
         }
 
         if !self.check_table_exists("EnclaveAction".to_string()) {
@@ -353,16 +354,14 @@ impl Main {
                 "TEXT NOT NULL",
                 "TEXT NOT NULL"
             );
-            self.table_create(&"EnclaveAction".to_string(), keys, vals);
-            self.transaction_flush();
+            self.table_create(tn, &"EnclaveAction".to_string(), keys, vals);
         }
 
         // Maps enclave id's to file ids
         if !self.check_table_exists("FileEnclaveMapping".to_string()) {
             let keys = &vec_of_strings!("file_id", "enclave_id", "timestamp");
             let vals = &vec_of_strings!("INTEGER NOT NULL", "INTEGER NOT NULL", "INTEGER NOT NULL");
-            self.table_create(&"FileEnclaveMapping".to_string(), keys, vals);
-            self.transaction_flush();
+            self.table_create(tn, &"FileEnclaveMapping".to_string(), keys, vals);
         }
 
         // Enclave condition
@@ -373,8 +372,7 @@ impl Main {
                 "TEXT NOT NULL",
                 "TEXT NOT NULL"
             );
-            self.table_create(&"EnclaveCondition".to_string(), keys, vals);
-            self.transaction_flush();
+            self.table_create(tn, &"EnclaveCondition".to_string(), keys, vals);
         }
 
         // Lists of conditions if X do Y
@@ -391,8 +389,7 @@ impl Main {
                 "INTEGER",
                 "INTEGER NOT NULL"
             );
-            self.table_create(&"EnclaveConditionList".to_string(), keys, vals);
-            self.transaction_flush();
+            self.table_create(tn, &"EnclaveConditionList".to_string(), keys, vals);
         }
 
         // Intermedidate table
@@ -409,15 +406,13 @@ impl Main {
                 "INTEGER NOT NULL",
                 "INTEGER NOT NULL"
             );
-            self.table_create(&"EnclaveActionOrderList".to_string(), keys, vals);
-            self.transaction_flush();
+            self.table_create(tn, &"EnclaveActionOrderList".to_string(), keys, vals);
         }
 
         if !self.check_table_exists("Enclave".to_string()) {
             let keys = &vec_of_strings!("id", "enclave_name", "priority");
             let vals = &vec_of_strings!("INTEGER PRIMARY KEY", "TEXT NOT NULL", "INTEGER NOT NULL");
-            self.table_create(&"Enclave".to_string(), keys, vals);
-            self.transaction_flush();
+            self.table_create(tn, &"Enclave".to_string(), keys, vals);
         }
     }
 

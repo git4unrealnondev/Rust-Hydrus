@@ -297,7 +297,7 @@ pub fn parser(
                         name: ns_name.into(),
                         description,
                     },
-                    tag: val.into(),
+                    tag: val.trim().into(),
                     tag_type: sharedtypes::TagType::Normal,
                     relates_to: urlsource.clone(),
                 });

@@ -23,14 +23,11 @@ pub use rusqlite::{Connection, Result, Transaction, params, types::Null};
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::collections::HashSet;
-use std::collections::hash_set;
 use std::panic;
 use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
-use utoipa::OpenApi;
-use utoipauto::utoipauto;
 use web_api::web_api;
 
 use crate::database::inmemdbnew::NewinMemDB;
@@ -47,12 +44,12 @@ pub fn dbinit(dbpath: &String) -> tnection {
     tnection::open(dbpath).unwrap()
 }*/
 
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, Debug)]
 pub enum CacheType {
     // Default option. Will use in memory DB to make store cached data.
     InMemdb,
     // Not yet implmented will be used for using sqlite 3 inmemory db calls.
-    InMemory,
+    InMemory(Pool<SqliteConnectionManager>),
     // Will be use to query the DB directly. No caching.
     Bare,
 }
@@ -63,14 +60,14 @@ pub struct Main {
     pub(super) _dbpath: Option<String>,
     pub(super) _vers: usize,
     pub(super) pool: Pool<SqliteConnectionManager>,
-    pub(super) write_conn: Arc<Mutex<PooledConnection<SqliteConnectionManager>>>,
+    pub write_conn: Arc<Mutex<PooledConnection<SqliteConnectionManager>>>,
     pub(super) write_conn_istransaction: Arc<Mutex<bool>>,
     pub(super) _active_vers: usize,
     pub(super) _inmemdb: Arc<RwLock<NewinMemDB>>,
     pub(super) tables_loaded: Arc<RwLock<Vec<sharedtypes::LoadDBTable>>>,
     pub(super) tables_loading: Arc<RwLock<Vec<sharedtypes::LoadDBTable>>>,
     pub(super) _cache: CacheType,
-    //pub globalload: Option<GlobalLoad>,
+    pub globalload: Option<Arc<GlobalLoad>>,
     pub(super) localref: Option<Arc<RwLock<Main>>>,
 }
 
@@ -82,6 +79,44 @@ pub fn transaction_execute(trans: &Transaction, inp: String) {
 /// Read only items from the db
 #[web_api]
 impl Main {
+    /// Searches the database using FTS5 allows getting a list of tags and their count based on a
+    /// search string and a limit of tagids to get
+    pub fn search_tags(
+        &self,
+        search_string: &String,
+        limit_to: &usize,
+    ) -> Vec<(sharedtypes::Tag, usize)> {
+        let mut out = Vec::new();
+
+        for (tag_id, count) in self.search_tags_sql(search_string, limit_to).iter() {
+            if let Some(tag) = self.tag_id_get(tag_id)
+                && let Some(namespace) = self.namespace_get_string(&tag.namespace)
+            {
+                out.push((
+                    sharedtypes::Tag {
+                        tag: tag.name,
+                        namespace: sharedtypes::GenericNamespaceObj {
+                            name: namespace.name,
+                            description: namespace.description,
+                        },
+                    },
+                    *count,
+                ));
+            }
+        }
+
+        out
+    }
+    /// Searches the database using FTS5 allows getting a list of tagids and their count based on a
+    /// search string and a limit of tagids to get
+    pub fn search_tags_ids(
+        &self,
+        search_string: &String,
+        limit_to: &usize,
+    ) -> Vec<(usize, usize)> {
+        self.search_tags_sql(search_string, limit_to)
+    }
+
     /// A test function to return 1
     pub fn test(&self) -> u32 {
         1
@@ -153,7 +188,7 @@ impl Main {
                         )
                         .unwrap();
                         if self.file_get_hash(&hash).is_some() {
-                            let mut cleaned_filepath = entry.path().to_path_buf();
+                            let cleaned_filepath = entry.path().to_path_buf();
 
                             let cleaned_filename = cleaned_filepath.as_path().file_name().unwrap();
 
@@ -199,7 +234,7 @@ impl Main {
                                 .unwrap();
                         }
                     } else {
-                        let mut cleaned_filepath = entry.path().to_path_buf();
+                        let cleaned_filepath = entry.path().to_path_buf();
 
                         let cleaned_filename = cleaned_filepath.as_path().file_name().unwrap();
 
@@ -383,13 +418,6 @@ impl Main {
                     return Some(filepath.to_string_lossy().to_string());
                 }
 
-                /*  if Path::new(&out).exists() {
-                    let out = std::fs::canonicalize(out)
-                        .unwrap()
-                        .to_string_lossy()
-                        .to_string();
-                    return Some(out);
-                }*/
                 // New revision of the downloader adds the extension to the file downloaded.
                 // This will rename the file if it uses the old file ext
                 if let Some(ref ext_str) = self.extension_get_string(&file.ext_id)
@@ -815,7 +843,7 @@ impl Main {
                     tables_loaded: Arc::new(vec![].into()),
                     tables_loading: Arc::new(vec![].into()),
                     _cache: CacheType::Bare,
-                    // globalload: None,
+                    globalload: None,
                     localref: None,
                 };
                 //                let tnection = dbinit(file_path);
@@ -854,7 +882,7 @@ PRAGMA journal_mode = WAL;
                     tables_loaded: Arc::new(vec![].into()),
                     tables_loading: Arc::new(vec![].into()),
                     _cache: CacheType::InMemdb,
-                    //  globalload: None,
+                    globalload: None,
                     localref: None,
                 };
                 main
@@ -885,7 +913,7 @@ PRAGMA journal_mode = WAL;
                 // Grab a "write" connection for operations that need exclusive access
                 let write_conn = Arc::new(Mutex::new(pool.get().unwrap()));
                 let write_conn_istransaction = Arc::new(Mutex::new(false));
-                dbg!("a");
+
                 let main = Main {
                     _dbpath: None,
                     _vers: vers,
@@ -897,7 +925,7 @@ PRAGMA journal_mode = WAL;
                     tables_loaded: Arc::new(vec![].into()),
                     tables_loading: Arc::new(vec![].into()),
                     _cache: CacheType::Bare,
-                    //                globalload: None,
+                    globalload: None,
                     localref: None,
                 };
                 main
@@ -907,7 +935,12 @@ PRAGMA journal_mode = WAL;
         // Sets default settings for db settings.
         if !first_time_load_flag {
             // Database Doesn't exist
-            main.first_db();
+            {
+                let mut write_conn = main.write_conn.lock();
+                let mut transaction = write_conn.transaction().unwrap();
+                main.first_db(&mut transaction);
+                transaction.commit().unwrap();
+            }
 
             main.transaction_flush();
 
@@ -988,7 +1021,7 @@ PRAGMA journal_mode = WAL;
     ///
     /// Gets one tnection from the sqlite pool
     ///
-    pub(super) fn get_database_connection(&self) -> PooledConnection<SqliteConnectionManager> {
+    pub fn get_database_connection(&self) -> PooledConnection<SqliteConnectionManager> {
         loop {
             match self.pool.get() {
                 Ok(out) => {
@@ -1023,7 +1056,18 @@ PRAGMA journal_mode = WAL;
                 let cachemode = match cache.as_str() {
                     "Bare" => Some(CacheType::Bare),
                     "InMemdb" => Some(CacheType::InMemdb),
-                    "InMemory" => Some(CacheType::InMemory),
+                    "InMemory" => {
+                        let manager = SqliteConnectionManager::memory();
+
+                        let pool = r2d2::Builder::new()
+                            .idle_timeout(Some(Duration::from_secs(5)))
+                            .max_size(1)
+                            .build(manager)
+                            .unwrap();
+
+                        Some(CacheType::InMemory(pool))
+                    }
+
                     _ => {
                         self.setup_default_cache();
                         None
@@ -1077,8 +1121,11 @@ PRAGMA journal_mode = WAL;
         }
 
         if flag {
+            let mut write_conn = self.get_database_connection();
+            let mut tn = write_conn.transaction().unwrap();
             logging::info_log("Relationship-Tag-Relations checker condensing tags");
-            self.condense_tags();
+            self.condense_tags(&mut tn);
+            tn.commit().unwrap();
             self.vacuum();
         }
         logging::info_log("Relationship-Tag-Relations checker ending check");
@@ -1180,108 +1227,79 @@ PRAGMA journal_mode = WAL;
     }
 
     /// Sets up first database interaction. Makes tables and does first time setup.
-    pub fn first_db(&self) {
-        dbg!("");
-        self.transaction_start();
-        dbg!("");
-        // Making Relationship Table
+    pub fn first_db(&self, tn: &mut Transaction) {
         {
-            let tn = self.write_conn.lock();
-            tn.execute(
-                "CREATE TABLE Relationship (fileid INTEGER NOT NULL, tagid INTEGER NOT NULL, PRIMARY KEY (fileid, tagid) ) WITHOUT ROWID",
-                [],
-            )
-            .unwrap();
+            // Making Tags Table
+            let mut name = "Tags".to_string();
+            let mut keys = vec_of_strings!["id", "name", "namespace"];
+            let mut vals = vec_of_strings![
+                "INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL ",
+                "TEXT NOT NULL",
+                "INTEGER NOT NULL, UNIQUE(name, namespace)"
+            ];
+            self.table_create(tn, &name, &keys, &vals);
 
-            tn.execute(
-                "CREATE INDEX idx_tagid_fileid ON Relationship(tagid, fileid)",
-                [],
-            )
-            .unwrap();
-        }
-        dbg!("");
-        // Making Tags Table
-        let mut name = "Tags".to_string();
-        let mut keys = vec_of_strings!["id", "name", "namespace"];
-        let mut vals = vec_of_strings![
-            "INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL ",
-            "TEXT NOT NULL",
-            "INTEGER NOT NULL, UNIQUE(name, namespace)"
-        ];
-        self.table_create(&name, &keys, &vals);
-
-        {
-            let tn = self.write_conn.lock();
-            tn.execute(
-                "  CREATE UNIQUE INDEX IF NOT EXISTS tags_name_namespace_idx
+            {
+                tn.execute(
+                    "  CREATE UNIQUE INDEX IF NOT EXISTS tags_name_namespace_idx
         ON Tags(name, namespace);",
-                [],
-            )
-            .unwrap();
-        }
+                    [],
+                )
+                .unwrap();
+            }
 
-        dbg!("");
-        // Making Parents Table. Relates tags to tag parents.
-        name = "Parents".to_string();
-        keys = vec_of_strings!["id", "tag_id", "relate_tag_id", "limit_to"];
-        vals = vec_of_strings![
-            "INTEGER PRIMARY KEY NOT NULL",
-            "INTEGER NOT NULL",
-            "INTEGER NOT NULL",
-            "INTEGER"
-        ];
-        self.table_create(&name, &keys, &vals);
+            // Making Parents Table. Relates tags to tag parents.
+            self.parents_create_v2(tn);
 
-        // Making Namespace Table
-        name = "Namespace".to_string();
-        keys = vec_of_strings!["id", "name", "description"];
-        vals = vec_of_strings![
-            "INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL",
-            "TEXT NOT NULL UNIQUE",
-            "TEXT"
-        ];
-        self.table_create(&name, &keys, &vals);
+            // Making Namespace Table
+            name = "Namespace".to_string();
+            keys = vec_of_strings!["id", "name", "description"];
+            vals = vec_of_strings![
+                "INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL",
+                "TEXT NOT NULL UNIQUE",
+                "TEXT"
+            ];
+            self.table_create(tn, &name, &keys, &vals);
 
-        // Making Settings Table
-        name = "Settings".to_string();
-        keys = vec_of_strings!["name", "pretty", "num", "param"];
-        vals = vec_of_strings!["TEXT PRIMARY KEY", "TEXT", "INTEGER", "TEXT"];
-        self.table_create(&name, &keys, &vals);
+            // Making Settings Table
+            name = "Settings".to_string();
+            keys = vec_of_strings!["name", "pretty", "num", "param"];
+            vals = vec_of_strings!["TEXT PRIMARY KEY", "TEXT", "INTEGER", "TEXT"];
+            self.table_create(tn, &name, &keys, &vals);
 
-        // Making Jobs Table
-        name = "Jobs".to_string();
-        keys = vec_of_strings!(
-            "id",
-            "time",
-            "reptime",
-            "priority",
-            "cachetime",
-            "cachechecktype",
-            "Manager",
-            "site",
-            "param",
-            "SystemData",
-            "UserData"
-        );
-        vals = vec_of_strings!(
-            "INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL",
-            "INTEGER NOT NULL",
-            "INTEGER NOT NULL",
-            "INTEGER NOT NULL",
-            "INTEGER",
-            "INTEGER NOT NULL",
-            "TEXT NOT NULL",
-            "TEXT NOT NULL",
-            "TEXT NOT NULL",
-            "TEXT NOT NULL",
-            "TEXT NOT NULL"
-        );
+            // Making Jobs Table
+            name = "Jobs".to_string();
+            keys = vec_of_strings!(
+                "id",
+                "time",
+                "reptime",
+                "priority",
+                "cachetime",
+                "cachechecktype",
+                "Manager",
+                "site",
+                "param",
+                "SystemData",
+                "UserData"
+            );
+            vals = vec_of_strings!(
+                "INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL",
+                "INTEGER NOT NULL",
+                "INTEGER NOT NULL",
+                "INTEGER NOT NULL",
+                "INTEGER",
+                "INTEGER NOT NULL",
+                "TEXT NOT NULL",
+                "TEXT NOT NULL",
+                "TEXT NOT NULL",
+                "TEXT NOT NULL",
+                "TEXT NOT NULL"
+            );
 
-        self.table_create(&name, &keys, &vals);
+            self.table_create(tn, &name, &keys, &vals);
 
-        {
-            let tn = self.write_conn.lock();
-            tn.execute(
+            {
+                tn.execute(
                 "CREATE TABLE File 
             (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, hash TEXT, extension INTEGER, storage_id INTEGER, 
                 CHECK (
@@ -1292,39 +1310,31 @@ PRAGMA journal_mode = WAL;
                 [],
             )
             .unwrap();
-            tn.execute(
-                "CREATE INDEX idx_parents ON Parents (tag_id, relate_tag_id, limit_to)",
-                [],
-            )
-            .unwrap();
-            tn.execute("CREATE INDEX idx_namespace ON Namespace (name)", [])
-                .unwrap();
-            tn.execute(
-                "CREATE INDEX idx_parents_rel ON Parents (relate_tag_id)",
-                [],
-            )
-            .unwrap();
-            tn.execute("CREATE INDEX idx_parents_lim ON Parents (limit_to)", [])
-                .unwrap();
-        }
 
-        dbg!("a");
-        self.enclave_create_database_v5();
+                self.relationship_create_v2(tn);
 
-        dbg!("b");
-        // Making dead urls Table
-        name = "dead_source_urls".to_string();
-        keys = vec_of_strings!["id", "dead_url"];
-        vals = vec_of_strings!["INTEGER PRIMARY KEY", "TEXT NOT NULL"];
-        self.table_create(&name, &keys, &vals);
-        {
-            let tn = self.write_conn.lock();
-            tn.execute(
-                "CREATE INDEX IF NOT EXISTS idx_file_hash ON File (hash)",
-                [],
-            )
-            .unwrap();
+                tn.execute("CREATE INDEX idx_namespace ON Namespace (name)", [])
+                    .unwrap();
+            }
+
+            self.enclave_create_database_v5(tn);
+
+            // Making dead urls Table
+            name = "dead_source_urls".to_string();
+            keys = vec_of_strings!["id", "dead_url"];
+            vals = vec_of_strings!["INTEGER PRIMARY KEY", "TEXT NOT NULL"];
+            self.table_create(tn, &name, &keys, &vals);
+            {
+                tn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_file_hash ON File (hash)",
+                    [],
+                )
+                .unwrap();
+            }
         }
+        self.tag_count_create_v1(tn);
+        self.tags_fts_create_v1(tn);
+        self.namespace_properties_create_v1(tn);
     }
 
     pub fn updatedb(&self) {
@@ -1486,7 +1496,13 @@ PRAGMA journal_mode = WAL;
 
     /// Creates a table name: The table name key: List of Collumn lables. dtype: List
     /// of Collumn types. NOTE Passed into SQLITE DIRECTLY THIS IS BAD :C
-    pub fn table_create(&self, name: &String, key: &Vec<String>, dtype: &Vec<String>) {
+    pub fn table_create(
+        &self,
+        tn: &mut Transaction,
+        name: &String,
+        key: &[String],
+        dtype: &[String],
+    ) {
         // Sanity checking...
         assert_eq!(
             key.len(),
@@ -1496,8 +1512,6 @@ PRAGMA journal_mode = WAL;
             dtype.len()
         );
 
-        self.transaction_start();
-        let tn = self.write_conn.lock();
         // Not sure if theirs a better way to dynamically allocate a string based on two
         // vec strings at run time. Let me know if im doing something stupid.
         let mut concat = true;
@@ -1553,7 +1567,7 @@ PRAGMA journal_mode = WAL;
     /// Checks if table exists in DB if it do then delete.
     pub(super) fn check_table_exists(&self, table: String) -> bool {
         let mut out = false;
-        let query_string = format!("SELECT * FROM sqlite_master WHERE type='table' AND name=? ;",);
+        let query_string = "SELECT * FROM sqlite_master WHERE type='table' AND name=? ;";
         dbg!("setup");
         let tn = self.get_database_connection();
         dbg!("connection");
@@ -1561,7 +1575,7 @@ PRAGMA journal_mode = WAL;
         dbg!(&table);
         dbg!(self.pool.state());
         //panic!();
-        let mut toexec = tn.prepare(&query_string).unwrap();
+        let mut toexec = tn.prepare(query_string).unwrap();
         dbg!("query");
         let mut rows = toexec.query(params![table]).unwrap();
         dbg!("rows");
@@ -1657,8 +1671,7 @@ PRAGMA journal_mode = WAL;
         logging::info_log(format!("check_version: Loaded version {}", db_vers));
         if self._active_vers != self._vers {
             let mut conn = self.get_database_connection();
-            let tn = conn
-                .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
+            conn.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
                 .unwrap();
             logging::info_log(format!(
                 "Starting upgrade from V{} to V{}",
@@ -1670,7 +1683,7 @@ PRAGMA journal_mode = WAL;
             self.clear_cache();
             self.load_table(&sharedtypes::LoadDBTable::Settings);
 
-            self.transaction_exclusive_start();
+            self.transaction_flush();
             if db_vers == 1 {
                 panic!("How did you get here vers is 1 did you do something dumb??")
             } else if db_vers == 2 {
@@ -1689,6 +1702,8 @@ PRAGMA journal_mode = WAL;
                 self.db_update_seven_to_eight();
             } else if db_vers == 8 {
                 self.db_update_eight_to_nine();
+            } else if db_vers == 9 {
+                self.db_update_nine_to_ten();
             }
 
             logging::info_log(format!("Finished upgrade to V{}.", db_vers));
@@ -1767,24 +1782,146 @@ PRAGMA journal_mode = WAL;
 
     ///
     /// Adds all tags to a fileid
+    /// If theirs no fileid then it just adds the tag
     ///
     pub fn add_tags_to_fileid(
         &self,
-        file_id: &usize,
-        tags: &Vec<sharedtypes::TagObject>,
-        globalload: &GlobalLoad,
+        file_id: Option<usize>,
+        tag_actions: &[sharedtypes::FileTagAction],
     ) {
-        for tag in tags {
-            match &tag.tag_type {
-                sharedtypes::TagType::Normal | sharedtypes::TagType::NormalNoRegex => {
-                    if tag.tag_type != sharedtypes::TagType::NormalNoRegex {
-                        globalload.plugin_on_tag(tag);
+        for tag_action in tag_actions {
+            match tag_action.operation {
+                sharedtypes::TagOperation::Add => {
+                    // Simple add operation
+                    for tag in &tag_action.tags {
+                        if matches!(
+                            tag.tag_type,
+                            sharedtypes::TagType::Normal | sharedtypes::TagType::NormalNoRegex
+                        ) {
+                            if let Some(tag_id) = self.tag_add_tagobject(tag) {
+                                if let Some(file_id) = file_id {
+                                    self.relationship_add(file_id, tag_id);
+                                }
+                            }
+                        }
+                    }
+                }
+
+                sharedtypes::TagOperation::Set => {
+                    // We need a valid file_id for Set
+                    let file_id = match file_id {
+                        Some(fid) => fid,
+                        None => return,
+                    };
+
+                    // 1️⃣ Build parser tags grouped by namespace
+                    let mut namespace_tags: HashMap<String, Vec<usize>> = HashMap::new();
+                    for tag in &tag_action.tags {
+                        // Ignore special tag types
+                        if !matches!(
+                            tag.tag_type,
+                            sharedtypes::TagType::Normal | sharedtypes::TagType::NormalNoRegex
+                        ) {
+                            continue;
+                        }
+
+                        if let Some(tag_id) = self.tag_add_tagobject(tag) {
+                            namespace_tags
+                                .entry(tag.namespace.name.clone())
+                                .or_insert_with(Vec::new)
+                                .push(tag_id);
+                        }
                     }
 
-                    let tag_id = self.tag_add_tagobject(tag);
-                    self.relationship_add(*file_id, tag_id);
+                    // 2️⃣ Fetch current tags for file grouped by namespace
+                    let mut namespace_file_tags: HashMap<String, Vec<usize>> = HashMap::new();
+                    for tag_id in self.relationship_get_tagid(&file_id) {
+                        if let Some(tag_obj) = self.tag_id_get(&tag_id) {
+                            if let Some(namespace) = self.namespace_get_string(&tag_obj.namespace) {
+                                namespace_file_tags
+                                    .entry(namespace.name.clone())
+                                    .or_insert_with(Vec::new)
+                                    .push(tag_id);
+                            }
+                        }
+                    }
+
+                    // 3️⃣ Remove ignored namespaces
+                    for ignored in ["source_url", ""] {
+                        namespace_tags.remove(ignored);
+                        namespace_file_tags.remove(ignored);
+                    }
+
+                    // 4️⃣ Synchronize tags
+                    for (namespace, parser_tags) in &namespace_tags {
+                        let file_tags = namespace_file_tags.get_mut(namespace);
+
+                        // Convert parser_tags to a HashSet for efficient lookup
+                        let parser_tag_set: HashSet<_> = parser_tags.iter().copied().collect();
+
+                        match file_tags {
+                            Some(file_tags) => {
+                                // a) Add new tags from parser that aren't already in file
+                                for &tag_id in parser_tags {
+                                    if !file_tags.contains(&tag_id) {
+                                        logging::log(format!(
+                                            "Adding tag_id {} to file_id {} per scraper",
+                                            tag_id, file_id
+                                        ));
+                                        self.relationship_add(file_id, tag_id);
+                                        file_tags.push(tag_id); // Update in-memory vector
+                                    }
+                                }
+
+                                // b) Remove tags from file that are no longer in parser
+                                let to_remove: Vec<_> = file_tags
+                                    .iter()
+                                    .filter(|&&tag_id| !parser_tag_set.contains(&tag_id))
+                                    .copied()
+                                    .collect();
+
+                                for tag_id in to_remove {
+                                    logging::log(format!(
+                                        "Removing tag_id {} from file_id {} per scraper",
+                                        tag_id, file_id
+                                    ));
+                                    self.relationship_remove(&file_id, &tag_id);
+                                    file_tags.retain(|&id| id != tag_id); // Update in-memory vector
+                                }
+                            }
+
+                            None => {
+                                // Namespace doesn't exist for this file, just add all parser tags
+                                for &tag_id in parser_tags {
+                                    logging::log(format!(
+                                        "Adding tag_id {} to file_id {} per scraper",
+                                        tag_id, file_id
+                                    ));
+                                    self.relationship_add(file_id, tag_id);
+                                }
+                            }
+                        }
+                    }
                 }
-                sharedtypes::TagType::Special => {}
+
+                sharedtypes::TagOperation::Del => {
+                    let file_id = match file_id {
+                        Some(fid) => fid,
+                        None => return,
+                    };
+                    for tag in tag_action.tags.iter() {
+                        if let Some(ns_id) = self.namespace_get(&tag.namespace.name) {
+                            if let Some(tag_id) = self.tag_get_name(tag.tag.clone(), ns_id) {
+                                logging::log(format!(
+                                    "Removing tag_id {} to file_id {} per scraper",
+                                    tag_id, file_id
+                                ));
+
+                                self.relationship_remove(&file_id, &tag_id);
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -1792,7 +1929,7 @@ PRAGMA journal_mode = WAL;
     /// NOTE USES PASSED tnECTION FROM FUNCTION NOT THE DB CONNECTION GETS ARROUND
     /// MEMROY SAFETY ISSUES WITH CLASSES IN RUST
     fn load_files(&self) {
-        if self._cache == CacheType::Bare {
+        if matches!(self._cache, CacheType::Bare) {
             return;
         }
         self.load_extensions();
@@ -1877,7 +2014,7 @@ PRAGMA journal_mode = WAL;
 
     /// Same as above
     fn load_namespace(&self) {
-        if self._cache == CacheType::Bare {
+        if matches!(self._cache, CacheType::Bare) {
             return;
         }
 
@@ -2120,7 +2257,7 @@ PRAGMA journal_mode = WAL;
     }
 
     pub fn setup_globalload(&mut self, globalload: GlobalLoad) {
-        // self.globalload = Some(globalload);
+        self.globalload = Some(globalload.into());
     }
 
     pub fn namespace_add_namespaceobject(
@@ -2142,10 +2279,20 @@ PRAGMA journal_mode = WAL;
             _ => {
                 self.transaction_exclusive_start();
                 for tag in tags.iter() {
-                    let tid = self.tag_add_tagobject(tag);
-                    self.relationship_add(fid, tid);
+                    if let Some(tid) = self.tag_add_tagobject(tag) {
+                        self.relationship_add(fid, tid);
+                    }
                 }
                 self.transaction_flush();
+            }
+        }
+    }
+
+    /// Runs regex mostly when a tag gets added
+    pub fn tag_run_on_tag(&self, tag: &sharedtypes::TagObject) {
+        if tag.tag_type != sharedtypes::TagType::NormalNoRegex {
+            if let Some(ref globalload) = self.globalload {
+                globalload.plugin_on_tag(tag);
             }
         }
     }
@@ -2153,17 +2300,32 @@ PRAGMA journal_mode = WAL;
     ///
     /// More modern way to add a file into the db
     ///
-    pub fn tag_add_tagobject(&self, tag: &sharedtypes::TagObject) -> usize {
+    pub fn tag_add_tagobject(&self, tag: &sharedtypes::TagObject) -> Option<usize> {
         let mut limit_to = None;
 
+        // If the tag is empty then dont push.
+        // this is a stupid check but I don't trust myself
+        if tag.tag.is_empty() || tag.namespace.name.is_empty() {
+            return None;
+        }
+
+        self.tag_run_on_tag(tag);
         let nsid = self.namespace_add_namespaceobject(tag.namespace.clone());
         let tag_id = self.tag_add(&tag.tag, nsid, None);
 
         // Parent tag adding
         if let Some(subtag) = &tag.relates_to {
+            if subtag.tag.is_empty() || subtag.namespace.name.is_empty() {
+                return None;
+            }
+
             let nsid = self.namespace_add_namespaceobject(subtag.namespace.clone());
             let relate_tag_id = self.tag_add(&subtag.tag, nsid, None);
             if let Some(limitto) = &subtag.limit_to {
+                if limitto.tag.is_empty() || limitto.namespace.name.is_empty() {
+                    return None;
+                }
+
                 let nsid = self.namespace_add_namespaceobject(limitto.namespace.clone());
                 limit_to = Some(self.tag_add(&limitto.tag, nsid, None));
             }
@@ -2175,7 +2337,7 @@ PRAGMA journal_mode = WAL;
 
             self.parents_add(par);
         }
-        tag_id
+        Some(tag_id)
     }
 
     /// Adds tag into DB if it doesn't exist in the memdb.
@@ -2458,7 +2620,15 @@ PRAGMA journal_mode = WAL;
     /// Migrates a tag from one ID to another
     /// NOTE Make this an exclusive transaction otherwise we could drop data
     ///
-    pub fn migrate_tag(&self, old_tag_id: &usize, new_tag_id: &usize) {
+    pub fn migrate_tag(&self, old_tag_id: &usize, new_tag_id: &usize, tn: &mut Transaction) {
+        if !matches!(self._cache, CacheType::InMemdb) {
+            tn.execute(
+                "UPDATE Tags SET id = ? WHERE id = ?",
+                params![new_tag_id, old_tag_id],
+            )
+            .unwrap();
+            return;
+        }
         let tag = match self.tag_id_get(old_tag_id) {
             Some(out) => out,
             None => {
@@ -2466,11 +2636,20 @@ PRAGMA journal_mode = WAL;
             }
         };
 
+        if self.tag_id_get(new_tag_id).is_none() {
+            panic!(
+                "Old tagid {},new tagid {} new tagid already exists cannot delete",
+                old_tag_id, new_tag_id
+            );
+            return;
+        } else {
+            self.tag_add(&tag.name.clone(), tag.namespace, Some(*new_tag_id));
+        }
+
         logging::log(format!("Moving tagid: {} to {}", old_tag_id, new_tag_id));
         self.parents_migration(old_tag_id, new_tag_id);
         self.migrate_relationship_tag(old_tag_id, new_tag_id);
         self.tag_remove(old_tag_id);
-        self.tag_add(&tag.name.clone(), tag.namespace, Some(*new_tag_id));
     }
 
     /// Removes tag & relationship from db.
@@ -2714,11 +2893,21 @@ PRAGMA journal_mode = WAL;
         out.unwrap()
     }
 
+    /// Removes all empty tags in the db
+    fn clear_empty_tags(&self) {
+        logging::info_log("Starting to clear any unlinked tags from the db");
+        let empty_tags = self.get_empty_tagids();
+        logging::info_log(format!("Found {} empty tags will clear.", empty_tags.len()));
+        for tag_id in empty_tags.iter() {
+            self.tag_remove(tag_id);
+        }
+    }
+
     ///
     /// Condenses tag ids into a solid column
     /// NOTE Make this an exclusive transaction otherwise we could drop data
     ///
-    pub fn condense_tags(&self) {
+    pub fn condense_tags(&self, tn: &mut Transaction) {
         self.load_table(&sharedtypes::LoadDBTable::Tags);
 
         // Stopping automagically updating the db
@@ -2726,8 +2915,6 @@ PRAGMA journal_mode = WAL;
         let tag_max = self.tags_max_id();
 
         let mut flag = false;
-
-        self.transaction_exclusive_start();
 
         logging::info_log("Starting preliminary tags scanning".to_string());
         for id in self.get_starting_tag_id()..tag_max - 1 {
@@ -2762,7 +2949,7 @@ PRAGMA journal_mode = WAL;
                 Some(tag) => {
                     if flag {
                         logging::log(format!("Migrating tag id {id} to {cnt}"));
-                        self.migrate_tag(&id, &cnt);
+                        self.migrate_tag(&id, &cnt, tn);
                         last_highest = cnt;
                     }
                     cnt += 1;
@@ -2771,7 +2958,6 @@ PRAGMA journal_mode = WAL;
             eta.step();
             if (cnt % count_percent) == 0 || cnt == 5 || cnt == tag_max {
                 logging::info_log(format!("{}", &eta));
-                self.transaction_exclusive_start();
             }
         }
 
@@ -2782,7 +2968,6 @@ PRAGMA journal_mode = WAL;
                 self._inmemdb.write().tag_max_set(last_highest + 1);
             }
         }
-        self.transaction_flush();
     }
 
     pub fn condense_namespace(&self) {
@@ -2792,9 +2977,10 @@ PRAGMA journal_mode = WAL;
         //self.namespace_delete_id(&2);
 
         for namespace_id in self.namespace_keys() {
-            if self.namespace_get_tagids(&namespace_id).is_empty() {
-                dbg!(&namespace_id);
-            }
+            dbg!(&namespace_id);
+            // if self.namespace_get_tagids(&namespace_id).is_empty() {
+            //     dbg!(&namespace_id);
+            // }
         }
     }
 
@@ -2802,10 +2988,15 @@ PRAGMA journal_mode = WAL;
     /// inbetween tag id's and their relationships.
     /// NOTE Make this an exclusive transaction otherwise we could drop data
     pub fn condense_db_all(&self) {
-        self.condense_namespace();
-        //self.condense_tags();
+        self.clear_empty_tags();
+        let mut write_conn = self.write_conn.lock();
+        let mut tn = write_conn.transaction().unwrap();
+        //self.condense_namespace();
+        self.condense_tags(&mut tn);
+
+        tn.commit().unwrap();
         //self.condense_file_locations();
-        self.vacuum();
+        //self.vacuum();
     }
 
     /*/// Recreates the db with only one ns in it.

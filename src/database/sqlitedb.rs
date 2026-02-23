@@ -53,6 +53,295 @@ pub fn transaction_start<'a>(
 }
 
 impl Main {
+    /// Finds all tag ids where they dont hace a relationship
+    pub fn get_empty_tagids(&self) -> HashSet<usize> {
+        let sql = "SELECT t.id
+FROM Tags t
+WHERE t.count ==0 AND NOT EXISTS (
+    SELECT 1 FROM Parents p
+    WHERE p.tag_id = t.id
+)
+AND NOT EXISTS (
+    SELECT 1 FROM Parents p
+    WHERE p.relate_tag_id = t.id
+)
+AND NOT EXISTS (
+    SELECT 1 FROM Parents p
+    WHERE p.limit_to = t.id
+);";
+        let conn = self.get_database_connection();
+        let mut stmt = conn.prepare(sql).unwrap();
+        wait_until_sqlite_ok!(
+            stmt.query_map(params![], |row| row.get::<_, usize>(0))
+                .unwrap()
+                .collect::<Result<HashSet<usize>, _>>()
+        )
+        .unwrap_or(HashSet::new())
+    }
+
+    /// Searches database for tag ids and count of the tag
+    pub fn search_tags_sql(
+        &self,
+        search_string: &String,
+        limit_to: &usize,
+    ) -> Vec<(usize, usize)> {
+        // Create the SQL query with a dynamic MATCH condition and limit
+        let sql = r#"
+        SELECT t.id, t.count
+FROM Tags t
+JOIN Tags_fts fts ON fts.rowid = t.id
+WHERE Tags_fts MATCH ?
+ORDER BY t.count DESC
+LIMIT ?;    "#;
+
+        let conn = self.get_database_connection();
+        let mut stmt = conn.prepare(sql).unwrap();
+
+        // Format the search string with the `*` suffix for prefix search (add it here, not in the query)
+        let search_query = format!("{}*", search_string); // Append '*' before passing to the query
+
+        // Build the parameter list for the query
+        let mut params: Vec<&dyn rusqlite::ToSql> = vec![&search_query, &limit_to];
+
+        // Convert the parameters vector to a slice and pass to query_map
+        wait_until_sqlite_ok!(
+            stmt.query_map(params.as_slice(), |row| {
+                Ok((row.get::<_, usize>(0)?, row.get::<_, usize>(1)?))
+            })
+            .unwrap()
+            .collect::<Result<Vec<(usize, usize)>, _>>()
+        )
+        .unwrap_or(Vec::new())
+    }
+    ///
+    /// Sets up relationship table and creates tagindex
+    ///
+    pub fn relationship_create_v2(&self, tn: &mut Transaction) {
+        tn.execute(
+            "CREATE TABLE IF NOT EXISTS Relationship (
+    fileid INTEGER NOT NULL,
+    tagid  INTEGER NOT NULL,
+
+    PRIMARY KEY (fileid, tagid),
+
+    FOREIGN KEY (fileid)
+        REFERENCES File(id)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE,
+
+    FOREIGN KEY (tagid)
+        REFERENCES Tags(id)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE
+) WITHOUT ROWID;",
+            [],
+        )
+        .unwrap();
+
+        tn.execute("DROP INDEX IF EXISTS idx_tagid_fileid", [])
+            .unwrap();
+
+        tn.execute(
+            "CREATE INDEX idx_tagid_fileid ON Relationship(tagid, fileid)",
+            [],
+        )
+        .unwrap();
+    }
+
+    ///
+    /// Creates the parents table and creates indexes
+    ///
+    pub fn parents_create_v2(&self, tn: &mut Transaction) {
+        tn.execute(
+            "CREATE TABLE IF NOT EXISTS Parents (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tag_id INTEGER NOT NULL,
+    relate_tag_id INTEGER NOT NULL,
+    limit_to INTEGER,
+
+    FOREIGN KEY (tag_id) REFERENCES Tags(id) ON DELETE CASCADE ON UPDATE CASCADE,
+    FOREIGN KEY (relate_tag_id) REFERENCES Tags(id) ON DELETE CASCADE ON UPDATE CASCADE,
+    FOREIGN KEY (limit_to) REFERENCES Tags(id) ON DELETE SET NULL ON UPDATE CASCADE,
+
+    CHECK (tag_id != relate_tag_id)
+);",
+            [],
+        )
+        .unwrap();
+
+        tn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_parents ON Parents (tag_id, relate_tag_id, limit_to)",
+            [],
+        )
+        .unwrap();
+        tn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_parents_rel ON Parents (relate_tag_id)",
+            [],
+        )
+        .unwrap();
+        tn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_parents_lim ON Parents (limit_to)",
+            [],
+        )
+        .unwrap();
+    }
+
+    ///
+    /// Creates tag Fast Text Search does a little parsing
+    /// Adds triggers to keep it up to date
+    ///
+    pub fn tags_fts_create_v1(&self, tn: &mut Transaction) {
+        tn.execute(
+            "
+        CREATE VIRTUAL TABLE IF NOT EXISTS Tags_fts USING fts5(
+            name,
+            namespace UNINDEXED,
+            content='Tags',
+            content_rowid='id',
+            tokenize='unicode61'
+        );
+        ",
+            [],
+        )
+        .unwrap();
+
+        tn.execute(
+            "
+        INSERT INTO Tags_fts(rowid, name, namespace)
+        SELECT id, replace(name, '_', ' '), namespace
+        FROM Tags;
+        ",
+            [],
+        )
+        .unwrap();
+
+        tn.execute(
+            "
+        CREATE TRIGGER IF NOT EXISTS Tags_ai AFTER INSERT ON Tags
+        BEGIN
+          INSERT INTO Tags_fts(rowid, name, namespace)
+          VALUES (new.id, replace(new.name, '_', ' '), new.namespace);
+        END;
+        ",
+            [],
+        )
+        .unwrap();
+
+        tn.execute(
+            "
+        CREATE TRIGGER IF NOT EXISTS Tags_ad AFTER DELETE ON Tags
+        BEGIN
+          DELETE FROM Tags_fts WHERE rowid = old.id;
+        END;
+        ",
+            [],
+        )
+        .unwrap();
+
+        tn.execute(
+            "
+        CREATE TRIGGER IF NOT EXISTS Tags_au AFTER UPDATE ON Tags
+        BEGIN
+          UPDATE Tags_fts
+          SET name = replace(new.name, '_', ' '), namespace = new.namespace
+          WHERE rowid = old.id;
+        END;
+        ",
+            [],
+        )
+        .unwrap();
+            }
+    /// Creates namespace properties table and its linker
+    pub fn namespace_properties_create_v1(&self, tn: &mut Transaction) {
+        tn.execute(
+            "
+CREATE TABLE IF NOT EXISTS NamespaceProperty (
+  id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+  name TEXT NOT NULL UNIQUE,  
+  property_value TEXT NOT NULL,  
+  description TEXT
+);
+",
+            [],
+        )
+        .unwrap();
+        tn.execute(
+            "
+CREATE TABLE IF NOT EXISTS NamespacePropertyLink (
+  id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+  namespace_id INTEGER NOT NULL,
+  property_id INTEGER NOT NULL,
+    UNIQUE(namespace_id, property_id),
+  FOREIGN KEY (namespace_id) REFERENCES Namespace(id) ON DELETE CASCADE,
+  FOREIGN KEY (property_id) REFERENCES NamespaceProperty(id) ON DELETE CASCADE
+);
+
+",
+            [],
+        )
+        .unwrap();
+    }
+
+    /// Creates the tags count table
+    pub fn tag_count_create_v1(&self, tn: &mut Transaction) {
+        tn.execute(
+            "
+ALTER TABLE Tags ADD COLUMN count INTEGER NOT NULL DEFAULT 0;
+",
+            [],
+        )
+        .unwrap();
+
+        tn.execute(
+            "
+
+CREATE TRIGGER relationship_insert_count
+AFTER INSERT ON Relationship
+BEGIN
+    UPDATE Tags
+    SET count = count + 1
+    WHERE id = NEW.tagid;
+END;
+",
+            [],
+        )
+        .unwrap();
+        tn.execute(
+            "
+CREATE TRIGGER relationship_delete_count
+AFTER DELETE ON Relationship
+BEGIN
+    UPDATE Tags
+    SET count = count - 1
+    WHERE id = OLD.tagid;
+END;",
+            [],
+        )
+        .unwrap();
+
+        tn.execute(
+            "UPDATE Tags
+SET count = sub.cnt
+FROM (
+    SELECT tagid, COUNT(*) AS cnt
+    FROM Relationship
+    GROUP BY tagid
+) AS sub
+WHERE Tags.id = sub.tagid;",
+            [],
+        )
+        .unwrap();
+
+tn.execute(
+            "
+        CREATE INDEX IF NOT EXISTS idx_tags_count ON Tags(count DESC);
+        ",
+            [],
+        )
+        .unwrap();
+
+    }
+
     ///
     /// Gets all tagids where namespace_id has a linkage with a tag that has count greater then
     /// cnt
@@ -128,44 +417,69 @@ HAVING COUNT(r.fileid) {dir} ?;"
         if tag_ids.is_empty() {
             return vec![];
         }
-        // Build placeholders like "?, ?, ?" dynamically
+
+        let tn = self.pool.get().unwrap();
+
+        // 1️⃣ Deduplicate input tags
+        let mut tag_ids: Vec<usize> = tag_ids.to_vec();
+        tag_ids.sort_unstable();
+        tag_ids.dedup();
+
+        // 2️⃣ Sort tags by rarity (Tags.count ASC)
         let placeholders = std::iter::repeat_n("?", tag_ids.len())
             .collect::<Vec<_>>()
             .join(", ");
 
-        // SQL: select fileid where tagid in (...) group by fileid having count(distinct tagid) = <n>
+        let count_sql = format!(
+            "SELECT id
+         FROM Tags
+         WHERE id IN ({})
+         ORDER BY count ASC",
+            placeholders
+        );
+
+        let mut stmt = tn.prepare(&count_sql).unwrap();
+
+        let sorted_tag_ids: Vec<usize> = stmt
+            .query_map(rusqlite::params_from_iter(&tag_ids), |row| {
+                row.get::<_, usize>(0)
+            })
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+
+        // If any tag is missing → no possible matches
+        if sorted_tag_ids.len() != tag_ids.len() {
+            return vec![];
+        }
+
+        // 3️⃣ Main query (match ALL tags)
+        let placeholders = std::iter::repeat_n("?", sorted_tag_ids.len())
+            .collect::<Vec<_>>()
+            .join(", ");
+
         let sql = format!(
             "SELECT fileid
          FROM Relationship
-         WHERE tagid IN ({placeholders})
+         WHERE tagid IN ({})
          GROUP BY fileid
-         HAVING COUNT(tagid) = ?",
-            placeholders = placeholders
+         HAVING COUNT(tagid) = ?
+         LIMIT 500",
+            placeholders
         );
-        // Build boxed parameter vector so we can pass a slice of &dyn ToSql
-        let mut params_boxed: Vec<Box<dyn ToSql>> = tag_ids
-            .iter()
-            .map(|&t| Box::new(t) as Box<dyn ToSql>)
-            .collect();
-        // push the required count (number of tags) as the final parameter
-        params_boxed.push(Box::new(tag_ids.len()));
 
-        // Create a Vec<&dyn ToSql> to pass to query_map
-        let params_refs: Vec<&dyn ToSql> =
-            params_boxed.iter().map(|b| &**b as &dyn ToSql).collect();
-
-        let tn = self.pool.get().unwrap();
         let mut stmt = tn.prepare(&sql).unwrap();
-        wait_until_sqlite_ok!(
-            stmt.query_map(&params_refs[..], |row| row.get::<_, usize>(0))
-                .unwrap()
-                .collect::<Result<Vec<usize>, _>>()
-        )
-        .unwrap_or(vec![])
 
-        // Convert to Vec<usize>
+        let mut params: Vec<&dyn ToSql> = sorted_tag_ids.iter().map(|t| t as &dyn ToSql).collect();
+
+        let required_count = sorted_tag_ids.len();
+        params.push(&required_count);
+
+        stmt.query_map(&params[..], |row| row.get::<_, usize>(0))
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap_or_else(|_| vec![])
     }
-
     ///
     /// Checks if a relationship exists
     ///
@@ -765,7 +1079,7 @@ RETURNING id;
 
     /// Loads Parents in from DB tnection
     pub(super) fn load_parents(&self) {
-        if self._cache == CacheType::Bare {
+        if matches!(self._cache, CacheType::Bare) {
             return;
         }
         logging::info_log("Database is Loading: Parents".to_string());
@@ -1068,7 +1382,7 @@ RETURNING id;
         }
 
         // Catches issue where a non bare DB would nuke itself
-        if self._cache == CacheType::Bare
+        if matches!(self._cache, CacheType::Bare)
             && let Some(id) = self.file_get_hash(&hash)
         {
             return id;
@@ -1099,7 +1413,8 @@ RETURNING id;
 
     /// Loads Relationships in from DB tnection
     pub(super) fn load_relationships(&self) {
-        if self._cache == CacheType::Bare {
+        //if self._cache == CacheType::Bare {
+        if matches!(self._cache, CacheType::Bare) {
             return;
         }
         let tn = self.pool.get().unwrap();
@@ -1231,7 +1546,8 @@ RETURNING id;
 
     ///
     /// Adds a setting into the db
-    ///
+    /// NOTE do not remove the transaction start here. Is needed for the db upgrade to restartup
+    /// commits
     ///
     pub fn setting_add_sql(
         &self,
@@ -1343,7 +1659,7 @@ RETURNING id;
     pub fn migrate_relationship_tag_sql(&self, old_tag_id: &usize, new_tag_id: &usize) {
         let tn = self.write_conn.lock();
         wait_until_sqlite_ok!(tn.execute(
-            "UPDATE OR REPLACE Relationship SET tagid = ? WHERE tagid = ?",
+            "UPDATE OR IGNORE Relationship SET tagid = ? WHERE tagid = ?",
             params![new_tag_id, old_tag_id],
         ))
         .unwrap();
@@ -1443,7 +1759,7 @@ RETURNING id;
 
     /// Loads tags into db
     pub(super) fn load_tags(&self) {
-        if self._cache == CacheType::Bare {
+        if matches!(self._cache, CacheType::Bare) {
             return;
         }
         logging::info_log("Database is Loading: Tags".to_string());
@@ -1451,7 +1767,7 @@ RETURNING id;
         // let mut delete_tags = HashSet::new();
         {
             let tn = self.pool.get().unwrap();
-            let temp = tn.prepare("SELECT * FROM Tags");
+            let temp = tn.prepare("SELECT (id, name, namespace) FROM Tags");
             if let Ok(mut con) = temp {
                 let tag = wait_until_sqlite_ok!(con.query_map([], |row| {
                     let name: String = match row.get(1) {
@@ -1552,6 +1868,7 @@ RETURNING id;
 
     /// Sqlite wrapper for deleteing a tag from table.
     pub fn delete_tag_sql(&self, tag_id: &usize) {
+        logging::log(format!("Removing tag with id: {}", tag_id));
         let tn = self.write_conn.lock();
         let inp = "DELETE FROM Tags WHERE id = ?";
         {

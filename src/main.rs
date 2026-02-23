@@ -5,7 +5,7 @@ use log::{error, warn};
 use parking_lot::{Mutex, RwLock};
 use std::{sync::Arc, thread, time};
 
-pub const VERS: usize = 9;
+pub const VERS: usize = 10;
 pub const DEFAULT_LOC_PLUGIN: &str = "plugins";
 pub const DEFAULT_LOC_SCRAPER: &str = "scrapers";
 extern crate ratelimit;
@@ -140,12 +140,8 @@ fn main() {
     let routes = database.clone().get_filters();
 
     let routes_with_fallback = routes.recover(handle_rejection);
-    println!("Server running on 127.0.0.1:3030");
 
     let runtime = tokio::runtime::Runtime::new().expect("Failed to create Tokio runtime");
-
-    // 2. Use block_on to run the async function and wait for its result
-    // let result = runtime.block_on(warp::serve(routes_with_fallback).run(([127, 0, 0, 1], 3030)));
 
     let jobmanager = Arc::new(RwLock::new(jobs::Jobs::new(database.clone())));
 
@@ -269,6 +265,10 @@ fn main() {
             break;
         }
     }
+
+    // 2. Use block_on to run the async function and wait for its result
+    //println!("Server running on 127.0.0.1:3030");
+    //let result = runtime.block_on(warp::serve(routes_with_fallback).run(([127, 0, 0, 1], 3030)));
 
     // This wait is done for allowing any thread to "complete" Shouldn't be nessisary
     // but hey. :D

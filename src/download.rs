@@ -335,7 +335,7 @@ pub fn process_archive_files(
     inp_bytes: Cursor<Bytes>,
     filetype: Option<FileFormat>,
     linkto: sharedtypes::SubTag,
-) -> Vec<(Vec<u8>, Vec<sharedtypes::TagObject>)> {
+) -> Vec<(Vec<u8>, Vec<sharedtypes::FileTagAction>)> {
     if let Some(filetype) = filetype
         && filetype == FileFormat::Zip
     {
@@ -350,7 +350,7 @@ pub fn process_archive_files(
 fn process_archive_zip(
     inp_bytes: Cursor<Bytes>,
     linkto: sharedtypes::SubTag,
-) -> Vec<(Vec<u8>, Vec<sharedtypes::TagObject>)> {
+) -> Vec<(Vec<u8>, Vec<sharedtypes::FileTagAction>)> {
     let mut out = Vec::new();
     if let Ok(mut zip) = zip::ZipArchive::new(inp_bytes) {
         for item in 0..zip.len() {
@@ -389,7 +389,13 @@ fn process_archive_zip(
 
                     let mut filetemp = Vec::new();
                     if std::io::copy(&mut file, &mut filetemp).is_ok() {
-                        out.push((filetemp, tags));
+                        out.push((
+                            filetemp,
+                            vec![sharedtypes::FileTagAction {
+                                operation: sharedtypes::TagOperation::Add,
+                                tags,
+                            }],
+                        ));
                     }
                 }
             }
