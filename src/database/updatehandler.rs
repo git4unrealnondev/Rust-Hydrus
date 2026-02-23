@@ -1014,7 +1014,7 @@ impl Main {
     /// Sets up the relationship and the parents table to actually depend on the tags table
     pub fn db_update_nine_to_ten(&mut self) {
         {
-            //self.backup_db();
+            self.backup_db();
             logging::info_log("Renaming Relationship to Relationship_old");
             let mut write_conn = self.write_conn.lock();
             write_conn
