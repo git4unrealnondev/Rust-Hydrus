@@ -80,13 +80,12 @@ debug = false
 walkdir = "2.4.0"
 quote = "1.0.44"
 syn = { version = "2.0.114", features = ["full"] }
+prettyplease = "0.2.37"
 
 [profile.release-with-debug]
 inherits = "release"
 debug = true
 strip = false
-
-[dev-dependencies]
 
 [[bench]]
 name = "inmemdb"

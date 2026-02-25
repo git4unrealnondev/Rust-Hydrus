@@ -80,11 +80,7 @@ AND NOT EXISTS (
     }
 
     /// Searches database for tag ids and count of the tag
-    pub fn search_tags_sql(
-        &self,
-        search_string: &String,
-        limit_to: &usize,
-    ) -> Vec<(usize, usize)> {
+    pub fn search_tags_sql(&self, search_string: &String, limit_to: &usize) -> Vec<(usize, usize)> {
         // Create the SQL query with a dynamic MATCH condition and limit
         let sql = r#"
         SELECT t.id, t.count
@@ -250,7 +246,7 @@ LIMIT ?;    "#;
             [],
         )
         .unwrap();
-            }
+    }
     /// Creates namespace properties table and its linker
     pub fn namespace_properties_create_v1(&self, tn: &mut Transaction) {
         tn.execute(
@@ -332,14 +328,13 @@ WHERE Tags.id = sub.tagid;",
         )
         .unwrap();
 
-tn.execute(
+        tn.execute(
             "
         CREATE INDEX IF NOT EXISTS idx_tags_count ON Tags(count DESC);
         ",
             [],
         )
         .unwrap();
-
     }
 
     ///

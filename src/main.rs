@@ -235,6 +235,11 @@ fn main() {
             );
         }
     }
+
+    // 2. Use block_on to run the async function and wait for its result
+    println!("Server running on 127.0.0.1:3030");
+    let result = runtime.block_on(warp::serve(routes_with_fallback).run(([127, 0, 0, 1], 3030)));
+
     // Anything below here will run automagically. Jobs run in OS threads Waits until
     // all threads have closed.
     loop {
@@ -265,10 +270,6 @@ fn main() {
             break;
         }
     }
-
-    // 2. Use block_on to run the async function and wait for its result
-    //println!("Server running on 127.0.0.1:3030");
-    //let result = runtime.block_on(warp::serve(routes_with_fallback).run(([127, 0, 0, 1], 3030)));
 
     // This wait is done for allowing any thread to "complete" Shouldn't be nessisary
     // but hey. :D

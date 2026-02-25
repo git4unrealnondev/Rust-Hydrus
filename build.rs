@@ -1,9 +1,11 @@
+use prettyplease;
 use quote::{ToTokens, quote};
 use std::fs;
 use std::fs::read_to_string;
 use std::io::{self, Write};
 use std::path::Path;
 use syn::Visibility;
+use syn::parse_file;
 use syn::{ImplItem, ItemImpl};
 fn generate_client_code(api_file: &str) -> io::Result<String> {
     // Read the file content and handle errors
@@ -118,28 +120,34 @@ fn generate_client_code(api_file: &str) -> io::Result<String> {
 
     // Combine client code with generated functions
     let client_code = quote! {
-        #[derive(Debug)]
-        pub struct RustHydrusApiClient {
-            pub base_url: String,
-        }
+    use std::collections::HashMap;
+            use std::collections::HashSet;
+            use crate::sharedtypes;
 
-        #[allow(dead_code)]
-        impl RustHydrusApiClient {
-            pub fn new<S: Into<String>>(base_url: S) -> Self {
-                let base_url_str = base_url.into();
-                let base_url_temp = if !base_url_str.starts_with("http") {
-                    format!("http://{}", base_url_str)
-                } else {
-                    base_url_str
-                };
-                RustHydrusApiClient { base_url: base_url_temp }
+            #[derive(Debug)]
+            pub struct RustHydrusApiClient {
+                pub base_url: String,
             }
 
-            #(#client_functions)*
-        }
-    };
+            #[allow(dead_code)]
+            impl RustHydrusApiClient {
+                pub fn new<S: Into<String>>(base_url: S) -> Self {
+                    let base_url_str = base_url.into();
+                    let base_url_temp = if !base_url_str.starts_with("http") {
+                        format!("http://{}", base_url_str)
+                    } else {
+                        base_url_str
+                    };
+                    RustHydrusApiClient { base_url: base_url_temp }
+                }
 
-    Ok(client_code.to_string())
+                #(#client_functions)*
+            }
+        };
+
+    let syntax_tree = parse_file(&client_code.to_string()).expect("Unable to parse generated code");
+    let formatted_code = prettyplease::unparse(&syntax_tree);
+    Ok(formatted_code.to_string())
 }
 
 fn has_web_api_macro(attrs: &[syn::Attribute]) -> bool {

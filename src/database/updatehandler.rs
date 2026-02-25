@@ -1087,6 +1087,15 @@ WHERE p.tag_id != p.relate_tag_id;",
         }
         self.db_drop_table(&"Relationship_old".to_string());
         self.db_drop_table(&"Parents_old".to_string());
+        self.transaction_flush();
+        // Will recreate indexes on parents table
+        {
+            let mut wruite_conn = self.write_conn.lock();
+            let mut tn = wruite_conn.transaction().unwrap();
+
+            self.parents_create_v2(&mut tn);
+            tn.commit();
+        }
         self.db_version_set(10);
         self.vacuum();
         self.analyze();

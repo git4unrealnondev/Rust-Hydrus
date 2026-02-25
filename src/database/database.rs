@@ -85,7 +85,7 @@ impl Main {
         &self,
         search_string: &String,
         limit_to: &usize,
-    ) -> Vec<(sharedtypes::Tag, usize)> {
+    ) -> Vec<(sharedtypes::Tag, usize, usize)> {
         let mut out = Vec::new();
 
         for (tag_id, count) in self.search_tags_sql(search_string, limit_to).iter() {
@@ -100,6 +100,7 @@ impl Main {
                             description: namespace.description,
                         },
                     },
+                    *tag_id,
                     *count,
                 ));
             }
@@ -109,11 +110,7 @@ impl Main {
     }
     /// Searches the database using FTS5 allows getting a list of tagids and their count based on a
     /// search string and a limit of tagids to get
-    pub fn search_tags_ids(
-        &self,
-        search_string: &String,
-        limit_to: &usize,
-    ) -> Vec<(usize, usize)> {
+    pub fn search_tags_ids(&self, search_string: &String, limit_to: &usize) -> Vec<(usize, usize)> {
         self.search_tags_sql(search_string, limit_to)
     }
 
@@ -424,10 +421,15 @@ impl Main {
                     && Path::new(&out).with_extension(ext_str).exists()
                 {
                     return Some(
-                        Path::new(&out)
-                            .with_extension(ext_str)
-                            .to_string_lossy()
-                            .to_string(),
+                        std::fs::canonicalize(
+                            Path::new(&out)
+                                .with_extension(ext_str)
+                                .to_string_lossy()
+                                .to_string(),
+                        )
+                        .unwrap()
+                        .to_string_lossy()
+                        .to_string(),
                     );
                 }
             }
@@ -438,13 +440,13 @@ impl Main {
     ///
     ///Checks if a url is dead
     ///
-    pub fn check_dead_url(&self, url: &String) -> bool {
+    pub fn check_dead_url(&self, url_to_check: &String) -> bool {
         match self._cache {
-            CacheType::Bare => self.does_dead_source_exist(url),
-            _ => match self._inmemdb.read().does_dead_source_exist(url) {
+            CacheType::Bare => self.does_dead_source_exist(url_to_check),
+            _ => match self._inmemdb.read().does_dead_source_exist(url_to_check) {
                 true => true,
                 // Need to check if we have a cache miss
-                false => self.does_dead_source_exist(url),
+                false => self.does_dead_source_exist(url_to_check),
             },
         }
     }
