@@ -83,25 +83,6 @@ fn db_file_sanity(dbloc: &str) {
         Err(_dbzero) => {}
     }
 }
-use warp::Filter;
-use warp::Rejection;
-use warp::Reply;
-
-async fn handle_rejection(err: Rejection) -> Result<impl Reply, warp::Rejection> {
-    if err.is_not_found() {
-        // If the route was not found, return a 404 response
-        Ok(warp::reply::with_status(
-            "404 Not Found",
-            warp::http::StatusCode::NOT_FOUND,
-        ))
-    } else {
-        // Handle any other errors (e.g., internal server error)
-        Ok(warp::reply::with_status(
-            "500 Internal Server Error",
-            warp::http::StatusCode::INTERNAL_SERVER_ERROR,
-        ))
-    }
-}
 
 /// Main function.
 fn main() {
@@ -137,12 +118,7 @@ fn main() {
     // Inits Database.
     let mut database = makedb(dbloc);
 
-    let routes = database.clone().get_filters();
-
-    let routes_with_fallback = routes.recover(handle_rejection);
-
-    let runtime = tokio::runtime::Runtime::new().expect("Failed to create Tokio runtime");
-
+    
     let jobmanager = Arc::new(RwLock::new(jobs::Jobs::new(database.clone())));
 
     let mut globalload = globalload::GlobalLoad::new(database.clone(), jobmanager.clone());
@@ -236,9 +212,6 @@ fn main() {
         }
     }
 
-    // 2. Use block_on to run the async function and wait for its result
-    println!("Server running on 127.0.0.1:3030");
-    let result = runtime.block_on(warp::serve(routes_with_fallback).run(([127, 0, 0, 1], 3030)));
 
     // Anything below here will run automagically. Jobs run in OS threads Waits until
     // all threads have closed.
