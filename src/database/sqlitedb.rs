@@ -459,6 +459,7 @@ HAVING COUNT(r.fileid) {dir} ?;"
          WHERE tagid IN ({})
          GROUP BY fileid
          HAVING COUNT(tagid) = ?
+        ORDER BY fileid DESC
          LIMIT 500",
             placeholders
         );
