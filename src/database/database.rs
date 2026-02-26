@@ -486,10 +486,11 @@ pub fn search_db_files(
     limit: Option<usize>,
 ) -> Option<Vec<usize>> {
     let tn = self.pool.get().unwrap();
-    let mut included_files: Option<HashSet<usize>> = None;
+    let mut final_files: HashSet<usize> = HashSet::new(); // OR combination of all groups
+    let mut initialized = false;
 
-    for search_item in search.searches.into_iter() {
-        let tag_ids = match &search_item {
+    for item in search.searches.into_iter() {
+        let tag_ids = match &item {
             sharedtypes::SearchHolder::And(ids)
             | sharedtypes::SearchHolder::Or(ids)
             | sharedtypes::SearchHolder::Not(ids) => ids,
@@ -499,9 +500,9 @@ pub fn search_db_files(
             continue;
         }
 
-        // Build SQL placeholders
+        // SQL placeholders
         let placeholders = vec!["?"; tag_ids.len()].join(", ");
-        let sql = match &search_item {
+        let sql = match &item {
             sharedtypes::SearchHolder::And(_) => format!(
                 "SELECT fileid
                  FROM Relationship
@@ -511,13 +512,7 @@ pub fn search_db_files(
                 placeholders,
                 tag_ids.len()
             ),
-            sharedtypes::SearchHolder::Or(_) => format!(
-                "SELECT DISTINCT fileid
-                 FROM Relationship
-                 WHERE tagid IN ({})",
-                placeholders
-            ),
-            sharedtypes::SearchHolder::Not(_) => format!(
+            sharedtypes::SearchHolder::Or(_) | sharedtypes::SearchHolder::Not(_) => format!(
                 "SELECT DISTINCT fileid
                  FROM Relationship
                  WHERE tagid IN ({})",
@@ -525,62 +520,31 @@ pub fn search_db_files(
             ),
         };
 
-        // Run the query
         let mut stmt = tn.prepare(&sql).unwrap();
-        let result_fileids: HashSet<usize> = stmt
+        let group_files: HashSet<usize> = stmt
             .query_map(rusqlite::params_from_iter(tag_ids.iter()), |row| row.get(0))
             .unwrap()
             .flatten()
             .collect();
 
-        match &search_item {
-            sharedtypes::SearchHolder::And(_) => {
-                included_files = Some(match included_files {
-                    Some(current) => current
-                        .intersection(&result_fileids)
-                        .cloned()
-                        .collect(),
-                    None => result_fileids,
-                });
-            }
-            sharedtypes::SearchHolder::Or(_) => {
-                included_files = Some(match included_files {
-                    Some(current) => current
-                        .union(&result_fileids)
-                        .cloned()
-                        .collect(),
-                    None => result_fileids,
-                });
+        match &item {
+            sharedtypes::SearchHolder::And(_) | sharedtypes::SearchHolder::Or(_) => {
+                if !initialized {
+                    final_files = group_files;
+                    initialized = true;
+                } else {
+                    final_files.extend(group_files); // union of all AND/OR groups
+                }
             }
             sharedtypes::SearchHolder::Not(_) => {
-                if let Some(current) = included_files.as_mut() {
-                    for fileid in result_fileids {
-                        current.remove(&fileid);
-                    }
-                } else {
-                    // If included_files is empty, treat NOT as excluding from all files
-                    // Optional: fetch all fileids once if needed
-                    let mut all_files_stmt = tn.prepare("SELECT id FROM File").unwrap();
-                    let all_files: HashSet<usize> = all_files_stmt
-                        .query_map([], |row| row.get(0))
-                        .unwrap()
-                        .flatten()
-                        .collect();
-                    let filtered: HashSet<_> =
-                        all_files.difference(&result_fileids).cloned().collect();
-                    included_files = Some(filtered);
+                for f in group_files {
+                    final_files.remove(&f); // subtract NOT files
                 }
             }
         }
     }
 
-    // Convert the final HashSet to a Vec and apply limit
-    let mut out = match included_files {
-        Some(s) => s.into_iter().collect::<Vec<usize>>(),
-        None => Vec::new(),
-    };
-
-    // Optional: sort for deterministic order
+    let mut out: Vec<usize> = final_files.into_iter().collect();
     out.sort_unstable();
 
     if let Some(lim) = limit {
@@ -588,8 +552,7 @@ pub fn search_db_files(
     }
 
     Some(out)
-}
-    /// Gets all jobs loaded in the db
+}    /// Gets all jobs loaded in the db
     pub fn jobs_get_all(&self) -> HashMap<usize, sharedtypes::DbJobsObj> {
         match &self._cache {
             //CacheType::Bare => self.jobs_get_all_sql(),
