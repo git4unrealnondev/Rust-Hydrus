@@ -188,25 +188,21 @@ LIMIT ?;    "#;
     ///
     pub fn tags_fts_create_v1(&self, tn: &mut Transaction) {
         tn.execute(
-            "
+            r#"
         CREATE VIRTUAL TABLE IF NOT EXISTS Tags_fts USING fts5(
-            name,
-            namespace UNINDEXED,
-            content='Tags',
-            content_rowid='id',
-            tokenize='unicode61'
-        );
-        ",
+    name,
+    namespace UNINDEXED,
+    content='Tags',
+    content_rowid='id',
+    tokenize = "unicode61 separators '_'"
+);        "#,
             [],
         )
         .unwrap();
 
         tn.execute(
             "
-        INSERT INTO Tags_fts(rowid, name, namespace)
-        SELECT id, replace(name, '_', ' '), namespace
-        FROM Tags;
-        ",
+        INSERT INTO Tags_fts(Tags_fts) VALUES('rebuild');        ",
             [],
         )
         .unwrap();
