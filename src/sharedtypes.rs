@@ -28,6 +28,15 @@ pub const DEFAULT_PRIORITY: usize = 10;
 pub const DEFAULT_CACHETIME: Option<usize> = None;
 pub const DEFAULT_CACHECHECK: JobCacheType = JobCacheType::TimeReptimeParam;
 
+
+/// Searches either from FTS or FTS then orders by count
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub enum TagPartialSearchType {
+    Fts,
+    Count
+}
+
+
 ///
 /// Job cache chcekr type. When a job gets added into a DB this field will determine what needs to be done
 /// to check if we should add this into the DB.

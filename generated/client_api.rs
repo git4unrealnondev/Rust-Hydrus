@@ -25,10 +25,11 @@ impl RustHydrusApiClient {
         &self,
         search_string: &String,
         limit_to: &usize,
+        fts_or_count: sharedtypes::TagPartialSearchType,
     ) -> Result<Vec<(sharedtypes::Tag, usize, usize)>, ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "search_tags");
         let res = ureq::post(url)
-            .send_json(&(search_string, limit_to))?
+            .send_json(&(search_string, limit_to, fts_or_count))?
             .body_mut()
             .read_json::<Vec<(sharedtypes::Tag, usize, usize)>>()?;
         Ok(res)
@@ -40,10 +41,11 @@ impl RustHydrusApiClient {
         &self,
         search_string: &String,
         limit_to: &usize,
+        fts_or_count: sharedtypes::TagPartialSearchType,
     ) -> Result<Vec<(usize, usize)>, ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "search_tags_ids");
         let res = ureq::post(url)
-            .send_json(&(search_string, limit_to))?
+            .send_json(&(search_string, limit_to, fts_or_count))?
             .body_mut()
             .read_json::<Vec<(usize, usize)>>()?;
         Ok(res)
@@ -181,7 +183,11 @@ impl RustHydrusApiClient {
     }
     /** Handles the searching of the DB dynamically. Returns the file id's associated
 
- with the search.*/
+ with the search.
+
+ Returns file IDs matching the search.
+
+ Supports AND, OR, NOT operations.*/
     pub fn search_db_files(
         &self,
         search: sharedtypes::SearchObj,

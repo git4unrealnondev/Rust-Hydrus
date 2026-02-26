@@ -85,10 +85,11 @@ impl Main {
         &self,
         search_string: &String,
         limit_to: &usize,
+        fts_or_count: sharedtypes::TagPartialSearchType
     ) -> Vec<(sharedtypes::Tag, usize, usize)> {
         let mut out = Vec::new();
 
-        for (tag_id, count) in self.search_tags_sql(search_string, limit_to).iter() {
+        for (tag_id, count) in self.search_tags_sql(search_string, limit_to, fts_or_count).iter() {
             if let Some(tag) = self.tag_id_get(tag_id)
                 && let Some(namespace) = self.namespace_get_string(&tag.namespace)
             {
@@ -110,8 +111,8 @@ impl Main {
     }
     /// Searches the database using FTS5 allows getting a list of tagids and their count based on a
     /// search string and a limit of tagids to get
-    pub fn search_tags_ids(&self, search_string: &String, limit_to: &usize) -> Vec<(usize, usize)> {
-        self.search_tags_sql(search_string, limit_to)
+    pub fn search_tags_ids(&self, search_string: &String, limit_to: &usize, fts_or_count: sharedtypes::TagPartialSearchType) -> Vec<(usize, usize)> {
+        self.search_tags_sql(search_string, limit_to, fts_or_count)
     }
 
     /// A test function to return 1
@@ -477,113 +478,117 @@ impl Main {
 
     /// Handles the searching of the DB dynamically. Returns the file id's associated
     /// with the search.
-    pub fn search_db_files(
-        &self,
+    /// Returns file IDs matching the search.
+/// Supports AND, OR, NOT operations.
+pub fn search_db_files(
+    &self,
+    search: sharedtypes::SearchObj,
+    limit: Option<usize>,
+) -> Option<Vec<usize>> {
+    let tn = self.pool.get().unwrap();
+    let mut included_files: Option<HashSet<usize>> = None;
 
-        search: sharedtypes::SearchObj,
-        limit: Option<usize>,
-        //offset: Option<usize>,
-    ) -> Option<Vec<usize>> {
-        let stor: Vec<sharedtypes::SearchHolder> = Vec::with_capacity(search.searches.len());
-        let fin: Vec<usize> = Vec::new();
-        let mut fin_temp: HashMap<usize, Vec<usize>> = HashMap::new();
-        let searched: Vec<(usize, usize)> = Vec::with_capacity(search.searches.len());
-        /*if search.search_relate.is_none() {
-            if search.searches.len() == 1 {
-                stor.push(sharedtypes::SearchHolder::And((0, 0)));
-            } else {
-                // Assume AND search
-                for each in 0..search.searches.len() {
-                    stor.push(sharedtypes::SearchHolder::And((each, each + 1)));
-                }
-            }
-        } else {
-            stor = search.search_relate.unwrap();
-        }*/
-        for (cnt, un) in search.searches.into_iter().enumerate() {
-            match un {
-                sharedtypes::SearchHolder::Not(tag_ids) => {
-                    /* let fa = self.relationship_get_fileid(&a);
-                    let fb = self.relationship_get_fileid(&b);
-                    fin_temp.insert(cnt, fa.difference(&fb).cloned().collect());
-                    searched.push((cnt, a));
-                    searched.push((cnt, b));*/
-                }
-                sharedtypes::SearchHolder::And(tag_ids) => {
-                    let file_ids = self.relationship_get_fileid_search_sql(&tag_ids);
+    for search_item in search.searches.into_iter() {
+        let tag_ids = match &search_item {
+            sharedtypes::SearchHolder::And(ids)
+            | sharedtypes::SearchHolder::Or(ids)
+            | sharedtypes::SearchHolder::Not(ids) => ids,
+        };
 
-                    fin_temp.insert(cnt, file_ids);
-
-                    //let mut tag_ids = tag_ids.clone();
-
-                    //Size check for if we get only one tag to search
-                    /*if tag_ids.len() == 1 {
-                        tag_ids.push(tag_ids[0]);
-                    }
-
-                    // Collects all the file ids that are related to this
-                    for tag_id in tag_ids.iter() {
-                        temp.push(self.relationship_get_fileid(tag_id));
-                    }
-
-                    // Intersects everything together
-                    let mut iter = temp.iter();
-                    let i = iter.next().map(|set| {
-                        iter.fold(set.clone(), |set1, set2| {
-                            set1.intersection(&set2).cloned().collect()
-                        })
-                    });
-                    if let Some(out) = i {
-                        fin_temp.insert(cnt, out);
-                    }*/
-
-                    /*let fa = self.relationship_get_fileid(&a);
-                    let fb = self.relationship_get_fileid(&b);
-                    fin_temp.insert(cnt, fa.intersection(&fb).cloned().collect());
-
-                    searched.push((cnt, a));
-                    searched.push((cnt, b));*/
-                }
-                sharedtypes::SearchHolder::Or(tag_ids) => {
-                    /*let fa = self.relationship_get_fileid(&a);
-                    let fb = self.relationship_get_fileid(&b);
-                    fin_temp.insert(cnt, fa.union(&fb).cloned().collect());
-                    searched.push((cnt, a));
-                    searched.push((cnt, b));*/
-                }
-            }
+        if tag_ids.is_empty() {
+            continue;
         }
 
-        match search.search_relate {
-            None => {
-                let mut out = Vec::new();
-                for item in fin_temp.values() {
-                    for item in item {
-                        out.push(*item);
-                    }
-                }
-                out.par_sort();
-                if let Some(limit) = limit {
-                    out = out
-                        .iter()
-                        .rev()
-                        .take(limit)
+        // Build SQL placeholders
+        let placeholders = vec!["?"; tag_ids.len()].join(", ");
+        let sql = match &search_item {
+            sharedtypes::SearchHolder::And(_) => format!(
+                "SELECT fileid
+                 FROM Relationship
+                 WHERE tagid IN ({})
+                 GROUP BY fileid
+                 HAVING COUNT(DISTINCT tagid) = {}",
+                placeholders,
+                tag_ids.len()
+            ),
+            sharedtypes::SearchHolder::Or(_) => format!(
+                "SELECT DISTINCT fileid
+                 FROM Relationship
+                 WHERE tagid IN ({})",
+                placeholders
+            ),
+            sharedtypes::SearchHolder::Not(_) => format!(
+                "SELECT DISTINCT fileid
+                 FROM Relationship
+                 WHERE tagid IN ({})",
+                placeholders
+            ),
+        };
+
+        // Run the query
+        let mut stmt = tn.prepare(&sql).unwrap();
+        let result_fileids: HashSet<usize> = stmt
+            .query_map(rusqlite::params_from_iter(tag_ids.iter()), |row| row.get(0))
+            .unwrap()
+            .flatten()
+            .collect();
+
+        match &search_item {
+            sharedtypes::SearchHolder::And(_) => {
+                included_files = Some(match included_files {
+                    Some(current) => current
+                        .intersection(&result_fileids)
                         .cloned()
-                        .collect::<Vec<usize>>();
+                        .collect(),
+                    None => result_fileids,
+                });
+            }
+            sharedtypes::SearchHolder::Or(_) => {
+                included_files = Some(match included_files {
+                    Some(current) => current
+                        .union(&result_fileids)
+                        .cloned()
+                        .collect(),
+                    None => result_fileids,
+                });
+            }
+            sharedtypes::SearchHolder::Not(_) => {
+                if let Some(current) = included_files.as_mut() {
+                    for fileid in result_fileids {
+                        current.remove(&fileid);
+                    }
+                } else {
+                    // If included_files is empty, treat NOT as excluding from all files
+                    // Optional: fetch all fileids once if needed
+                    let mut all_files_stmt = tn.prepare("SELECT id FROM File").unwrap();
+                    let all_files: HashSet<usize> = all_files_stmt
+                        .query_map([], |row| row.get(0))
+                        .unwrap()
+                        .flatten()
+                        .collect();
+                    let filtered: HashSet<_> =
+                        all_files.difference(&result_fileids).cloned().collect();
+                    included_files = Some(filtered);
                 }
-                return Some(out);
-            }
-            Some(search_temp) => {
-                panic!();
             }
         }
-
-        if !fin.is_empty() {
-            return Some(fin);
-        }
-        None
     }
 
+    // Convert the final HashSet to a Vec and apply limit
+    let mut out = match included_files {
+        Some(s) => s.into_iter().collect::<Vec<usize>>(),
+        None => Vec::new(),
+    };
+
+    // Optional: sort for deterministic order
+    out.sort_unstable();
+
+    if let Some(lim) = limit {
+        out.truncate(lim);
+    }
+
+    Some(out)
+}
     /// Gets all jobs loaded in the db
     pub fn jobs_get_all(&self) -> HashMap<usize, sharedtypes::DbJobsObj> {
         match &self._cache {
@@ -852,11 +857,15 @@ impl Main {
                 let manager = SqliteConnectionManager::file(file_path).with_init(|conn| {
                     conn.execute_batch(
                         "
-PRAGMA journal_mode = WAL;
+            PRAGMA journal_mode = WAL;
             PRAGMA synchronous = NORMAL;
-            PRAGMA secure_delete = 0;PRAGMA busy_timeout = 20000;
+            PRAGMA secure_delete = 0;
+            PRAGMA busy_timeout = 20000;
             PRAGMA page_size = 8192;
-            PRAGMA cache_size = -500000;
+            PRAGMA cache_size = -800000;
+            PRAGMA mmap_size = 30000000000;
+            PRAGMA temp_store = MEMORY;
+            PRAGMA wal_autocheckpoint = 20000;
     ",
                     )?;
 

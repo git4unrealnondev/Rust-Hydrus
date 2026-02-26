@@ -80,15 +80,36 @@ AND NOT EXISTS (
     }
 
     /// Searches database for tag ids and count of the tag
-    pub fn search_tags_sql(&self, search_string: &String, limit_to: &usize) -> Vec<(usize, usize)> {
+    pub fn search_tags_sql(&self, search_string: &String, limit_to: &usize, use_fts_only: sharedtypes::TagPartialSearchType) -> Vec<(usize, usize)> {
         // Create the SQL query with a dynamic MATCH condition and limit
-        let sql = r#"
+       
+let sql = match use_fts_only {
+            sharedtypes::TagPartialSearchType::Fts => {r#"
+SELECT t.id, t.count
+FROM (
+    SELECT rowid
+    FROM Tags_fts
+    WHERE Tags_fts MATCH ?
+    LIMIT 300
+) f
+JOIN Tags t ON t.id = f.rowid
+LIMIT ?;
+"#
+},
+            sharedtypes::TagPartialSearchType::Count => {r#"
         SELECT t.id, t.count
-FROM Tags t
-JOIN Tags_fts fts ON fts.rowid = t.id
-WHERE Tags_fts MATCH ?
+FROM (
+    SELECT rowid
+    FROM Tags_fts
+    WHERE Tags_fts MATCH ?
+    LIMIT 300
+) f
+JOIN Tags t ON t.id = f.rowid
 ORDER BY t.count DESC
-LIMIT ?;    "#;
+LIMIT ?;    "#}
+        };
+
+
 
         let conn = self.get_database_connection();
         let mut stmt = conn.prepare(sql).unwrap();
@@ -189,13 +210,14 @@ LIMIT ?;    "#;
     pub fn tags_fts_create_v1(&self, tn: &mut Transaction) {
         tn.execute(
             r#"
-        CREATE VIRTUAL TABLE IF NOT EXISTS Tags_fts USING fts5(
+        CREATE VIRTUAL TABLE Tags_fts USING fts5(
     name,
     namespace UNINDEXED,
     content='Tags',
     content_rowid='id',
-    tokenize = "unicode61 separators '_'"
-);        "#,
+    tokenize = "unicode61 separators '_'",
+    prefix = '2 3 4'
+);"#,
             [],
         )
         .unwrap();
@@ -207,12 +229,14 @@ LIMIT ?;    "#;
         )
         .unwrap();
 
+        tn.execute("INSERT INTO Tags_fts(Tags_fts) VALUES('optimize');", []).unwrap();
+
         tn.execute(
             "
         CREATE TRIGGER IF NOT EXISTS Tags_ai AFTER INSERT ON Tags
         BEGIN
           INSERT INTO Tags_fts(rowid, name, namespace)
-          VALUES (new.id, replace(new.name, '_', ' '), new.namespace);
+          VALUES (new.id, new.name, new.namespace);
         END;
         ",
             [],
@@ -235,7 +259,7 @@ LIMIT ?;    "#;
         CREATE TRIGGER IF NOT EXISTS Tags_au AFTER UPDATE ON Tags
         BEGIN
           UPDATE Tags_fts
-          SET name = replace(new.name, '_', ' '), namespace = new.namespace
+          SET name = new.name, namespace = new.namespace
           WHERE rowid = old.id;
         END;
         ",
