@@ -179,70 +179,97 @@ fn resize_images(
 }
 
 ///
-/// Get's multiple frames if they exist
+/// Gets multiple frames from a video if they exist.
 ///
 pub fn get_video_frame_multiple<R: BufRead + Seek>(
     mut reader: R,
     mime: FileFormat,
-    ttl: usize,                // total number of frames to get
-    split: usize,              // amount of frames inbetween to get
-    scale: Option<(u32, u32)>, // Scales the image
+    total_frames: usize,       // total number of frames to get
+    step: usize,               // frames between each capture
+    scale: Option<(u32, u32)>, // optional resize
 ) -> ThumbResult<Vec<DynamicImage>> {
-    use crate::error::{self, ThumbError, ThumbResult};
+    use crate::error::{ThumbError, ThumbResult};
     use crate::utils::ffmpeg_cli::{get_webp_frame, is_ffmpeg_installed};
     use image::io::Reader as ImageReader;
     use image::{DynamicImage, ImageFormat};
-    use std::io::{BufRead, Cursor, ErrorKind, Seek};
-    lazy_static::lazy_static! { static ref FFMPEG_INSTALLED: bool = is_ffmpeg_installed(); }
+    use std::io::{BufRead, Cursor, Seek};
+
+    lazy_static::lazy_static! {
+        static ref FFMPEG_INSTALLED: bool = is_ffmpeg_installed();
+    }
+
     if !*FFMPEG_INSTALLED {
         return Err(ThumbError::Unsupported(mime));
     }
 
+    let mut step = step.clone();
+
+    // Write input video to temp file
     let tempdir = tempfile::tempdir()?;
-    let path = std::path::PathBuf::from(tempdir.path())
+    let video_path = tempdir
+        .path()
         .join("video")
         .with_extension(mime.extension());
 
-    let mut buf = Vec::new();
-    reader.read_to_end(&mut buf)?;
-    std::fs::write(&path, buf)?;
+    let mut buffer = Vec::new();
+    reader.read_to_end(&mut buffer)?;
+    std::fs::write(&video_path, &buffer)?;
 
-    let mut buf = Vec::new();
-    reader.read_to_end(&mut buf)?;
+    let mut frames = Vec::with_capacity(total_frames);
 
-    let mut frames = Vec::with_capacity(ttl);
-    let ttlamt = match ttl {
-        0 => 1,
-        _ => ttl - 1,
-    };
-    for inve in 1..=ttlamt {
-        let frame_to_get = inve * split;
-        let png_bytes = match get_webp_frame(
-            path.to_str()
-                .expect("path to tmpdir contains invalid characters"),
-            frame_to_get,
+    // Ensure at least one frame attempt
+    let iterations = total_frames.max(1);
+
+    'main: for i in 1..=iterations {
+        let frame_index = i * step;
+
+        let mut webp_bytes;
+'steploop: loop {
+
+        webp_bytes = match get_webp_frame(
+            video_path
+                .to_str()
+                .expect("temporary path contains invalid UTF-8"),
+            frame_index,
         ) {
-            Err(_) => {
-                return Ok(frames);
-            }
-            Ok(out) => out,
-        }; // take the 16th frame
-        let img = ImageReader::with_format(Cursor::new(png_bytes), ImageFormat::WebP).decode();
-        match img {
-            Ok(img) => {
-                if let Some(size) = scale {
-                    frames.push(
-                        resize_images(img, &[ThumbnailSize::Custom(size)], FilterType::Lanczos3)[0]
-                            .clone(),
-                    );
-                } else {
-                    frames.push(img);
-                }
-            }
-            Err(_) => break,
-        }
-    }
-    tempdir.close()?;
+            Ok(bytes) => {
+                        webp_bytes = bytes;
 
+                        break 'steploop;
+                    },
+            Err(_) => {
+                if step == 0 {
+                    break 'main;
+                }
+                step -= 1;
+                continue;
+            }, // stop if frame extraction fails
+        };
+        }
+        let image = match ImageReader::with_format(
+            Cursor::new(webp_bytes),
+            ImageFormat::WebP,
+        )
+        .decode()
+        {
+            Ok(img) => img,
+            Err(_) => break,
+        };
+
+        let image = if let Some(size) = scale {
+            resize_images(
+                image,
+                &[ThumbnailSize::Custom(size)],
+                FilterType::Lanczos3,
+            )[0]
+                .clone()
+        } else {
+            image
+        };
+
+        frames.push(image);
+    }
+
+    tempdir.close()?;
     Ok(frames)
 }
