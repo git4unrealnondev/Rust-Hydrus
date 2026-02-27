@@ -86,27 +86,20 @@ AND NOT EXISTS (
 let sql = match use_fts_only {
             sharedtypes::TagPartialSearchType::Fts => {r#"
 SELECT t.id, t.count
-FROM (
-    SELECT rowid
-    FROM Tags_fts
-    WHERE Tags_fts MATCH ?
-    LIMIT 300
-) f
+FROM Tags_fts f
 JOIN Tags t ON t.id = f.rowid
+WHERE Tags_fts MATCH ?
+ORDER BY bm25(Tags_fts)
 LIMIT ?;
 "#
 },
             sharedtypes::TagPartialSearchType::Count => {r#"
         SELECT t.id, t.count
-FROM (
-    SELECT rowid
-    FROM Tags_fts
-    WHERE Tags_fts MATCH ?
-    LIMIT 300
-) f
+FROM Tags_fts f
 JOIN Tags t ON t.id = f.rowid
+WHERE Tags_fts MATCH ?
 ORDER BY t.count DESC
-LIMIT ?;    "#}
+LIMIT ?;"#}
         };
 
 
