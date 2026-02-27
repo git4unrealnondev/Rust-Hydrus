@@ -201,7 +201,7 @@ LIMIT ?;"#}
     /// Adds triggers to keep it up to date
     ///
     pub fn tags_fts_create_v1(&self, tn: &mut Transaction) {
-        tn.execute(
+      /*  tn.execute(
             r#"
         CREATE VIRTUAL TABLE Tags_fts USING fts5(
     name,
@@ -213,15 +213,36 @@ LIMIT ?;"#}
 );"#,
             [],
         )
-        .unwrap();
-
-        tn.execute(
-            "
-        INSERT INTO Tags_fts(Tags_fts) VALUES('rebuild');        ",
+        .unwrap();*/
+tn.execute(
+            r#"
+        CREATE VIRTUAL TABLE Tags_fts USING fts5(
+    name,
+    namespace UNINDEXED,
+    content='Tags',
+    content_rowid='id',
+    tokenize = "trigram",
+    prefix = '2 3 4'
+);"#,
             [],
         )
         .unwrap();
 
+        /*tn.execute(
+            "
+        INSERT INTO Tags_fts(Tags_fts) VALUES('rebuild');        ",
+            [],
+        )
+        .unwrap();*/
+        tn.execute(
+            "
+        INSERT INTO Tags_fts(rowid, name)
+SELECT id,
+       REPLACE(REPLACE(name, '_', ' '), '/', ' ')  -- replace _ and / with spaces
+FROM Tags;",
+            [],
+        )
+        .unwrap();
         tn.execute("INSERT INTO Tags_fts(Tags_fts) VALUES('optimize');", []).unwrap();
 
         tn.execute(
@@ -348,6 +369,14 @@ WHERE Tags.id = sub.tagid;",
             [],
         )
         .unwrap();
+        tn.execute(
+            "
+        CREATE INDEX IF NOT EXISTS idx_tags_namespace ON Tags(namespace);
+        ",
+            [],
+        )
+        .unwrap();
+
     }
 
     ///

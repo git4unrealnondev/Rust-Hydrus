@@ -476,82 +476,133 @@ impl Main {
         out
     }
 
+
     /// Handles the searching of the DB dynamically. Returns the file id's associated
     /// with the search.
     /// Returns file IDs matching the search.
 /// Supports AND, OR, NOT operations.
 pub fn search_db_files(
-    &self,
+        &self,
     search: sharedtypes::SearchObj,
     limit: Option<usize>,
-) -> Option<Vec<usize>> {
-    let tn = self.pool.get().unwrap();
-    let mut final_files: HashSet<usize> = HashSet::new(); // OR combination of all groups
-    let mut initialized = false;
+) -> Option<Vec<usize>> {use rusqlite::params_from_iter;
+    // Separate AND / OR / NOT
+    let mut and_tags = Vec::new();
+    let mut or_groups: Vec<Vec<usize>> = Vec::new();
+    let mut not_groups: Vec<Vec<usize>> = Vec::new();
 
-    for item in search.searches.into_iter() {
-        let tag_ids = match &item {
-            sharedtypes::SearchHolder::And(ids)
-            | sharedtypes::SearchHolder::Or(ids)
-            | sharedtypes::SearchHolder::Not(ids) => ids,
-        };
-
-        if tag_ids.is_empty() {
-            continue;
-        }
-
-        // SQL placeholders
-        let placeholders = vec!["?"; tag_ids.len()].join(", ");
-        let sql = match &item {
-            sharedtypes::SearchHolder::And(_) => format!(
-                "SELECT fileid
-                 FROM Relationship
-                 WHERE tagid IN ({})
-                 GROUP BY fileid
-                 HAVING COUNT(DISTINCT tagid) = {}",
-                placeholders,
-                tag_ids.len()
-            ),
-            sharedtypes::SearchHolder::Or(_) | sharedtypes::SearchHolder::Not(_) => format!(
-                "SELECT DISTINCT fileid
-                 FROM Relationship
-                 WHERE tagid IN ({})",
-                placeholders
-            ),
-        };
-
-        let mut stmt = tn.prepare(&sql).unwrap();
-        let group_files: HashSet<usize> = stmt
-            .query_map(rusqlite::params_from_iter(tag_ids.iter()), |row| row.get(0))
-            .unwrap()
-            .flatten()
-            .collect();
-
-        match &item {
-            sharedtypes::SearchHolder::And(_) | sharedtypes::SearchHolder::Or(_) => {
-                if !initialized {
-                    final_files = group_files;
-                    initialized = true;
-                } else {
-                    final_files.extend(group_files); // union of all AND/OR groups
-                }
-            }
-            sharedtypes::SearchHolder::Not(_) => {
-                for f in group_files {
-                    final_files.remove(&f); // subtract NOT files
-                }
-            }
+    for holder in search.searches {
+        match holder {
+            sharedtypes::SearchHolder::And(ids) => and_tags.extend(ids),
+            sharedtypes::SearchHolder::Or(ids) if !ids.is_empty() => or_groups.push(ids),
+            sharedtypes::SearchHolder::Not(ids) if !ids.is_empty() => not_groups.push(ids),
+            _ => {}
         }
     }
 
-    let mut out: Vec<usize> = final_files.into_iter().collect();
-    out.sort_unstable();
+    if and_tags.is_empty() {
+        return None;
+    }
 
+    // Pick rarest AND tag dynamically
+    let placeholders = vec!["?"; and_tags.len()].join(", ");
+    let driver_sql = format!(
+        "SELECT id FROM Tags WHERE id IN ({}) ORDER BY count ASC LIMIT 1",
+        placeholders
+    );
+
+    let conn = self.get_database_connection();
+    let driver_tag: usize = match conn.query_row(
+        &driver_sql,
+        params_from_iter(&and_tags),
+        |row| row.get(0)
+    ) {
+        Ok(tag) => tag,
+        Err(_) => return None, // treat errors as no results
+    };
+
+    let remaining_and: Vec<usize> = and_tags.into_iter()
+        .filter(|&id| id != driver_tag)
+        .collect();
+
+    // Build search SQL
+    let mut sql = String::from(
+        "SELECT r.fileid
+         FROM Relationship r INDEXED BY idx_tagid_fileid
+         WHERE r.tagid = ?"
+    );
+    let mut params: Vec<usize> = vec![driver_tag];
+
+    for tag in &remaining_and {
+        sql.push_str(
+            "
+            AND EXISTS (
+                SELECT 1 FROM Relationship r2
+                WHERE r2.tagid = ?
+                  AND r2.fileid = r.fileid
+            )"
+        );
+        params.push(*tag);
+    }
+
+    for group in &or_groups {
+        let placeholders = vec!["?"; group.len()].join(", ");
+        sql.push_str(&format!(
+            "
+            AND EXISTS (
+                SELECT 1 FROM Relationship r3
+                WHERE r3.tagid IN ({})
+                  AND r3.fileid = r.fileid
+            )",
+            placeholders
+        ));
+        params.extend(group);
+    }
+
+    for group in &not_groups {
+        let placeholders = vec!["?"; group.len()].join(", ");
+        sql.push_str(&format!(
+            "
+            AND NOT EXISTS (
+                SELECT 1 FROM Relationship r4
+                WHERE r4.tagid IN ({})
+                  AND r4.fileid = r.fileid
+            )",
+            placeholders
+        ));
+        params.extend(group);
+    }
+    sql.push_str(" ORDER BY r.fileid DESC");
     if let Some(lim) = limit {
-        out.truncate(lim);
+        sql.push_str(" LIMIT ?");
+        params.push(lim);
     }
 
-    Some(out)
+        dbg!(&sql, &params);
+
+    // Execute query
+    let mut stmt = match conn.prepare(&sql) {
+        Ok(s) => s,
+        Err(_) => return None,
+    };
+
+    let rows = match stmt.query_map(params_from_iter(params.iter()), |row| row.get(0)) {
+        Ok(r) => r,
+        Err(_) => return None,
+    };
+
+    let mut results = Vec::new();
+    for r in rows {
+        if let Ok(fileid) = r {
+            results.push(fileid);
+        }
+    }
+
+    if results.is_empty() {
+        None
+    } else {
+        Some(results)
+    }
 }    /// Gets all jobs loaded in the db
     pub fn jobs_get_all(&self) -> HashMap<usize, sharedtypes::DbJobsObj> {
         match &self._cache {
