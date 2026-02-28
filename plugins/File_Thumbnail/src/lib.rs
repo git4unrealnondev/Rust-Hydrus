@@ -294,7 +294,7 @@ pub fn on_start() {
         PLUGIN_NAME,
         file_ids.len()
     ));
-    let pool = ThreadPoolBuilder::new().num_threads(50).build().unwrap();
+    let pool = ThreadPoolBuilder::new().build().unwrap();
 
     if let Some(location) = setup_thumbnail_location() {
         pool.install(|| {
