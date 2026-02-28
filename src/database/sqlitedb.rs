@@ -80,11 +80,17 @@ AND NOT EXISTS (
     }
 
     /// Searches database for tag ids and count of the tag
-    pub fn search_tags_sql(&self, search_string: &String, limit_to: &usize, use_fts_only: sharedtypes::TagPartialSearchType) -> Vec<(usize, usize)> {
+    pub fn search_tags_sql(
+        &self,
+        search_string: &String,
+        limit_to: &usize,
+        use_fts_only: sharedtypes::TagPartialSearchType,
+    ) -> Vec<(usize, usize)> {
         // Create the SQL query with a dynamic MATCH condition and limit
-       
-let sql = match use_fts_only {
-            sharedtypes::TagPartialSearchType::Fts => {r#"
+
+        let sql = match use_fts_only {
+            sharedtypes::TagPartialSearchType::Fts => {
+                r#"
 SELECT t.id, t.count
 FROM Tags_fts f
 JOIN Tags t ON t.id = f.rowid
@@ -92,17 +98,17 @@ WHERE Tags_fts MATCH ?
 ORDER BY bm25(Tags_fts)
 LIMIT ?;
 "#
-},
-            sharedtypes::TagPartialSearchType::Count => {r#"
+            }
+            sharedtypes::TagPartialSearchType::Count => {
+                r#"
         SELECT t.id, t.count
 FROM Tags_fts f
 JOIN Tags t ON t.id = f.rowid
 WHERE Tags_fts MATCH ?
 ORDER BY t.count DESC
-LIMIT ?;"#}
+LIMIT ?;"#
+            }
         };
-
-
 
         let conn = self.get_database_connection();
         let mut stmt = conn.prepare(sql).unwrap();
@@ -201,7 +207,7 @@ LIMIT ?;"#}
     /// Adds triggers to keep it up to date
     ///
     pub fn tags_fts_create_v1(&self, tn: &mut Transaction) {
-      /*  tn.execute(
+        /*  tn.execute(
             r#"
         CREATE VIRTUAL TABLE Tags_fts USING fts5(
     name,
@@ -214,7 +220,7 @@ LIMIT ?;"#}
             [],
         )
         .unwrap();*/
-tn.execute(
+        tn.execute(
             r#"
         CREATE VIRTUAL TABLE Tags_fts USING fts5(
     name,
@@ -243,7 +249,8 @@ FROM Tags;",
             [],
         )
         .unwrap();
-        tn.execute("INSERT INTO Tags_fts(Tags_fts) VALUES('optimize');", []).unwrap();
+        tn.execute("INSERT INTO Tags_fts(Tags_fts) VALUES('optimize');", [])
+            .unwrap();
 
         tn.execute(
             "
@@ -376,7 +383,6 @@ WHERE Tags.id = sub.tagid;",
             [],
         )
         .unwrap();
-
     }
 
     ///

@@ -118,7 +118,6 @@ fn main() {
     // Inits Database.
     let mut database = makedb(dbloc);
 
-    
     let jobmanager = Arc::new(RwLock::new(jobs::Jobs::new(database.clone())));
 
     let mut globalload = globalload::GlobalLoad::new(database.clone(), jobmanager.clone());
@@ -211,7 +210,6 @@ fn main() {
             );
         }
     }
-
 
     // Anything below here will run automagically. Jobs run in OS threads Waits until
     // all threads have closed.

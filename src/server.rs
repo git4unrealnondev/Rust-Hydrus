@@ -168,26 +168,26 @@ impl PluginIpcInteract {
                     None
                 }
             }
-        }use warp::Filter;
-use warp::Rejection;
-use warp::Reply;
+        }
+        use warp::Filter;
+        use warp::Rejection;
+        use warp::Reply;
 
-async fn handle_rejection(err: Rejection) -> Result<impl Reply, warp::Rejection> {
-    if err.is_not_found() {
-        // If the route was not found, return a 404 response
-        Ok(warp::reply::with_status(
-            "404 Not Found",
-            warp::http::StatusCode::NOT_FOUND,
-        ))
-    } else {
-        // Handle any other errors (e.g., internal server error)
-        Ok(warp::reply::with_status(
-            "500 Internal Server Error",
-            warp::http::StatusCode::INTERNAL_SERVER_ERROR,
-        ))
-    }
-}
-
+        async fn handle_rejection(err: Rejection) -> Result<impl Reply, warp::Rejection> {
+            if err.is_not_found() {
+                // If the route was not found, return a 404 response
+                Ok(warp::reply::with_status(
+                    "404 Not Found",
+                    warp::http::StatusCode::NOT_FOUND,
+                ))
+            } else {
+                // Handle any other errors (e.g., internal server error)
+                Ok(warp::reply::with_status(
+                    "500 Internal Server Error",
+                    warp::http::StatusCode::INTERNAL_SERVER_ERROR,
+                ))
+            }
+        }
 
         let num_threads: u64 = 200;
         let thread_list = Arc::new(Mutex::new(Vec::new()));
@@ -279,21 +279,18 @@ another process and try again.",
         //    .unwrap();
 
         let listener = Arc::new(listener);
-let routes = main_db.clone().get_filters();
+        let routes = main_db.clone().get_filters();
 
-    let routes_with_fallback = routes.recover(handle_rejection);
+        let routes_with_fallback = routes.recover(handle_rejection);
 
-    let runtime = tokio::runtime::Runtime::new().expect("Failed to create Tokio runtime");
+        let runtime = tokio::runtime::Runtime::new().expect("Failed to create Tokio runtime");
 
-
-
-handles.push(std::thread::spawn(move || {
-            
-    // 2. Use block_on to run the async function and wait for its result
-    println!("Server running on 127.0.0.1:3030");
-    let result = runtime.block_on(warp::serve(routes_with_fallback).run(([127, 0, 0, 1], 3030)));
+        handles.push(std::thread::spawn(move || {
+            // 2. Use block_on to run the async function and wait for its result
+            println!("Server running on 127.0.0.1:3030");
+            let result =
+                runtime.block_on(warp::serve(routes_with_fallback).run(([127, 0, 0, 1], 3030)));
         }));
-
 
         // NOTE due to the nature of this POS if the number of requests coming in exceed the number
         // of cpu threads we could softlock and I can't trace it.

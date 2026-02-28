@@ -85,11 +85,14 @@ impl Main {
         &self,
         search_string: &String,
         limit_to: &usize,
-        fts_or_count: sharedtypes::TagPartialSearchType
+        fts_or_count: sharedtypes::TagPartialSearchType,
     ) -> Vec<(sharedtypes::Tag, usize, usize)> {
         let mut out = Vec::new();
 
-        for (tag_id, count) in self.search_tags_sql(search_string, limit_to, fts_or_count).iter() {
+        for (tag_id, count) in self
+            .search_tags_sql(search_string, limit_to, fts_or_count)
+            .iter()
+        {
             if let Some(tag) = self.tag_id_get(tag_id)
                 && let Some(namespace) = self.namespace_get_string(&tag.namespace)
             {
@@ -111,7 +114,12 @@ impl Main {
     }
     /// Searches the database using FTS5 allows getting a list of tagids and their count based on a
     /// search string and a limit of tagids to get
-    pub fn search_tags_ids(&self, search_string: &String, limit_to: &usize, fts_or_count: sharedtypes::TagPartialSearchType) -> Vec<(usize, usize)> {
+    pub fn search_tags_ids(
+        &self,
+        search_string: &String,
+        limit_to: &usize,
+        fts_or_count: sharedtypes::TagPartialSearchType,
+    ) -> Vec<(usize, usize)> {
         self.search_tags_sql(search_string, limit_to, fts_or_count)
     }
 
@@ -476,134 +484,133 @@ impl Main {
         out
     }
 
-
     /// Handles the searching of the DB dynamically. Returns the file id's associated
     /// with the search.
     /// Returns file IDs matching the search.
-/// Supports AND, OR, NOT operations.
-pub fn search_db_files(
+    /// Supports AND, OR, NOT operations.
+    pub fn search_db_files(
         &self,
-    search: sharedtypes::SearchObj,
-    limit: Option<usize>,
-) -> Option<Vec<usize>> {use rusqlite::params_from_iter;
-    // Separate AND / OR / NOT
-    let mut and_tags = Vec::new();
-    let mut or_groups: Vec<Vec<usize>> = Vec::new();
-    let mut not_groups: Vec<Vec<usize>> = Vec::new();
+        search: sharedtypes::SearchObj,
+        limit: Option<usize>,
+    ) -> Option<Vec<usize>> {
+        use rusqlite::params_from_iter;
+        // Separate AND / OR / NOT
+        let mut and_tags = Vec::new();
+        let mut or_groups: Vec<Vec<usize>> = Vec::new();
+        let mut not_groups: Vec<Vec<usize>> = Vec::new();
 
-    for holder in search.searches {
-        match holder {
-            sharedtypes::SearchHolder::And(ids) => and_tags.extend(ids),
-            sharedtypes::SearchHolder::Or(ids) if !ids.is_empty() => or_groups.push(ids),
-            sharedtypes::SearchHolder::Not(ids) if !ids.is_empty() => not_groups.push(ids),
-            _ => {}
+        for holder in search.searches {
+            match holder {
+                sharedtypes::SearchHolder::And(ids) => and_tags.extend(ids),
+                sharedtypes::SearchHolder::Or(ids) if !ids.is_empty() => or_groups.push(ids),
+                sharedtypes::SearchHolder::Not(ids) if !ids.is_empty() => not_groups.push(ids),
+                _ => {}
+            }
         }
-    }
 
-    if and_tags.is_empty() {
-        return None;
-    }
+        if and_tags.is_empty() {
+            return None;
+        }
 
-    // Pick rarest AND tag dynamically
-    let placeholders = vec!["?"; and_tags.len()].join(", ");
-    let driver_sql = format!(
-        "SELECT id FROM Tags WHERE id IN ({}) ORDER BY count ASC LIMIT 1",
-        placeholders
-    );
+        // Pick rarest AND tag dynamically
+        let placeholders = vec!["?"; and_tags.len()].join(", ");
+        let driver_sql = format!(
+            "SELECT id FROM Tags WHERE id IN ({}) ORDER BY count ASC LIMIT 1",
+            placeholders
+        );
 
-    let conn = self.get_database_connection();
-    let driver_tag: usize = match conn.query_row(
-        &driver_sql,
-        params_from_iter(&and_tags),
-        |row| row.get(0)
-    ) {
-        Ok(tag) => tag,
-        Err(_) => return None, // treat errors as no results
-    };
+        let conn = self.get_database_connection();
+        let driver_tag: usize =
+            match conn.query_row(&driver_sql, params_from_iter(&and_tags), |row| row.get(0)) {
+                Ok(tag) => tag,
+                Err(_) => return None, // treat errors as no results
+            };
 
-    let remaining_and: Vec<usize> = and_tags.into_iter()
-        .filter(|&id| id != driver_tag)
-        .collect();
+        let remaining_and: Vec<usize> = and_tags
+            .into_iter()
+            .filter(|&id| id != driver_tag)
+            .collect();
 
-    // Build search SQL
-    let mut sql = String::from(
-        "SELECT r.fileid
+        // Build search SQL
+        let mut sql = String::from(
+            "SELECT r.fileid
          FROM Relationship r INDEXED BY idx_tagid_fileid
-         WHERE r.tagid = ?"
-    );
-    let mut params: Vec<usize> = vec![driver_tag];
+         WHERE r.tagid = ?",
+        );
+        let mut params: Vec<usize> = vec![driver_tag];
 
-    for tag in &remaining_and {
-        sql.push_str(
-            "
+        for tag in &remaining_and {
+            sql.push_str(
+                "
             AND EXISTS (
                 SELECT 1 FROM Relationship r2
                 WHERE r2.tagid = ?
                   AND r2.fileid = r.fileid
-            )"
-        );
-        params.push(*tag);
-    }
+            )",
+            );
+            params.push(*tag);
+        }
 
-    for group in &or_groups {
-        let placeholders = vec!["?"; group.len()].join(", ");
-        sql.push_str(&format!(
-            "
+        for group in &or_groups {
+            let placeholders = vec!["?"; group.len()].join(", ");
+            sql.push_str(&format!(
+                "
             AND EXISTS (
                 SELECT 1 FROM Relationship r3
                 WHERE r3.tagid IN ({})
                   AND r3.fileid = r.fileid
             )",
-            placeholders
-        ));
-        params.extend(group);
-    }
+                placeholders
+            ));
+            params.extend(group);
+        }
 
-    for group in &not_groups {
-        let placeholders = vec!["?"; group.len()].join(", ");
-        sql.push_str(&format!(
-            "
+        for group in &not_groups {
+            let placeholders = vec!["?"; group.len()].join(", ");
+            sql.push_str(&format!(
+                "
             AND NOT EXISTS (
                 SELECT 1 FROM Relationship r4
                 WHERE r4.tagid IN ({})
                   AND r4.fileid = r.fileid
             )",
-            placeholders
-        ));
-        params.extend(group);
-    }
-    sql.push_str(" ORDER BY r.fileid DESC");
-    if let Some(lim) = limit {
-        sql.push_str(" LIMIT ?");
-        params.push(lim);
-    }
+                placeholders
+            ));
+            params.extend(group);
+        }
+        sql.push_str(" ORDER BY r.fileid DESC");
+        if let Some(lim) = limit {
+            sql.push_str(" LIMIT ?");
+            params.push(lim);
+        }
 
         dbg!(&sql, &params);
 
-    // Execute query
-    let mut stmt = match conn.prepare(&sql) {
-        Ok(s) => s,
-        Err(_) => return None,
-    };
+        // Execute query
+        let mut stmt = match conn.prepare(&sql) {
+            Ok(s) => s,
+            Err(_) => return None,
+        };
 
-    let rows = match stmt.query_map(params_from_iter(params.iter()), |row| row.get(0)) {
-        Ok(r) => r,
-        Err(_) => return None,
-    };
+        let rows = match stmt.query_map(params_from_iter(params.iter()), |row| row.get(0)) {
+            Ok(r) => r,
+            Err(_) => return None,
+        };
 
-    let mut results = Vec::new();
-    for r in rows {
-        if let Ok(fileid) = r {
-            results.push(fileid);
+        let mut results = Vec::new();
+        for r in rows {
+            if let Ok(fileid) = r {
+                results.push(fileid);
+            }
+        }
+
+        if results.is_empty() {
+            None
+        } else {
+            Some(results)
         }
     }
-
-    if results.is_empty() {
-        None
-    } else {
-        Some(results)
-    }
-}    /// Gets all jobs loaded in the db
+    /// Gets all jobs loaded in the db
     pub fn jobs_get_all(&self) -> HashMap<usize, sharedtypes::DbJobsObj> {
         match &self._cache {
             //CacheType::Bare => self.jobs_get_all_sql(),
