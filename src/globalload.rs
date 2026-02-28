@@ -170,6 +170,7 @@ impl GlobalLoad {
             );
         }
 
+        let api = db.api_info.read();
         for (cnt, lib_path) in libpath.iter().enumerate() {
             let lib;
             unsafe {
@@ -191,6 +192,7 @@ impl GlobalLoad {
                         &[u8],
                         &String,
                         &String,
+                    &sharedtypes::ClientAPIInfo
                     )
                         -> Vec<sharedtypes::DBPluginOutputEnum>,
                     //unsafe extern "C" fn(Cursor<Bytes>, &String, &String, database::Main),
@@ -205,7 +207,7 @@ impl GlobalLoad {
                     }
                 };
                 //db.
-                output = plugindatafunc(cursorpass, hash, ext);
+                output = plugindatafunc(cursorpass, hash, ext, &api.clone());
             }
 
             let jobmanager;

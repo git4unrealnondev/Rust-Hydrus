@@ -438,4 +438,194 @@ impl RustHydrusApiClient {
         let res = ureq::get(url).call()?.body_mut().read_json::<String>()?;
         Ok(res)
     }
+    /// Starts an exclusive write transaction
+    pub fn transaction_exclusive_start(&self) -> Result<(), ureq::Error> {
+        let url = format!(
+            "{}/{}/{}", self.base_url, "main", "transaction_exclusive_start"
+        );
+        let res = ureq::get(url).call()?.body_mut().read_json::<()>()?;
+        Ok(res)
+    }
+    /// Starts an exclusive write transaction
+    pub fn transaction_start(&self) -> Result<(), ureq::Error> {
+        let url = format!("{}/{}/{}", self.base_url, "main", "transaction_start");
+        let res = ureq::get(url).call()?.body_mut().read_json::<()>()?;
+        Ok(res)
+    }
+    /// commits an exclusive write transaction
+    pub fn transaction_flush(&self) -> Result<(), ureq::Error> {
+        let url = format!("{}/{}/{}", self.base_url, "main", "transaction_flush");
+        let res = ureq::get(url).call()?.body_mut().read_json::<()>()?;
+        Ok(res)
+    }
+    /// Adds file into Memdb instance.
+    pub fn file_add_db(
+        &self,
+        file: sharedtypes::DbFileStorage,
+    ) -> Result<usize, ureq::Error> {
+        let url = format!("{}/{}/{}", self.base_url, "main", "file_add_db");
+        let res = ureq::post(url).send_json(&(file))?.body_mut().read_json::<usize>()?;
+        Ok(res)
+    }
+    /** Adds a setting to the Settings Table. name: str   , Setting name pretty: str ,
+
+ Fancy Flavor text optional num: u64    , unsigned u64 largest int is
+
+ 18446744073709551615 smallest is 0 param: str  , Parameter to allow (value)*/
+    pub fn setting_add(
+        &self,
+        name: String,
+        pretty: Option<String>,
+        num: Option<usize>,
+        param: Option<String>,
+    ) -> Result<(), ureq::Error> {
+        let url = format!("{}/{}/{}", self.base_url, "main", "setting_add");
+        let res = ureq::post(url)
+            .send_json(&(name, pretty, num, param))?
+            .body_mut()
+            .read_json::<()>()?;
+        Ok(res)
+    }
+    /// Removes a relationship based on fileid and tagid
+    pub fn relationship_remove(
+        &self,
+        file_id: &usize,
+        tag_id: &usize,
+    ) -> Result<(), ureq::Error> {
+        let url = format!("{}/{}/{}", self.base_url, "main", "relationship_remove");
+        let res = ureq::post(url)
+            .send_json(&(file_id, tag_id))?
+            .body_mut()
+            .read_json::<()>()?;
+        Ok(res)
+    }
+    /// Removes parent from db
+    pub fn parents_tagid_remove(
+        &self,
+        tag_id: &usize,
+    ) -> Result<HashSet<sharedtypes::DbParentsObj>, ureq::Error> {
+        let url = format!("{}/{}/{}", self.base_url, "main", "parents_tagid_remove");
+        let res = ureq::post(url)
+            .send_json(&(tag_id))?
+            .body_mut()
+            .read_json::<HashSet<sharedtypes::DbParentsObj>>()?;
+        Ok(res)
+    }
+    /** Condesnes relationships between tags & files. Changes tag id's removes spaces
+
+ inbetween tag id's and their relationships.
+
+ NOTE Make this an exclusive transaction otherwise we could drop data*/
+    pub fn condense_db_all(&self) -> Result<(), ureq::Error> {
+        let url = format!("{}/{}/{}", self.base_url, "main", "condense_db_all");
+        let res = ureq::get(url).call()?.body_mut().read_json::<()>()?;
+        Ok(res)
+    }
+    /// Wrapper for inmemdb
+    pub fn parents_reltagid_remove(
+        &self,
+        reltag: &usize,
+    ) -> Result<HashSet<sharedtypes::DbParentsObj>, ureq::Error> {
+        let url = format!("{}/{}/{}", self.base_url, "main", "parents_reltagid_remove");
+        let res = ureq::post(url)
+            .send_json(&(reltag))?
+            .body_mut()
+            .read_json::<HashSet<sharedtypes::DbParentsObj>>()?;
+        Ok(res)
+    }
+    ///
+    pub fn parents_limitto_remove(
+        &self,
+        limit_to: Option<usize>,
+    ) -> Result<HashSet<sharedtypes::DbParentsObj>, ureq::Error> {
+        let url = format!("{}/{}/{}", self.base_url, "main", "parents_limitto_remove");
+        let res = ureq::post(url)
+            .send_json(&(limit_to))?
+            .body_mut()
+            .read_json::<HashSet<sharedtypes::DbParentsObj>>()?;
+        Ok(res)
+    }
+    /// Adds a namespace into the db if it may or may not exist
+    pub fn namespace_add(
+        &self,
+        name: &String,
+        description: &Option<String>,
+    ) -> Result<usize, ureq::Error> {
+        let url = format!("{}/{}/{}", self.base_url, "main", "namespace_add");
+        let res = ureq::post(url)
+            .send_json(&(name, description))?
+            .body_mut()
+            .read_json::<usize>()?;
+        Ok(res)
+    }
+    /// Migrates a tag to a new tag from an old tag
+    pub fn migrate_relationship_tag(
+        &self,
+        old_tag_id: &usize,
+        new_tag_id: &usize,
+    ) -> Result<(), ureq::Error> {
+        let url = format!("{}/{}/{}", self.base_url, "main", "migrate_relationship_tag");
+        let res = ureq::post(url)
+            .send_json(&(old_tag_id, new_tag_id))?
+            .body_mut()
+            .read_json::<()>()?;
+        Ok(res)
+    }
+    /// More modern way to add a file into the db
+    pub fn tag_add_tagobject(
+        &self,
+        tag: &sharedtypes::TagObject,
+    ) -> Result<Option<usize>, ureq::Error> {
+        let url = format!("{}/{}/{}", self.base_url, "main", "tag_add_tagobject");
+        let res = ureq::post(url)
+            .send_json(&(tag))?
+            .body_mut()
+            .read_json::<Option<usize>>()?;
+        Ok(res)
+    }
+    /// Removes tag from inmemdb and sql database.
+    pub fn tag_remove(&self, id: &usize) -> Result<(), ureq::Error> {
+        let url = format!("{}/{}/{}", self.base_url, "main", "tag_remove");
+        let res = ureq::post(url).send_json(&(id))?.body_mut().read_json::<()>()?;
+        Ok(res)
+    }
+    /// Adds relationship into DB. Inherently trusts user user to not duplicate stuff.
+    pub fn relationship_add(&self, file: usize, tag: usize) -> Result<(), ureq::Error> {
+        let url = format!("{}/{}/{}", self.base_url, "main", "relationship_add");
+        let res = ureq::post(url).send_json(&(file, tag))?.body_mut().read_json::<()>()?;
+        Ok(res)
+    }
+    /** Adds all tags to a fileid
+
+ If theirs no fileid then it just adds the tag*/
+    pub fn add_tags_to_fileid(
+        &self,
+        file_id: Option<usize>,
+        tag_actions: &Vec<sharedtypes::FileTagAction>,
+    ) -> Result<(), ureq::Error> {
+        let url = format!("{}/{}/{}", self.base_url, "main", "add_tags_to_fileid");
+        let res = ureq::post(url)
+            .send_json(&(file_id, tag_actions))?
+            .body_mut()
+            .read_json::<()>()?;
+        Ok(res)
+    }
+    /// Adds a ns into the db if the id already exists
+    pub fn namespace_add_id_exists(
+        &self,
+        ns: sharedtypes::DbNamespaceObj,
+    ) -> Result<usize, ureq::Error> {
+        let url = format!("{}/{}/{}", self.base_url, "main", "namespace_add_id_exists");
+        let res = ureq::post(url).send_json(&(ns))?.body_mut().read_json::<usize>()?;
+        Ok(res)
+    }
+    /// Wrapper for inmemdb and parents_add_db
+    pub fn parents_add(
+        &self,
+        par: sharedtypes::DbParentsObj,
+    ) -> Result<usize, ureq::Error> {
+        let url = format!("{}/{}/{}", self.base_url, "main", "parents_add");
+        let res = ureq::post(url).send_json(&(par))?.body_mut().read_json::<usize>()?;
+        Ok(res)
+    }
 }

@@ -72,6 +72,7 @@ pub fn on_download(
     byte_c: &[u8],
     hash_in: &String,
     _ext_in: &String,
+    api_info: &sharedtypes::ClientAPIInfo,
 ) -> Vec<sharedtypes::DBPluginOutputEnum> {
     let output = Arc::new(Mutex::new(Vec::new()));
 

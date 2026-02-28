@@ -1,7 +1,6 @@
 #![allow(dead_code)]
 #![allow(unused_variables)]
 #![allow(unexpected_cfgs)]
-use std::default;
 use std::default::Default;
 use std::time::Duration;
 
@@ -33,6 +32,13 @@ pub const DEFAULT_CACHECHECK: JobCacheType = JobCacheType::TimeReptimeParam;
 pub enum TagPartialSearchType {
     Fts,
     Count,
+}
+
+#[derive(Clone)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub struct ClientAPIInfo{
+  pub  url: String,
+   pub authentication: Option<String>
 }
 
 ///

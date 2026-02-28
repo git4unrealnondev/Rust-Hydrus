@@ -60,6 +60,9 @@ utoipa = "5.4.0"
 utoipa-swagger-ui = { version = "9.0.2", features = ["axum"] }
 utoipauto = "0.2.0"
 
+[profile.dev]
+opt-level = 2
+
 [features]
 default = ["exe_build"]
 exe_build = ["regex", "clap", "serde"]
@@ -81,6 +84,7 @@ walkdir = "2.4.0"
 quote = "1.0.44"
 syn = { version = "2.0.114", features = ["full"] }
 prettyplease = "0.2.37"
+proc-macro2 = "1.0.106"
 
 [profile.release-with-debug]
 inherits = "release"

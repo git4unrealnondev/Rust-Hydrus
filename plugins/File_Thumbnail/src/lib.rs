@@ -30,8 +30,11 @@ pub enum VideoSpacing {
 mod client;
 #[path = "../../../src/sharedtypes.rs"]
 mod sharedtypes;
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex};
+
+#[path = "../../../generated/client_api.rs"]
+mod client_api;
+
+use std::sync::atomic::AtomicUsize;
 use std::{
     collections::HashMap,
     path::{Path, PathBuf},
@@ -97,24 +100,18 @@ pub fn file_thumbnailer_give_thumbnail_location(
 
         if let Some(cdreturning) = callback.data.get(i) {
             if let Some(dbloc) = callback.data.get(j) {
-                match cdreturning {
-                    sharedtypes::CallbackCustomDataReturning::U8(imgdata) => match dbloc {
-                        sharedtypes::CallbackCustomDataReturning::String(dbloc) => {
-                            let (finpath, outhash) =
-                                make_thumbnail_path(&Path::new(dbloc).to_path_buf(), imgdata);
-                            let mut out = HashMap::new();
-                            out.insert(
-                                "path".to_string(),
-                                sharedtypes::CallbackCustomDataReturning::String(
-                                    finpath.join(outhash).to_string_lossy().to_string(),
-                                ),
-                            );
-                            return out;
-                        }
-                        _ => {}
-                    },
-                    _ => {}
-                }
+                if let sharedtypes::CallbackCustomDataReturning::U8(imgdata) = cdreturning { if let sharedtypes::CallbackCustomDataReturning::String(dbloc) = dbloc {
+                    let (finpath, outhash) =
+                        make_thumbnail_path(&Path::new(dbloc).to_path_buf(), imgdata);
+                    let mut out = HashMap::new();
+                    out.insert(
+                        "path".to_string(),
+                        sharedtypes::CallbackCustomDataReturning::String(
+                            finpath.join(outhash).to_string_lossy().to_string(),
+                        ),
+                    );
+                    return out;
+                } }
             }
         }
     }
@@ -140,9 +137,9 @@ fn make_thumbnail_path(dbloc: &PathBuf, imgdata: &Vec<u8>) -> (PathBuf, String) 
     // Final folder location path of db
     let folderpath = canonicalize(dbloc)
         .unwrap()
-        .join(hash[0..2].to_string())
-        .join(hash[2..4].to_string())
-        .join(hash[4..6].to_string());
+        .join(&hash[0..2])
+        .join(&hash[2..4])
+        .join(&hash[4..6]);
     if let Ok(path) = std::fs::exists(folderpath.clone()) {
         if path {
             return (folderpath, hash);
@@ -170,18 +167,15 @@ pub fn file_thumbnailer_generate_thumbnail_u8(
             .position(|r| *r == "image".to_string())
             .unwrap();
         if let Some(cdreturning) = callback.data.get(i) {
-            match cdreturning {
-                sharedtypes::CallbackCustomDataReturning::U8(imgdata) => {
-                    if let Ok(thumbnail) = generate_thumbnail_u8(imgdata.to_vec()) {
-                        let mut out = HashMap::new();
-                        out.insert(
-                            "image".to_string(),
-                            sharedtypes::CallbackCustomDataReturning::U8(thumbnail),
-                        );
-                        return out;
-                    }
+            if let sharedtypes::CallbackCustomDataReturning::U8(imgdata) = cdreturning {
+                if let Ok(thumbnail) = generate_thumbnail_u8(imgdata.to_vec()) {
+                    let mut out = HashMap::new();
+                    out.insert(
+                        "image".to_string(),
+                        sharedtypes::CallbackCustomDataReturning::U8(thumbnail),
+                    );
+                    return out;
                 }
-                _ => {}
             }
         }
     }
@@ -207,10 +201,12 @@ pub fn on_start() {
     use rayon::iter::IntoParallelRefIterator;
     use rayon::iter::ParallelIterator;
 
+    let api = client_api::RustHydrusApiClient::new("127.0.0.1:3030");
+
     let should_run = match client::settings_get_name(format!("{}-shouldrun", PLUGIN_NAME)) {
         None => {
             client::setting_add(
-                format!("{}-shouldrun", PLUGIN_NAME).into(),
+                format!("{}-shouldrun", PLUGIN_NAME),
                 format!(
                     "From plugin {} {} Determines if we should run",
                     PLUGIN_NAME, PLUGIN_DESCRIPTION
@@ -224,7 +220,7 @@ pub fn on_start() {
         Some(loc) => match loc.param {
             None => {
                 client::setting_add(
-                    format!("{}-shouldrun", PLUGIN_NAME).into(),
+                    format!("{}-shouldrun", PLUGIN_NAME),
                     format!(
                         "From plugin {} {} Determines if we should run",
                         PLUGIN_NAME, PLUGIN_DESCRIPTION
@@ -239,7 +235,7 @@ pub fn on_start() {
         },
     };
 
-    if should_run == "False".to_string() {
+    if should_run == "False" {
         client::log_no_print(format!(
             "{} - Returning due to should run is false.",
             PLUGIN_NAME
@@ -265,24 +261,26 @@ pub fn on_start() {
     // Gets namespace id if it doesn't exist then recreate
     let utable;
     {
-        utable = match client::namespace_get(PLUGIN_NAME.to_string()) {
-            None => client::namespace_put(
-                PLUGIN_NAME.to_string(),
-                Some(PLUGIN_DESCRIPTION.to_string()),
-            ),
+        utable = match api.namespace_get(&PLUGIN_NAME.to_string()).unwrap() {
+            None => api
+                .namespace_add(
+                    &PLUGIN_NAME.to_string(),
+                    &Some(PLUGIN_DESCRIPTION.to_string()),
+                )
+                .unwrap(),
             Some(id) => id,
         }
     }
 
     // Gets the tags inside a namespace
-    let nids = client::namespace_get_tagids(utable);
+    let nids = api.namespace_get_tagids(&utable).unwrap();
 
     // Removes the fileids that already have thumbnails
-    for each in nids {
+    for each in nids.iter() {
         if should_run == "Clear" {
-            client::tag_remove(each);
+            api.tag_remove(each).unwrap();
         } else {
-            for file_id in client::relationship_get_fileid(each).iter() {
+            for file_id in api.relationship_get_fileid(each).unwrap().iter() {
                 file_ids.remove(file_id);
             }
         }
@@ -301,15 +299,30 @@ pub fn on_start() {
             file_ids.par_iter().for_each(|fid| {
                 let _ = std::panic::catch_unwind(|| {
                     if let Some(thumb_hash) = process_fid(fid, &location, &utable) {
-                        let _ = client::relationship_file_tag_add(*fid, thumb_hash, utable, None);
+                        api.add_tags_to_fileid(
+                            Some(*fid),
+                            &vec![sharedtypes::FileTagAction {
+                                operation: sharedtypes::TagOperation::Set,
+                                tags: vec![sharedtypes::TagObject {
+                                    namespace: sharedtypes::GenericNamespaceObj {
+                                        name: PLUGIN_NAME.to_string(),
+                                        description: Some(PLUGIN_DESCRIPTION.to_string()),
+                                    },
+                                    tag: thumb_hash,
+                                    tag_type: sharedtypes::TagType::Normal,
+                                    relates_to: None,
+                                }],
+                            }],
+                        );
+                        //let _ = api.relationship_file_tag_add(*fid, thumb_hash, utable, None);
                     }
                 });
             });
         });
     }
     client::log(format!("{} - generation done", PLUGIN_NAME));
-    client::setting_add(
-        format!("{}-shouldrun", PLUGIN_NAME).into(),
+    api.setting_add(
+        format!("{}-shouldrun", PLUGIN_NAME),
         format!(
             "From plugin {} - {} Determines if we should run",
             PLUGIN_NAME, PLUGIN_DESCRIPTION
@@ -318,20 +331,20 @@ pub fn on_start() {
         None,
         Some("False".to_string()),
     );
-    client::transaction_flush();
+    api.transaction_flush();
 }
 
-fn process_fid(fid: &usize, location: &PathBuf, utable: &usize) -> Option<String> {
+fn process_fid(fid: &usize, location: &PathBuf, _utable: &usize) -> Option<String> {
     match generate_thumbnail(*fid) {
         Ok(thumb_file) => {
-            let (thumb_path, thumb_hash) = make_thumbnail_path(&location, &thumb_file);
+            let (thumb_path, thumb_hash) = make_thumbnail_path(location, &thumb_file);
             let thpath = thumb_path.join(thumb_hash.clone());
             let pa = thpath.to_string_lossy().to_string();
             /*client::log(format!(
                 "{}: Writing fileid: {} thumbnail to {}",
                 PLUGIN_NAME, fid, &pa
             ));*/
-            if let Ok(_) = std::fs::write(pa, thumb_file) {
+            if std::fs::write(pa, thumb_file).is_ok() {
                 client::log_no_print(format!(
                     "Plugin: {} -- fid {fid} Wrote: {} to {:?}",
                     PLUGIN_NAME, &thumb_hash, &thumb_path,
@@ -357,33 +370,30 @@ pub fn file_thumbnailer_generate_thumbnail_fid(
     if let Some(index) = index {
         if callback.data.len() >= index {
             if let Some(custom_data) = callback.data.get(index) {
-                match custom_data {
-                    sharedtypes::CallbackCustomDataReturning::Usize(inp) => {
-                        let counter = &AtomicUsize::new(0);
-                        if let Some(location) = &setup_thumbnail_location() {
-                            // Gets namespace id if it doesn't exist then recreate
-                            let utable;
-                            {
-                                utable = match client::namespace_get(PLUGIN_NAME.to_string()) {
-                                    None => client::namespace_put(
-                                        PLUGIN_NAME.to_string(),
-                                        Some(PLUGIN_DESCRIPTION.to_string()),
-                                    ),
-                                    Some(id) => id,
-                                }
-                            }
-
-                            if let Some(file_thumb_hash) = process_fid(&inp, location, &utable) {
-                                client::relationship_file_tag_add(
-                                    *inp,
-                                    file_thumb_hash,
-                                    utable,
-                                    None,
-                                );
+                if let sharedtypes::CallbackCustomDataReturning::Usize(inp) = custom_data {
+                    let _counter = &AtomicUsize::new(0);
+                    if let Some(location) = &setup_thumbnail_location() {
+                        // Gets namespace id if it doesn't exist then recreate
+                        let utable;
+                        {
+                            utable = match client::namespace_get(PLUGIN_NAME.to_string()) {
+                                None => client::namespace_put(
+                                    PLUGIN_NAME.to_string(),
+                                    Some(PLUGIN_DESCRIPTION.to_string()),
+                                ),
+                                Some(id) => id,
                             }
                         }
+
+                        if let Some(file_thumb_hash) = process_fid(inp, location, &utable) {
+                            client::relationship_file_tag_add(
+                                *inp,
+                                file_thumb_hash,
+                                utable,
+                                None,
+                            );
+                        }
                     }
-                    _ => {}
                 }
             }
         }
@@ -410,8 +420,7 @@ fn generate_thumbnail_u8(inp: Vec<u8>) -> Result<Vec<u8>, std::io::Error> {
                 ));
             }
             _ => {
-                return Err(Error::new(
-                    ErrorKind::Other,
+                return Err(Error::other(
                     format!("{PLUGIN_NAME} - Failed to match err - 190 {:?}", err),
                 ));
             }
@@ -466,7 +475,7 @@ fn generate_thumbnail_u8(inp: Vec<u8>) -> Result<Vec<u8>, std::io::Error> {
 /// Actually generates thumbnails
 ///
 pub fn generate_thumbnail(fid: usize) -> Result<Vec<u8>, std::io::Error> {
-    use std::io::{Error, ErrorKind};
+    use std::io::Error;
     let max_cnt = 5;
     if let Some(fbyte) = client::get_file(fid) {
         for _ in 0..5 {
@@ -475,7 +484,7 @@ pub fn generate_thumbnail(fid: usize) -> Result<Vec<u8>, std::io::Error> {
             }
         }
     } else {
-        return Err(Error::new(ErrorKind::Other, "Err  get_file is none"));
+        return Err(Error::other("Err  get_file is none"));
     }
     Err(std::io::Error::other(format!(
         "Could not load the filter after {}",
@@ -492,7 +501,30 @@ fn make_img(thumb: Thumbnail) -> Vec<u8> {
     thumb.write_webp(&mut buf).unwrap();
     buf.into_inner()
 }
+use image::{AnimationDecoder, DynamicImage, ImageResult, codecs::gif::GifDecoder};
+pub fn extract_gif_frames(cursor: std::io::Cursor<Vec<u8>>) -> ImageResult<Vec<DynamicImage>> {
+    // Wrap the data in a Cursor so the decoder can read it like a file
 
+    // Create the decoder
+    let decoder = GifDecoder::new(cursor)?;
+
+    // Decode the animation into frames
+    // into_frames() returns an iterator of Frame objects
+    let frames = decoder.into_frames();
+
+    // Convert each frame into a DynamicImage and collect into a vector
+    frames
+        .map(|f| {
+            // f? handles any decoding errors per frame
+            let frame = f?;
+            Ok(DynamicImage::ImageRgba8(frame.into_buffer()).resize_exact(
+                SIZE_THUMBNAIL_X,
+                SIZE_THUMBNAIL_Y,
+                image::imageops::FilterType::Lanczos3,
+            ))
+        })
+        .collect()
+}
 ///
 /// Makes an animated image thumbnail.
 ///
@@ -504,8 +536,11 @@ fn make_animated_img(
     use image::Pixel;
     use std::io::Cursor;
     let frate = 4;
+
+    let cursor = Cursor::new(filebytes);
+
     let res = thumbnailer::get_video_frame_multiple(
-        Cursor::new(filebytes),
+        cursor.clone(),
         fileformat,
         spl.frames as usize,
         frate,
@@ -526,7 +561,16 @@ fn make_animated_img(
         method: 6,
     };
     match res {
-        Ok(ve) => {
+        Ok(mut ve) => {
+            if ve.is_empty()
+                && fileformat.extension() == "gif" {
+                    if let Ok(frames) = extract_gif_frames(cursor) {
+                        for frame in frames {
+                            ve.push(frame);
+                        }
+                    }
+                }
+
             use webp_animation::Encoder;
             use webp_animation::EncoderOptions;
             let mut encoder = Encoder::new_with_options(
@@ -549,30 +593,31 @@ fn make_animated_img(
                     }
                 }
 
-                let _ = encoder.add_frame(&pixelbuf, (cnt * frate).try_into().unwrap());
+                encoder
+                    .add_frame(&pixelbuf, (cnt * frate).try_into().unwrap())
+                    .unwrap();
                 cnt += 1;
             }
             let out = match encoder.finalize(((cnt + 1) * frate).try_into().unwrap()) {
                 Ok(out) => out,
-                Err(_) => return None,
+                Err(_err) => {
+                    return None;
+                }
             };
             Some(out.to_vec())
         }
-        Err(err) => {
-            dbg!("err", err);
-            None
-        }
+        Err(_err) => None,
     }
 }
 
-fn setup_thumbnail_default() -> PathBuf {
-    let storage = client::location_get();
+fn setup_thumbnail_default(api: &client_api::RustHydrusApiClient) -> PathBuf {
+    let storage = api.location_get().unwrap();
     let path = Path::new(&storage);
     let finpath = std::fs::canonicalize(path.join(LOCATION_THUMBNAILS))
         .unwrap()
         .to_string_lossy()
         .to_string();
-    client::setting_add(
+    api.setting_add(
         format!("{}-location", PLUGIN_NAME),
         format!("From plugin {} {}", PLUGIN_NAME, PLUGIN_DESCRIPTION).into(),
         None,
@@ -585,16 +630,16 @@ fn setup_thumbnail_default() -> PathBuf {
 ///
 /// Gets the location to put thumbnails in
 ///
-fn thumbnail_location_get() -> PathBuf {
-    match client::settings_get_name(format!("{}-location", PLUGIN_NAME)) {
-        Some(setting) => {
+fn thumbnail_location_get(api: &client_api::RustHydrusApiClient) -> PathBuf {
+    match api.settings_get_name(&format!("{}-location", PLUGIN_NAME)) {
+        Ok(Some(setting)) => {
             let locpath = match setting.param {
                 Some(loc) => Path::new(&loc).to_path_buf(),
-                None => setup_thumbnail_default(),
+                None => setup_thumbnail_default(api),
             };
             locpath
         }
-        None => setup_thumbnail_default(),
+        _ => setup_thumbnail_default(api),
     }
 }
 
@@ -693,11 +738,13 @@ pub fn on_download(
     byte_c: &[u8],
     hash_in: &String,
     ext_in: &String,
+    api_info: &sharedtypes::ClientAPIInfo,
 ) -> Vec<sharedtypes::DBPluginOutputEnum> {
     let mut output = Vec::new();
     match generate_thumbnail_u8(byte_c.to_vec()) {
         Ok(thumb) => {
-            let thumbpath = thumbnail_location_get();
+    let api = client_api::RustHydrusApiClient::new(api_info.url.to_string());
+            let thumbpath = thumbnail_location_get(&api);
             let (thumb_path, thumb_hash) = make_thumbnail_path(&thumbpath, &thumb);
             let thpath = thumb_path.join(thumb_hash.clone());
             let pa = thpath.to_string_lossy().to_string();
