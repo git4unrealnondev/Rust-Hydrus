@@ -119,7 +119,6 @@ impl Main {
             PRAGMA page_size = 8192;
             PRAGMA cache_size = -1250000;
             PRAGMA mmap_size = 10000000000;
-            PRAGMA temp_store = MEMORY;
             PRAGMA wal_autocheckpoint = 20000;
     ",
                     )?;
