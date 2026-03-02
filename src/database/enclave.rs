@@ -216,32 +216,39 @@ impl Main {
         download_location: &String,
         file: &mut sharedtypes::FileObject,
     ) -> usize {
-        let storage_id = self.storage_put(download_location);
-        // error checking. We should have all dirs needed but hey if we're missing
-        std::fs::create_dir_all(download_location).unwrap();
+        let fileid;
+        let download_loc;
+        {
+            let mut write_conn = self.write_conn.lock();
+            let tn = write_conn.transaction().unwrap();
 
-        // Gives file extension
-        let file_ext = FileFormat::from_bytes(bytes).extension().to_string();
+            let storage_id = self.storage_put_internal(&tn, download_location);
+            // error checking. We should have all dirs needed but hey if we're missing
+            std::fs::create_dir_all(download_location).unwrap();
 
-        let ext_id = self.extension_put_string(&file_ext);
+            // Gives file extension
+            let file_ext = FileFormat::from_bytes(bytes).extension().to_string();
 
-        let download_loc = std::path::Path::new(&download_location)
-            .canonicalize()
-            .unwrap();
+            let ext_id = self.extension_put_string_internal(&tn, &file_ext);
 
-        let filestorage = sharedtypes::DbFileStorage::NoIdExist(sharedtypes::DbFileObjNoId {
-            hash: sha512hash.to_string(),
-            ext_id,
-            storage_id,
-        });
-        let fileid = self.file_add(filestorage);
-        if let Some(source_url) = source_url {
-            let tagid = self.tag_add(source_url, source_url_ns_id, None);
-            self.relationship_add(fileid, tagid);
+            download_loc = std::path::Path::new(&download_location)
+                .canonicalize()
+                .unwrap();
+
+            let filestorage = sharedtypes::DbFileStorage::NoIdExist(sharedtypes::DbFileObjNoId {
+                hash: sha512hash.to_string(),
+                ext_id,
+                storage_id,
+            });
+            fileid = self.file_add_internal(&tn, filestorage);
+            if let Some(source_url) = source_url {
+                let tagid = self.tag_add_internal(&tn, source_url, source_url_ns_id, None);
+                self.add_relationship_sql(&tn, &fileid, &tagid);
+            }
+
+            self.enclave_file_mapping_add(&tn, &fileid, enclave_id);
+            tn.commit().unwrap();
         }
-
-        self.enclave_file_mapping_add(&fileid, enclave_id);
-
         download::write_to_disk(download_loc, bytes, sha512hash);
 
         fileid
@@ -293,10 +300,9 @@ impl Main {
     ///
     /// Adds a filemapping if it doesn't exist
     ///
-    fn enclave_file_mapping_add(&self, file_id: &usize, enclave_id: &usize) {
+    fn enclave_file_mapping_add(&self, tn: &Transaction, file_id: &usize, enclave_id: &usize) {
         let timestamp = Utc::now().timestamp_millis();
 
-        let tn = self.write_conn.lock();
         if self.enclave_file_mapping_get(file_id, enclave_id).is_some() {
             let mut prep = tn
             .prepare(
@@ -332,7 +338,7 @@ impl Main {
     ///
     /// Creates tje database tables for a V5 upgrade
     ///
-    pub fn enclave_create_database_v5(&self, tn: &mut Transaction) {
+    pub fn enclave_create_database_v5(&self, tn: &Transaction) {
         // Creates a location to store the location of files
         if !self.check_table_exists("FileStorageLocations".to_string()) {
             let keys = &vec_of_strings!("id", "location");
@@ -417,33 +423,40 @@ impl Main {
     }
 
     pub fn enclave_create_default_file_import(&self) {
+        let mut write_conn = self.write_conn.lock();
+        let tn = write_conn.transaction().unwrap();
+        self.enclave_create_default_file_import_internal(&tn);
+        tn.commit().unwrap();
+    }
+
+    pub fn enclave_create_default_file_import_internal(&self, tn: &Transaction) {
         let action_id = self.enclave_action_put(
+            tn,
             &DEFAULT_PUT_DISK.into(),
             sharedtypes::EnclaveAction::PutAtDefault,
         );
         self.enclave_condition_put(
+            tn,
             &sharedtypes::EnclaveAction::PutAtDefault,
             &sharedtypes::EnclaveCondition::Any,
         );
-        let enclave_id = self.enclave_name_put(DEFAULT_PUT_DISK.into(), &DEFAULT_PRIORITY_PUT);
-        self.transaction_flush();
+        let enclave_id = self.enclave_name_put(tn, DEFAULT_PUT_DISK.into(), &DEFAULT_PRIORITY_PUT);
         let condition_id = self
-            .enclave_condition_get_id(&sharedtypes::EnclaveAction::PutAtDefault)
+            .enclave_condition_get_id(tn, &sharedtypes::EnclaveAction::PutAtDefault)
             .unwrap();
-        self.enclave_condition_link_put(&condition_id, &action_id, None);
+        self.enclave_condition_link_put(tn, &condition_id, &action_id, None);
         let condition_link_id = self
-            .enclave_condition_link_get_id(&condition_id, &action_id)
+            .enclave_condition_link_get_id_sql(tn, &condition_id, &action_id)
             .unwrap();
 
-        self.transaction_flush();
-        self.enclave_action_order_link_put(&enclave_id, &condition_link_id, &0);
+        self.enclave_action_order_link_put(tn, &enclave_id, &condition_link_id, &0);
     }
 
     ///
     /// Creates a enclave that is for downloading files
     /// Default behaviour is to download to the specified folder unless the input is false
     ///
-    pub fn enclave_create_default_file_download(&self, location: String) {
+    pub fn enclave_create_default_file_download(&self, tn: &Transaction, location: String) {
         // Makes the default file download location
         {
             folder_make(&location);
@@ -490,35 +503,38 @@ impl Main {
 
         let default_file_enclave = format!("File_Download_location_{}", location);
         let enclave_id = self.enclave_name_put(
+            tn,
             default_file_enclave.clone(),
             &default_or_alternative_priority,
         );
-        let condition_id = self.enclave_condition_put(&default_or_alternative_name, &alt_condition);
+        let condition_id =
+            self.enclave_condition_put(tn, &default_or_alternative_name, &alt_condition);
         let action_id =
-            self.enclave_action_put(&default_or_alternative_location.to_string(), alt_action);
+            self.enclave_action_put(tn, &default_or_alternative_location.to_string(), alt_action);
 
-        let condition_link_id = self.enclave_condition_link_put(&condition_id, &action_id, None);
+        let condition_link_id =
+            self.enclave_condition_link_put(tn, &condition_id, &action_id, None);
 
-        self.enclave_action_order_link_put(&enclave_id, &condition_link_id, &0);
-        self.transaction_flush();
+        self.enclave_action_order_link_put(tn, &enclave_id, &condition_link_id, &0);
     }
 
     ///
     /// Inserts the enclave's name into the database
     /// Kinda a dumb way but hey it works
     ///
-    fn enclave_name_put(&self, name: String, enclave_priority: &usize) -> usize {
+    fn enclave_name_put(&self, tn: &Transaction, name: String, enclave_priority: &usize) -> usize {
         if let Some(out) = self.enclave_name_get_id(&name) {
             return out;
         }
 
-        let tn = self.write_conn.lock();
-        let mut prep = tn
+        {
+            let mut prep = tn
             .prepare("INSERT OR REPLACE INTO Enclave (enclave_name, priority) VALUES (?, ?) ON CONFLICT DO NOTHING")
             .unwrap();
-        let _ = prep.insert(params![name, enclave_priority]);
+            let _ = prep.insert(params![name, enclave_priority]);
+        }
 
-        self.enclave_name_get_sql(&tn, &name).unwrap()
+        self.enclave_name_get_sql(tn, &name).unwrap()
     }
     //  pub fn enclave_name_edit(&self, id: &usize, name: String) {}
 
@@ -539,11 +555,7 @@ impl Main {
     ///
     /// Raw sqlite call
     ///
-    fn enclave_name_get_sql(
-        &self,
-        tn: &PooledConnection<SqliteConnectionManager>,
-        name: &str,
-    ) -> Option<usize> {
+    fn enclave_name_get_sql(&self, tn: &Transaction, name: &str) -> Option<usize> {
         tn.query_row(
             "SELECT id from Enclave where enclave_name = ?",
             params![name],
@@ -557,8 +569,8 @@ impl Main {
     /// Gets the enclave id from the enclave name
     ///
     pub fn enclave_name_get_id(&self, name: &str) -> Option<usize> {
-        let tn = self.get_database_connection();
-        self.enclave_name_get_sql(&tn, name)
+        let mut tn = self.get_database_connection();
+        self.enclave_name_get_sql(&tn.transaction().unwrap(), name)
     }
 
     ///
@@ -624,31 +636,35 @@ impl Main {
     ///
     fn enclave_condition_put(
         &self,
-
+        tn: &Transaction,
         action: &sharedtypes::EnclaveAction,
         condition: &sharedtypes::EnclaveCondition,
     ) -> usize {
-        if let Some(out) = self.enclave_condition_get_id(action) {
+        if let Some(out) = self.enclave_condition_get_id(tn, action) {
             return out;
         }
 
-        let tn = self.write_conn.lock();
-        let mut prep = tn
+        {
+            let mut prep = tn
             .prepare("INSERT OR REPLACE INTO EnclaveCondition (action_name, action_condition) VALUES (?, ?)")
             .unwrap();
-        let _ = prep.insert(params![
-            serde_json::to_string(action).unwrap(),
-            serde_json::to_string(condition).unwrap()
-        ]);
-        self.enclave_condition_get_id_sql(&tn, action).unwrap()
+            let _ = prep.insert(params![
+                serde_json::to_string(action).unwrap(),
+                serde_json::to_string(condition).unwrap()
+            ]);
+        }
+        self.enclave_condition_get_id_sql(tn, action).unwrap()
     }
 
     ///
     /// Gets an action by its name and returns an id if it exits
     ///
-    pub fn enclave_condition_get_id(&self, name: &sharedtypes::EnclaveAction) -> Option<usize> {
-        let tn = self.get_database_connection();
-        self.enclave_condition_get_id_sql(&tn, name)
+    pub fn enclave_condition_get_id(
+        &self,
+        tn: &Transaction,
+        name: &sharedtypes::EnclaveAction,
+    ) -> Option<usize> {
+        self.enclave_condition_get_id_sql(tn, name)
     }
 
     ///
@@ -656,7 +672,7 @@ impl Main {
     ///
     fn enclave_condition_get_id_sql(
         &self,
-        tn: &PooledConnection<SqliteConnectionManager>,
+        tn: &Transaction,
         name: &sharedtypes::EnclaveAction,
     ) -> Option<usize> {
         tn.query_row(
@@ -703,7 +719,7 @@ impl Main {
     ///
     fn enclave_action_order_link_put(
         &self,
-
+        tn: &Transaction,
         enclave_id: &usize,
         enclave_conditional_list_id: &usize,
         enclave_action_position: &usize,
@@ -715,9 +731,7 @@ impl Main {
             return;
         }
 
-        self.transaction_start();
         {
-            let tn = self.write_conn.lock();
             let mut prep = tn
             .prepare("INSERT OR REPLACE INTO EnclaveActionOrderList (enclave_id,enclave_conditional_list_id, enclave_action_position) VALUES (? ,? ,?)")
             .unwrap();
@@ -727,7 +741,6 @@ impl Main {
                 enclave_action_position
             ]);
         }
-        self.transaction_flush();
     }
     ///
     /// Gives id from conditional linked list
@@ -783,42 +796,30 @@ impl Main {
     ///
     fn enclave_condition_link_put(
         &self,
-
+        tn: &Transaction,
         condition_id: &usize,
         action_id: &usize,
         failed_enclave_id: Option<&usize>,
     ) -> usize {
-        if let Some(out) = self.enclave_condition_link_get_id(condition_id, action_id) {
+        if let Some(out) = self.enclave_condition_link_get_id_sql(tn, condition_id, action_id) {
             out
         } else {
-            let tn = self.write_conn.lock();
-            let mut prep = tn
+            {
+                let mut prep = tn
             .prepare("INSERT OR REPLACE INTO EnclaveConditionList (enclave_action_id,failed_enclave_action_id,condition_id) VALUES (? ,? ,?)")
             .unwrap();
-            let _ = prep.insert(params![action_id, failed_enclave_id, condition_id,]);
-
+                let _ = prep.insert(params![action_id, failed_enclave_id, condition_id,]);
+            }
             // Gets id
-            self.enclave_condition_link_get_id_sql(&tn, condition_id, action_id)
+            self.enclave_condition_link_get_id_sql(tn, condition_id, action_id)
                 .unwrap()
         }
     }
 
-    ///
-    /// Gives id from conditional linked list
-    ///
-    fn enclave_condition_link_get_id(
-        &self,
-
-        condition_id: &usize,
-        action_id: &usize,
-    ) -> Option<usize> {
-        let tn = self.get_database_connection();
-        self.enclave_condition_link_get_id_sql(&tn, condition_id, action_id)
-    }
-
+    /// Gets a id from a condition and action id
     fn enclave_condition_link_get_id_sql(
         &self,
-        tn: &PooledConnection<SqliteConnectionManager>,
+        tn: &Transaction,
         condition_id: &usize,
         action_id: &usize,
     ) -> Option<usize> {
@@ -857,38 +858,32 @@ impl Main {
     ///
     /// Inserts the name and action into the database
     ///
-    fn enclave_action_put(&self, name: &String, action: sharedtypes::EnclaveAction) -> usize {
+    fn enclave_action_put(
+        &self,
+        tn: &Transaction,
+        name: &String,
+        action: sharedtypes::EnclaveAction,
+    ) -> usize {
         // Quick out if we already have this inserted
-        if let Some(out) = self.enclave_action_get_id(name) {
+        if let Some(out) = self.enclave_action_get_id_sql(tn, name) {
             return out;
         } else {
-            let tn = self.write_conn.lock();
-            let mut prep = tn
+            {
+                let mut prep = tn
                 .prepare(
                     "INSERT OR REPLACE INTO EnclaveAction (action_name, action_text) VALUES (?, ?)",
                 )
                 .unwrap();
-            let _ = prep.insert(params![name, serde_json::to_string(&action).unwrap()]);
-            self.enclave_action_get_id_sql(&tn, name).unwrap()
+                let _ = prep.insert(params![name, serde_json::to_string(&action).unwrap()]);
+            }
+            self.enclave_action_get_id_sql(tn, name).unwrap()
         }
-    }
-
-    ///
-    /// Gets an action's ID based on name
-    ///
-    fn enclave_action_get_id(&self, name: &String) -> Option<usize> {
-        let tn = self.get_database_connection();
-        self.enclave_action_get_id_sql(&tn, name)
     }
 
     ///
     /// Raw SQL to check if the enclaveaction exists by name
     ///
-    fn enclave_action_get_id_sql(
-        &self,
-        tn: &PooledConnection<SqliteConnectionManager>,
-        name: &String,
-    ) -> Option<usize> {
+    fn enclave_action_get_id_sql(&self, tn: &Transaction, name: &String) -> Option<usize> {
         tn.query_row(
             "SELECT id from EnclaveAction where action_name = ?",
             params![name],

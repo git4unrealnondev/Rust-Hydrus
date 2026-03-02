@@ -5,7 +5,7 @@ use log::{error, warn};
 use parking_lot::{Mutex, RwLock};
 use std::{sync::Arc, thread, time};
 
-pub const VERS: usize = 10;
+pub const VERS: usize = 11;
 pub const DEFAULT_LOC_PLUGIN: &str = "plugins";
 pub const DEFAULT_LOC_SCRAPER: &str = "scrapers";
 extern crate ratelimit;
@@ -37,7 +37,7 @@ pub mod os;
 pub mod server;
 pub mod types;
 
-use crate::database::database::Main;
+use database::database::Main;
 
 // pub mod scr { pub mod cli; pub mod database; pub mod download; pub mod file; pub
 // pub mod jobs; pub mod logging; pub mod plugins; pub mod scraper; pub mod
@@ -245,6 +245,8 @@ fn main() {
     // This wait is done for allowing any thread to "complete" Shouldn't be nessisary
     // but hey. :D
     //database.transaction_flush(tn);
+
+    database.transaction_flush();
 
     let mills_fifty = time::Duration::from_millis(50);
     std::thread::sleep(mills_fifty);

@@ -1,4 +1,4 @@
-use crate::database::database::Main;
+use crate::Main;
 use crate::download::{hash_file, process_archive_files};
 use crate::enclave;
 use crate::globalload::GlobalLoad;
@@ -164,8 +164,6 @@ pub fn parse_file(
                 fileid = database.file_get_hash(&sha512hash);
             }
 
-            // imports all tags onto the file that we dl'ed
-            database.add_tags_to_fileid(fileid, &tag_list);
             //for tag in tag_list.iter() {
             //    parse_tags(database.clone(), tag, fileid, &0, &0, manager_arc.clone());
             //}
@@ -180,6 +178,8 @@ pub fn parse_file(
                     link_subtag,
                 ));
             }
+
+            let mut subitems = Vec::new();
 
             // Loop that handles archive extration
             loop {
@@ -208,7 +208,7 @@ pub fn parse_file(
                     );
                     subfileid = database.file_get_hash(&sub_sha512hash);
                 }
-                database.add_tags_to_fileid(subfileid, &tags);
+                subitems.push((subfileid, tags));
                 // imports all tags onto the file that we dl'ed
                 /*  for tag in tags.iter() {
                     parse_tags(
@@ -224,6 +224,15 @@ pub fn parse_file(
                 // NOTE COULD CAUSE LOCKING
                 manager_arc.callback_on_import(&file_bytes, &sub_sha512hash);
             }
+
+            {
+                // imports all tags onto the file that we dl'ed
+                database.add_tags_to_fileid(fileid, &tag_list);
+                for (subfileid, tags) in subitems {
+                    database.add_tags_to_fileid(subfileid, &tags);
+                }
+            }
+
             if let Some(fid) = fileid {
                 return Some(fid);
             }

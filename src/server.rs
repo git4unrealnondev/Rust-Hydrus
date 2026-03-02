@@ -405,7 +405,7 @@ pub fn dbactions_to_function(
             namespace_id,
             count,
             dir,
-        )) => data_size_to_b(&database.relationship_get_tagid_where_namespace_count(
+        )) => data_size_to_b(&database.relationship_get_tagid_where_namespace_count_sql(
             &namespace_id,
             &count,
             &dir,
@@ -414,7 +414,7 @@ pub fn dbactions_to_function(
             namespace_id,
             count,
             dir,
-        )) => data_size_to_b(&database.relationship_get_fileid_where_namespace_count(
+        )) => data_size_to_b(&database.relationship_get_fileid_where_namespace_count_sql(
             &namespace_id,
             &count,
             &dir,
@@ -423,30 +423,23 @@ pub fn dbactions_to_function(
         types::SupportedDBRequests::CondenseTags() => {
             let unwrappy = database;
             unwrappy.transaction_flush();
-            let mut write_conn = unwrappy.get_database_connection();
-            let mut tn = write_conn.transaction().unwrap();
-            unwrappy.condense_tags(&mut tn);
-            tn.commit().unwrap();
+            unwrappy.condense_tags();
             data_size_to_b(&true)
         }
         types::SupportedDBRequests::TagDelete(tag_id) => {
             let unwrappy = database;
-            unwrappy.tag_remove(&tag_id);
+            unwrappy.delete_tag(&tag_id);
             data_size_to_b(&true)
         }
         types::SupportedDBRequests::MigrateRelationship((file_id, old_tag_id, new_tag_id)) => {
             let unwrappy = database;
             unwrappy.migrate_relationship_file_tag(&file_id, &old_tag_id, &new_tag_id);
-            unwrappy.transaction_flush();
             data_size_to_b(&true)
         }
 
         types::SupportedDBRequests::MigrateTag((old_tag_id, new_tag_id)) => {
             let unwrappy = database;
-            let mut write_conn = unwrappy.get_database_connection();
-            let mut tn = write_conn.transaction().unwrap();
-            unwrappy.migrate_tag(&old_tag_id, &new_tag_id, &mut tn);
-            tn.commit().unwrap();
+            unwrappy.migrate_tag(&old_tag_id, &new_tag_id);
             data_size_to_b(&true)
         }
         types::SupportedDBRequests::PutFileNoBlock((mut file, ratelimit)) => {
@@ -596,12 +589,13 @@ pub fn dbactions_to_function(
         }
         types::SupportedDBRequests::RelationshipAdd(file, tag) => {
             let unwrappy = database;
-            unwrappy.relationship_add(file, tag);
+            unwrappy.add_relationship(&file, &tag);
             data_size_to_b(&true)
         }
         types::SupportedDBRequests::RelationshipRemove(file, tag) => {
             let unwrappy = database;
-            unwrappy.relationship_remove(&file, &tag);
+
+            unwrappy.delete_relationship(&file, &tag);
             data_size_to_b(&true)
         }
 
@@ -612,8 +606,9 @@ pub fn dbactions_to_function(
         }
         types::SupportedDBRequests::PutTagRelationship(fid, tags, namespace_id, id) => {
             let unwrappy = database;
-            let tmep = unwrappy.tag_add(&tags, namespace_id, id);
-            unwrappy.relationship_add(fid, tmep);
+            panic!();
+            //let tmep = unwrappy.tag_add(&tags, namespace_id, id);
+            //unwrappy.relationship_add(fid, tmep);
             data_size_to_b(&true)
         }
         types::SupportedDBRequests::GetDBLocation() => {
@@ -624,7 +619,6 @@ pub fn dbactions_to_function(
         types::SupportedDBRequests::SettingsSet(name, pretty, num, param) => {
             let unwrappy = database;
             unwrappy.setting_add(name, pretty, num, param);
-            unwrappy.transaction_flush();
             data_size_to_b(&true)
         }
         types::SupportedDBRequests::RelationshipGetTagid(id) => {
@@ -661,7 +655,6 @@ pub fn dbactions_to_function(
             let unwrappy = database;
             let out = unwrappy.namespace_add(&name, &description);
 
-            unwrappy.transaction_flush();
             data_size_to_b(&out)
         }
         types::SupportedDBRequests::GetNamespace(name) => {

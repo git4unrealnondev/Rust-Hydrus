@@ -221,7 +221,6 @@ impl Worker {
                                                 None,
                                                 api_namespace.clone(),
                                             );
-                                            database.transaction_flush();
                                         }
                                         if *overwrite_db_entry && api_body.is_some() {
                                             database.setting_add(
@@ -230,7 +229,6 @@ impl Worker {
                                                 None,
                                                 api_body.clone(),
                                             );
-                                            database.transaction_flush();
                                         }
                                     }
                                     let ns_stored =
@@ -494,7 +492,7 @@ impl Worker {
 
                                         // Adds tags into db
                                         for tag in out_st.tags.iter() {
-                                            database.tag_add_tagobject(tag);
+                                            database.tag_add_tagobject( tag);
                                         }
 
                                         // Parses files from urls
@@ -601,7 +599,7 @@ enum SkipResult {
     Download,
 }
 
-/// Parses tags and adds the tags into the database.
+/*/// Parses tags and adds the tags into the database.
 pub fn parse_tags_old(
     database: Main,
     tag: &sharedtypes::TagObject,
@@ -617,106 +615,17 @@ pub fn parse_tags_old(
                 // Runs regex mostly
                 manager.plugin_on_tag(tag);
             }
-            if let Some(tag_id) = database.tag_add_tagobject(tag) {
-                match file_id {
-                    None => {}
-                    Some(id) => {
-                        database.relationship_add(id, tag_id);
-                    }
-                }
-            }
+
+            database.add_tags_to_fileid(tn, file_id, vec![tag]);
 
             url_return
         }
-        /* sharedtypes::TagType::ParseUrl((jobscraped, skippy)) => {
-            match skippy {
-                None => {
-                    url_return.insert(jobscraped.clone());
-                }
-                Some(skip_if) => match skip_if {
-                    sharedtypes::SkipIf::FileHash(sha512hash) => {
-                        if database.file_get_hash(sha512hash).is_none() {
-                            url_return.insert(jobscraped.clone());
-                        }
-                    }
-                    sharedtypes::SkipIf::FileNamespaceNumber((
-                        unique_tag,
-                        namespace_filter,
-                        filter_number,
-                    )) => {
-                        let mut cnt = 0;
-                        if let Some(nidf) = &database.namespace_get(&namespace_filter.name)
-                            && let Some(nid) = &database.namespace_get(&unique_tag.namespace.name)
-                            && let Some(tid) = &database.tag_get_name(unique_tag.tag.clone(), *nid)
-                        {
-                            let fids = database.relationship_get_fileid(tid);
-                            if fids.len() == 1 {
-                                let fid = fids.iter().next().unwrap();
-                                for tidtofilter in database.relationship_get_tagid(fid).iter() {
-                                    //if database.namespace_contains_id(nidf) {
-                                    if database.namespace_contains_id(nidf, tidtofilter) {
-                                        cnt += 1;
-                                    }
-                                }
-                            }
-                        }
-                        if cnt >= *filter_number {
-                            info_log(format!(
-                                "Not downloading because unique namespace is greater then limit number. {}",
-                                unique_tag.tag
-                            ));
-                        } else {
-                            info_log(
-                                    "Downloading due to unique namespace not existing or number less then limit number.".to_string(),
-                                );
-                            url_return.insert(jobscraped.clone());
-                        }
-                    }
-                    sharedtypes::SkipIf::FileTagRelationship(taginfo) => 'tag: {
-                        let nid = database.namespace_get(&taginfo.namespace.name);
-                        let id = match nid {
-                            None => {
-                                println!("Namespace does not exist: {:?}", taginfo.namespace);
-                                url_return.insert(jobscraped.clone());
-                                break 'tag;
-                            }
-                            Some(id) => id,
-                        };
-                        match &database.tag_get_name(taginfo.tag.clone(), id) {
-                            None => {
-                                println!("WillDownload: {}", taginfo.tag);
-                                url_return.insert(jobscraped.clone());
-                            }
-                            Some(tag_id) => {
-                                let rel_hashset = database.relationship_get_fileid(tag_id);
-                                if rel_hashset.is_empty() {
-                                    info_log(format!(
-                                        "Worker: {worker_id} JobId: {job_id} -- Will download from {} because tag name {} has no relationship.",
-                                        jobscraped.job.site, taginfo.tag
-                                    ));
-                                    url_return.insert(jobscraped.clone());
-                                } else {
-                                    info_log(format!(
-                                        "Worker: {worker_id} JobId: {job_id} -- Skipping because this already has a relationship. {}",
-                                        taginfo.tag
-                                    ));
-                                }
-                                break 'tag;
-                            }
-                        }
-                    }
-                },
-            }
-
-            // Returns the url that we need to parse.
-            url_return
-        }*/
-        sharedtypes::TagType::Special => {
+                sharedtypes::TagType::Special => {
             // Do nothing will handle this later lol.
             url_return
         }
     }
-}
+}*/
 
 ///
 /// Downloads a file into the db if needed
@@ -912,7 +821,6 @@ pub fn main_file_loop(
                             parse_skipif(file_tag, &source_url, database.clone(), worker_id, job_id)
                         {
                             database.add_tags_to_fileid(Some(file_id), &file.tag_list);
-                            database.transaction_flush();
                             return;
                         }
                     }
@@ -988,27 +896,6 @@ pub fn main_file_loop(
                     };
                     break 'source_list;
                 }
-
-                /* dbg!(&fileid);
-                let mut conn = {
-                    let db = database;
-                    database.get_database_connection()
-                };
-                let tn = conn.transaction().unwrap();
-
-                for tag in file.tag_list.iter() {
-                    parse_tags(
-
-                        database.clone(),
-                        tag,
-                        Some(fileid),
-                        worker_id,
-                        job_id,
-                        globalload.clone(),
-                        false,
-                    );
-                }
-                database.transaction_flush();*/
             }
             sharedtypes::FileSource::Bytes(bytes) => {
                 let bytes = &bytes::Bytes::from(bytes);
@@ -1030,27 +917,4 @@ pub fn main_file_loop(
     }
 
     database.add_tags_to_fileid(fileid, &file.tag_list);
-
-    /*for tag in file.tag_list.iter() {
-        parse_tags(
-            database.clone(),
-            tag,
-            fileid,
-            worker_id,
-            job_id,
-            globalload.clone(),
-        );
-
-        parse_jobs(
-            tag,
-            fileid,
-            jobstorage.clone(),
-            database.clone(),
-            scraper,
-            worker_id,
-            job_id,
-            globalload.clone(),
-        );
-    }*/
-    database.transaction_flush();
 }

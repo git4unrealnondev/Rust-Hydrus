@@ -205,7 +205,7 @@ impl Jobs {
             for job in job_list_static {
                 if job.id == data.id && job_list.remove(&job) {
                     logging::info_log(format!("Worker: {worker_id} --Removing Job: {:?}", &job));
-                    self.db.del_from_jobs_byid(job.id.as_ref());
+                    self.db.del_from_jobs_byid(job.id);
                 }
             }
         }

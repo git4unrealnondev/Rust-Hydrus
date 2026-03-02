@@ -1,4 +1,3 @@
-use prettyplease;
 use quote::{ToTokens, quote};
 use std::fs;
 use std::fs::read_to_string;
@@ -121,7 +120,7 @@ fn generate_client_code(api_file: &str) -> io::Result<String> {
     // Combine client code with generated functions
     let client_code = quote! {
     use std::collections::HashMap;
-            use std::collections::HashSet;
+            use std::collections::HashSet;use std::path::PathBuf;
             use crate::sharedtypes;
 
             #[derive(Debug)]
@@ -186,7 +185,7 @@ fn write_client_file_if_changed(client_code: &str) -> io::Result<()> {
 
 fn main() {
     {
-        let file_path = "./src/database/database.rs";
+        let file_path = "./src/database/public_calls.rs";
         dbg!(&file_path);
         if let Ok(ref code) = generate_client_code(file_path) {
             let _ = write_client_file_if_changed(code);

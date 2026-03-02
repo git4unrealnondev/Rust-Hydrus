@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::collections::HashSet;
+use std::path::PathBuf;
 use crate::sharedtypes;
 #[derive(Debug)]
 pub struct RustHydrusApiClient {
@@ -17,6 +18,251 @@ impl RustHydrusApiClient {
         RustHydrusApiClient {
             base_url: base_url_temp,
         }
+    }
+    /// Gets a scraper folder. If it doesn't exist then please create it in db
+    pub fn loaded_scraper_folder(&self) -> Result<PathBuf, ureq::Error> {
+        let url = format!("{}/{}/{}", self.base_url, "main", "loaded_scraper_folder");
+        let res = ureq::get(url).call()?.body_mut().read_json::<PathBuf>()?;
+        Ok(res)
+    }
+    /// Gets a plugin folder. If it doesn't exist then please create it in db
+    pub fn loaded_plugin_folder(&self) -> Result<PathBuf, ureq::Error> {
+        let url = format!("{}/{}/{}", self.base_url, "main", "loaded_plugin_folder");
+        let res = ureq::get(url).call()?.body_mut().read_json::<PathBuf>()?;
+        Ok(res)
+    }
+    /// Deletes a namespace by id
+    pub fn delete_namespace_id(&self, nsid: &usize) -> Result<(), ureq::Error> {
+        let url = format!("{}/{}/{}", self.base_url, "main", "delete_namespace_id");
+        let res = ureq::post(url).send_json(&(nsid))?.body_mut().read_json::<()>()?;
+        Ok(res)
+    }
+    ///
+    pub fn check_default_source_urls(
+        &self,
+        action: &sharedtypes::CheckSourceUrlsEnum,
+    ) -> Result<(), ureq::Error> {
+        let url = format!(
+            "{}/{}/{}", self.base_url, "main", "check_default_source_urls"
+        );
+        let res = ureq::post(url).send_json(&(action))?.body_mut().read_json::<()>()?;
+        Ok(res)
+    }
+    /// Checks relationships with table for any dead tagids
+    pub fn check_relationship_tag_relations(&self) -> Result<(), ureq::Error> {
+        let url = format!(
+            "{}/{}/{}", self.base_url, "main", "check_relationship_tag_relations"
+        );
+        let res = ureq::get(url).call()?.body_mut().read_json::<()>()?;
+        Ok(res)
+    }
+    /// Removes a job from the database by id. Removes from both memdb and sql.
+    pub fn del_from_jobs_byid(&self, id: Option<usize>) -> Result<(), ureq::Error> {
+        let url = format!("{}/{}/{}", self.base_url, "main", "del_from_jobs_byid");
+        let res = ureq::post(url).send_json(&(id))?.body_mut().read_json::<()>()?;
+        Ok(res)
+    }
+    ///
+    pub fn extension_put_string(&self, ext: &String) -> Result<usize, ureq::Error> {
+        let url = format!("{}/{}/{}", self.base_url, "main", "extension_put_string");
+        let res = ureq::post(url).send_json(&(ext))?.body_mut().read_json::<usize>()?;
+        Ok(res)
+    }
+    ///
+    pub fn file_add(
+        &self,
+        file: sharedtypes::DbFileStorage,
+    ) -> Result<usize, ureq::Error> {
+        let url = format!("{}/{}/{}", self.base_url, "main", "file_add");
+        let res = ureq::post(url).send_json(&(file))?.body_mut().read_json::<usize>()?;
+        Ok(res)
+    }
+    ///
+    pub fn storage_put(&self, location: &String) -> Result<usize, ureq::Error> {
+        let url = format!("{}/{}/{}", self.base_url, "main", "storage_put");
+        let res = ureq::post(url)
+            .send_json(&(location))?
+            .body_mut()
+            .read_json::<usize>()?;
+        Ok(res)
+    }
+    /// Adds tags to fileid  commits to db
+    pub fn add_tags_to_fileid(
+        &self,
+        file_id: Option<usize>,
+        tag_actions: &Vec<sharedtypes::FileTagAction>,
+    ) -> Result<(), ureq::Error> {
+        let url = format!("{}/{}/{}", self.base_url, "main", "add_tags_to_fileid");
+        let res = ureq::post(url)
+            .send_json(&(file_id, tag_actions))?
+            .body_mut()
+            .read_json::<()>()?;
+        Ok(res)
+    }
+    ///
+    pub fn delete_tag(&self, tag: &usize) -> Result<(), ureq::Error> {
+        let url = format!("{}/{}/{}", self.base_url, "main", "delete_tag");
+        let res = ureq::post(url).send_json(&(tag))?.body_mut().read_json::<()>()?;
+        Ok(res)
+    }
+    ///
+    pub fn parents_tagid_remove(
+        &self,
+        tagid: &usize,
+    ) -> Result<HashSet<sharedtypes::DbParentsObj>, ureq::Error> {
+        let url = format!("{}/{}/{}", self.base_url, "main", "parents_tagid_remove");
+        let res = ureq::post(url)
+            .send_json(&(tagid))?
+            .body_mut()
+            .read_json::<HashSet<sharedtypes::DbParentsObj>>()?;
+        Ok(res)
+    }
+    ///
+    pub fn add_relationship(
+        &self,
+        file: &usize,
+        tag: &usize,
+    ) -> Result<(), ureq::Error> {
+        let url = format!("{}/{}/{}", self.base_url, "main", "add_relationship");
+        let res = ureq::post(url).send_json(&(file, tag))?.body_mut().read_json::<()>()?;
+        Ok(res)
+    }
+    ///
+    pub fn delete_relationship(
+        &self,
+        file: &usize,
+        tag: &usize,
+    ) -> Result<(), ureq::Error> {
+        let url = format!("{}/{}/{}", self.base_url, "main", "delete_relationship");
+        let res = ureq::post(url).send_json(&(file, tag))?.body_mut().read_json::<()>()?;
+        Ok(res)
+    }
+    /// Adds the tag to the db. commits on finish
+    pub fn tag_add_tagobject(
+        &self,
+        tag: &sharedtypes::TagObject,
+    ) -> Result<Option<usize>, ureq::Error> {
+        let url = format!("{}/{}/{}", self.base_url, "main", "tag_add_tagobject");
+        let res = ureq::post(url)
+            .send_json(&(tag))?
+            .body_mut()
+            .read_json::<Option<usize>>()?;
+        Ok(res)
+    }
+    /// condesnes everything in db
+    pub fn condense_db_all(&self) -> Result<(), ureq::Error> {
+        let url = format!("{}/{}/{}", self.base_url, "main", "condense_db_all");
+        let res = ureq::get(url).call()?.body_mut().read_json::<()>()?;
+        Ok(res)
+    }
+    /// Sets a relationship between a fileid old and new tagid
+    pub fn condense_tags(&self) -> Result<(), ureq::Error> {
+        let url = format!("{}/{}/{}", self.base_url, "main", "condense_tags");
+        let res = ureq::get(url).call()?.body_mut().read_json::<()>()?;
+        Ok(res)
+    }
+    /// Sets a relationship between a fileid old and new tagid
+    pub fn migrate_tag(
+        &self,
+        old_tag_id: &usize,
+        new_tag_id: &usize,
+    ) -> Result<(), ureq::Error> {
+        let url = format!("{}/{}/{}", self.base_url, "main", "migrate_tag");
+        let res = ureq::post(url)
+            .send_json(&(old_tag_id, new_tag_id))?
+            .body_mut()
+            .read_json::<()>()?;
+        Ok(res)
+    }
+    /// Sets a relationship between a fileid old and new tagid
+    pub fn migrate_relationship_file_tag(
+        &self,
+        file_id: &usize,
+        old_tag_id: &usize,
+        new_tag_id: &usize,
+    ) -> Result<(), ureq::Error> {
+        let url = format!(
+            "{}/{}/{}", self.base_url, "main", "migrate_relationship_file_tag"
+        );
+        let res = ureq::post(url)
+            .send_json(&(file_id, old_tag_id, new_tag_id))?
+            .body_mut()
+            .read_json::<()>()?;
+        Ok(res)
+    }
+    /// Updates the database for inmemdb and sql
+    pub fn jobs_update_db(
+        &self,
+        jobs_obj: sharedtypes::DbJobsObj,
+    ) -> Result<(), ureq::Error> {
+        let url = format!("{}/{}/{}", self.base_url, "main", "jobs_update_db");
+        let res = ureq::post(url).send_json(&(jobs_obj))?.body_mut().read_json::<()>()?;
+        Ok(res)
+    }
+    /// Removes a parent selectivly
+    pub fn parents_selective_remove(
+        &self,
+        parentobj: &sharedtypes::DbParentsObj,
+    ) -> Result<(), ureq::Error> {
+        let url = format!("{}/{}/{}", self.base_url, "main", "parents_selective_remove");
+        let res = ureq::post(url).send_json(&(parentobj))?.body_mut().read_json::<()>()?;
+        Ok(res)
+    }
+    /// Adds a parent into the db
+    pub fn parents_add(
+        &self,
+        par: sharedtypes::DbParentsObj,
+    ) -> Result<usize, ureq::Error> {
+        let url = format!("{}/{}/{}", self.base_url, "main", "parents_add");
+        let res = ureq::post(url).send_json(&(par))?.body_mut().read_json::<usize>()?;
+        Ok(res)
+    }
+    /// Adds tag into db
+    pub fn tag_add(
+        &self,
+        tags: &String,
+        namespace: usize,
+        id: Option<usize>,
+    ) -> Result<usize, ureq::Error> {
+        let url = format!("{}/{}/{}", self.base_url, "main", "tag_add");
+        let res = ureq::post(url)
+            .send_json(&(tags, namespace, id))?
+            .body_mut()
+            .read_json::<usize>()?;
+        Ok(res)
+    }
+    /// Checks if table is loaded in mem and if not then loads it.
+    pub fn load_table(
+        &self,
+        table: &sharedtypes::LoadDBTable,
+    ) -> Result<(), ureq::Error> {
+        let url = format!("{}/{}/{}", self.base_url, "main", "load_table");
+        let res = ureq::post(url).send_json(&(table))?.body_mut().read_json::<()>()?;
+        Ok(res)
+    }
+    ///
+    pub fn setting_add(
+        &self,
+        name: String,
+        pretty: Option<String>,
+        num: Option<usize>,
+        param: Option<String>,
+    ) -> Result<(), ureq::Error> {
+        let url = format!("{}/{}/{}", self.base_url, "main", "setting_add");
+        let res = ureq::post(url)
+            .send_json(&(name, pretty, num, param))?
+            .body_mut()
+            .read_json::<()>()?;
+        Ok(res)
+    }
+    /// Adds a dead url into the db
+    pub fn add_dead_url(&self, url_string: &String) -> Result<(), ureq::Error> {
+        let url = format!("{}/{}/{}", self.base_url, "main", "add_dead_url");
+        let res = ureq::post(url)
+            .send_json(&(url_string))?
+            .body_mut()
+            .read_json::<()>()?;
+        Ok(res)
     }
     /** Searches the database using FTS5 allows getting a list of tags and their count based on a
 
@@ -458,94 +704,7 @@ impl RustHydrusApiClient {
         let res = ureq::get(url).call()?.body_mut().read_json::<()>()?;
         Ok(res)
     }
-    /// Adds file into Memdb instance.
-    pub fn file_add_db(
-        &self,
-        file: sharedtypes::DbFileStorage,
-    ) -> Result<usize, ureq::Error> {
-        let url = format!("{}/{}/{}", self.base_url, "main", "file_add_db");
-        let res = ureq::post(url).send_json(&(file))?.body_mut().read_json::<usize>()?;
-        Ok(res)
-    }
-    /** Adds a setting to the Settings Table. name: str   , Setting name pretty: str ,
-
- Fancy Flavor text optional num: u64    , unsigned u64 largest int is
-
- 18446744073709551615 smallest is 0 param: str  , Parameter to allow (value)*/
-    pub fn setting_add(
-        &self,
-        name: String,
-        pretty: Option<String>,
-        num: Option<usize>,
-        param: Option<String>,
-    ) -> Result<(), ureq::Error> {
-        let url = format!("{}/{}/{}", self.base_url, "main", "setting_add");
-        let res = ureq::post(url)
-            .send_json(&(name, pretty, num, param))?
-            .body_mut()
-            .read_json::<()>()?;
-        Ok(res)
-    }
-    /// Removes a relationship based on fileid and tagid
-    pub fn relationship_remove(
-        &self,
-        file_id: &usize,
-        tag_id: &usize,
-    ) -> Result<(), ureq::Error> {
-        let url = format!("{}/{}/{}", self.base_url, "main", "relationship_remove");
-        let res = ureq::post(url)
-            .send_json(&(file_id, tag_id))?
-            .body_mut()
-            .read_json::<()>()?;
-        Ok(res)
-    }
-    /// Removes parent from db
-    pub fn parents_tagid_remove(
-        &self,
-        tag_id: &usize,
-    ) -> Result<HashSet<sharedtypes::DbParentsObj>, ureq::Error> {
-        let url = format!("{}/{}/{}", self.base_url, "main", "parents_tagid_remove");
-        let res = ureq::post(url)
-            .send_json(&(tag_id))?
-            .body_mut()
-            .read_json::<HashSet<sharedtypes::DbParentsObj>>()?;
-        Ok(res)
-    }
-    /** Condesnes relationships between tags & files. Changes tag id's removes spaces
-
- inbetween tag id's and their relationships.
-
- NOTE Make this an exclusive transaction otherwise we could drop data*/
-    pub fn condense_db_all(&self) -> Result<(), ureq::Error> {
-        let url = format!("{}/{}/{}", self.base_url, "main", "condense_db_all");
-        let res = ureq::get(url).call()?.body_mut().read_json::<()>()?;
-        Ok(res)
-    }
-    /// Wrapper for inmemdb
-    pub fn parents_reltagid_remove(
-        &self,
-        reltag: &usize,
-    ) -> Result<HashSet<sharedtypes::DbParentsObj>, ureq::Error> {
-        let url = format!("{}/{}/{}", self.base_url, "main", "parents_reltagid_remove");
-        let res = ureq::post(url)
-            .send_json(&(reltag))?
-            .body_mut()
-            .read_json::<HashSet<sharedtypes::DbParentsObj>>()?;
-        Ok(res)
-    }
     ///
-    pub fn parents_limitto_remove(
-        &self,
-        limit_to: Option<usize>,
-    ) -> Result<HashSet<sharedtypes::DbParentsObj>, ureq::Error> {
-        let url = format!("{}/{}/{}", self.base_url, "main", "parents_limitto_remove");
-        let res = ureq::post(url)
-            .send_json(&(limit_to))?
-            .body_mut()
-            .read_json::<HashSet<sharedtypes::DbParentsObj>>()?;
-        Ok(res)
-    }
-    /// Adds a namespace into the db if it may or may not exist
     pub fn namespace_add(
         &self,
         name: &String,
@@ -558,58 +717,6 @@ impl RustHydrusApiClient {
             .read_json::<usize>()?;
         Ok(res)
     }
-    /// Migrates a tag to a new tag from an old tag
-    pub fn migrate_relationship_tag(
-        &self,
-        old_tag_id: &usize,
-        new_tag_id: &usize,
-    ) -> Result<(), ureq::Error> {
-        let url = format!("{}/{}/{}", self.base_url, "main", "migrate_relationship_tag");
-        let res = ureq::post(url)
-            .send_json(&(old_tag_id, new_tag_id))?
-            .body_mut()
-            .read_json::<()>()?;
-        Ok(res)
-    }
-    /// More modern way to add a file into the db
-    pub fn tag_add_tagobject(
-        &self,
-        tag: &sharedtypes::TagObject,
-    ) -> Result<Option<usize>, ureq::Error> {
-        let url = format!("{}/{}/{}", self.base_url, "main", "tag_add_tagobject");
-        let res = ureq::post(url)
-            .send_json(&(tag))?
-            .body_mut()
-            .read_json::<Option<usize>>()?;
-        Ok(res)
-    }
-    /// Removes tag from inmemdb and sql database.
-    pub fn tag_remove(&self, id: &usize) -> Result<(), ureq::Error> {
-        let url = format!("{}/{}/{}", self.base_url, "main", "tag_remove");
-        let res = ureq::post(url).send_json(&(id))?.body_mut().read_json::<()>()?;
-        Ok(res)
-    }
-    /// Adds relationship into DB. Inherently trusts user user to not duplicate stuff.
-    pub fn relationship_add(&self, file: usize, tag: usize) -> Result<(), ureq::Error> {
-        let url = format!("{}/{}/{}", self.base_url, "main", "relationship_add");
-        let res = ureq::post(url).send_json(&(file, tag))?.body_mut().read_json::<()>()?;
-        Ok(res)
-    }
-    /** Adds all tags to a fileid
-
- If theirs no fileid then it just adds the tag*/
-    pub fn add_tags_to_fileid(
-        &self,
-        file_id: Option<usize>,
-        tag_actions: &Vec<sharedtypes::FileTagAction>,
-    ) -> Result<(), ureq::Error> {
-        let url = format!("{}/{}/{}", self.base_url, "main", "add_tags_to_fileid");
-        let res = ureq::post(url)
-            .send_json(&(file_id, tag_actions))?
-            .body_mut()
-            .read_json::<()>()?;
-        Ok(res)
-    }
     /// Adds a ns into the db if the id already exists
     pub fn namespace_add_id_exists(
         &self,
@@ -619,13 +726,12 @@ impl RustHydrusApiClient {
         let res = ureq::post(url).send_json(&(ns))?.body_mut().read_json::<usize>()?;
         Ok(res)
     }
-    /// Wrapper for inmemdb and parents_add_db
-    pub fn parents_add(
-        &self,
-        par: sharedtypes::DbParentsObj,
-    ) -> Result<usize, ureq::Error> {
-        let url = format!("{}/{}/{}", self.base_url, "main", "parents_add");
-        let res = ureq::post(url).send_json(&(par))?.body_mut().read_json::<usize>()?;
+    /// Gets a default namespace id if it doesn't exist
+    pub fn create_default_source_url_ns_id(&self) -> Result<usize, ureq::Error> {
+        let url = format!(
+            "{}/{}/{}", self.base_url, "main", "create_default_source_url_ns_id"
+        );
+        let res = ureq::get(url).call()?.body_mut().read_json::<usize>()?;
         Ok(res)
     }
 }

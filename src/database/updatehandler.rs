@@ -7,6 +7,7 @@ use chrono::Utc;
 use eta::{Eta, TimeAcc};
 use rusqlite::params;
 use std::collections::BTreeMap;
+
 impl Main {
     /// Migrates from version 2 to version 3 SQLITE Only bb
     pub fn db_update_two_to_three(&mut self) {
@@ -405,24 +406,32 @@ impl Main {
         }
 
         self.transaction_flush();
-        // Adds storage locations into db
-        for (location, id) in location_storage.iter_mut() {
-            self.storage_put(location);
-            *id = self.storage_get_id(location);
+        {
+            // Adds storage locations into db
+            for (location, id) in location_storage.iter_mut() {
+                *id = Some(self.storage_put(location));
+            }
         }
-        // Sets up missing enclave location
-        self.enclave_create_default_file_download(self.location_get());
 
-        // Super dirty way of getting around the borrow checker
         let mut location_to_enclave = std::collections::HashMap::new();
         {
-            for (location_string, storage_id) in location_storage.iter() {
-                self.enclave_create_default_file_download(location_string.clone());
+            let mut write_conn = self.write_conn.lock();
+            let mut tn = write_conn.transaction().unwrap();
 
-                let file_enclave = format!("File_Download_location_{}", location_string);
-                location_to_enclave
-                    .insert(storage_id.unwrap(), self.enclave_name_get_id(&file_enclave));
+            // Sets up missing enclave location
+            self.enclave_create_default_file_download(&mut tn, self.location_get());
+
+            // Super dirty way of getting around the borrow checker
+            {
+                for (location_string, storage_id) in location_storage.iter() {
+                    self.enclave_create_default_file_download(&mut tn, location_string.clone());
+
+                    let file_enclave = format!("File_Download_location_{}", location_string);
+                    location_to_enclave
+                        .insert(storage_id.unwrap(), self.enclave_name_get_id(&file_enclave));
+                }
             }
+            tn.commit();
         }
 
         {
@@ -1099,5 +1108,33 @@ WHERE p.tag_id != p.relate_tag_id;",
         self.db_version_set(10);
         self.vacuum();
         self.analyze();
+    }
+    pub fn db_update_ten_to_eleven(&mut self) {
+            self.backup_db();
+        {
+            let mut wruite_conn = self.write_conn.lock();
+            let tn = wruite_conn.transaction().unwrap();
+
+            // Creates popular settings
+            self.get_relationship_popular_division_count(&tn);
+            self.get_relationship_popular_division_count_old(&tn);
+
+        self.relationship_create_v3(&tn);   
+        self.tags_fts_create_v2(&tn);
+
+let count = self.get_relationship_popular_division_count(&tn);
+
+        // Setus up triggers for the migration of popular tags
+        self.migrate_relationship_popular_count(&tn, &0, &count);
+
+
+
+    tn.commit().unwrap();
+        }
+
+        self.db_version_set(11);
+        self.vacuum();
+        self.analyze();
+
     }
 }

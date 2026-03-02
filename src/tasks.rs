@@ -2,7 +2,7 @@
 #![allow(unused_variables)]
 use super::download;
 use super::sharedtypes;
-use crate::database::database::Main;
+use crate::Main;
 use crate::helpers;
 use crate::logging;
 use ahash::AHashMap;
@@ -26,7 +26,7 @@ struct Row {
 /// Currently supports only one file to tag assiciation. Need to add support for
 /// multiple tags. But this currently works for me.
 pub fn import_files(
-    tn: &Transaction<'_>,
+    tn: &mut Transaction<'_>,
     location: &String,
     csvdata: sharedtypes::CsvCopyMvHard,
     db: &mut Main,
@@ -105,8 +105,7 @@ pub fn import_files(
         }
         println!("Copied to path: {}", &final_path);
 
-        db.storage_put(&&location);
-        let storage_id = db.storage_get_id(&location).unwrap();
+        let storage_id = db.storage_put(&&location);
 
         // Gets the extension id from a string
         let ext_id = db.extension_put_string(&file_ext);
@@ -120,7 +119,7 @@ pub fn import_files(
         let file_id = db.file_add(file);
         let namespace_id = db.namespace_add(&row.namespace, &None);
         let tag_id = db.tag_add(&row.tag, namespace_id, Some(row.id));
-        db.relationship_add(file_id.to_owned(), tag_id.to_owned());
+        db.add_relationship(&file_id, &tag_id);
     }
     println!("Clearing any files from any move ops.");
     info!("Clearing any files from any move ops.");

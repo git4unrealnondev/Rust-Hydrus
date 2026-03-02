@@ -30,15 +30,21 @@ pub const DEFAULT_CACHECHECK: JobCacheType = JobCacheType::TimeReptimeParam;
 /// Searches either from FTS or FTS then orders by count
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum TagPartialSearchType {
+    // Normal FTS table sort by bm25
     Fts,
+    // Normal FTS table filter based on count in db
     Count,
+    // Popular FTS table sort by bm25
+    PopularFts,
+    // Popular FTS table filter based on count in db
+    PopularCount,
 }
 
 #[derive(Clone)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub struct ClientAPIInfo{
-  pub  url: String,
-   pub authentication: Option<String>
+pub struct ClientAPIInfo {
+    pub url: String,
+    pub authentication: Option<String>,
 }
 
 ///
@@ -66,6 +72,7 @@ pub enum GreqLeqOrEq {
     Equal,
 }
 #[cfg_attr(feature = "clap", derive(Debug, Subcommand))]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum CheckSourceUrlsEnum {
     /// Just print the suspected urls
     Print,

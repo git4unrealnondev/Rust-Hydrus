@@ -10,8 +10,8 @@ use url::Url;
 use walkdir::WalkDir;
 
 // use std::str::pattern::Searcher;
+use crate::Main;
 use crate::Mutex;
-use crate::database::database::Main;
 use crate::download;
 use crate::file::find_sidecar;
 use crate::sharedtypes::{DEFAULT_CACHECHECK, DEFAULT_CACHETIME, DEFAULT_PRIORITY};
@@ -316,8 +316,9 @@ pub fn main(data: Main) {
                 data.load_table(&sharedtypes::LoadDBTable::Tags);
                 data.load_table(&sharedtypes::LoadDBTable::Namespace);
                 data.load_table(&sharedtypes::LoadDBTable::Parents);
-                data.enclave_create_default_file_import();
-
+                {
+                    data.enclave_create_default_file_import();
+                }
                 for local_file in directory.location.iter() {
                     let mut files = HashMap::new();
                     let mut sidecars = HashSet::new();
@@ -733,7 +734,7 @@ pub fn main(data: Main) {
                         let mut key = data.namespace_keys();
                         key.retain(|x| *x != ns_id);
                         for each in key {
-                            data.delete_namespace_sql(&each);
+                            data.delete_namespace_id(&each);
                         }
                         //data.drop_recreate_ns(&ns_id);
                         panic!();
@@ -761,7 +762,7 @@ pub fn main(data: Main) {
                         logging::info_log(format!("Found Namespace: {} Removing...", &ns_id));
                         data.load_table(&sharedtypes::LoadDBTable::Tags);
                         data.load_table(&sharedtypes::LoadDBTable::Relationship);
-                        data.namespace_delete_id(&ns_id);
+                        data.delete_namespace_id(&ns_id);
                     }
                 }
             }

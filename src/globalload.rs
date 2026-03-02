@@ -1,6 +1,6 @@
+use crate::Main;
 use crate::RwLock;
 use crate::{
-    database::database::{self, Main},
     jobs::Jobs,
     logging, server,
     sharedtypes::{self, GlobalPluginScraper},
@@ -192,7 +192,7 @@ impl GlobalLoad {
                         &[u8],
                         &String,
                         &String,
-                    &sharedtypes::ClientAPIInfo
+                        &sharedtypes::ClientAPIInfo,
                     )
                         -> Vec<sharedtypes::DBPluginOutputEnum>,
                     //unsafe extern "C" fn(Cursor<Bytes>, &String, &String, database::Main),
@@ -265,14 +265,10 @@ impl GlobalLoad {
                             for files in files_to_add {
                                 let ext_id = db.extension_put_string(&files.ext.clone().unwrap());
                                 let storage_id = match &files.location {
-                                    Some(exists) => {
-                                        db.storage_put(exists);
-                                        db.storage_get_id(exists).unwrap()
-                                    }
+                                    Some(exists) => db.storage_put(exists),
                                     None => {
                                         let exists = db.location_get();
-                                        db.storage_put(&exists);
-                                        db.storage_get_id(&exists).unwrap()
+                                        db.storage_put(&exists)
                                     }
                                 };
                                 let file = sharedtypes::DbFileStorage::NoIdExist(
@@ -284,7 +280,6 @@ impl GlobalLoad {
                                 );
                                 db.file_add(file);
                             }
-                            db.transaction_flush();
                         }
 
                         // 3️⃣ Add tags under one write lock
@@ -316,7 +311,7 @@ impl GlobalLoad {
                                         db.file_get_hash(&rel.file_hash),
                                         db.tag_get_name(rel.tag_name.clone(), ns_id),
                                     ) {
-                                        db.relationship_add(file_id, tag_id);
+                                        db.add_relationship(&file_id, &tag_id);
                                     }
                                 }
                             }
@@ -680,14 +675,10 @@ impl GlobalLoad {
                                 let ext_id = self.db.extension_put_string(&files.ext.unwrap());
 
                                 let storage_id = match files.location {
-                                    Some(exists) => {
-                                        self.db.storage_put(&exists);
-                                        self.db.storage_get_id(&exists).unwrap()
-                                    }
+                                    Some(exists) => self.db.storage_put(&exists),
                                     None => {
                                         let exists = self.db.location_get();
-                                        self.db.storage_put(&exists);
-                                        self.db.storage_get_id(&exists).unwrap()
+                                        self.db.storage_put(&exists)
                                     }
                                 };
 
@@ -743,7 +734,8 @@ impl GlobalLoad {
                             }
                         }
                         for (file_id, tag_id) in temp_vec {
-                            self.db.relationship_add(file_id.unwrap(), tag_id.unwrap());
+                            self.db
+                                .add_relationship(&file_id.unwrap(), &tag_id.unwrap());
                         }
                     }
                 }

@@ -1,4 +1,4 @@
-use crate::database::database::Main;
+use crate::Main;
 use crate::globalload;
 use crate::globalload::GlobalLoad;
 use crate::logging::error_log;

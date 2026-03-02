@@ -44,8 +44,14 @@ macro_rules! wait_until_sqlite_ok {
     }};
 }
 
+enum GreqOrEq {
+    GreaterThan,
+    EqualTo,
+    LessThan,
+}
+
 /// Starts a transaction for bulk inserts.
-pub fn transaction_start<'a>(
+pub(in crate::database) fn transaction_start<'a>(
     conn: &'a mut PooledConnection<SqliteConnectionManager>,
 ) -> Transaction<'a> {
     //let mut con = self.pool.get().unwrap();
@@ -54,7 +60,7 @@ pub fn transaction_start<'a>(
 
 impl Main {
     /// Finds all tag ids where they dont hace a relationship
-    pub fn get_empty_tagids(&self) -> HashSet<usize> {
+    pub(in crate::database) fn get_empty_tagids(&self) -> HashSet<usize> {
         let sql = "SELECT t.id
 FROM Tags t
 WHERE t.count ==0 AND NOT EXISTS (
@@ -80,7 +86,7 @@ AND NOT EXISTS (
     }
 
     /// Searches database for tag ids and count of the tag
-    pub fn search_tags_sql(
+    pub(in crate::database) fn search_tags_sql(
         &self,
         search_string: &String,
         limit_to: &usize,
@@ -108,6 +114,26 @@ WHERE Tags_fts MATCH ?
 ORDER BY t.count DESC
 LIMIT ?;"#
             }
+            sharedtypes::TagPartialSearchType::PopularFts => {
+r#"
+SELECT t.id, t.count
+FROM Tags_Popular_fts f
+JOIN Tags t ON t.id = f.rowid
+WHERE Tags_Popular_fts MATCH ?
+ORDER BY bm25(Tags_Popular_fts)
+LIMIT ?;
+"#
+
+            },
+            sharedtypes::TagPartialSearchType::PopularCount => {
+ r#"
+        SELECT t.id, t.count
+FROM Tags_Popular_fts f
+JOIN Tags t ON t.id = f.rowid
+WHERE Tags_Popular_fts MATCH ?
+ORDER BY t.count DESC
+LIMIT ?;"#
+            }
         };
 
         let conn = self.get_database_connection();
@@ -132,7 +158,7 @@ LIMIT ?;"#
     ///
     /// Sets up relationship table and creates tagindex
     ///
-    pub fn relationship_create_v2(&self, tn: &mut Transaction) {
+    pub(in crate::database) fn relationship_create_v2(&self, tn: &Transaction) {
         tn.execute(
             "CREATE TABLE IF NOT EXISTS Relationship (
     fileid INTEGER NOT NULL,
@@ -164,10 +190,78 @@ LIMIT ?;"#
         .unwrap();
     }
 
+    pub(in crate::database) fn relationship_create_v3(&self, tn: &Transaction) {
+        tn.execute(
+            "CREATE TABLE IF NOT EXISTS Relationship (
+    fileid INTEGER NOT NULL,
+    tagid  INTEGER NOT NULL,
+
+    PRIMARY KEY (fileid, tagid),
+
+    FOREIGN KEY (fileid)
+        REFERENCES File(id)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE,
+
+    FOREIGN KEY (tagid)
+        REFERENCES Tags(id)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE
+) WITHOUT ROWID;",
+            [],
+        )
+        .unwrap();
+
+        tn.execute("DROP INDEX IF EXISTS idx_tagid_fileid", [])
+            .unwrap();
+
+        tn.execute(
+            "CREATE INDEX idx_tagid_fileid ON Relationship(tagid, fileid DESC)",
+            [],
+        )
+        .unwrap();
+
+        tn.execute(
+            "CREATE TABLE IF NOT EXISTS Relationship_Popular (
+    fileid INTEGER NOT NULL,
+    tagid  INTEGER NOT NULL,
+
+    PRIMARY KEY (fileid, tagid),
+
+    FOREIGN KEY (fileid)
+        REFERENCES File(id)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE,
+
+    FOREIGN KEY (tagid)
+        REFERENCES Tags(id)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE
+) WITHOUT ROWID;",
+            [],
+        )
+        .unwrap();
+        tn.execute("DROP INDEX IF EXISTS idx_tagid_fileid_popular", [])
+            .unwrap();
+
+        tn.execute(
+            "CREATE INDEX idx_tagid_fileid_popular ON Relationship_Popular(tagid, fileid DESC)",
+            [],
+        )
+        .unwrap();
+
+        // Cleans up any old triggers
+        tn.execute("DROP TRIGGER IF EXISTS relationship_delete_count", [])
+            .unwrap();
+        tn.execute("DROP TRIGGER IF EXISTS relationship_insert_count", [])
+            .unwrap();
+
+            }
+
     ///
     /// Creates the parents table and creates indexes
     ///
-    pub fn parents_create_v2(&self, tn: &mut Transaction) {
+    pub(in crate::database) fn parents_create_v2(&self, tn: &Transaction) {
         tn.execute(
             "CREATE TABLE IF NOT EXISTS Parents (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -203,24 +297,145 @@ LIMIT ?;"#
     }
 
     ///
-    /// Creates tag Fast Text Search does a little parsing
-    /// Adds triggers to keep it up to date
+    /// Creates tags_fts and tags_popular_fts and populates them with data
     ///
-    pub fn tags_fts_create_v1(&self, tn: &mut Transaction) {
-        /*  tn.execute(
+pub(in crate::database) fn tags_fts_create_v2(&self, tn: &Transaction) {
+
+        tn.execute("DROP TABLE IF EXISTS Tags_Popular_fts", []).unwrap();
+        tn.execute("DROP TABLE IF EXISTS Tags_fts", []).unwrap();
+        tn.execute("DROP TRIGGER IF EXISTS Tags_ai", []).unwrap();
+        tn.execute("DROP TRIGGER IF EXISTS Tags_ad", []).unwrap();
+        tn.execute("DROP TRIGGER IF EXISTS Tags_au", []).unwrap();
+        tn.execute("DROP TRIGGER IF EXISTS Tags_Popular_ai", []).unwrap();
+        tn.execute("DROP TRIGGER IF EXISTS Tags_Popular_ad", []).unwrap();
+        tn.execute("DROP TRIGGER IF EXISTS Tags_Popular_au", []).unwrap();
+let popular_lock = self.popular_relationship_count.lock();
+
+        dbg!(&popular_lock);
+        if let Some(count) = *popular_lock {
+
+                tn.execute(
             r#"
         CREATE VIRTUAL TABLE Tags_fts USING fts5(
     name,
     namespace UNINDEXED,
-    content='Tags',
-    content_rowid='id',
-    tokenize = "unicode61 separators '_'",
-    prefix = '2 3 4'
+    tokenize = "trigram",
 );"#,
             [],
         )
-        .unwrap();*/
+        .unwrap();
+
+                tn.execute(
+        &format!(    "
+        INSERT INTO Tags_fts(rowid, name, namespace) SELECT id, REPLACE(REPLACE(name, '_', ' '), '/', ' '), namespace FROM Tags WHERE count < {};", count),
+            [],
+        )
+        .unwrap();
+        tn.execute("INSERT INTO Tags_fts(Tags_fts) VALUES('optimize');", [])
+            .unwrap();
+
         tn.execute(
+       &format!(     "
+        CREATE TRIGGER IF NOT EXISTS Tags_ai AFTER INSERT ON Tags WHEN new.count < {}
+        BEGIN
+          INSERT INTO Tags_fts(rowid, name, namespace) 
+          VALUES (new.id, new.name, new.namespace);
+        END;
+        ", count),
+            [],
+        )
+        .unwrap();
+
+        tn.execute(
+            &format!("
+        CREATE TRIGGER IF NOT EXISTS Tags_ad AFTER DELETE ON Tags WHEN new.count >= {}
+        BEGIN
+          DELETE FROM Tags_fts WHERE rowid = old.id;
+        END;
+        ", count),
+            [],
+        )
+        .unwrap();
+
+        tn.execute(
+            &format!("
+        CREATE TRIGGER IF NOT EXISTS Tags_au AFTER UPDATE ON Tags WHEN new.count < {}
+        BEGIN
+          UPDATE Tags_fts
+          SET name = new.name, namespace = new.namespace
+          WHERE rowid = old.id;
+        END;
+        ", count),
+            [],
+        )
+        .unwrap();
+
+            // Popular fts
+            tn.execute(
+            r#"
+        CREATE VIRTUAL TABLE Tags_Popular_fts USING fts5(
+    name,
+    namespace UNINDEXED,
+    tokenize = "trigram",
+);"#,
+            [],
+        )
+        .unwrap();
+
+                tn.execute(
+        &format!(    "
+        INSERT INTO Tags_Popular_fts(rowid, name, namespace) SELECT id, REPLACE(REPLACE(name, '_', ' '), '/', ' '), namespace FROM Tags WHERE count >= {};", count),
+            [],
+        )
+        .unwrap();
+        tn.execute("INSERT INTO Tags_Popular_fts(Tags_Popular_fts) VALUES('optimize');", [])
+            .unwrap();
+
+        tn.execute(
+       &format!(     "
+        CREATE TRIGGER IF NOT EXISTS Tags_Popular_ai AFTER INSERT ON Tags WHEN new.count >= {}
+        BEGIN
+          INSERT INTO Tags_Popular_fts(rowid, name, namespace) 
+          VALUES (new.id, new.name, new.namespace);
+        END;
+        ", count),
+            [],
+        )
+        .unwrap();
+
+        tn.execute(
+            &format!("
+        CREATE TRIGGER IF NOT EXISTS Tags_Popular_ad AFTER DELETE ON Tags WHEN new.count < {}
+        BEGIN
+          DELETE FROM Tags_Popular_fts WHERE rowid = old.id;
+        END;
+        ", count),
+            [],
+        )
+        .unwrap();
+
+        tn.execute(
+            &format!("
+        CREATE TRIGGER IF NOT EXISTS Tags_Popular_au AFTER UPDATE ON Tags WHEN new.count >= {}
+        BEGIN
+          UPDATE Tags_Popular_fts
+          SET name = new.name, namespace = new.namespace
+          WHERE rowid = old.id;
+        END;
+        ", count),
+            [],
+        )
+        .unwrap();
+
+    }
+    }
+
+    ///
+    /// Creates tag Fast Text Search does a little parsing
+    /// Adds triggers to keep it up to date
+    ///
+    pub(in crate::database) fn tags_fts_create_v1(&self, tn: &Transaction) {
+                tn.execute(
             r#"
         CREATE VIRTUAL TABLE Tags_fts USING fts5(
     name,
@@ -234,13 +449,7 @@ LIMIT ?;"#
         )
         .unwrap();
 
-        /*tn.execute(
-            "
-        INSERT INTO Tags_fts(Tags_fts) VALUES('rebuild');        ",
-            [],
-        )
-        .unwrap();*/
-        tn.execute(
+                tn.execute(
             "
         INSERT INTO Tags_fts(rowid, name)
 SELECT id,
@@ -289,7 +498,7 @@ FROM Tags;",
         .unwrap();
     }
     /// Creates namespace properties table and its linker
-    pub fn namespace_properties_create_v1(&self, tn: &mut Transaction) {
+    pub(in crate::database) fn namespace_properties_create_v1(&self, tn: &Transaction) {
         tn.execute(
             "
 CREATE TABLE IF NOT EXISTS NamespaceProperty (
@@ -319,8 +528,69 @@ CREATE TABLE IF NOT EXISTS NamespacePropertyLink (
         .unwrap();
     }
 
+    pub(in crate::database) fn tag_create_v1(&self, tn: &Transaction) {
+        tn.execute("CREATE TABLE IF NOT EXISTS Tags (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, namespace INTEGER NOT NULL, count INTEGER NOT NULL DEFAULT 0, UNIQUE(name, namespace) )", []).unwrap();
+        tn.execute(
+            "
+        CREATE INDEX IF NOT EXISTS idx_tags_count ON Tags(count DESC);
+        ",
+            [],
+        )
+        .unwrap();
+        tn.execute(
+            "
+        CREATE INDEX IF NOT EXISTS idx_tags_namespace ON Tags(namespace);
+        ",
+            [],
+        )
+        .unwrap();
+        tn.execute(
+            "  CREATE UNIQUE INDEX IF NOT EXISTS tags_name_namespace_idx
+        ON Tags(name, namespace);",
+            [],
+        )
+        .unwrap();
+    }
+
+    pub(in crate::database) fn tag_count_create_v2(&self, tn: &Transaction) {
+        tn.execute(
+            "
+ALTER TABLE Tags ADD COLUMN count INTEGER NOT NULL DEFAULT 0;
+",
+            [],
+        )
+        .unwrap();
+        tn.execute(
+            "UPDATE Tags
+SET count = sub.cnt
+FROM (
+    SELECT tagid, COUNT(*) AS cnt
+    FROM Relationship
+    GROUP BY tagid
+) AS sub
+WHERE Tags.id = sub.tagid;",
+            [],
+        )
+        .unwrap();
+
+        tn.execute(
+            "
+        CREATE INDEX IF NOT EXISTS idx_tags_count ON Tags(count DESC);
+        ",
+            [],
+        )
+        .unwrap();
+        tn.execute(
+            "
+        CREATE INDEX IF NOT EXISTS idx_tags_namespace ON Tags(namespace);
+        ",
+            [],
+        )
+        .unwrap();
+    }
+
     /// Creates the tags count table
-    pub fn tag_count_create_v1(&self, tn: &mut Transaction) {
+    pub(in crate::database) fn tag_count_create_v1(&self, tn: &Transaction) {
         tn.execute(
             "
 ALTER TABLE Tags ADD COLUMN count INTEGER NOT NULL DEFAULT 0;
@@ -389,7 +659,7 @@ WHERE Tags.id = sub.tagid;",
     /// Gets all tagids where namespace_id has a linkage with a tag that has count greater then
     /// cnt
     ///
-    pub fn relationship_get_tagid_where_namespace_count(
+    pub fn relationship_get_tagid_where_namespace_count_sql(
         &self,
         namespace_id: &usize,
         count: &usize,
@@ -424,7 +694,7 @@ HAVING COUNT(r.fileid) {dir} ?;"
     /// Gets all fileids where namespace_id has a linkage with a tag that has count greater then
     /// cnt
     ///
-    pub fn relationship_get_fileid_where_namespace_count(
+    pub fn relationship_get_fileid_where_namespace_count_sql(
         &self,
         namespace_id: &usize,
         count: &usize,
@@ -456,7 +726,10 @@ HAVING COUNT(r.fileid) {dir} ?;"
     /// Searches for a list of fileids from a list of tagids
     /// Straight yoinked off chad
     ///
-    pub fn relationship_get_fileid_search_sql(&self, tag_ids: &[usize]) -> Vec<usize> {
+    pub(in crate::database) fn relationship_get_fileid_search_sql(
+        &self,
+        tag_ids: &[usize],
+    ) -> Vec<usize> {
         if tag_ids.is_empty() {
             return vec![];
         }
@@ -527,15 +800,24 @@ HAVING COUNT(r.fileid) {dir} ?;"
     ///
     /// Checks if a relationship exists
     ///
-    pub fn relationship_exists(&self, file_id: &usize, tag_id: &usize) -> bool {
-        let sql = "SELECT EXISTS(SELECT 1 FROM Relationship WHERE fileid=? AND tagid=? LIMIT 1)";
+    fn relationship_exists(&self, tn: &Transaction, file_id: &usize, tag_id: &usize) -> bool {
+        let table = if self.is_tag_count_greater_rel_limit(tn, tag_id) {
+            "Relationship_Popular"
+        } else {
+            "Relationship"
+        };
+
+        let sql = format!(
+            "SELECT EXISTS(SELECT 1 FROM {} WHERE fileid=? AND tagid=? LIMIT 1)",
+            table
+        );
 
         let tn = match self.pool.get() {
             Ok(conn) => conn,
             Err(_) => return false,
         };
 
-        let result: Result<i32, _> = tn.query_one(sql, params![file_id, tag_id], |row| {
+        let result: Result<i32, _> = tn.query_one(&sql, params![file_id, tag_id], |row| {
             row.get::<usize, i32>(0) // specify column index and expected type
         });
 
@@ -548,7 +830,7 @@ HAVING COUNT(r.fileid) {dir} ?;"
     ///
     /// Gets all jobs from the sql tables
     ///
-    pub fn jobs_get_all_sql(&self) -> HashMap<usize, sharedtypes::DbJobsObj> {
+    pub(in crate::database) fn jobs_get_all_sql(&self) -> HashMap<usize, sharedtypes::DbJobsObj> {
         let mut out = HashMap::new();
         let tn = self.pool.get().unwrap();
         let max_jobs = self.jobs_return_count_sql();
@@ -565,7 +847,7 @@ HAVING COUNT(r.fileid) {dir} ?;"
     ///
     /// Returns the total count of the jobs table
     ///
-    pub fn jobs_return_count_sql(&self) -> usize {
+    pub(in crate::database) fn jobs_return_count_sql(&self) -> usize {
         let tn = self.pool.get().unwrap();
         let mut max: Option<usize> =
             wait_until_sqlite_ok!(
@@ -595,7 +877,7 @@ HAVING COUNT(r.fileid) {dir} ?;"
     ///
     /// Returns the total count of the namespace table
     ///
-    pub fn namespace_return_count_sql(&self) -> usize {
+    pub(in crate::database) fn namespace_return_count_sql(&self) -> usize {
         let tn = self.pool.get().unwrap();
         wait_until_sqlite_ok!(
             tn.query_row("SELECT COUNT(*) FROM Namespace", params![], |row| {
@@ -608,7 +890,10 @@ HAVING COUNT(r.fileid) {dir} ?;"
     ///
     /// Get file if it exists by id
     ///
-    pub fn files_get_id_sql(&self, file_id: &usize) -> Option<sharedtypes::DbFileStorage> {
+    pub(in crate::database) fn files_get_id_sql(
+        &self,
+        file_id: &usize,
+    ) -> Option<sharedtypes::DbFileStorage> {
         let tn = self.pool.get().unwrap();
         let inp = "SELECT * FROM File where id = ?";
         wait_until_sqlite_ok!(tn.query_row(inp, params![file_id], |row| {
@@ -631,7 +916,7 @@ HAVING COUNT(r.fileid) {dir} ?;"
     ///
     /// Returns all namespace keys
     ///
-    pub fn namespace_keys_sql(&self) -> Vec<usize> {
+    pub(in crate::database) fn namespace_keys_sql(&self) -> Vec<usize> {
         let tn = self.pool.get().unwrap();
         let mut out = Vec::new();
         let mut inp = tn.prepare("SELECT id FROM Namespace").unwrap();
@@ -647,7 +932,7 @@ HAVING COUNT(r.fileid) {dir} ?;"
     ///
     /// Get file if it exists by id
     ///
-    pub fn namespace_get_tagids_sql(&self, ns_id: &usize) -> HashSet<usize> {
+    pub(in crate::database) fn namespace_get_tagids_sql(&self, ns_id: &usize) -> HashSet<usize> {
         let tn = self.pool.get().unwrap();
         let mut out = HashSet::new();
         let mut inp = tn
@@ -669,7 +954,10 @@ HAVING COUNT(r.fileid) {dir} ?;"
     ///
     /// Gets a job by id
     ///
-    pub fn jobs_get_id_sql(&self, job_id: &usize) -> Option<sharedtypes::DbJobsObj> {
+    pub(in crate::database) fn jobs_get_id_sql(
+        &self,
+        job_id: &usize,
+    ) -> Option<sharedtypes::DbJobsObj> {
         let tn = self.pool.get().unwrap();
         let inp = "SELECT * FROM Jobs WHERE id = ? LIMIT 1";
         wait_until_sqlite_ok!(tn.query_row(inp, params![job_id], |row| {
@@ -706,7 +994,7 @@ HAVING COUNT(r.fileid) {dir} ?;"
     }
 
     /// Adds a job to sql
-    pub fn jobs_add_sql(&self, data: &sharedtypes::DbJobsObj) {
+    pub(in crate::database) fn jobs_add_sql(&self, data: &sharedtypes::DbJobsObj) {
         self.transaction_start();
         let tn = self.write_conn.lock();
         let inp = "INSERT INTO Jobs VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
@@ -732,8 +1020,11 @@ HAVING COUNT(r.fileid) {dir} ?;"
     }
 
     /// Wrapper that handles inserting parents info into DB.
-    pub fn parents_add_sql(&self, parent: &sharedtypes::DbParentsObj) -> usize {
-        let tn = self.write_conn.lock();
+    pub(in crate::database) fn parents_add_sql(
+        &self,
+        tn: &Transaction,
+        parent: &sharedtypes::DbParentsObj,
+    ) -> usize {
         let inp = "INSERT INTO Parents(tag_id, relate_tag_id, limit_to) VALUES(?, ?, ?)";
         let limit_to = match parent.limit_to {
             None => &Null as &dyn ToSql,
@@ -842,7 +1133,7 @@ HAVING COUNT(r.fileid) {dir} ?;"
     /// Returns a list of relate_tag_ids where: tag_id
     /// exists
     ///
-    pub fn parents_relatetagid_get(&self, tag_id: &usize) -> HashSet<usize> {
+    pub(in crate::database) fn parents_relatetagid_get(&self, tag_id: &usize) -> HashSet<usize> {
         let tn = self.pool.get().unwrap();
         let mut out = HashSet::new();
 
@@ -859,6 +1150,32 @@ HAVING COUNT(r.fileid) {dir} ?;"
             out.insert(item);
         }
         out
+    }
+
+    /// Adds job into db
+    pub fn jobs_add_new(&self, dbjobsobj: sharedtypes::DbJobsObj) -> usize {
+        let mut dbjobsobj = dbjobsobj.clone();
+        let id = match dbjobsobj.id {
+            None => self.jobs_get_max(),
+            Some(id) => id,
+        };
+
+        for each in self.jobs_get_all() {
+            if dbjobsobj.time == each.1.time
+                && dbjobsobj.reptime == each.1.reptime
+                && dbjobsobj.site == each.1.site
+                && dbjobsobj.param == each.1.param
+            {
+                dbg!("RET");
+                return id;
+            }
+        }
+
+        dbjobsobj.id = Some(id);
+
+        self.jobs_update_db(dbjobsobj);
+
+        id
     }
 
     ///
@@ -890,16 +1207,16 @@ HAVING COUNT(r.fileid) {dir} ?;"
         out
     }
 
-    pub fn parents_delete_sql(&self, id: &usize) {
-        self.parents_delete_tag_id_sql(id);
-        self.parents_delete_relate_tag_id_sql(id);
-        self.parents_delete_limit_to_sql(id);
+    pub(in crate::database) fn parents_delete_sql(&self, tn: &Transaction, id: &usize) {
+        self.parents_delete_tag_id_sql(tn, id);
+        self.parents_delete_relate_tag_id_sql(tn, id);
+        self.parents_delete_limit_to_sql(tn, id);
     }
 
     ///
     /// Checks if a dead source exists
     ///
-    pub fn does_dead_source_exist(&self, url: &String) -> bool {
+    pub(in crate::database) fn does_dead_source_exist(&self, url: &String) -> bool {
         let tn = self.pool.get().unwrap();
         wait_until_sqlite_ok!(tn.query_row(
             "SELECT id from dead_source_urls WHERE dead_url = ?",
@@ -912,7 +1229,7 @@ HAVING COUNT(r.fileid) {dir} ?;"
     ///
     /// Does namespace contains tagid. A more optimizes sqlite version
     ///
-    pub fn namespace_contains_id_sql(&self, tid: &usize, nsid: &usize) -> bool {
+    pub(in crate::database) fn namespace_contains_id_sql(&self, tid: &usize, nsid: &usize) -> bool {
         let tn = self.pool.get().unwrap();
         wait_until_sqlite_ok!(tn.query_row(
             "SELECT id FROM Tags WHERE id = ? AND namespace = ?",
@@ -925,8 +1242,7 @@ HAVING COUNT(r.fileid) {dir} ?;"
     ///
     /// Removes ALL of a tag_id from the parents collumn
     ///
-    pub fn parents_delete_tag_id_sql(&self, tag_id: &usize) {
-        let tn = self.write_conn.lock();
+    pub(in crate::database) fn parents_delete_tag_id_sql(&self, tn: &Transaction, tag_id: &usize) {
         let _ = wait_until_sqlite_ok!(
             tn.execute("DELETE FROM Parents WHERE tag_id = ?", params![tag_id])
         );
@@ -935,8 +1251,11 @@ HAVING COUNT(r.fileid) {dir} ?;"
     ///
     /// Removes ALL of a relate_tag_id from the parents collumn
     ///
-    pub fn parents_delete_relate_tag_id_sql(&self, relate_tag_id: &usize) {
-        let tn = self.write_conn.lock();
+    pub(in crate::database) fn parents_delete_relate_tag_id_sql(
+        &self,
+        tn: &Transaction,
+        relate_tag_id: &usize,
+    ) {
         let _ = wait_until_sqlite_ok!(tn.execute(
             "DELETE FROM Parents WHERE relate_tag_id = ?",
             params![relate_tag_id],
@@ -946,8 +1265,11 @@ HAVING COUNT(r.fileid) {dir} ?;"
     ///
     /// Removes ALL of a relate_tag_id from the parents collumn
     ///
-    pub fn parents_delete_limit_to_sql(&self, limit_to: &usize) {
-        let tn = self.write_conn.lock();
+    pub(in crate::database) fn parents_delete_limit_to_sql(
+        &self,
+        tn: &Transaction,
+        limit_to: &usize,
+    ) {
         let _ = wait_until_sqlite_ok!(
             tn.execute("DELETE FROM Parents WHERE limit_to = ?", params![limit_to])
         );
@@ -956,7 +1278,7 @@ HAVING COUNT(r.fileid) {dir} ?;"
     ///
     /// Gets a file storage location id
     ///
-    pub fn storage_get_id(&self, location: &String) -> Option<usize> {
+    pub(in crate::database) fn storage_get_id(&self, location: &String) -> Option<usize> {
         let tn = self.pool.get().unwrap();
         wait_until_sqlite_ok!(tn.query_row(
             "SELECT id from FileStorageLocations where location = ?",
@@ -972,7 +1294,7 @@ HAVING COUNT(r.fileid) {dir} ?;"
     /// Note needs to be offset by one because sqlite starts at 1 but the internal sqlite counter
     /// starts at zero but the stupid actual count starts at 1
     ///
-    pub fn tags_max_return_sql(&self) -> usize {
+    pub(in crate::database) fn tags_max_return_sql(&self) -> usize {
         let tn = self.pool.get().unwrap();
         wait_until_sqlite_ok!(tn.query_row("SELECT MAX(id) FROM Tags", params![], |row| row.get(0)))
             .unwrap_or(0)
@@ -982,7 +1304,10 @@ HAVING COUNT(r.fileid) {dir} ?;"
     ///
     /// Gets a tag by id
     ///
-    pub fn tags_get_dbtagnns_sql(&self, tag_id: &usize) -> Option<sharedtypes::DbTagNNS> {
+    pub(in crate::database) fn tags_get_dbtagnns_sql(
+        &self,
+        tag_id: &usize,
+    ) -> Option<sharedtypes::DbTagNNS> {
         let tn = self.pool.get().unwrap();
         wait_until_sqlite_ok!(tn.query_row(
             "SELECT name, namespace from Tags where id = ?",
@@ -1002,7 +1327,7 @@ HAVING COUNT(r.fileid) {dir} ?;"
     ///
     /// Gets a list of tag ids
     ///
-    pub fn tags_get_id_list_sql(&self) -> HashSet<usize> {
+    pub(in crate::database) fn tags_get_id_list_sql(&self) -> HashSet<usize> {
         let tn = self.pool.get().unwrap();
         let inp = "SELECT id FROM Tags";
 
@@ -1020,7 +1345,7 @@ HAVING COUNT(r.fileid) {dir} ?;"
     ///
     /// Gets a list of tag ids
     ///
-    pub fn file_get_list_id_sql(&self) -> HashSet<usize> {
+    pub(in crate::database) fn file_get_list_id_sql(&self) -> HashSet<usize> {
         let tn = self.pool.get().unwrap();
         let inp = "SELECT id FROM File";
 
@@ -1038,7 +1363,7 @@ HAVING COUNT(r.fileid) {dir} ?;"
     ///
     /// Gets a string from the ID of the storage location
     ///
-    pub fn storage_get_string(&self, id: &usize) -> Option<String> {
+    pub(in crate::database) fn storage_get_string(&self, id: &usize) -> Option<String> {
         let tn = self.pool.get().unwrap();
         wait_until_sqlite_ok!(tn.query_row(
             "SELECT location from FileStorageLocations where id = ?",
@@ -1052,12 +1377,12 @@ HAVING COUNT(r.fileid) {dir} ?;"
     ///
     /// Inserts into storage the location
     ///
-    pub fn storage_put(&self, location: &String) -> usize {
-        if let Some(out) = self.storage_get_id(location) {
-            return out;
-        }
+    pub(in crate::database) fn storage_put_internal(
+        &self,
+        tn: &Transaction,
+        location: &String,
+    ) -> usize {
         {
-            let tn = self.write_conn.lock();
             let mut prep = tn
                 .prepare("INSERT OR REPLACE INTO FileStorageLocations (location) VALUES (?)")
                 .unwrap();
@@ -1072,11 +1397,16 @@ HAVING COUNT(r.fileid) {dir} ?;"
         }
     }
     /// Adds tags into sql database
-    pub(super) fn tag_add_sql(&self, tag_id: &usize, tag: &String, namespace: &usize) -> usize {
+    pub(super) fn tag_add_sql(
+        &self,
+        tn: &Transaction,
+        tag_id: &usize,
+        tag: &String,
+        namespace: &usize,
+    ) -> usize {
         let inp = "INSERT INTO Tags (id, name, namespace) VALUES(?, ?, ?) ON CONFLICT(id) DO UPDATE SET name = EXCLUDED.name, namespace = EXCLUDED.namespace";
         {
             {
-                let tn = self.write_conn.lock();
                 let _ = wait_until_sqlite_ok!(tn.execute(inp, params![tag_id, tag, namespace]));
                 wait_until_sqlite_ok!(tn.query_row(
                     "SELECT id FROM Tags WHERE name = ? AND namespace = ?",
@@ -1089,7 +1419,7 @@ HAVING COUNT(r.fileid) {dir} ?;"
     }
 
     /// Adds tags into sql database
-    pub(super) fn tag_add_no_id_sql(&self, tag: &str, namespace: usize) -> usize {
+    pub(super) fn tag_add_no_id_sql(&self, tn: &Transaction, tag: &str, namespace: usize) -> usize {
         let sql = r#"
 INSERT INTO Tags(name, namespace)
 VALUES (?, ?)
@@ -1097,28 +1427,30 @@ ON CONFLICT(name, namespace) DO UPDATE SET name=excluded.name
 RETURNING id;
 "#;
 
-        let conn = self.write_conn.lock();
-
-        conn.query_row(sql, params![tag, namespace], |row| row.get(0))
+        tn.query_row(sql, params![tag, namespace], |row| row.get(0))
             .unwrap()
     }
 
     /// Adds namespace to the SQL database
     pub(super) fn namespace_add_sql(
         &self,
+        tn: &Transaction,
         name: &String,
         description: &Option<String>,
         name_id: Option<usize>,
-    ) {
-        self.transaction_start();
+    )-> usize {
         {
-            let tn = self.write_conn.lock();
             let inp = "INSERT INTO Namespace (id, name, description) VALUES(?, ?, ?)";
             {
-                let _ = wait_until_sqlite_ok!(tn.execute(inp, params![name_id, name, description]));
+                let _ = wait_until_sqlite_ok!(tn.execute(inp, params![name_id, name, description]));wait_until_sqlite_ok!(tn.query_row(
+                    "SELECT id FROM Namespace WHERE name = ?",
+                    params![name],
+                    |row| row.get(0),
+                ))
+                .unwrap()
+
             }
         }
-        self.transaction_flush();
     }
 
     /// Loads Parents in from DB tnection
@@ -1140,7 +1472,7 @@ RETURNING id;
             .unwrap();
             for each in parents {
                 if let Ok(res) = each {
-                    self.parents_add_db(res);
+                    self.parents_add_internal_db(res);
                 } else {
                     error!("Bad Parent cant load {:?}", each);
                 }
@@ -1151,7 +1483,10 @@ RETURNING id;
     ///
     /// Returns the parents
     ///
-    pub fn parents_get_id_list_sql(&self, par: &sharedtypes::DbParentsObj) -> HashSet<usize> {
+    pub(in crate::database) fn parents_get_id_list_sql(
+        &self,
+        par: &sharedtypes::DbParentsObj,
+    ) -> HashSet<usize> {
         let mut out = HashSet::new();
         let limit_to = match par.limit_to {
             None => &Null as &dyn ToSql,
@@ -1216,7 +1551,10 @@ RETURNING id;
         out
     }
 
-    pub fn parents_dbobj_get_sql(&self, parent_id: &usize) -> Option<DbParentsObj> {
+    pub(in crate::database) fn parents_dbobj_get_sql(
+        &self,
+        parent_id: &usize,
+    ) -> Option<DbParentsObj> {
         let tn = self.get_database_connection();
 
         let result: Result<(usize, usize, Option<usize>), rusqlite::Error> = tn.query_row(
@@ -1241,13 +1579,12 @@ RETURNING id;
         }
     }
 
-    pub fn file_tag_relationship(
+    pub(in crate::database) fn file_tag_relationship(
         &self,
+        tn: &Transaction,
         fid: &usize,
-        // tag, namespace
         tags: Vec<sharedtypes::TagObject>,
     ) {
-        let tn = self.write_conn.lock();
         {
             // Prepare statements
             let mut ns_stmt = tn
@@ -1298,7 +1635,10 @@ RETURNING id;
     ///
     /// Convience function to search by extension strings
     ///
-    pub fn extensions_get_fileid_extstr_sql(&self, extensions: &[String]) -> HashSet<usize> {
+    pub(in crate::database) fn extensions_get_fileid_extstr_sql(
+        &self,
+        extensions: &[String],
+    ) -> HashSet<usize> {
         let mut ext_id_vec = Vec::new();
         for ext in extensions.iter() {
             if let Some(ext_id) = self.extension_get_id(ext) {
@@ -1311,7 +1651,10 @@ RETURNING id;
     ///
     /// Gets all fileids where a list of extension ids exist
     ///
-    pub fn extension_get_fileid_extid_sql(&self, extensions: &[usize]) -> HashSet<usize> {
+    pub(in crate::database) fn extension_get_fileid_extid_sql(
+        &self,
+        extensions: &[usize],
+    ) -> HashSet<usize> {
         let conn = self.pool.get().unwrap();
         if extensions.is_empty() {
             return HashSet::new();
@@ -1342,8 +1685,12 @@ RETURNING id;
     ///
     /// Adds a extension and an id OPTIONAL into the db
     ///
-    pub fn extension_put_id_ext_sql(&self, id: Option<usize>, ext: &str) -> usize {
-        let tn = self.write_conn.lock();
+    pub(in crate::database) fn extension_put_id_ext_sql(
+        &self,
+        tn: &Transaction,
+        id: Option<usize>,
+        ext: &str,
+    ) -> usize {
         {
             let _ = wait_until_sqlite_ok!(tn.execute(
                 "insert or ignore into FileExtensions(id, extension) VALUES (?,?)",
@@ -1362,7 +1709,7 @@ RETURNING id;
     ///
     /// Returns id if a hash exists
     ///
-    pub fn file_get_id_sql(&self, hash: &str) -> Option<usize> {
+    pub(in crate::database) fn file_get_id_sql(&self, hash: &str) -> Option<usize> {
         let tn = self.pool.get().unwrap();
         wait_until_sqlite_ok!(tn.query_row(
             "SELECT id FROM File WHERE hash = ? LIMIT 1",
@@ -1375,7 +1722,7 @@ RETURNING id;
     ///
     /// Returns if an extension exists gey by ext string
     ///
-    pub fn extension_get_id_sql(&self, ext: &str) -> Option<usize> {
+    pub(in crate::database) fn extension_get_id_sql(&self, ext: &str) -> Option<usize> {
         let tn = self.pool.get().unwrap();
         wait_until_sqlite_ok!(tn.query_row(
             "SELECT id FROM FileExtensions WHERE extension = ?",
@@ -1387,7 +1734,7 @@ RETURNING id;
     ///
     /// Returns if an extension exists get by id
     ///
-    pub fn extension_get_string_sql(&self, id: &usize) -> Option<String> {
+    pub(in crate::database) fn extension_get_string_sql(&self, id: &usize) -> Option<String> {
         let tn = self.pool.get().unwrap();
         wait_until_sqlite_ok!(tn.query_row(
             "select extension from FileExtensions where id = ?",
@@ -1398,7 +1745,11 @@ RETURNING id;
     }
 
     /// Adds file via SQL
-    pub(super) fn file_add_sql(&self, file: &sharedtypes::DbFileStorage) -> usize {
+    pub(super) fn file_add_sql(
+        &self,
+        tn: &Transaction,
+        file: &sharedtypes::DbFileStorage,
+    ) -> usize {
         let out_file_id;
         let file_id;
         let hash;
@@ -1434,7 +1785,6 @@ RETURNING id;
 
         let inp = "INSERT INTO File VALUES(?, ?, ?, ?)";
         {
-            let tn = self.write_conn.lock();
             let _ = wait_until_sqlite_ok!(
                 tn.execute(inp, params![file_id, hash, extension, storage_id])
             );
@@ -1442,8 +1792,6 @@ RETURNING id;
         if let Some(id) = file_id {
             out_file_id = id;
         } else {
-            let tn = self.write_conn.lock();
-
             out_file_id = wait_until_sqlite_ok!(tn.query_row(
                 "SELECT id FROM File WHERE hash = ? LIMIT 1",
                 params![hash],
@@ -1487,18 +1835,365 @@ RETURNING id;
             }
         }
     }
+
+    /// Checks if the count of a tag is greater or equal to the relationships count
+    pub(in crate::database) fn is_tag_count_greater_rel_limit(
+        &self,
+        tn: &Transaction,
+        id: &usize,
+    ) -> bool {
+        if let Some(db_count) = *self.popular_relationship_count.lock()
+            && let Some(count) = self.get_count_for_tagid(tn, id)
+        {
+            return count >= db_count;
+        }
+        false
+    }
+    /// Checks if the count of a tag is equal or equal to the relationships count
+    pub(in crate::database) fn is_tag_count_equal_rel_limit(
+        &self,
+        tn: &Transaction,
+        id: &usize,
+    ) -> bool {
+        if let Some(db_count) = *self.popular_relationship_count.lock()
+            && let Some(count) = self.get_count_for_tagid(tn, id)
+        {
+            return count == db_count;
+        }
+        false
+    }
+    /// Checks if the count of a tag is equal or equal to the relationships count
+    pub(in crate::database) fn is_tag_count_greq_rel_limit(
+        &self,
+        tn: &Transaction,
+        id: &usize,
+    ) -> GreqOrEq {
+        if let Some(db_count) = *self.popular_relationship_count.lock()
+            && let Some(count) = self.get_count_for_tagid(tn, id)
+        {
+            if count > db_count {
+                return GreqOrEq::GreaterThan;
+            } else if db_count > count {
+                return GreqOrEq::LessThan;
+            }
+        }
+        GreqOrEq::EqualTo
+    }
+
+    /// Gets a count for a tagid that exists
+    pub(in crate::database) fn get_count_for_tagid(
+        &self,
+        tn: &Transaction,
+        id: &usize,
+    ) -> Option<usize> {
+        wait_until_sqlite_ok!(tn.query_row(
+            "SELECT count FROM Tags WHERE id = ?",
+            params![id],
+            |row| row.get(0),
+        ))
+        .unwrap_or(None)
+    }
+
     /// Adds relationship to SQL db.
-    pub fn relationship_add_sql(&self, file: &usize, tag: &usize) {
-        if self.relationship_exists(file, tag) {
-            return;
+    pub(in crate::database) fn add_relationship_sql(
+        &self,
+        tn: &Transaction,
+        file: &usize,
+        tag: &usize,
+    ) {
+        let greq = self.is_tag_count_greq_rel_limit(tn, tag);
+
+        let inp = match greq {
+            GreqOrEq::EqualTo => "INSERT OR IGNORE INTO Relationship_Popular VALUES(?, ?)",
+            GreqOrEq::LessThan => "INSERT OR IGNORE INTO Relationship VALUES(?, ?)",
+            GreqOrEq::GreaterThan => "INSERT OR IGNORE INTO Relationship_Popular VALUES(?, ?)",
+        };
+
+        let _out = tn.execute(inp, params![file, tag]);
+
+        match greq {
+            GreqOrEq::EqualTo => {
+                self.migrate_relationship_popular_tagid(tn, tag, true);
+            }
+            _ => {}
+        }
+    }
+
+    /// Migrates all tags with id into the popular table if true
+    pub(in crate::database) fn migrate_relationship_popular_tagid(
+        &self,
+        tn: &Transaction,
+        id: &usize,
+        popular: bool,
+    ) {
+        self.drop_trigger_manage_relationship_count(tn);
+
+        let sql = if popular {
+            "INSERT OR IGNORE INTO Relationship_Popular (fileid, tagid) SELECT fileid, tagid FROM Relationship WHERE tagid = ?"
+        } else {
+            "INSERT OR IGNORE INTO Relationship (fileid, tagid) SELECT fileid, tagid FROM Relationship_Popular WHERE tagid = ?"
+        };
+
+        tn.execute(sql, params![id]).unwrap();
+        let sql = if popular {
+            "DELETE FROM Relationship WHERE tagid = ?"
+        } else {
+            "DELETE FROM Relationship_Popular WHERE tagid = ?"
+        };
+
+        tn.execute(sql, params![id]).unwrap();
+
+        self.create_trigger_manage_relationship_count_v1(tn);
+    }
+
+    fn drop_trigger_manage_relationship_count(&self, tn: &Transaction) {
+        tn.execute("DROP TRIGGER IF EXISTS manage_relationship_insert", [])
+            .unwrap();
+        tn.execute("DROP TRIGGER IF EXISTS manage_relationship_delete", [])
+            .unwrap();
+        tn.execute(
+            "DROP TRIGGER IF EXISTS manage_relationship_popular_insert",
+            [],
+        )
+        .unwrap();
+        tn.execute(
+            "DROP TRIGGER IF EXISTS manage_relationship_popular_delete",
+            [],
+        )
+        .unwrap();
+tn.execute("DROP TRIGGER IF EXISTS Tags_ai", []).unwrap();
+        tn.execute("DROP TRIGGER IF EXISTS Tags_ad", []).unwrap();
+        tn.execute("DROP TRIGGER IF EXISTS Tags_au", []).unwrap();
+        tn.execute("DROP TRIGGER IF EXISTS Tags_Popular_ai", []).unwrap();
+        tn.execute("DROP TRIGGER IF EXISTS Tags_Popular_ad", []).unwrap();
+        tn.execute("DROP TRIGGER IF EXISTS Tags_Popular_au", []).unwrap();
+
+    }
+
+    fn create_trigger_manage_relationship_count_v1(&self, tn: &Transaction) {
+        // Create the trigger for insertions into `Relationship`.
+        tn.execute(
+            "CREATE TRIGGER manage_relationship_insert
+AFTER INSERT ON Relationship
+BEGIN
+    UPDATE Tags
+    SET count = count + 1
+    WHERE id = NEW.tagid;
+
+    END;",
+            [],
+        )
+        .unwrap();
+
+        // Create the trigger for deletions from `Relationship`.
+        tn.execute(
+            "CREATE TRIGGER manage_relationship_delete
+AFTER DELETE ON Relationship
+BEGIN
+    UPDATE Tags
+    SET count = count - 1
+    WHERE id = OLD.tagid;
+
+END;",
+            [],
+        )
+        .unwrap();
+        // Create the trigger for insertions into `Relationship_Popular`.
+        tn.execute(
+            "CREATE TRIGGER manage_relationship_popular_insert
+AFTER INSERT ON Relationship_Popular
+BEGIN
+    UPDATE Tags
+    SET count = count + 1
+    WHERE id = NEW.tagid;
+
+    END;",
+            [],
+        )
+        .unwrap();
+
+        // Create the trigger for deletions from `Relationship`.
+        tn.execute(
+            "CREATE TRIGGER manage_relationship_popular_delete
+AFTER DELETE ON Relationship_Popular
+BEGIN
+    UPDATE Tags
+    SET count = count - 1
+    WHERE id = OLD.tagid;
+
+END;",
+            [],
+        )
+        .unwrap();
+
+
+let popular_lock = self.popular_relationship_count.lock();
+        if let Some(count) = *popular_lock {
+        tn.execute(
+       &format!(     "
+        CREATE TRIGGER IF NOT EXISTS Tags_ai AFTER INSERT ON Tags WHEN new.count < {}
+        BEGIN
+          INSERT INTO Tags_fts(rowid, name, namespace) 
+          VALUES (new.id, new.name, new.namespace);
+        END;
+        ", count),
+            [],
+        )
+        .unwrap();
+
+        tn.execute(
+            &format!("
+        CREATE TRIGGER IF NOT EXISTS Tags_ad AFTER DELETE ON Tags WHEN new.count >= {}
+        BEGIN
+          DELETE FROM Tags_fts WHERE rowid = old.id;
+        END;
+        ", count),
+            [],
+        )
+        .unwrap();
+
+        tn.execute(
+            &format!("
+        CREATE TRIGGER IF NOT EXISTS Tags_au AFTER UPDATE ON Tags WHEN new.count < {}
+        BEGIN
+          UPDATE Tags_fts
+          SET name = new.name, namespace = new.namespace
+          WHERE rowid = old.id;
+        END;
+        ", count),
+            [],
+        )
+        .unwrap();tn.execute(
+       &format!(     "
+        CREATE TRIGGER IF NOT EXISTS Tags_Popular_ai AFTER INSERT ON Tags WHEN new.count >= {}
+        BEGIN
+          INSERT INTO Tags_Popular_fts(rowid, name, namespace) 
+          VALUES (new.id, new.name, new.namespace);
+        END;
+        ", count),
+            [],
+        )
+        .unwrap();
+
+        tn.execute(
+            &format!("
+        CREATE TRIGGER IF NOT EXISTS Tags_Popular_ad AFTER DELETE ON Tags WHEN new.count < {}
+        BEGIN
+          DELETE FROM Tags_Popular_fts WHERE rowid = old.id;
+        END;
+        ", count),
+            [],
+        )
+        .unwrap();
+
+        tn.execute(
+            &format!("
+        CREATE TRIGGER IF NOT EXISTS Tags_Popular_au AFTER UPDATE ON Tags WHEN new.count >= {}
+        BEGIN
+          UPDATE Tags_Popular_fts
+          SET name = new.name, namespace = new.namespace
+          WHERE rowid = old.id;
+        END;
+        ", count),
+            [],
+        )
+        .unwrap();
         }
 
-        let tn = self.write_conn.lock();
-        let inp = "INSERT OR IGNORE INTO Relationship VALUES(?, ?)";
-        let _out = tn.execute(inp, params![file, tag]);
     }
+
+    ///
+    /// Migrates ALL tagid relationships from an old count to a new count
+    ///
+    pub(in crate::database) fn migrate_relationship_popular_count(
+        &self,
+        tn: &Transaction,
+        old_count: &usize,
+        new_count: &usize,
+    ) {
+        dbg!(old_count, new_count);
+        self.drop_trigger_manage_relationship_count(tn);
+        // If the counts have changed, we need to update the triggers.
+        if old_count != new_count {
+            // Drop existing triggers if they exist. Need to do this because otherwise the logic runs
+
+            // Migrates tags
+            if new_count < old_count {
+                // Insert into `Relationship_Popular` for tags with counts between new_count and old_count.
+                tn.execute(
+                    "INSERT INTO Relationship_Popular (fileid, tagid)
+            SELECT fileid, tagid
+            FROM Relationship
+            WHERE tagid IN (SELECT id FROM Tags WHERE count < ? AND count >= ?);",
+                    params![old_count, new_count],
+                )
+                .unwrap();
+                tn.execute(
+                    "INSERT OR REPLACE INTO Tags_Popular_fts (rowid, name, namespace)
+            SELECT id, name, namespace 
+            FROM Tags
+            WHERE count < ? AND count >= ?;",
+                    params![old_count, new_count],
+                )
+                .unwrap();
+
+
+                // Remove the relationships from `Relationship` where the tag count is between new_count and old_count.
+                tn.execute(
+                    "DELETE FROM Relationship
+            WHERE tagid IN (SELECT id FROM Tags WHERE count < ? AND count >= ?);",
+                    params![old_count, new_count],
+                )
+                .unwrap();
+                tn.execute(
+                    "DELETE FROM Tags_fts
+            WHERE rowid IN (SELECT id FROM Tags WHERE count < ? AND count >= ?);",
+                    params![old_count, new_count],
+                )
+                .unwrap();
+
+            }
+            // Handle the case where the count increases (old_count < new_count).
+            else if new_count > old_count {
+                // Insert into `Relationship_Popular` for tags with counts between old_count and new_count.
+                tn.execute(
+                    "INSERT INTO Relationship (fileid, tagid)
+            SELECT fileid, tagid
+            FROM Relationship_Popular
+            WHERE tagid IN (SELECT id FROM Tags WHERE count <= ? );",
+                    params![new_count],
+                )
+                .unwrap();tn.execute(
+                    "INSERT OR REPLACE INTO Tags_fts (rowid, name, namespace)
+            SELECT id, name, namespace 
+            FROM Tags
+            WHERE count <= ?;",
+                    params![ new_count],
+                )
+                .unwrap();
+
+
+                // Delete the relationships from `Relationship_Popular` where the tag count is between old_count and new_count.
+                tn.execute(
+                    "DELETE FROM Relationship_Popular
+            WHERE tagid IN (SELECT id FROM Tags WHERE count <= ? );",
+                    params![new_count],
+                )
+                .unwrap();
+                tn.execute(
+                    "DELETE FROM Tags_Popular_fts
+            WHERE rowid IN (SELECT id FROM Tags WHERE count <= ? );",
+                    params![new_count],
+                )
+                .unwrap();
+
+            }
+            self.create_trigger_manage_relationship_count_v1(tn);
+        }
+    }
+
     /// Updates job by id
-    pub fn jobs_update_by_id(&self, data: &sharedtypes::DbJobsObj) {
+    pub(in crate::database) fn jobs_update_by_id(&self, data: &sharedtypes::DbJobsObj) {
         self.transaction_start();
         let tn = self.write_conn.lock();
         let inp = "UPDATE Jobs SET id=?, time=?, reptime=?, Manager=?, priority=?,cachetime=?,cachechecktype=?, site=?, param=?, SystemData=?, UserData=? WHERE id = ?";
@@ -1524,7 +2219,10 @@ RETURNING id;
     ///
     /// Gets a list of fileid associated with a tagid
     ///
-    pub fn relationship_get_fileid_sql(&self, tag_id: &usize) -> HashSet<usize> {
+    pub(in crate::database) fn relationship_get_fileid_sql(
+        &self,
+        tag_id: &usize,
+    ) -> HashSet<usize> {
         let mut out = HashSet::new();
 
         let tn = self.pool.get().unwrap();
@@ -1541,7 +2239,10 @@ RETURNING id;
     ///
     /// Gets a list of tagid associated with a fileid
     ///
-    pub fn relationship_get_tagid_sql(&self, file_id: &usize) -> HashSet<usize> {
+    pub(in crate::database) fn relationship_get_tagid_sql(
+        &self,
+        file_id: &usize,
+    ) -> HashSet<usize> {
         let mut out = HashSet::new();
 
         let tn = self.pool.get().unwrap();
@@ -1558,7 +2259,7 @@ RETURNING id;
 
     /// Querys the db use this for select statements. NOTE USE THIS ONY FOR RESULTS
     /// THAT RETURN STRINGS
-    /*pub fn quer_stra(&self, inp: String) -> Result<Vec<String>> {
+    /*pub(in crate::database) fn quer_stra(&self, inp: String) -> Result<Vec<String>> {
         let binding = self.tn.lock();
         let mut toexec = binding.prepare(&inp).unwrap();
         let rows = wait_until_sqlite_ok!(toexec.query_map([], |row| row.get(0))).unwrap();
@@ -1570,7 +2271,7 @@ RETURNING id;
     }*/
     /// Querys the db use this for select statements. NOTE USE THIS ONY FOR RESULTS
     /// THAT RETURN INTS
-    pub fn quer_int(&self, inp: String) -> Vec<isize> {
+    pub(in crate::database) fn quer_int(&self, inp: String) -> Vec<isize> {
         let tn = self.pool.get().unwrap();
         let mut toexec = tn.prepare(&inp).unwrap();
         let rows = wait_until_sqlite_ok!(toexec.query_map([], |row| row.get(0))).unwrap();
@@ -1593,16 +2294,15 @@ RETURNING id;
     /// NOTE do not remove the transaction start here. Is needed for the db upgrade to restartup
     /// commits
     ///
-    pub fn setting_add_sql(
+    pub(in crate::database) fn setting_add_sql(
         &self,
+        tn: &Transaction,
         name: String,
         pretty: &Option<String>,
         num: Option<usize>,
         param: &Option<String>,
     ) {
-        self.transaction_start();
         {
-            let tn = self.write_conn.lock();
             let _ex =
             wait_until_sqlite_ok!( tn                .execute(
                     "INSERT INTO Settings(name, pretty, num, param) VALUES (?1, ?2, ?3, ?4) ON CONFLICT(name) DO UPDATE SET pretty=?2, num=?3, param=?4 ;",
@@ -1641,7 +2341,6 @@ RETURNING id;
                 Ok(_ex) => {}
             }
         }
-        self.transaction_flush();
     }
 
     /// Loads settings into db
@@ -1663,7 +2362,7 @@ RETURNING id;
                     .unwrap();
                     for each in settings {
                         if let Ok(res) = each {
-                            self.setting_add_db(res.name, res.pretty, res.num, res.param);
+                            self.setting_add_internal_db(res.name, res.pretty, res.num, res.param);
                         } else {
                             error!("Bad Setting cant load {:?}", each);
                         }
@@ -1687,7 +2386,10 @@ RETURNING id;
     ///
     /// Returns id if a tag exists
     ///
-    pub fn tags_get_id_sql(&self, db_tag_nns: &sharedtypes::DbTagNNS) -> Option<usize> {
+    pub(in crate::database) fn tags_get_id_sql(
+        &self,
+        db_tag_nns: &sharedtypes::DbTagNNS,
+    ) -> Option<usize> {
         let tn = self.pool.get().unwrap();
         wait_until_sqlite_ok!(tn.query_row(
             "SELECT id FROM Tags WHERE name = ? AND namespace = ?",
@@ -1700,8 +2402,12 @@ RETURNING id;
     ///
     /// Migrates a relationship's tag id
     ///
-    pub fn migrate_relationship_tag_sql(&self, old_tag_id: &usize, new_tag_id: &usize) {
-        let tn = self.write_conn.lock();
+    pub(in crate::database) fn migrate_relationship_tag_sql(
+        &self,
+        tn: &Transaction,
+        old_tag_id: &usize,
+        new_tag_id: &usize,
+    ) {
         wait_until_sqlite_ok!(tn.execute(
             "UPDATE OR IGNORE Relationship SET tagid = ? WHERE tagid = ?",
             params![new_tag_id, old_tag_id],
@@ -1711,13 +2417,13 @@ RETURNING id;
     ///
     /// Migrates a relationship's tag id
     ///
-    pub fn migrate_relationship_file_tag_sql(
+    pub(in crate::database) fn migrate_relationship_file_tag_sql(
         &self,
+        tn: &Transaction,
         file_id: &usize,
         old_tag_id: &usize,
         new_tag_id: &usize,
     ) {
-        let tn = self.write_conn.lock();
         wait_until_sqlite_ok!(tn.execute(
             "UPDATE OR REPLACE Relationship SET tagid = ? WHERE tagid = ? AND fileid=?",
             params![new_tag_id, old_tag_id, file_id],
@@ -1728,7 +2434,7 @@ RETURNING id;
     ///
     /// Returns id if a namespace exists
     ///
-    pub fn namespace_get_id_sql(&self, namespace: &String) -> Option<usize> {
+    pub(in crate::database) fn namespace_get_id_sql(&self, namespace: &String) -> Option<usize> {
         let tn = self.pool.get().unwrap();
         wait_until_sqlite_ok!(tn.query_row(
             "SELECT id FROM Namespace WHERE name = ?",
@@ -1740,7 +2446,7 @@ RETURNING id;
     ///
     /// Returns dbnamespace if a namespace id exists
     ///
-    pub fn namespace_get_namespaceobj_sql(
+    pub(in crate::database) fn namespace_get_namespaceobj_sql(
         &self,
         ns_id: &usize,
     ) -> Option<sharedtypes::DbNamespaceObj> {
@@ -1806,52 +2512,10 @@ RETURNING id;
         if matches!(self._cache, CacheType::Bare) {
             return;
         }
-        logging::info_log("Database is Loading: Tags".to_string());
-
-        // let mut delete_tags = HashSet::new();
-        {
-            let tn = self.pool.get().unwrap();
-            let temp = tn.prepare("SELECT (id, name, namespace) FROM Tags");
-            if let Ok(mut con) = temp {
-                let tag = wait_until_sqlite_ok!(con.query_map([], |row| {
-                    let name: String = match row.get(1) {
-                        Ok(out) => out,
-                        Err(err) => {
-                            let temp: u64 = row.get(1).unwrap();
-                            panic!();
-                        }
-                    };
-
-                    Ok(sharedtypes::DbTagObjCompatability {
-                        id: row.get(0).unwrap(),
-                        name,
-                        namespace: row.get(2).unwrap(),
-                    })
-                }));
-                match tag {
-                    Ok(tags) => {
-                        for each in tags {
-                            if let Ok(res) = each {
-                                // if let Some(id) = self._inmemdb.tags_get_data(&res.id) {
-                                // logging::info_log(&format!( "Already have tag {:?} adding {} {} {}", id,
-                                // res.name, res.namespace, res.id )); continue;
-                                // delete_tags.insert((res.name.clone(), res.namespace.clone())); }
-                                self.tag_add(&res.name, res.namespace, Some(res.id));
-                            } else {
-                                error!("Bad Tag cant load {:?}", each);
-                            }
-                        }
-                    }
-                    Err(errer) => {
-                        error!("WARNING COULD NOT LOAD TAG: {:?} DUE TO ERROR", errer);
-                    }
-                }
-            }
-        }
     }
 
     /// Sets advanced settings for journaling. NOTE Experimental badness
-    pub fn db_open(&self) {
+    pub(in crate::database) fn db_open(&self) {
         self.transaction_start();
         let tn = self.write_conn.lock();
         let _ = wait_until_sqlite_ok!(tn.execute("PRAGMA secure_delete = 0", params![]));
@@ -1864,7 +2528,7 @@ RETURNING id;
     }
 
     /// Removes a job from sql table by id
-    pub fn del_from_jobs_table_sql_better(&self, id: &usize) {
+    pub(in crate::database) fn del_from_jobs_table_sql_better(&self, id: &usize) {
         self.transaction_start();
         {
             let tn = self.write_conn.lock();
@@ -1875,7 +2539,11 @@ RETURNING id;
     }
 
     /// Removes a tag from sql table by name and namespace
-    pub fn del_from_tags_by_name_and_namespace(&self, name: &String, namespace: &String) {
+    pub(in crate::database) fn del_from_tags_by_name_and_namespace(
+        &self,
+        name: &String,
+        namespace: &String,
+    ) {
         self.transaction_start();
         let tn = self.write_conn.lock();
         let inp = "DELETE FROM Tags WHERE name = ? AND namespace = ?";
@@ -1883,24 +2551,37 @@ RETURNING id;
     }
 
     /// Sqlite wrapper for deleteing a relationship from table.
-    pub fn delete_relationship_sql(&self, file_id: &usize, tag_id: &usize) {
-        let tn = self.write_conn.lock();
+    pub(in crate::database) fn delete_relationship_sql(
+        &self,
+        tn: &Transaction,
+        file_id: &usize,
+        tag_id: &usize,
+    ) {
         logging::log(format!(
             "Removing Relationship where fileid = {} and tagid = {}",
             file_id, tag_id
         ));
+        let greq = self.is_tag_count_greq_rel_limit(tn, tag_id);
 
-        let inp = "DELETE FROM Relationship WHERE fileid = ? AND tagid = ?";
-        {
-            wait_until_sqlite_ok!(
-                tn.execute(inp, params![file_id.to_string(), tag_id.to_string()])
-            )
-            .unwrap();
+        let inp = match greq {
+            GreqOrEq::EqualTo => "DELETE FROM Relationship_Popular WHERE fileid = ? AND tagid = ?",
+            GreqOrEq::LessThan => "DELETE FROM Relationship WHERE fileid = ? AND tagid = ?",
+            GreqOrEq::GreaterThan => {
+                "DELETE FROM Relationship_Popular WHERE fileid = ? AND tagid = ?"
+            }
+        };
+
+        tn.execute(inp, params![file_id, tag_id]).unwrap();
+        match greq {
+            GreqOrEq::EqualTo => {
+                self.migrate_relationship_popular_tagid(tn, tag_id, false);
+            }
+            _ => {}
         }
     }
 
     /// Sqlite wrapper for deleteing a parent from table.
-    pub fn delete_parent_sql(&self, tag_id: &usize, relate_tag_id: &usize) {
+    pub(in crate::database) fn delete_parent_sql(&self, tag_id: &usize, relate_tag_id: &usize) {
         let tn = self.write_conn.lock();
         let inp = "DELETE FROM Parents WHERE tag_id = ? AND relate_tag_id = ?";
         {
@@ -1911,9 +2592,8 @@ RETURNING id;
     }
 
     /// Sqlite wrapper for deleteing a tag from table.
-    pub fn delete_tag_sql(&self, tag_id: &usize) {
+    pub(in crate::database) fn delete_tag_sql(&self, tn: &Transaction, tag_id: &usize) {
         logging::log(format!("Removing tag with id: {}", tag_id));
-        let tn = self.write_conn.lock();
         let inp = "DELETE FROM Tags WHERE id = ?";
         {
             let _ = wait_until_sqlite_ok!(tn.execute(inp, params![tag_id.to_string()]));
@@ -1921,7 +2601,7 @@ RETURNING id;
     }
 
     /// Sqlite wrapper for deleteing a tag from table.
-    pub fn delete_namespace_sql(&self, namespace_id: &usize) {
+    pub(in crate::database) fn delete_namespace_sql(&self, namespace_id: &usize) {
         let tn = self.write_conn.lock();
         logging::info_log(format!(
             "Deleting namespace with id : {} from db",
