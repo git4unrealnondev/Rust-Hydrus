@@ -115,7 +115,7 @@ ORDER BY t.count DESC
 LIMIT ?;"#
             }
             sharedtypes::TagPartialSearchType::PopularFts => {
-r#"
+                r#"
 SELECT t.id, t.count
 FROM Tags_Popular_fts f
 JOIN Tags t ON t.id = f.rowid
@@ -123,10 +123,9 @@ WHERE Tags_Popular_fts MATCH ?
 ORDER BY bm25(Tags_Popular_fts)
 LIMIT ?;
 "#
-
-            },
+            }
             sharedtypes::TagPartialSearchType::PopularCount => {
- r#"
+                r#"
         SELECT t.id, t.count
 FROM Tags_Popular_fts f
 JOIN Tags t ON t.id = f.rowid
@@ -255,8 +254,7 @@ LIMIT ?;"#
             .unwrap();
         tn.execute("DROP TRIGGER IF EXISTS relationship_insert_count", [])
             .unwrap();
-
-            }
+    }
 
     ///
     /// Creates the parents table and creates indexes
@@ -299,135 +297,157 @@ LIMIT ?;"#
     ///
     /// Creates tags_fts and tags_popular_fts and populates them with data
     ///
-pub(in crate::database) fn tags_fts_create_v2(&self, tn: &Transaction) {
-
-        tn.execute("DROP TABLE IF EXISTS Tags_Popular_fts", []).unwrap();
+    pub(in crate::database) fn tags_fts_create_v2(&self, tn: &Transaction) {
+        tn.execute("DROP TABLE IF EXISTS Tags_Popular_fts", [])
+            .unwrap();
         tn.execute("DROP TABLE IF EXISTS Tags_fts", []).unwrap();
         tn.execute("DROP TRIGGER IF EXISTS Tags_ai", []).unwrap();
         tn.execute("DROP TRIGGER IF EXISTS Tags_ad", []).unwrap();
         tn.execute("DROP TRIGGER IF EXISTS Tags_au", []).unwrap();
-        tn.execute("DROP TRIGGER IF EXISTS Tags_Popular_ai", []).unwrap();
-        tn.execute("DROP TRIGGER IF EXISTS Tags_Popular_ad", []).unwrap();
-        tn.execute("DROP TRIGGER IF EXISTS Tags_Popular_au", []).unwrap();
-let popular_lock = self.popular_relationship_count.lock();
+        tn.execute("DROP TRIGGER IF EXISTS Tags_Popular_ai", [])
+            .unwrap();
+        tn.execute("DROP TRIGGER IF EXISTS Tags_Popular_ad", [])
+            .unwrap();
+        tn.execute("DROP TRIGGER IF EXISTS Tags_Popular_au", [])
+            .unwrap();
+        let popular_lock = self.popular_relationship_count.lock();
 
         dbg!(&popular_lock);
         if let Some(count) = *popular_lock {
-
-                tn.execute(
-            r#"
+            tn.execute(
+                r#"
         CREATE VIRTUAL TABLE Tags_fts USING fts5(
     name,
     namespace UNINDEXED,
     tokenize = "trigram",
 );"#,
-            [],
-        )
-        .unwrap();
+                [],
+            )
+            .unwrap();
 
-                tn.execute(
+            tn.execute(
         &format!(    "
         INSERT INTO Tags_fts(rowid, name, namespace) SELECT id, REPLACE(REPLACE(name, '_', ' '), '/', ' '), namespace FROM Tags WHERE count < {};", count),
             [],
         )
         .unwrap();
-        tn.execute("INSERT INTO Tags_fts(Tags_fts) VALUES('optimize');", [])
-            .unwrap();
+            tn.execute("INSERT INTO Tags_fts(Tags_fts) VALUES('optimize');", [])
+                .unwrap();
 
-        tn.execute(
-       &format!(     "
+            tn.execute(
+                &format!(
+                    "
         CREATE TRIGGER IF NOT EXISTS Tags_ai AFTER INSERT ON Tags WHEN new.count < {}
         BEGIN
           INSERT INTO Tags_fts(rowid, name, namespace) 
           VALUES (new.id, new.name, new.namespace);
         END;
-        ", count),
-            [],
-        )
-        .unwrap();
+        ",
+                    count
+                ),
+                [],
+            )
+            .unwrap();
 
-        tn.execute(
-            &format!("
+            tn.execute(
+                &format!(
+                    "
         CREATE TRIGGER IF NOT EXISTS Tags_ad AFTER DELETE ON Tags WHEN new.count >= {}
         BEGIN
           DELETE FROM Tags_fts WHERE rowid = old.id;
         END;
-        ", count),
-            [],
-        )
-        .unwrap();
+        ",
+                    count
+                ),
+                [],
+            )
+            .unwrap();
 
-        tn.execute(
-            &format!("
+            tn.execute(
+                &format!(
+                    "
         CREATE TRIGGER IF NOT EXISTS Tags_au AFTER UPDATE ON Tags WHEN new.count < {}
         BEGIN
           UPDATE Tags_fts
           SET name = new.name, namespace = new.namespace
           WHERE rowid = old.id;
         END;
-        ", count),
-            [],
-        )
-        .unwrap();
+        ",
+                    count
+                ),
+                [],
+            )
+            .unwrap();
 
             // Popular fts
             tn.execute(
-            r#"
+                r#"
         CREATE VIRTUAL TABLE Tags_Popular_fts USING fts5(
     name,
     namespace UNINDEXED,
     tokenize = "trigram",
 );"#,
-            [],
-        )
-        .unwrap();
+                [],
+            )
+            .unwrap();
 
-                tn.execute(
+            tn.execute(
         &format!(    "
         INSERT INTO Tags_Popular_fts(rowid, name, namespace) SELECT id, REPLACE(REPLACE(name, '_', ' '), '/', ' '), namespace FROM Tags WHERE count >= {};", count),
             [],
         )
         .unwrap();
-        tn.execute("INSERT INTO Tags_Popular_fts(Tags_Popular_fts) VALUES('optimize');", [])
+            tn.execute(
+                "INSERT INTO Tags_Popular_fts(Tags_Popular_fts) VALUES('optimize');",
+                [],
+            )
             .unwrap();
 
-        tn.execute(
-       &format!(     "
+            tn.execute(
+                &format!(
+                    "
         CREATE TRIGGER IF NOT EXISTS Tags_Popular_ai AFTER INSERT ON Tags WHEN new.count >= {}
         BEGIN
           INSERT INTO Tags_Popular_fts(rowid, name, namespace) 
           VALUES (new.id, new.name, new.namespace);
         END;
-        ", count),
-            [],
-        )
-        .unwrap();
+        ",
+                    count
+                ),
+                [],
+            )
+            .unwrap();
 
-        tn.execute(
-            &format!("
+            tn.execute(
+                &format!(
+                    "
         CREATE TRIGGER IF NOT EXISTS Tags_Popular_ad AFTER DELETE ON Tags WHEN new.count < {}
         BEGIN
           DELETE FROM Tags_Popular_fts WHERE rowid = old.id;
         END;
-        ", count),
-            [],
-        )
-        .unwrap();
+        ",
+                    count
+                ),
+                [],
+            )
+            .unwrap();
 
-        tn.execute(
-            &format!("
+            tn.execute(
+                &format!(
+                    "
         CREATE TRIGGER IF NOT EXISTS Tags_Popular_au AFTER UPDATE ON Tags WHEN new.count >= {}
         BEGIN
           UPDATE Tags_Popular_fts
           SET name = new.name, namespace = new.namespace
           WHERE rowid = old.id;
         END;
-        ", count),
-            [],
-        )
-        .unwrap();
-
-    }
+        ",
+                    count
+                ),
+                [],
+            )
+            .unwrap();
+        }
     }
 
     ///
@@ -435,7 +455,7 @@ let popular_lock = self.popular_relationship_count.lock();
     /// Adds triggers to keep it up to date
     ///
     pub(in crate::database) fn tags_fts_create_v1(&self, tn: &Transaction) {
-                tn.execute(
+        tn.execute(
             r#"
         CREATE VIRTUAL TABLE Tags_fts USING fts5(
     name,
@@ -449,7 +469,7 @@ let popular_lock = self.popular_relationship_count.lock();
         )
         .unwrap();
 
-                tn.execute(
+        tn.execute(
             "
         INSERT INTO Tags_fts(rowid, name)
 SELECT id,
@@ -1438,17 +1458,17 @@ RETURNING id;
         name: &String,
         description: &Option<String>,
         name_id: Option<usize>,
-    )-> usize {
+    ) -> usize {
         {
             let inp = "INSERT INTO Namespace (id, name, description) VALUES(?, ?, ?)";
             {
-                let _ = wait_until_sqlite_ok!(tn.execute(inp, params![name_id, name, description]));wait_until_sqlite_ok!(tn.query_row(
+                let _ = wait_until_sqlite_ok!(tn.execute(inp, params![name_id, name, description]));
+                wait_until_sqlite_ok!(tn.query_row(
                     "SELECT id FROM Namespace WHERE name = ?",
                     params![name],
                     |row| row.get(0),
                 ))
                 .unwrap()
-
             }
         }
     }
@@ -1961,13 +1981,15 @@ RETURNING id;
             [],
         )
         .unwrap();
-tn.execute("DROP TRIGGER IF EXISTS Tags_ai", []).unwrap();
+        tn.execute("DROP TRIGGER IF EXISTS Tags_ai", []).unwrap();
         tn.execute("DROP TRIGGER IF EXISTS Tags_ad", []).unwrap();
         tn.execute("DROP TRIGGER IF EXISTS Tags_au", []).unwrap();
-        tn.execute("DROP TRIGGER IF EXISTS Tags_Popular_ai", []).unwrap();
-        tn.execute("DROP TRIGGER IF EXISTS Tags_Popular_ad", []).unwrap();
-        tn.execute("DROP TRIGGER IF EXISTS Tags_Popular_au", []).unwrap();
-
+        tn.execute("DROP TRIGGER IF EXISTS Tags_Popular_ai", [])
+            .unwrap();
+        tn.execute("DROP TRIGGER IF EXISTS Tags_Popular_ad", [])
+            .unwrap();
+        tn.execute("DROP TRIGGER IF EXISTS Tags_Popular_au", [])
+            .unwrap();
     }
 
     fn create_trigger_manage_relationship_count_v1(&self, tn: &Transaction) {
@@ -2026,80 +2048,97 @@ END;",
         )
         .unwrap();
 
-
-let popular_lock = self.popular_relationship_count.lock();
+        let popular_lock = self.popular_relationship_count.lock();
         if let Some(count) = *popular_lock {
-        tn.execute(
-       &format!(     "
+            tn.execute(
+                &format!(
+                    "
         CREATE TRIGGER IF NOT EXISTS Tags_ai AFTER INSERT ON Tags WHEN new.count < {}
         BEGIN
           INSERT INTO Tags_fts(rowid, name, namespace) 
           VALUES (new.id, new.name, new.namespace);
         END;
-        ", count),
-            [],
-        )
-        .unwrap();
+        ",
+                    count
+                ),
+                [],
+            )
+            .unwrap();
 
-        tn.execute(
-            &format!("
+            tn.execute(
+                &format!(
+                    "
         CREATE TRIGGER IF NOT EXISTS Tags_ad AFTER DELETE ON Tags WHEN new.count >= {}
         BEGIN
           DELETE FROM Tags_fts WHERE rowid = old.id;
         END;
-        ", count),
-            [],
-        )
-        .unwrap();
+        ",
+                    count
+                ),
+                [],
+            )
+            .unwrap();
 
-        tn.execute(
-            &format!("
+            tn.execute(
+                &format!(
+                    "
         CREATE TRIGGER IF NOT EXISTS Tags_au AFTER UPDATE ON Tags WHEN new.count < {}
         BEGIN
           UPDATE Tags_fts
           SET name = new.name, namespace = new.namespace
           WHERE rowid = old.id;
         END;
-        ", count),
-            [],
-        )
-        .unwrap();tn.execute(
-       &format!(     "
+        ",
+                    count
+                ),
+                [],
+            )
+            .unwrap();
+            tn.execute(
+                &format!(
+                    "
         CREATE TRIGGER IF NOT EXISTS Tags_Popular_ai AFTER INSERT ON Tags WHEN new.count >= {}
         BEGIN
           INSERT INTO Tags_Popular_fts(rowid, name, namespace) 
           VALUES (new.id, new.name, new.namespace);
         END;
-        ", count),
-            [],
-        )
-        .unwrap();
+        ",
+                    count
+                ),
+                [],
+            )
+            .unwrap();
 
-        tn.execute(
-            &format!("
+            tn.execute(
+                &format!(
+                    "
         CREATE TRIGGER IF NOT EXISTS Tags_Popular_ad AFTER DELETE ON Tags WHEN new.count < {}
         BEGIN
           DELETE FROM Tags_Popular_fts WHERE rowid = old.id;
         END;
-        ", count),
-            [],
-        )
-        .unwrap();
+        ",
+                    count
+                ),
+                [],
+            )
+            .unwrap();
 
-        tn.execute(
-            &format!("
+            tn.execute(
+                &format!(
+                    "
         CREATE TRIGGER IF NOT EXISTS Tags_Popular_au AFTER UPDATE ON Tags WHEN new.count >= {}
         BEGIN
           UPDATE Tags_Popular_fts
           SET name = new.name, namespace = new.namespace
           WHERE rowid = old.id;
         END;
-        ", count),
-            [],
-        )
-        .unwrap();
+        ",
+                    count
+                ),
+                [],
+            )
+            .unwrap();
         }
-
     }
 
     ///
@@ -2137,7 +2176,6 @@ let popular_lock = self.popular_relationship_count.lock();
                 )
                 .unwrap();
 
-
                 // Remove the relationships from `Relationship` where the tag count is between new_count and old_count.
                 tn.execute(
                     "DELETE FROM Relationship
@@ -2151,7 +2189,6 @@ let popular_lock = self.popular_relationship_count.lock();
                     params![old_count, new_count],
                 )
                 .unwrap();
-
             }
             // Handle the case where the count increases (old_count < new_count).
             else if new_count > old_count {
@@ -2163,15 +2200,15 @@ let popular_lock = self.popular_relationship_count.lock();
             WHERE tagid IN (SELECT id FROM Tags WHERE count <= ? );",
                     params![new_count],
                 )
-                .unwrap();tn.execute(
+                .unwrap();
+                tn.execute(
                     "INSERT OR REPLACE INTO Tags_fts (rowid, name, namespace)
             SELECT id, name, namespace 
             FROM Tags
             WHERE count <= ?;",
-                    params![ new_count],
+                    params![new_count],
                 )
                 .unwrap();
-
 
                 // Delete the relationships from `Relationship_Popular` where the tag count is between old_count and new_count.
                 tn.execute(
@@ -2186,7 +2223,6 @@ let popular_lock = self.popular_relationship_count.lock();
                     params![new_count],
                 )
                 .unwrap();
-
             }
             self.create_trigger_manage_relationship_count_v1(tn);
         }

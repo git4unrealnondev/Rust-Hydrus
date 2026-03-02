@@ -356,7 +356,9 @@ impl Main {
         match self._cache {
             CacheType::Bare => {}
             _ => {
-                self._inmemdb.write().add_dead_source_url(url_string.to_string());
+                self._inmemdb
+                    .write()
+                    .add_dead_source_url(url_string.to_string());
             }
         }
     }
@@ -816,12 +818,13 @@ impl Main {
             .filter(|&id| id != driver_tag)
             .collect();
 
-        let table = if self.is_tag_count_greater_rel_limit(&conn.transaction().unwrap(), &driver_tag) {
-    "Relationship_Popular"
-} else {
-    "Relationship"
-};
-        
+        let table =
+            if self.is_tag_count_greater_rel_limit(&conn.transaction().unwrap(), &driver_tag) {
+                "Relationship_Popular"
+            } else {
+                "Relationship"
+            };
+
         // Build search SQL
         let mut sql = format!(
             "SELECT r.fileid
@@ -832,10 +835,10 @@ impl Main {
 
         for tag in &remaining_and {
             let table = if self.is_tag_count_greater_rel_limit(&conn.transaction().unwrap(), &tag) {
-    "Relationship_Popular"
-} else {
-    "Relationship"
-};
+                "Relationship_Popular"
+            } else {
+                "Relationship"
+            };
 
             sql.push_str(&format!(
                 "
@@ -844,7 +847,7 @@ impl Main {
                 WHERE r2.tagid = ?
                   AND r2.fileid = r.fileid
             )"
-            ) );
+            ));
             params.push(*tag);
         }
 

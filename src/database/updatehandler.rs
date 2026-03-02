@@ -1110,7 +1110,7 @@ WHERE p.tag_id != p.relate_tag_id;",
         self.analyze();
     }
     pub fn db_update_ten_to_eleven(&mut self) {
-            self.backup_db();
+        self.backup_db();
         {
             let mut wruite_conn = self.write_conn.lock();
             let tn = wruite_conn.transaction().unwrap();
@@ -1119,22 +1119,19 @@ WHERE p.tag_id != p.relate_tag_id;",
             self.get_relationship_popular_division_count(&tn);
             self.get_relationship_popular_division_count_old(&tn);
 
-        self.relationship_create_v3(&tn);   
-        self.tags_fts_create_v2(&tn);
+            self.relationship_create_v3(&tn);
+            self.tags_fts_create_v2(&tn);
 
-let count = self.get_relationship_popular_division_count(&tn);
+            let count = self.get_relationship_popular_division_count(&tn);
 
-        // Setus up triggers for the migration of popular tags
-        self.migrate_relationship_popular_count(&tn, &0, &count);
+            // Setus up triggers for the migration of popular tags
+            self.migrate_relationship_popular_count(&tn, &0, &count);
 
-
-
-    tn.commit().unwrap();
+            tn.commit().unwrap();
         }
 
         self.db_version_set(11);
         self.vacuum();
         self.analyze();
-
     }
 }

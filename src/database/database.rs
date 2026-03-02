@@ -891,6 +891,14 @@ PRAGMA journal_mode = WAL;
         }
         self.tags_fts_create_v2(tn);
         self.namespace_properties_create_v1(tn);
+
+
+let count = self.get_relationship_popular_division_count(&tn);
+
+            // Setus up triggers for the migration of popular tags
+            self.migrate_relationship_popular_count(&tn, &0, &count);
+
+
     }
 
     fn updatedb(&self, tn: &Transaction) {
@@ -1099,9 +1107,7 @@ PRAGMA journal_mode = WAL;
         }
 
         match self._cache {
-            CacheType::Bare => {
-                self.namespace_add_sql(tn, name, description, None)
-            }
+            CacheType::Bare => self.namespace_add_sql(tn, name, description, None),
             _ => {
                 let out = self.namespace_add_inmemdb(tn, name.clone(), description.clone());
 
