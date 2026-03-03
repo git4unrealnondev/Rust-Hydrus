@@ -1955,10 +1955,28 @@ RETURNING id;
         };
 
         tn.execute(sql, params![id]).unwrap();
+
+
+        let sql = if popular {
+            "INSERT OR IGNORE INTO Tags_Popular_fts (rowid, name, namespace) SELECT rowid, name, namespace FROM Tags_fts WHERE rowid = ?"
+        } else {
+            "INSERT OR IGNORE INTO Tags_fts (rowid, name, namespace) SELECT rowid, name, namespace FROM Tags_Popular_fts WHERE rowid = ?"
+        };
+
+        tn.execute(sql, params![id]).unwrap();
+
+
         let sql = if popular {
             "DELETE FROM Relationship WHERE tagid = ?"
         } else {
             "DELETE FROM Relationship_Popular WHERE tagid = ?"
+        };
+
+        tn.execute(sql, params![id]).unwrap();
+let sql = if popular {
+            "DELETE FROM Tags_fts WHERE rowid = ?"
+        } else {
+            "DELETE FROM Tags_Popular_fts WHERE rowid = ?"
         };
 
         tn.execute(sql, params![id]).unwrap();
