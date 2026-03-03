@@ -1125,7 +1125,8 @@ WHERE p.tag_id != p.relate_tag_id;",
             let count = self.get_relationship_popular_division_count(&tn);
 
             // Setus up triggers for the migration of popular tags
-            self.migrate_relationship_popular_count(&tn, &0, &count);
+            // big number is max for sqlitee.
+            self.migrate_relationship_popular_count(&tn, &922372036854775807, &count);
 
             tn.commit().unwrap();
         }

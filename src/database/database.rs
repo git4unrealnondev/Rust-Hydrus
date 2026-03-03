@@ -891,13 +891,10 @@ PRAGMA journal_mode = WAL;
         self.tags_fts_create_v2(tn);
         self.namespace_properties_create_v1(tn);
 
+        let count = self.get_relationship_popular_division_count(tn);
 
-let count = self.get_relationship_popular_division_count(&tn);
-
-            // Setus up triggers for the migration of popular tags
-            self.migrate_relationship_popular_count(&tn, &0, &count);
-
-
+        // Setus up triggers for the migration of popular tags
+        self.migrate_relationship_popular_count(tn, &922372036854775807, &count);
     }
 
     fn updatedb(&self, tn: &Transaction) {
