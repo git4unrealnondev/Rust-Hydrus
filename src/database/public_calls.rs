@@ -200,10 +200,13 @@ impl Main {
     /// Adds the tag to the db. commits on finish
     ///
     pub fn tag_add_tagobject(&self, tag: &sharedtypes::TagObject) -> Option<usize> {
+       let out;
         let mut write_conn = self.write_conn.lock();
+        {
         let tn = write_conn.transaction().unwrap();
-        let out = self.tag_add_tagobject_internal(&tn, tag);
+        out = self.tag_add_tagobject_internal(&tn, tag);
         tn.commit().unwrap();
+        }
         out
     }
     /// condesnes everything in db
@@ -1145,37 +1148,7 @@ impl Main {
             .to_owned()
     }
 
-    ///
-    /// Starts an exclusive write transaction
-    ///
-    pub(super) fn transaction_exclusive_start(&self) {
-        self.transaction_flush();
-
-        let mut transaction = self.write_conn_istransaction.lock();
-        if !*transaction {
-            *transaction = true;
-            self.write_conn
-                .lock()
-                .execute("BEGIN EXCLUSIVE TRANSACTION", [])
-                .unwrap();
-        }
-    }
-    ///
-    /// Starts an exclusive write transaction
-    ///
-    pub(super) fn transaction_start(&self) {
-        self.transaction_flush();
-
-        let mut transaction = self.write_conn_istransaction.lock();
-        if !*transaction {
-            *transaction = true;
-            self.write_conn
-                .lock()
-                .execute("BEGIN TRANSACTION", [])
-                .unwrap();
-        }
-    }
-
+    
     ///
     /// commits an exclusive write transaction
     ///

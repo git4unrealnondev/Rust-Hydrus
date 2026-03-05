@@ -49,14 +49,14 @@ enum GreqOrEq {
     EqualTo,
     LessThan,
 }
-
+/*
 /// Starts a transaction for bulk inserts.
 pub(in crate::database) fn transaction_start<'a>(
     conn: &'a mut PooledConnection<SqliteConnectionManager>,
 ) -> Transaction<'a> {
     //let mut con = self.pool.get().unwrap();
     conn.transaction().unwrap()
-}
+}*/
 
 impl Main {
     /// Finds all tag ids where they dont hace a relationship
@@ -1009,7 +1009,7 @@ HAVING COUNT(r.fileid) {dir} ?;"
 
     /// Adds a job to sql
     pub(in crate::database) fn jobs_add_sql(&self, data: &sharedtypes::DbJobsObj) {
-        self.transaction_start();
+        
         let tn = self.write_conn.lock();
         let inp = "INSERT INTO Jobs VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
         {
@@ -2192,7 +2192,7 @@ WHERE count BETWEEN ? AND ?",
 
     /// Updates job by id
     pub(in crate::database) fn jobs_update_by_id(&self, data: &sharedtypes::DbJobsObj) {
-        self.transaction_start();
+        
         let tn = self.write_conn.lock();
         let inp = "UPDATE Jobs SET id=?, time=?, reptime=?, Manager=?, priority=?,cachetime=?,cachechecktype=?, site=?, param=?, SystemData=?, UserData=? WHERE id = ?";
         let _ = tn.execute(
@@ -2373,7 +2373,7 @@ WHERE count BETWEEN ? AND ?",
     }
 
     pub(super) fn add_dead_url_sql(&self, url: &String) {
-        self.transaction_start();
+        
         let tn = self.write_conn.lock();
         let _ = wait_until_sqlite_ok!(tn.execute(
             "INSERT INTO dead_source_urls(dead_url) VALUES (?)",
@@ -2514,7 +2514,7 @@ WHERE count BETWEEN ? AND ?",
 
     /// Sets advanced settings for journaling. NOTE Experimental badness
     pub(in crate::database) fn db_open(&self) {
-        self.transaction_start();
+        
         let tn = self.write_conn.lock();
         let _ = wait_until_sqlite_ok!(tn.execute("PRAGMA secure_delete = 0", params![]));
         let _ = wait_until_sqlite_ok!(tn.execute("PRAGMA busy_timeout = 5000", params![]));
@@ -2527,7 +2527,7 @@ WHERE count BETWEEN ? AND ?",
 
     /// Removes a job from sql table by id
     pub(in crate::database) fn del_from_jobs_table_sql_better(&self, id: &usize) {
-        self.transaction_start();
+        
         {
             let tn = self.write_conn.lock();
             //let inp = "DELETE FROM Jobs WHERE id = ? LIMIT 1";
@@ -2542,7 +2542,7 @@ WHERE count BETWEEN ? AND ?",
         name: &String,
         namespace: &String,
     ) {
-        self.transaction_start();
+        
         let tn = self.write_conn.lock();
         let inp = "DELETE FROM Tags WHERE name = ? AND namespace = ?";
         wait_until_sqlite_ok!(tn.execute(inp, params![name, namespace])).unwrap();

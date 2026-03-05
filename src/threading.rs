@@ -187,7 +187,7 @@ impl Worker {
                         "Worker {} -- Stopping loop because we have no jobs.",
                         &id
                     ));
-                    database.transaction_flush();
+                    
                     break 'bigloop;
                 }
 
@@ -306,7 +306,7 @@ impl Worker {
                                 // job next
                                 database.jobs_update_db(data);
                             }
-                            database.transaction_flush();
+                            
                         }
                     }
                     // Loads anything passed from the scraper at compile time into the user_data
@@ -485,7 +485,7 @@ impl Worker {
                                             job_storage.jobs_add(scraper.clone(), scraper_data_return.job.clone());
                                         }
 
-                                        database.transaction_flush();
+                                        
 
                                         // Spawns the multithreaded pool
                                         let pool = ThreadPool::default();
@@ -575,7 +575,7 @@ impl Worker {
                         }
                     }
                 } );
-                database.transaction_flush();
+                
             }
             threadflagcontrol.stop();
             jobstorage.write().clear_previously_seen_cache(&scraper);
@@ -674,7 +674,7 @@ fn download_add_to_db(
     match blopt {
         download::FileReturnStatus::File((hash, file_ext, file_id)) => {
             //let fileid;
-            database.transaction_flush();
+            
             /* {
                         let ext_id = database.extension_put_string(&file_ext);
 
@@ -690,7 +690,7 @@ fn download_add_to_db(
                         let tagid = database.tag_add(source, source_url_ns_id, None);
                         database.relationship_add(fileid, tagid);
                     }
-            database.transaction_flush();*/
+            */
             return Some(file_id);
         }
         download::FileReturnStatus::DeadUrl(dead_url) => {
@@ -698,7 +698,7 @@ fn download_add_to_db(
         }
         _ => {}
     }
-    database.transaction_flush();
+    
     None
 }
 /*

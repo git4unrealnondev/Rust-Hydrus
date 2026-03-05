@@ -153,7 +153,7 @@ fn main() {
             }
         }
 
-        database.transaction_flush();
+        
 
         // Actually upgrades the DB from scraper calls
         for db_version in upgradeversvec.iter() {
@@ -164,7 +164,7 @@ fn main() {
         //cli::main(database.clone(), globalload);
         cli::main(database.clone());
 
-        database.transaction_flush();
+        
     }
     {
         globalload.reload_regex();
@@ -190,7 +190,7 @@ fn main() {
     }
 
     // One flush after all the on_start unless needed
-    //database.transaction_flush();
+    //
 
     // Creates a threadhandler that manages callable threads.
     let mut threadhandler = threading::Threads::new();
@@ -246,7 +246,7 @@ fn main() {
     // but hey. :D
     //database.transaction_flush(tn);
 
-    database.transaction_flush();
+    
 
     let mills_fifty = time::Duration::from_millis(50);
     std::thread::sleep(mills_fifty);

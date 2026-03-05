@@ -684,20 +684,6 @@ impl RustHydrusApiClient {
         let res = ureq::get(url).call()?.body_mut().read_json::<String>()?;
         Ok(res)
     }
-    /// Starts an exclusive write transaction
-    pub fn transaction_exclusive_start(&self) -> Result<(), ureq::Error> {
-        let url = format!(
-            "{}/{}/{}", self.base_url, "main", "transaction_exclusive_start"
-        );
-        let res = ureq::get(url).call()?.body_mut().read_json::<()>()?;
-        Ok(res)
-    }
-    /// Starts an exclusive write transaction
-    pub fn transaction_start(&self) -> Result<(), ureq::Error> {
-        let url = format!("{}/{}/{}", self.base_url, "main", "transaction_start");
-        let res = ureq::get(url).call()?.body_mut().read_json::<()>()?;
-        Ok(res)
-    }
     /// commits an exclusive write transaction
     pub fn transaction_flush(&self) -> Result<(), ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "transaction_flush");

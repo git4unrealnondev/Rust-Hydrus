@@ -422,7 +422,6 @@ pub fn dbactions_to_function(
 
         types::SupportedDBRequests::CondenseTags() => {
             let unwrappy = database;
-            unwrappy.transaction_flush();
             unwrappy.condense_tags();
             data_size_to_b(&true)
         }
@@ -492,7 +491,6 @@ pub fn dbactions_to_function(
         types::SupportedDBRequests::PutJob(job) => {
             let unwrappy = database;
             let _ = unwrappy.jobs_add_new(job);
-            unwrappy.transaction_flush();
             data_size_to_b(&true)
         }
         types::SupportedDBRequests::GetNamespaceIDsAll => {
@@ -674,12 +672,10 @@ pub fn dbactions_to_function(
         types::SupportedDBRequests::LoadTable(table) => {
             let unwrappy = database;
             unwrappy.load_table(&table);
-            unwrappy.transaction_flush();
             data_size_to_b(&true)
         }
         types::SupportedDBRequests::TransactionFlush() => {
             let unwrappy = database;
-            unwrappy.transaction_flush();
 
             data_size_to_b(&true)
         }

@@ -123,11 +123,12 @@ impl Main {
 PRAGMA journal_mode = MEMORY;
     ",
                     )?;
-
+/*
                     // Enable SQL tracing
-                    /*   conn.trace(Some(|sql| {
+                       conn.trace(Some(|sql| {
                         println!("[SQL TRACE] {}", sql);
-                    }));*/
+                    }));
+*/
                     Ok(())
                 });
                 let pool = r2d2::Builder::new()
@@ -697,7 +698,7 @@ PRAGMA journal_mode = WAL;
         }
 
         if flag {
-            let mut write_conn = self.get_database_connection();
+            let mut write_conn = self.write_conn.lock();
             let mut tn = write_conn.transaction().unwrap();
             logging::info_log("Relationship-Tag-Relations checker condensing tags");
             self.condense_tags_internal(&mut tn);
@@ -1174,13 +1175,14 @@ PRAGMA journal_mode = WAL;
 
     /// Alters a tables name
     pub(super) fn alter_table(&self, original_table: &String, new_table: &String) {
-        self.transaction_start();
-        let tn = self.write_conn.lock();
+        let mut write_conn = self.write_conn.lock();
+        let tn = write_conn.transaction().unwrap();
         tn.execute(
             "ALTER TABLE ? RENAME TO ?",
             params![original_table, new_table],
         )
         .unwrap();
+        tn.commit().unwrap();
     }
 
     /// Checks if table exists in DB if it do then delete.
@@ -1238,7 +1240,6 @@ PRAGMA journal_mode = WAL;
     }
 
     pub(super) fn db_drop_table(&self, table: &String) {
-        self.transaction_exclusive_start();
         let tn = self.write_conn.lock();
         let query_string = format!("DROP TABLE IF EXISTS {};", table);
         let mut toexec = tn.prepare(&query_string).unwrap();
