@@ -153,8 +153,6 @@ fn main() {
             }
         }
 
-        
-
         // Actually upgrades the DB from scraper calls
         for db_version in upgradeversvec.iter() {
             globalload.run_upgrade_logic(db_version);
@@ -163,8 +161,6 @@ fn main() {
         // Processes any CLI input here
         //cli::main(database.clone(), globalload);
         cli::main(database.clone());
-
-        
     }
     {
         globalload.reload_regex();
@@ -245,8 +241,6 @@ fn main() {
     // This wait is done for allowing any thread to "complete" Shouldn't be nessisary
     // but hey. :D
     //database.transaction_flush(tn);
-
-    
 
     let mills_fifty = time::Duration::from_millis(50);
     std::thread::sleep(mills_fifty);

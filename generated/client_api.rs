@@ -63,12 +63,6 @@ impl RustHydrusApiClient {
         Ok(res)
     }
     ///
-    pub fn extension_put_string(&self, ext: &String) -> Result<usize, ureq::Error> {
-        let url = format!("{}/{}/{}", self.base_url, "main", "extension_put_string");
-        let res = ureq::post(url).send_json(&(ext))?.body_mut().read_json::<usize>()?;
-        Ok(res)
-    }
-    ///
     pub fn file_add(
         &self,
         file: sharedtypes::DbFileStorage,
@@ -507,15 +501,6 @@ impl RustHydrusApiClient {
             "{}/{}/{}", self.base_url, "main", "extensions_videos_get_fileid"
         );
         let res = ureq::get(url).call()?.body_mut().read_json::<HashSet<usize>>()?;
-        Ok(res)
-    }
-    /// Gets an ID if a extension string exists
-    pub fn extension_get_id(&self, ext: &String) -> Result<Option<usize>, ureq::Error> {
-        let url = format!("{}/{}/{}", self.base_url, "main", "extension_get_id");
-        let res = ureq::post(url)
-            .send_json(&(ext))?
-            .body_mut()
-            .read_json::<Option<usize>>()?;
         Ok(res)
     }
     /// Gets an ID if a extension string exists

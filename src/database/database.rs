@@ -91,14 +91,15 @@ impl Main {
                 let manager = SqliteConnectionManager::memory();
                 let pool = r2d2::Builder::new().max_size(20).build(manager).unwrap();
                 let write_conn = Arc::new(Mutex::new({
-let mut pool = pool.get().unwrap();
-pool.execute_batch("PRAGMA busy_timeout = 20000;
+                    let mut pool = pool.get().unwrap();
+                    pool.execute_batch(
+                        "PRAGMA busy_timeout = 20000;
             PRAGMA page_size = 8192;
-").unwrap();
+",
+                    )
+                    .unwrap();
 
                     pool
-
-
                 }));
                 let write_conn_istransaction = Arc::new(Mutex::new(false));
                 let memdbmain = Main {
@@ -134,7 +135,7 @@ PRAGMA journal_mode = MEMORY;
                     )?;
 
                     // Enable SQL tracing
-                       conn.trace(Some(|sql| {
+                    conn.trace(Some(|sql| {
                         println!("[SQL TRACE] {}", sql);
                     }));
 
@@ -1271,9 +1272,30 @@ PRAGMA journal_mode = WAL;
         tn: &Transaction,
         ext: &String,
     ) -> usize {
-        match self.extension_get_id(ext) {
+        match self.extension_get_id_sql(tn, ext) {
             Some(id) => id,
             None => self.extension_put_id_ext_sql(tn, None, ext),
+        }
+    }
+
+    pub fn extension_put_string(&self, ext: &String) -> usize {
+        if let Some(out) = self.extension_get_id(ext) {
+            return out;
+        }
+
+        let out = self.extension_put_string(ext);
+        out
+    }
+
+    ///
+    /// Gets an ID if a extension string exists
+    ///
+    pub fn extension_get_id(&self, ext: &String) -> Option<usize> {
+        let mut db = self.get_database_connection();
+        let tn = db.transaction().unwrap();
+        match self._cache {
+            CacheType::Bare => self.extension_get_id_sql(&tn, ext),
+            _ => self._inmemdb.read().extension_get_id(ext).copied(),
         }
     }
 
@@ -1368,27 +1390,34 @@ PRAGMA journal_mode = WAL;
             }
         }
     }
+    ///
+    /// Gets a fileid from a hash
+    ///
+    pub fn file_get_hash_internal(&self, tn: &Transaction, hash: &String) -> Option<usize> {
+        match self._cache {
+            CacheType::Bare => self.file_get_id_sql_internal(tn, hash),
+            _ => self._inmemdb.read().file_get_hash(hash).copied(),
+        }
+    }
 
     /// Adds a file into the db sqlite. Do this first.
     pub(in crate::database) fn file_add_internal(
         &self,
         tn: &Transaction,
-        file: sharedtypes::DbFileStorage,
+        file: &sharedtypes::DbFileStorage,
     ) -> usize {
         match file {
-            sharedtypes::DbFileStorage::Exist(ref file_obj) => {
-                if self.file_get_hash(&file_obj.hash).is_none() {
-                    let id = self.file_add_db(tn, file.clone());
-                    id
+            sharedtypes::DbFileStorage::Exist( file_obj) => {
+                if self.file_get_hash_internal(tn, &file_obj.hash).is_none() {
+                     self.file_add_sql(tn, file)
                 } else {
                     file_obj.id
                 }
             }
-            sharedtypes::DbFileStorage::NoIdExist(ref noid_obj) => {
-                if self.file_get_hash(&noid_obj.hash).is_none() {
-                    let id = self.file_add_db(tn, file.clone());
+            sharedtypes::DbFileStorage::NoIdExist( noid_obj) => {
+                if self.file_get_hash_internal(tn, &noid_obj.hash).is_none() {
+                     self.file_add_sql(tn, file)
 
-                    id
                 } else {
                     self.file_get_hash(&noid_obj.hash).unwrap()
                 }

@@ -218,13 +218,13 @@ impl Main {
     ) -> usize {
         let fileid;
         let download_loc;
+        // error checking. We should have all dirs needed but hey if we're missing
+        std::fs::create_dir_all(download_location).unwrap();
         {
             let mut write_conn = self.write_conn.lock();
             let tn = write_conn.transaction().unwrap();
 
             let storage_id = self.storage_put_internal(&tn, download_location);
-            // error checking. We should have all dirs needed but hey if we're missing
-            std::fs::create_dir_all(download_location).unwrap();
 
             // Gives file extension
             let file_ext = FileFormat::from_bytes(bytes).extension().to_string();
@@ -240,7 +240,7 @@ impl Main {
                 ext_id,
                 storage_id,
             });
-            fileid = self.file_add_internal(&tn, filestorage);
+            fileid = self.file_add_internal(&tn, &filestorage);
             if let Some(source_url) = source_url {
                 let tagid = self.tag_add_internal(&tn, source_url, source_url_ns_id, None);
                 self.add_relationship_sql(&tn, &fileid, &tagid);

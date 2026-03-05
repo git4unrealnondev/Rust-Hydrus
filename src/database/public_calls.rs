@@ -125,21 +125,10 @@ impl Main {
         }
     }
 
-    pub fn extension_put_string(&self, ext: &String) -> usize {
-        if let Some(out) = self.extension_get_id(ext) {
-            return out;
-        }
-
-        let mut write_conn = self.write_conn.lock();
-        let tn = write_conn.transaction().unwrap();
-        let out = self.extension_put_string_internal(&tn, ext);
-        tn.commit().unwrap();
-        out
-    }
     pub fn file_add(&self, file: sharedtypes::DbFileStorage) -> usize {
         let mut write_conn = self.write_conn.lock();
         let tn = write_conn.transaction().unwrap();
-        let out = self.file_add_internal(&tn, file);
+        let out = self.file_add_internal(&tn, &file);
         tn.commit().unwrap();
         out
     }
@@ -200,12 +189,12 @@ impl Main {
     /// Adds the tag to the db. commits on finish
     ///
     pub fn tag_add_tagobject(&self, tag: &sharedtypes::TagObject) -> Option<usize> {
-       let out;
+        let out;
         let mut write_conn = self.write_conn.lock();
         {
-        let tn = write_conn.transaction().unwrap();
-        out = self.tag_add_tagobject_internal(&tn, tag);
-        tn.commit().unwrap();
+            let tn = write_conn.transaction().unwrap();
+            out = self.tag_add_tagobject_internal(&tn, tag);
+            tn.commit().unwrap();
         }
         out
     }
@@ -985,15 +974,6 @@ impl Main {
     ///
     /// Gets an ID if a extension string exists
     ///
-    pub fn extension_get_id(&self, ext: &String) -> Option<usize> {
-        match self._cache {
-            CacheType::Bare => self.extension_get_id_sql(ext),
-            _ => self._inmemdb.read().extension_get_id(ext).copied(),
-        }
-    }
-    ///
-    /// Gets an ID if a extension string exists
-    ///
     pub fn extension_get_string(&self, ext_id: &usize) -> Option<String> {
         match self._cache {
             CacheType::Bare => self.extension_get_string_sql(ext_id),
@@ -1148,7 +1128,6 @@ impl Main {
             .to_owned()
     }
 
-    
     ///
     /// commits an exclusive write transaction
     ///

@@ -187,7 +187,7 @@ impl Worker {
                         "Worker {} -- Stopping loop because we have no jobs.",
                         &id
                     ));
-                    
+
                     break 'bigloop;
                 }
 
@@ -306,7 +306,6 @@ impl Worker {
                                 // job next
                                 database.jobs_update_db(data);
                             }
-                            
                         }
                     }
                     // Loads anything passed from the scraper at compile time into the user_data
@@ -485,7 +484,6 @@ impl Worker {
                                             job_storage.jobs_add(scraper.clone(), scraper_data_return.job.clone());
                                         }
 
-                                        
 
                                         // Spawns the multithreaded pool
                                         let pool = ThreadPool::default();
@@ -575,7 +573,6 @@ impl Worker {
                         }
                     }
                 } );
-                
             }
             threadflagcontrol.stop();
             jobstorage.write().clear_previously_seen_cache(&scraper);
@@ -674,7 +671,7 @@ fn download_add_to_db(
     match blopt {
         download::FileReturnStatus::File((hash, file_ext, file_id)) => {
             //let fileid;
-            
+
             /* {
                         let ext_id = database.extension_put_string(&file_ext);
 
@@ -698,7 +695,7 @@ fn download_add_to_db(
         }
         _ => {}
     }
-    
+
     None
 }
 /*
