@@ -90,7 +90,16 @@ impl Main {
                 let memdb = Arc::new(RwLock::new(NewinMemDB::new()));
                 let manager = SqliteConnectionManager::memory();
                 let pool = r2d2::Builder::new().max_size(20).build(manager).unwrap();
-                let write_conn = Arc::new(Mutex::new(pool.get().unwrap()));
+                let write_conn = Arc::new(Mutex::new({
+let mut pool = pool.get().unwrap();
+pool.execute_batch("PRAGMA busy_timeout = 20000;
+            PRAGMA page_size = 8192;
+").unwrap();
+
+                    pool
+
+
+                }));
                 let write_conn_istransaction = Arc::new(Mutex::new(false));
                 let memdbmain = Main {
                     _dbpath: path.clone(),
