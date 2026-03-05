@@ -89,7 +89,7 @@ impl Main {
                 first_time_load_flag = Path::new(&file_path).exists();
                 let memdb = Arc::new(RwLock::new(NewinMemDB::new()));
                 let manager = SqliteConnectionManager::memory();
-                let pool = r2d2::Builder::new().max_size(20).build(manager).unwrap();
+                let pool = r2d2::Builder::new().max_size(200).build(manager).unwrap();
                 let write_conn = Arc::new(Mutex::new({
                     let mut pool = pool.get().unwrap();
                     pool.execute_batch(
