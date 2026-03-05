@@ -115,7 +115,7 @@ pub fn web_api(_attr: TokenStream, item: TokenStream) -> TokenStream {
                 use warp::Filter;
                 let instance = self.clone();
                 let routes = #combined_filters;
-                routes
+                routes.boxed()
             }
         }
     };

@@ -123,12 +123,12 @@ impl Main {
 PRAGMA journal_mode = MEMORY;
     ",
                     )?;
-/*
+
                     // Enable SQL tracing
                        conn.trace(Some(|sql| {
                         println!("[SQL TRACE] {}", sql);
                     }));
-*/
+
                     Ok(())
                 });
                 let pool = r2d2::Builder::new()
