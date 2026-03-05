@@ -1110,26 +1110,43 @@ WHERE p.tag_id != p.relate_tag_id;",
         self.analyze();
     }
     pub fn db_update_ten_to_eleven(&mut self) {
-        self.backup_db();
+        //self.backup_db();
         {
             let mut wruite_conn = self.write_conn.lock();
             let tn = wruite_conn.transaction().unwrap();
 
             // Creates popular settings
+            logging::info_log("Getting popular settings");
             self.get_relationship_popular_division_count(&tn);
             self.get_relationship_popular_division_count_old(&tn);
 
+            logging::info_log("Creating relationships table");
             self.relationship_create_v3(&tn);
+
+            tn.execute("DROP INDEX IF EXISTS idx_tagid_fileid_popular", [])
+                .unwrap();
+            logging::info_log("Creating popular FTS serach");
             self.tags_fts_create_v2(&tn);
 
+            logging::info_log("Migrating Data");
             let count = self.get_relationship_popular_division_count(&tn);
 
             // Setus up triggers for the migration of popular tags
             // big number is max for sqlitee.
             self.migrate_relationship_popular_count(&tn, &922372036854775807, &count);
 
+            logging::info_log("Making Index");
+            tn.execute(
+                "CREATE INDEX idx_tagid_fileid_popular ON Relationship_Popular(tagid, fileid DESC)",
+                [],
+            )
+            .unwrap();
+
+            logging::info_log("Committing");
+
             tn.commit().unwrap();
         }
+        logging::info_log("Wrapping up");
 
         self.db_version_set(11);
         self.vacuum();

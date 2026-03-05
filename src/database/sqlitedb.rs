@@ -211,11 +211,9 @@ LIMIT ?;"#
         )
         .unwrap();
 
-        tn.execute("DROP INDEX IF EXISTS idx_tagid_fileid", [])
-            .unwrap();
-
+        // Safety check for relatinoship
         tn.execute(
-            "CREATE INDEX idx_tagid_fileid ON Relationship(tagid, fileid DESC)",
+            "CREATE INDEX IF NOT EXISTS idx_tagid_fileid ON Relationship(tagid, fileid DESC)",
             [],
         )
         .unwrap();
@@ -298,9 +296,9 @@ LIMIT ?;"#
     /// Creates tags_fts and tags_popular_fts and populates them with data
     ///
     pub(in crate::database) fn tags_fts_create_v2(&self, tn: &Transaction) {
+        tn.execute("DROP TABLE IF EXISTS Tags_fts", []).unwrap();
         tn.execute("DROP TABLE IF EXISTS Tags_Popular_fts", [])
             .unwrap();
-        tn.execute("DROP TABLE IF EXISTS Tags_fts", []).unwrap();
         tn.execute("DROP TRIGGER IF EXISTS Tags_ai", []).unwrap();
         tn.execute("DROP TRIGGER IF EXISTS Tags_ad", []).unwrap();
         tn.execute("DROP TRIGGER IF EXISTS Tags_au", []).unwrap();
@@ -316,21 +314,17 @@ LIMIT ?;"#
         if let Some(count) = *popular_lock {
             tn.execute(
                 r#"
-        CREATE VIRTUAL TABLE Tags_fts USING fts5(
+        CREATE VIRTUAL TABLE IF NOT EXISTS Tags_fts USING fts5(
     name,
     namespace UNINDEXED,
     tokenize = "trigram",
+    content="Tags",
+    content_rowid='id',
 );"#,
                 [],
             )
             .unwrap();
 
-            tn.execute(
-        &format!(    "
-        INSERT INTO Tags_fts(rowid, name, namespace) SELECT id, REPLACE(REPLACE(name, '_', ' '), '/', ' '), namespace FROM Tags WHERE count < {};", count),
-            [],
-        )
-        .unwrap();
             tn.execute("INSERT INTO Tags_fts(Tags_fts) VALUES('optimize');", [])
                 .unwrap();
 
@@ -1923,13 +1917,22 @@ RETURNING id;
     ) {
         let greq = self.is_tag_count_greq_rel_limit(tn, tag);
 
-        let inp = match greq {
-            GreqOrEq::EqualTo => "INSERT OR IGNORE INTO Relationship_Popular VALUES(?, ?)",
-            GreqOrEq::LessThan => "INSERT OR IGNORE INTO Relationship VALUES(?, ?)",
-            GreqOrEq::GreaterThan => "INSERT OR IGNORE INTO Relationship_Popular VALUES(?, ?)",
-        };
+        match greq {
+            GreqOrEq::EqualTo | GreqOrEq::GreaterThan => {
+                let sql = "INSERT OR IGNORE INTO Relationship_Popular VALUES(?, ?)";
 
-        let _out = tn.execute(inp, params![file, tag]);
+                tn.execute(sql, params![file, tag]).unwrap();
+
+                let sql = "INSERT OR IGNORE INTO Relationship VALUES(?, ?)";
+
+                tn.execute(sql, params![file, tag]).unwrap();
+            }
+            GreqOrEq::LessThan => {
+                let sql = "INSERT OR IGNORE INTO Relationship VALUES(?, ?)";
+
+                tn.execute(sql, params![file, tag]).unwrap();
+            }
+        };
 
         match greq {
             GreqOrEq::EqualTo => {
@@ -1948,38 +1951,22 @@ RETURNING id;
     ) {
         self.drop_trigger_manage_relationship_count(tn);
 
-        let sql = if popular {
-            "INSERT OR IGNORE INTO Relationship_Popular (fileid, tagid) SELECT fileid, tagid FROM Relationship WHERE tagid = ?"
-        } else {
-            "INSERT OR IGNORE INTO Relationship (fileid, tagid) SELECT fileid, tagid FROM Relationship_Popular WHERE tagid = ?"
-        };
+        if popular {
+            let sql = "INSERT OR IGNORE INTO Relationship_Popular (fileid, tagid) SELECT fileid, tagid FROM Relationship WHERE tagid = ?";
 
-        tn.execute(sql, params![id]).unwrap();
+            tn.execute(sql, params![id]).unwrap();
+            let sql = "INSERT OR IGNORE INTO Tags_Popular_fts (rowid, name, namespace) SELECT rowid, name, namespace FROM Tags_fts WHERE rowid = ?";
 
+            tn.execute(sql, params![id]).unwrap();
+        }
 
-        let sql = if popular {
-            "INSERT OR IGNORE INTO Tags_Popular_fts (rowid, name, namespace) SELECT rowid, name, namespace FROM Tags_fts WHERE rowid = ?"
-        } else {
-            "INSERT OR IGNORE INTO Tags_fts (rowid, name, namespace) SELECT rowid, name, namespace FROM Tags_Popular_fts WHERE rowid = ?"
-        };
+        if !popular {
+            let sql = "DELETE FROM Relationship_Popular WHERE tagid = ?";
 
-        tn.execute(sql, params![id]).unwrap();
-
-
-        let sql = if popular {
-            "DELETE FROM Relationship WHERE tagid = ?"
-        } else {
-            "DELETE FROM Relationship_Popular WHERE tagid = ?"
-        };
-
-        tn.execute(sql, params![id]).unwrap();
-let sql = if popular {
-            "DELETE FROM Tags_fts WHERE rowid = ?"
-        } else {
-            "DELETE FROM Tags_Popular_fts WHERE rowid = ?"
-        };
-
-        tn.execute(sql, params![id]).unwrap();
+            tn.execute(sql, params![id]).unwrap();
+            let sql = "DELETE FROM Tags_Popular_fts WHERE rowid = ?";
+            tn.execute(sql, params![id]).unwrap();
+        }
 
         self.create_trigger_manage_relationship_count_v1(tn);
     }
@@ -2038,46 +2025,17 @@ END;",
             [],
         )
         .unwrap();
-        // Create the trigger for insertions into `Relationship_Popular`.
-        tn.execute(
-            "CREATE TRIGGER manage_relationship_popular_insert
-AFTER INSERT ON Relationship_Popular
-BEGIN
-    UPDATE Tags
-    SET count = count + 1
-    WHERE id = NEW.tagid;
-
-    END;",
-            [],
-        )
-        .unwrap();
-
-        // Create the trigger for deletions from `Relationship`.
-        tn.execute(
-            "CREATE TRIGGER manage_relationship_popular_delete
-AFTER DELETE ON Relationship_Popular
-BEGIN
-    UPDATE Tags
-    SET count = count - 1
-    WHERE id = OLD.tagid;
-
-END;",
-            [],
-        )
-        .unwrap();
-
         let popular_lock = self.popular_relationship_count.lock();
         if let Some(count) = *popular_lock {
             tn.execute(
                 &format!(
                     "
-        CREATE TRIGGER IF NOT EXISTS Tags_ai AFTER INSERT ON Tags WHEN new.count < {}
+        CREATE TRIGGER IF NOT EXISTS Tags_ai AFTER INSERT ON Tags 
         BEGIN
           INSERT INTO Tags_fts(rowid, name, namespace) 
           VALUES (new.id, new.name, new.namespace);
         END;
         ",
-                    count
                 ),
                 [],
             )
@@ -2086,12 +2044,11 @@ END;",
             tn.execute(
                 &format!(
                     "
-        CREATE TRIGGER IF NOT EXISTS Tags_ad AFTER DELETE ON Tags WHEN new.count >= {}
+        CREATE TRIGGER IF NOT EXISTS Tags_ad AFTER DELETE ON Tags  
         BEGIN
           DELETE FROM Tags_fts WHERE rowid = old.id;
         END;
         ",
-                    count
                 ),
                 [],
             )
@@ -2100,14 +2057,13 @@ END;",
             tn.execute(
                 &format!(
                     "
-        CREATE TRIGGER IF NOT EXISTS Tags_au AFTER UPDATE ON Tags WHEN new.count < {}
+        CREATE TRIGGER IF NOT EXISTS Tags_au AFTER UPDATE ON Tags
         BEGIN
           UPDATE Tags_fts
           SET name = new.name, namespace = new.namespace
           WHERE rowid = old.id;
         END;
         ",
-                    count
                 ),
                 [],
             )
@@ -2168,7 +2124,7 @@ END;",
         old_count: &usize,
         new_count: &usize,
     ) {
-        dbg!(old_count, new_count);
+        dbg!(old_count, new_count, new_count < old_count);
         self.drop_trigger_manage_relationship_count(tn);
         // If the counts have changed, we need to update the triggers.
         if old_count != new_count {
@@ -2185,48 +2141,35 @@ END;",
                     params![old_count, new_count],
                 )
                 .unwrap();
+                dbg!("a");
                 tn.execute(
-                    "INSERT OR REPLACE INTO Tags_Popular_fts (rowid, name, namespace)
-            SELECT id, name, namespace 
-            FROM Tags
-            WHERE count < ? AND count >= ?;",
-                    params![old_count, new_count],
+                    "INSERT OR IGNORE INTO Tags_Popular_fts(rowid, name, namespace)
+SELECT id, name, namespace
+FROM Tags
+WHERE count BETWEEN ? AND ?",
+                    params![new_count, old_count],
                 )
                 .unwrap();
 
-                // Remove the relationships from `Relationship` where the tag count is between new_count and old_count.
-                tn.execute(
-                    "DELETE FROM Relationship
+            // Remove the relationships from `Relationship` where the tag count is between new_count and old_count.
+            /*   tn.execute(
+                "DELETE FROM Relationship
             WHERE tagid IN (SELECT id FROM Tags WHERE count < ? AND count >= ?);",
-                    params![old_count, new_count],
-                )
-                .unwrap();
-                tn.execute(
-                    "DELETE FROM Tags_fts
-            WHERE rowid IN (SELECT id FROM Tags WHERE count < ? AND count >= ?);",
-                    params![old_count, new_count],
-                )
-                .unwrap();
+                params![old_count, new_count],
+            )
+            .unwrap();*/
             }
             // Handle the case where the count increases (old_count < new_count).
             else if new_count > old_count {
                 // Insert into `Relationship_Popular` for tags with counts between old_count and new_count.
-                tn.execute(
+                /*      tn.execute(
                     "INSERT INTO Relationship (fileid, tagid)
             SELECT fileid, tagid
             FROM Relationship_Popular
             WHERE tagid IN (SELECT id FROM Tags WHERE count <= ? );",
                     params![new_count],
                 )
-                .unwrap();
-                tn.execute(
-                    "INSERT OR REPLACE INTO Tags_fts (rowid, name, namespace)
-            SELECT id, name, namespace 
-            FROM Tags
-            WHERE count <= ?;",
-                    params![new_count],
-                )
-                .unwrap();
+                .unwrap();*/
 
                 // Delete the relationships from `Relationship_Popular` where the tag count is between old_count and new_count.
                 tn.execute(
@@ -2242,6 +2185,7 @@ END;",
                 )
                 .unwrap();
             }
+            dbg!("b");
             self.create_trigger_manage_relationship_count_v1(tn);
         }
     }
@@ -2617,15 +2561,10 @@ END;",
         ));
         let greq = self.is_tag_count_greq_rel_limit(tn, tag_id);
 
-        let inp = match greq {
-            GreqOrEq::EqualTo => "DELETE FROM Relationship_Popular WHERE fileid = ? AND tagid = ?",
-            GreqOrEq::LessThan => "DELETE FROM Relationship WHERE fileid = ? AND tagid = ?",
-            GreqOrEq::GreaterThan => {
-                "DELETE FROM Relationship_Popular WHERE fileid = ? AND tagid = ?"
-            }
-        };
-
-        tn.execute(inp, params![file_id, tag_id]).unwrap();
+        let sql = "DELETE FROM Relationship WHERE fileid = ? AND tagid = ?";
+        tn.execute(sql, params![file_id, tag_id]).unwrap();
+        let sql = "DELETE FROM Relationship_Popular WHERE fileid = ? AND tagid = ?";
+        tn.execute(sql, params![file_id, tag_id]).unwrap();
         match greq {
             GreqOrEq::EqualTo => {
                 self.migrate_relationship_popular_tagid(tn, tag_id, false);

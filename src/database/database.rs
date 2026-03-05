@@ -120,6 +120,7 @@ impl Main {
             PRAGMA cache_size = -1250000;
             PRAGMA mmap_size = 10000000000;
             PRAGMA wal_autocheckpoint = 20000;
+PRAGMA journal_mode = MEMORY;
     ",
                     )?;
 
