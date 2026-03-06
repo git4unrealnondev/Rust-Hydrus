@@ -278,7 +278,7 @@ pub fn on_start() {
     // Removes the fileids that already have thumbnails
     for each in nids.iter() {
         if should_run == "Clear" {
-            api.tag_remove(each).unwrap();
+            api.delete_tag(each).unwrap();
         } else {
             for file_id in api.relationship_get_fileid(each).unwrap().iter() {
                 file_ids.remove(file_id);

@@ -13,6 +13,7 @@ use anyhow::Context;
 use crate::RwLock;
 use interprocess::local_socket::{GenericNamespaced, ListenerOptions, prelude::*};
 use std::collections::HashSet;
+use std::panic;
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
@@ -285,11 +286,29 @@ another process and try again.",
 
         let runtime = tokio::runtime::Runtime::new().expect("Failed to create Tokio runtime");
 
+        // Gets the API URL that we should be using
+        let mut api_url = db.get_api_url();
+
         handles.push(std::thread::spawn(move || {
-            // 2. Use block_on to run the async function and wait for its result
-            println!("Server running on 127.0.0.1:3030");
-            let result =
-                runtime.block_on(warp::serve(routes_with_fallback).run(([127, 0, 0, 1], 3030)));
+            use tokio::net::TcpListener;
+            'errloop: loop {
+                match runtime.block_on(TcpListener::bind(api_url.url)) {
+                    Ok(l) => {
+                        break 'errloop;
+                    }
+                    Err(e) => {
+                        logging::error_log(&format!("Failed to bind server: {}", e));
+                        api_url.url.set_port(api_url.url.port() + 1);
+                    }
+                };
+            }
+
+            runtime.block_on(warp::serve(routes_with_fallback.clone()).run(api_url.url));
+            /*loop {
+            logging::info_log(&format!("Starting API server on: {}", api_url.url));
+
+            let panic_handler = panic::catch_unwind(||{ runtime.block_on(warp::serve(routes_with_fallback).run(api_url.url))});
+            }*/
         }));
 
         // NOTE due to the nature of this POS if the number of requests coming in exceed the number
@@ -604,9 +623,8 @@ pub fn dbactions_to_function(
         }
         types::SupportedDBRequests::PutTagRelationship(fid, tags, namespace_id, id) => {
             let unwrappy = database;
-            panic!();
-            //let tmep = unwrappy.tag_add(&tags, namespace_id, id);
-            //unwrappy.relationship_add(fid, tmep);
+            let tmep = unwrappy.tag_add(&tags, namespace_id, id);
+            unwrappy.add_relationship(&fid, &tmep);
             data_size_to_b(&true)
         }
         types::SupportedDBRequests::GetDBLocation() => {

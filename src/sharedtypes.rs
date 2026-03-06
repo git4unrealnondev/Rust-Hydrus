@@ -2,6 +2,7 @@
 #![allow(unused_variables)]
 #![allow(unexpected_cfgs)]
 use std::default::Default;
+use std::net::SocketAddr;
 use std::time::Duration;
 
 #[cfg(feature = "regex")]
@@ -43,7 +44,7 @@ pub enum TagPartialSearchType {
 #[derive(Clone)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct ClientAPIInfo {
-    pub url: String,
+    pub url: SocketAddr,
     pub authentication: Option<String>,
 }
 

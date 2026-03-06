@@ -773,7 +773,9 @@ impl Main {
         limit: Option<usize>,
     ) -> Option<Vec<usize>> {
         use rusqlite::params_from_iter;
-        // Separate AND / OR / NOT
+        use std::collections::HashSet;
+
+        // --- Separate AND / OR / NOT tags ---
         let mut and_tags = Vec::new();
         let mut or_groups: Vec<Vec<usize>> = Vec::new();
         let mut not_groups: Vec<Vec<usize>> = Vec::new();
@@ -791,94 +793,103 @@ impl Main {
             return None;
         }
 
-        // Pick rarest AND tag dynamically
-        let placeholders = vec!["?"; and_tags.len()].join(", ");
-        let driver_sql = format!(
-            "SELECT id FROM Tags WHERE id IN ({}) ORDER BY count ASC LIMIT 1",
-            placeholders
-        );
-
         let mut conn = self.get_database_connection();
-        let driver_tag: usize =
-            match conn.query_row(&driver_sql, params_from_iter(&and_tags), |row| row.get(0)) {
-                Ok(tag) => tag,
-                Err(_) => return None, // treat errors as no results
-            };
 
-        let remaining_and: Vec<usize> = and_tags
-            .into_iter()
-            .filter(|&id| id != driver_tag)
-            .collect();
+        // --- Split AND tags into popular and normal ---
+        let mut popular_tags = Vec::new();
+        let mut normal_tags = Vec::new();
 
-        let table =
-            if self.is_tag_count_greater_rel_limit(&conn.transaction().unwrap(), &driver_tag) {
-                "Relationship_Popular"
+        for &tag in &and_tags {
+            if self.is_tag_count_greater_rel_limit(&conn.transaction().unwrap(), &tag) {
+                popular_tags.push(tag);
             } else {
-                "Relationship"
-            };
-
-        // Build search SQL
-        let mut sql = format!(
-            "SELECT r.fileid
-         FROM {table} r 
-         WHERE r.tagid = ?",
-        );
-        let mut params: Vec<usize> = vec![driver_tag];
-
-        for tag in &remaining_and {
-            let table = if self.is_tag_count_greater_rel_limit(&conn.transaction().unwrap(), &tag) {
-                "Relationship_Popular"
-            } else {
-                "Relationship"
-            };
-
-            sql.push_str(&format!(
-                "
-            AND EXISTS (
-                SELECT 1 FROM {table} r2
-                WHERE r2.tagid = ?
-                  AND r2.fileid = r.fileid
-            )"
-            ));
-            params.push(*tag);
+                normal_tags.push(tag);
+            }
         }
 
+        let mut sql_parts = Vec::new();
+        let mut params: Vec<usize> = Vec::new();
+
+        // --- Derived table for popular AND tags ---
+        if !popular_tags.is_empty() {
+            let placeholders = vec!["?"; popular_tags.len()].join(", ");
+            sql_parts.push(format!(
+                "SELECT fileid
+             FROM Relationship_Popular
+             WHERE tagid IN ({})
+             GROUP BY fileid
+             HAVING COUNT(DISTINCT tagid) = ?",
+                placeholders
+            ));
+            params.extend(&popular_tags);
+            params.push(popular_tags.len());
+        }
+
+        // --- Derived table for normal AND tags ---
+        if !normal_tags.is_empty() {
+            let placeholders = vec!["?"; normal_tags.len()].join(", ");
+            sql_parts.push(format!(
+                "SELECT fileid
+             FROM Relationship
+             WHERE tagid IN ({})
+             GROUP BY fileid
+             HAVING COUNT(DISTINCT tagid) = ?",
+                placeholders
+            ));
+            params.extend(&normal_tags);
+            params.push(normal_tags.len());
+        }
+
+        // --- Combine popular and normal derived tables ---
+        let mut sql = if sql_parts.len() == 2 {
+            // UNION ALL if both exist
+            format!(
+                "SELECT fileid FROM (\n{}\nUNION ALL\n{}\n) AS candidate_files\n",
+                sql_parts[0], sql_parts[1]
+            )
+        } else {
+            format!(
+                "SELECT fileid FROM (\n{}\n) AS candidate_files\n",
+                sql_parts[0]
+            )
+        };
+
+        // --- Add OR groups ---
         for group in &or_groups {
             let placeholders = vec!["?"; group.len()].join(", ");
             sql.push_str(&format!(
-                "
-            AND EXISTS (
-                SELECT 1 FROM Relationship r3
-                WHERE r3.tagid IN ({})
-                  AND r3.fileid = r.fileid
-            )",
+                "AND EXISTS (
+                SELECT 1 FROM Relationship r_or
+                WHERE r_or.fileid = candidate_files.fileid
+                  AND r_or.tagid IN ({})
+            )\n",
                 placeholders
             ));
             params.extend(group);
         }
 
+        // --- Add NOT groups ---
         for group in &not_groups {
             let placeholders = vec!["?"; group.len()].join(", ");
             sql.push_str(&format!(
-                "
-            AND NOT EXISTS (
-                SELECT 1 FROM Relationship r4
-                WHERE r4.tagid IN ({})
-                  AND r4.fileid = r.fileid
-            )",
+                "AND NOT EXISTS (
+                SELECT 1 FROM Relationship r_not
+                WHERE r_not.fileid = candidate_files.fileid
+                  AND r_not.tagid IN ({})
+            )\n",
                 placeholders
             ));
             params.extend(group);
         }
-        sql.push_str(" ORDER BY r.fileid DESC");
+
+        // --- Final ORDER BY + LIMIT ---
+        sql.push_str("ORDER BY fileid DESC\n");
         if let Some(lim) = limit {
-            sql.push_str(" LIMIT ?");
+            sql.push_str("LIMIT ?");
             params.push(lim);
         }
 
-        dbg!(&sql, &params);
-
-        // Execute query
+        // --- Prepare and execute ---
         let mut stmt = match conn.prepare(&sql) {
             Ok(s) => s,
             Err(_) => return None,
@@ -902,6 +913,7 @@ impl Main {
             Some(results)
         }
     }
+
     /// Gets all jobs loaded in the db
     pub fn jobs_get_all(&self) -> HashMap<usize, sharedtypes::DbJobsObj> {
         match &self._cache {

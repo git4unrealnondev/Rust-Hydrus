@@ -20,9 +20,11 @@ pub use rusqlite::{Connection, Result, Transaction, params, types::Null};
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::collections::HashSet;
+use std::net::SocketAddr;
 use std::panic;
 use std::path::Path;
 use std::path::PathBuf;
+use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 /// I dont want to keep writing .to_string on EVERY vector of strings. Keeps me
@@ -63,7 +65,7 @@ pub(crate) struct Main {
     pub(super) _cache: CacheType,
     pub globalload: Option<Arc<GlobalLoad>>,
     pub(super) localref: Option<Arc<RwLock<Main>>>,
-    pub api_info: Arc<RwLock<sharedtypes::ClientAPIInfo>>,
+    pub api_info: Arc<RwLock<Option<sharedtypes::ClientAPIInfo>>>,
     pub(in crate::database) popular_relationship_count: Arc<Mutex<Option<usize>>>,
 }
 
@@ -74,14 +76,35 @@ fn transaction_execute(trans: &Transaction, inp: String) {
 
 /// Contains DB functions.
 impl Main {
+    pub fn get_api_url(&self) -> sharedtypes::ClientAPIInfo {
+        match self.settings_get_name(&"SYSTEM_API_URL".to_string()) {
+            Some(setting) => {
+                if let Some(param) = setting.param {
+                    if let Ok(url) = SocketAddr::from_str(&param) {
+                        return sharedtypes::ClientAPIInfo {
+                            url,
+                            authentication: None,
+                        };
+                    }
+                }
+            }
+            None => {}
+        }
+        let url = "127.0.0.1:3030".to_string();
+
+        if let Ok(url) = SocketAddr::from_str(&url) {
+            self.setting_add("SYSTEM_API_URL".to_string(), Some("The url to connect everything to. Normally is 127.0.0.1:3030 or 0.0.0.0:3030 if you want it to be accessible from everywhere".to_string()), None, Some(url.to_string()));
+            return sharedtypes::ClientAPIInfo {
+                url,
+                authentication: None,
+            };
+        } else {
+            panic!("This should always parse properly. local api is 127.0.0.1:3030")
+        }
+    }
+
     /// Sets up new db instance.
     pub fn new(path: Option<String>, vers: usize) -> Self {
-        // API info default. Should load this in a better way
-        let api_info = Arc::new(RwLock::new(sharedtypes::ClientAPIInfo {
-            url: "127.0.0.1:3030".to_string(),
-            authentication: None,
-        }));
-
         // Initiates two tnections to the DB. Cheap workaround to avoid loading errors.
         let mut first_time_load_flag = false;
         let mut main = match path {
@@ -115,7 +138,7 @@ impl Main {
                     _cache: CacheType::Bare,
                     globalload: None,
                     localref: None,
-                    api_info: api_info.clone(),
+                    api_info: Arc::new(None.into()),
                     popular_relationship_count: Arc::new(None.into()),
                 };
                 //                let tnection = dbinit(file_path);
@@ -123,22 +146,18 @@ impl Main {
                     conn.execute_batch(
                         "
             PRAGMA journal_mode = WAL;
-            PRAGMA synchronous = NORMAL;
-            PRAGMA secure_delete = 0;
-            PRAGMA busy_timeout = 20000;
-            PRAGMA page_size = 8192;
-            PRAGMA cache_size = -1250000;
-            PRAGMA mmap_size = 10000000000;
-            PRAGMA wal_autocheckpoint = 20000;
-PRAGMA journal_mode = MEMORY;
-    ",
+PRAGMA synchronous = NORMAL;
+PRAGMA busy_timeout = 20000;
+PRAGMA wal_autocheckpoint = 5000;
+PRAGMA mmap_size = 1073741824; -- 1GB
+",
                     )?;
-
-                    // Enable SQL tracing
-                    conn.trace(Some(|sql| {
-                        println!("[SQL TRACE] {}", sql);
-                    }));
-
+                    /*
+                                        // Enable SQL tracing
+                                        conn.trace(Some(|sql| {
+                                            println!("[SQL TRACE] {}", sql);
+                                        }));
+                    */
                     Ok(())
                 });
                 let pool = r2d2::Builder::new()
@@ -161,7 +180,7 @@ PRAGMA journal_mode = MEMORY;
                     _cache: CacheType::InMemdb,
                     globalload: None,
                     localref: None,
-                    api_info: api_info.clone(),
+                    api_info: Arc::new(None.into()),
                     popular_relationship_count: Arc::new(None.into()),
                 };
                 main
@@ -206,7 +225,7 @@ PRAGMA journal_mode = WAL;
                     _cache: CacheType::Bare,
                     globalload: None,
                     localref: None,
-                    api_info: api_info.clone(),
+                    api_info: Arc::new(None.into()),
                     popular_relationship_count: Arc::new(None.into()),
                 };
                 main
@@ -239,12 +258,18 @@ PRAGMA journal_mode = WAL;
             main.load_table(&sharedtypes::LoadDBTable::Settings);
             main.load_caching();
         }
+
+        // Manages to load the db count for migrating any count if they've changeed into the new
+        // popular_fts or relaitonship table
         {
             let mut write_conn = main.write_conn.lock();
             let mut tn = write_conn.transaction().unwrap();
             main.migrate_relationships_based_on_count(&mut tn);
             tn.commit().unwrap();
         }
+
+        // Loads api info into the settings table
+        main.api_info = Arc::new(RwLock::new(Some(main.get_api_url())));
 
         main.transaction_flush();
         main
@@ -1407,17 +1432,16 @@ PRAGMA journal_mode = WAL;
         file: &sharedtypes::DbFileStorage,
     ) -> usize {
         match file {
-            sharedtypes::DbFileStorage::Exist( file_obj) => {
+            sharedtypes::DbFileStorage::Exist(file_obj) => {
                 if self.file_get_hash_internal(tn, &file_obj.hash).is_none() {
-                     self.file_add_sql(tn, file)
+                    self.file_add_sql(tn, file)
                 } else {
                     file_obj.id
                 }
             }
-            sharedtypes::DbFileStorage::NoIdExist( noid_obj) => {
+            sharedtypes::DbFileStorage::NoIdExist(noid_obj) => {
                 if self.file_get_hash_internal(tn, &noid_obj.hash).is_none() {
-                     self.file_add_sql(tn, file)
-
+                    self.file_add_sql(tn, file)
                 } else {
                     self.file_get_hash(&noid_obj.hash).unwrap()
                 }

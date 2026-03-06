@@ -206,8 +206,12 @@ impl GlobalLoad {
                         continue;
                     }
                 };
-                //db.
-                output = plugindatafunc(cursorpass, hash, ext, &api.clone());
+                // If the api isnt set then just return and dont call anything
+                if let Some(ref api_info) = *api {
+                    output = plugindatafunc(cursorpass, hash, ext, &api_info);
+                } else {
+                    return;
+                }
             }
 
             let jobmanager;
