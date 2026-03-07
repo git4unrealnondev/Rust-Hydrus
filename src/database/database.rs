@@ -152,7 +152,7 @@ impl Main {
                     conn.execute_batch(
                         "
             PRAGMA journal_mode = WAL;
-PRAGMA synchronous = NORMAL;
+PRAGMA synchronous = FULL;
 PRAGMA busy_timeout = 20000;
 PRAGMA wal_autocheckpoint = 20000;
 PRAGMA mmap_size = 4294967296; -- 1GB
