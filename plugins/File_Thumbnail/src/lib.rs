@@ -63,7 +63,7 @@ pub fn get_global_info() -> Vec<sharedtypes::GlobalPluginScraper> {
             func: format!("{}_generate_thumbnail_fid", PLUGIN_NAME),
             vers: 0,
             data_name: vec!["file_id".into()],
-            data: vec![sharedtypes::CallbackCustomData::Usize],
+            data: vec![sharedtypes::CallbackCustomData::u64],
         }),
     ];
     let out = vec![main];
@@ -334,7 +334,7 @@ pub fn on_start() {
     api.transaction_flush();
 }
 
-fn process_fid(fid: &usize, location: &PathBuf, _utable: &usize) -> Option<String> {
+fn process_fid(fid: &u64, location: &PathBuf, _utable: &u64) -> Option<String> {
     match generate_thumbnail(*fid) {
         Ok(thumb_file) => {
             let (thumb_path, thumb_hash) = make_thumbnail_path(location, &thumb_file);
@@ -370,7 +370,7 @@ pub fn file_thumbnailer_generate_thumbnail_fid(
     if let Some(index) = index {
         if callback.data.len() >= index {
             if let Some(custom_data) = callback.data.get(index) {
-                if let sharedtypes::CallbackCustomDataReturning::Usize(inp) = custom_data {
+                if let sharedtypes::CallbackCustomDataReturning::U64(inp) = custom_data {
                     let _counter = &AtomicUsize::new(0);
                     if let Some(location) = &setup_thumbnail_location() {
                         // Gets namespace id if it doesn't exist then recreate
@@ -385,7 +385,7 @@ pub fn file_thumbnailer_generate_thumbnail_fid(
                             }
                         }
 
-                        if let Some(file_thumb_hash) = process_fid(inp, location, &utable) {
+                        if let Some(file_thumb_hash) = process_fid(inp, location, &utable.try_into().unwrap()) {
                             client::relationship_file_tag_add(
                                 *inp,
                                 file_thumb_hash,
@@ -474,7 +474,7 @@ fn generate_thumbnail_u8(inp: Vec<u8>) -> Result<Vec<u8>, std::io::Error> {
 ///
 /// Actually generates thumbnails
 ///
-pub fn generate_thumbnail(fid: usize) -> Result<Vec<u8>, std::io::Error> {
+pub fn generate_thumbnail(fid: u64) -> Result<Vec<u8>, std::io::Error> {
     use std::io::Error;
     let max_cnt = 5;
     if let Some(fbyte) = client::get_file(fid) {

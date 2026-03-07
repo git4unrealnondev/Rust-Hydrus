@@ -173,7 +173,7 @@ fn get_set(inp: Supset) -> sharedtypes::GenericNamespaceObj {
 ///
 /// Checks and creates tables if not existing.
 ///
-fn check_existing_db_table(table: TableData) -> usize {
+fn check_existing_db_table(table: TableData) -> u64 {
     let bns = client::namespace_get(table.name.to_string());
     let uns = match bns {
         None => client::namespace_put(table.name, table.description),
@@ -186,9 +186,9 @@ fn check_existing_db_table(table: TableData) -> usize {
 fn check_existing_db() {
     use rayon::prelude::*;
 
-    let mut utable_storage: HashMap<Supset, usize> = HashMap::new();
-    let mut utable_count: HashMap<Supset, usize> = HashMap::new();
-    let mut modernstorage: HashMap<usize, Vec<Supset>> = HashMap::new();
+    let mut utable_storage: HashMap<Supset, u64> = HashMap::new();
+    let mut utable_count: HashMap<Supset, u64> = HashMap::new();
+    let mut modernstorage: HashMap<u64, Vec<Supset>> = HashMap::new();
 
     let mut table_skip: Vec<Supset> = Vec::new();
 
@@ -250,8 +250,8 @@ fn check_existing_db() {
         client::log(format!("Ended table loop for table: {:?}", &table));
     }
 
-    let failed_id: Arc<Mutex<HashMap<Supset, usize>>> = Arc::new(Mutex::new(HashMap::new()));
-    let hashed_id: Arc<Mutex<HashMap<Supset, usize>>> = Arc::new(Mutex::new(HashMap::new()));
+    let failed_id: Arc<Mutex<HashMap<Supset, u64>>> = Arc::new(Mutex::new(HashMap::new()));
+    let hashed_id: Arc<Mutex<HashMap<Supset, u64>>> = Arc::new(Mutex::new(HashMap::new()));
     for table in Supset::iter() {
         // Early exist for if the table neeeds to be skipped
         if table_skip.contains(&table) {
