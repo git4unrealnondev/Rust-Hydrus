@@ -216,7 +216,7 @@ pub fn main(data: Main) {
                         &id.id
                     );
                 } else {
-                    let mut itvec: Vec<usize> = hstags.into_iter().collect();
+                    let mut itvec: Vec<u64> = hstags.into_iter().collect();
                     itvec.sort();
                     for tid in itvec {
                         let tag = data.tag_id_get(&tid);
@@ -534,13 +534,13 @@ pub fn main(data: Main) {
 
                         // This will check files in the database and will see if they even exist.
                         let db_location = data.location_get();
-                        let cnt: std::sync::Arc<std::sync::Mutex<usize>> =
+                        let cnt: std::sync::Arc<std::sync::Mutex<u64>> =
                             std::sync::Arc::new(std::sync::Mutex::new(0));
                         data.load_table(&sharedtypes::LoadDBTable::All);
                         if !Path::new("fileexists.txt").exists() {
                             let _ = std::fs::File::create("fileexists.txt");
                         }
-                        let fiexist: std::sync::Arc<std::sync::Mutex<HashSet<usize>>> =
+                        let fiexist: std::sync::Arc<std::sync::Mutex<HashSet<u64>>> =
                             std::sync::Arc::new(std::sync::Mutex::new(
                                 std::fs::read_to_string("fileexists.txt")
                                     // panic on possible file-reading errors
@@ -548,7 +548,7 @@ pub fn main(data: Main) {
                                     // split the string into an iterator of string slices
                                     .lines()
                                     // make each slice into a string
-                                    .map(|x| x.parse::<usize>().unwrap())
+                                    .map(|x| x.parse::<u64>().unwrap())
                                     .collect(),
                             ));
                         let f = std::sync::Arc::new(std::sync::Mutex::new(
@@ -561,7 +561,7 @@ pub fn main(data: Main) {
                         logging::info_log(
                             "Checking if we have any missing or bad files.".to_string(),
                         );
-                        let mut nsid: Option<usize> = None;
+                        let mut nsid: Option<u64> = None;
                         {
                             let nso = data.namespace_get(&"source_url".to_owned());
                             if let Some(ns) = nso {

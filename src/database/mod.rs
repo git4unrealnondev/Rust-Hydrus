@@ -4,6 +4,7 @@ pub mod enclave;
 pub mod fuzzy_search;
 pub mod inmemdbnew;
 pub mod public_calls;
+pub mod roaring_bitmap;
 pub mod sqlitedb;
 pub mod updatehandler;
 

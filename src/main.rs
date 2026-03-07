@@ -5,7 +5,7 @@ use log::{error, warn};
 use parking_lot::{Mutex, RwLock};
 use std::{sync::Arc, thread, time};
 
-pub const VERS: usize = 11;
+pub const VERS: u64 = 11;
 pub const DEFAULT_LOC_PLUGIN: &str = "plugins";
 pub const DEFAULT_LOC_SCRAPER: &str = "scrapers";
 extern crate ratelimit;

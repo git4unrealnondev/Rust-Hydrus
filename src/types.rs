@@ -50,8 +50,8 @@ pub struct Coms {
 // con_econtrolsigs(input: &mut [u8; 1]) -> EControlSigs { unsafe {
 // std::mem::transmute(*input) } }
 //
-// /// /// Turns bytes into a uszie structure. /// pub fn con_usize(input: &mut
-// [u8; 8]) -> usize { unsafe { std::mem::transmute(*input) } }
+// /// /// Turns bytes into a uszie structure. /// pub fn con_u64(input: &mut
+// [u8; 8]) -> u64 { unsafe { std::mem::transmute(*input) } }
 //
 // /// /// Turns bytes into a SupportedRequests structure. /// //pub fn
 // con_supportedrequests(input: &mut [u8; 56]) -> SupportedRequests { //    unsafe
@@ -59,54 +59,54 @@ pub struct Coms {
 /// Supported Database operations.
 #[derive(Debug, Serialize, Deserialize, bincode::Encode, bincode::Decode)]
 pub enum SupportedDBRequests {
-    GetTagId(usize),
-    PutTag(String, usize, Option<usize>),
-    PutTagRelationship(usize, String, usize, Option<usize>),
-    GetTagName((String, usize)),
-    RelationshipAdd(usize, usize),
-    RelationshipRemove(usize, usize),
-    RelationshipGetTagid(usize),
-    RelationshipGetFileid(usize),
-    GetFile(usize),
-    GetFileExt(usize),
+    GetTagId(u64),
+    PutTag(String, u64, Option<u64>),
+    PutTagRelationship(u64, String, u64, Option<u64>),
+    GetTagName((String, u64)),
+    RelationshipAdd(u64, u64),
+    RelationshipRemove(u64, u64),
+    RelationshipGetTagid(u64),
+    RelationshipGetFileid(u64),
+    GetFile(u64),
+    GetFileExt(u64),
     GetFileHash(String),
     GetNamespace(String),
     CreateNamespace(String, Option<String>),
-    GetNamespaceTagIDs(usize),
-    GetNamespaceString(usize),
+    GetNamespaceTagIDs(u64),
+    GetNamespaceString(u64),
     SettingsGetName(String),
-    SettingsSet(String, Option<String>, Option<usize>, Option<String>),
+    SettingsSet(String, Option<String>, Option<u64>, Option<String>),
     LoadTable(sharedtypes::LoadDBTable),
-    TestUsize(),
+    Testu64(),
     GetFileListId(),
     GetFileListAll(),
     TransactionFlush(),
     GetDBLocation(),
     Logging(String),
     LoggingNoPrint(String),
-    Search((sharedtypes::SearchObj, Option<usize>, Option<usize>)),
-    GetFileByte(usize),
-    GetFileLocation(usize),
-    NamespaceContainsId(usize, usize),
-    FilterNamespaceById((HashSet<usize>, usize)),
-    PluginCallback(String, usize, sharedtypes::CallbackInfoInput),
+    Search((sharedtypes::SearchObj, Option<u64>, Option<u64>)),
+    GetFileByte(u64),
+    GetFileLocation(u64),
+    NamespaceContainsId(u64, u64),
+    FilterNamespaceById((HashSet<u64>, u64)),
+    PluginCallback(String, u64, sharedtypes::CallbackInfoInput),
     ReloadLoadedPlugins(),
-    ParentsGet((ParentsType, usize)),
+    ParentsGet((ParentsType, u64)),
     ParentsDelete(sharedtypes::DbParentsObj),
     ParentsPut(sharedtypes::DbParentsObj),
     PutJob(sharedtypes::DbJobsObj),
-    GetJob(usize),
-    TagDelete(usize),
+    GetJob(u64),
+    TagDelete(u64),
     PutFile((sharedtypes::FileObject, (u64, std::time::Duration))),
     PutFileNoBlock((sharedtypes::FileObject, (u64, std::time::Duration))),
     ReloadRegex,
     GetNamespaceIDsAll,
-    MigrateTag((usize, usize)),
-    MigrateRelationship((usize, usize, usize)),
+    MigrateTag((u64, u64)),
+    MigrateRelationship((u64, u64, u64)),
     CondenseTags(),
-    GetFileRaw(usize),
-    GetRelationshipFileidWhereNamespace((usize, usize, sharedtypes::GreqLeqOrEq)),
-    GetRelationshipTagidWhereNamespace((usize, usize, sharedtypes::GreqLeqOrEq)),
+    GetFileRaw(u64),
+    GetRelationshipFileidWhereNamespace((u64, u64, sharedtypes::GreqLeqOrEq)),
+    GetRelationshipTagidWhereNamespace((u64, u64, sharedtypes::GreqLeqOrEq)),
     GetFileIdsWhereExtensionIs(sharedtypes::FileExtensionType),
 }
 
@@ -135,13 +135,13 @@ pub enum AllReturns {
 #[derive(Debug)]
 pub enum DBReturns {
     GetTagId(Option<sharedtypes::DbTagNNS>),
-    GetTagName(Option<usize>),
-    RelationshipGetTagid(Option<HashSet<usize>>),
-    RelationshipGetFileid(Option<HashSet<usize>>),
+    GetTagName(Option<u64>),
+    RelationshipGetTagid(Option<HashSet<u64>>),
+    RelationshipGetFileid(Option<HashSet<u64>>),
     GetFile(Option<sharedtypes::DbFileObj>),
-    GetFileHash(Option<usize>),
-    GetNamespaceTagIDs(HashSet<usize>),
-    GetNamespace(Option<usize>),
+    GetFileHash(Option<u64>),
+    GetNamespaceTagIDs(HashSet<u64>),
+    GetNamespace(Option<u64>),
     GetNamespaceString(Option<sharedtypes::DbNamespaceObj>),
     SettingsGetName(Option<sharedtypes::DbSettingObj>),
     LoadTable(bool),
@@ -189,10 +189,10 @@ pub fn send_preserialize(inp: &Vec<u8>, conn: &mut BufReader<LocalSocketStream>)
 pub fn recieve<T: serde::de::DeserializeOwned>(
     conn: &mut BufReader<LocalSocketStream>,
 ) -> Result<T, bincode::error::DecodeError> {
-    let mut usize_b: [u8; std::mem::size_of::<usize>()] = [0; std::mem::size_of::<usize>()];
-    let _ = conn.get_mut().read_exact(&mut usize_b[..]);
-    let size_of_data: usize = usize::from_ne_bytes(usize_b);
-    let mut data_b = vec![0; size_of_data];
+    let mut u64_b: [u8; std::mem::size_of::<u64>()] = [0; std::mem::size_of::<u64>()];
+    let _ = conn.get_mut().read_exact(&mut u64_b[..]);
+    let size_of_data: u64 = u64::from_ne_bytes(u64_b);
+    let mut data_b = vec![0; size_of_data as usize];
     let _ = conn.get_mut().read_exact(&mut data_b[..]);
 
     let out = bincode::serde::decode_from_slice(&data_b, bincode::config::standard())?;

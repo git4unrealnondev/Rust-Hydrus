@@ -19,13 +19,13 @@ use strum_macros::EnumIter;
 #[cfg(feature = "clap")]
 use strum_macros::{Display, EnumString};
 // Default priority for a scraper
-pub const DEFAULT_PRIORITY: usize = 10;
+pub const DEFAULT_PRIORITY: u64 = 10;
 
 // Default cache time for a job.
 // If its None then do not cache the job
 // If the cachetime is greq then zero we'll add the job to a local cache
 // If the cachetime is zero it will be only valid for the job run
-pub const DEFAULT_CACHETIME: Option<usize> = None;
+pub const DEFAULT_CACHETIME: Option<u64> = None;
 pub const DEFAULT_CACHECHECK: JobCacheType = JobCacheType::TimeReptimeParam;
 
 /// Searches either from FTS or FTS then orders by count
@@ -89,8 +89,8 @@ pub enum CheckSourceUrlsEnum {
 pub enum EnclaveCondition {
     Any,
     None,
-    FileSizeGreater(usize),
-    FileSizeLessthan(usize),
+    FileSizeGreater(u64),
+    FileSizeLessthan(u64),
     TagNameAndNamespace((String, String)),
 }
 
@@ -114,7 +114,7 @@ pub enum EnclaveStopCondition {
 #[derive(Debug, bincode::Encode, bincode::Decode)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum EnclaveAction {
-    DownloadToLocation(usize),
+    DownloadToLocation(u64),
     AddTagAndNamespace((String, GenericNamespaceObj, TagType, Option<SubTag>)),
     DownloadToDefault,
     //Functionally similar to DownloadToLocation however this is used for just putting an item in a
@@ -127,16 +127,16 @@ pub enum EnclaveAction {
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct DbTagNNS {
     pub name: String,
-    pub namespace: usize,
+    pub namespace: u64,
 }
 
 /// Database Tags Object
 #[derive(Debug, bincode::Encode, bincode::Decode)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct DbTagObjCompatability {
-    pub id: usize,
+    pub id: u64,
     pub name: String,
-    pub namespace: usize,
+    pub namespace: u64,
 }
 
 #[derive(Debug)]
@@ -160,7 +160,7 @@ pub enum Tasks {
 #[derive(Debug, Default)]
 #[cfg_attr(feature = "clap", derive(EnumIter, Display))]
 pub enum TasksRemove {
-    RemoveNamespaceId(usize),
+    RemoveNamespaceId(u64),
     RemoveNamespaceString(String),
     #[default]
     None,
@@ -202,9 +202,9 @@ pub struct ScraperInfo {
     /// Ratelimit for this site
     pub ratelimit: (u64, std::time::Duration),
     pub sites: Vec<String>,
-    pub priority: usize,
+    pub priority: u64,
     // How many threads should we use to scrape a page. If none then use as many threads as on cpu
-    pub num_threads: Option<usize>,
+    pub num_threads: Option<u64>,
     pub modifiers: Vec<TargetModifiers>,
 }
 
@@ -266,7 +266,7 @@ pub struct GlobalPluginScraper {
     /// Name of the site (human readable plz)
     pub name: String,
     /// Verison of the item
-    pub version: usize,
+    pub version: u64,
     /// Weather this item should handle the file download
     pub should_handle_file_download: bool,
     /// Weather this item needs to handle text scraping
@@ -368,9 +368,9 @@ pub fn stringto_commit_type(into: &String) -> CommitType {
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[cfg_attr(feature = "clap", derive(EnumIter))]
 pub enum SearchHolder {
-    And(Vec<usize>),
-    Or(Vec<usize>),
-    Not(Vec<usize>),
+    And(Vec<u64>),
+    Or(Vec<u64>),
+    Not(Vec<u64>),
 }
 /// Allows searching inside the db. search_relate relates the item in the vec with
 /// eachother the IDs in search relate correspond to the id's in searches. IE: if 0
@@ -502,10 +502,10 @@ pub struct ScraperFileReturn {
 #[derive(Debug, bincode::Encode, bincode::Decode, Clone, Eq, Hash, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct DbFileObj {
-    pub id: usize,
+    pub id: u64,
     pub hash: String,
-    pub ext_id: usize,
-    pub storage_id: usize,
+    pub ext_id: u64,
+    pub storage_id: u64,
 }
 
 /// File object with no id field if unknown
@@ -513,8 +513,8 @@ pub struct DbFileObj {
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct DbFileObjNoId {
     pub hash: String,
-    pub ext_id: usize,
-    pub storage_id: usize,
+    pub ext_id: u64,
+    pub storage_id: u64,
 }
 
 /// Wrapper for DbFileStorage
@@ -526,7 +526,7 @@ pub enum DbFileStorage {
     // File object except ID
     NoIdExist(DbFileObjNoId),
     // Only the fileid is known at the time
-    NoExist(usize),
+    NoExist(u64),
     // Nothing is known (generate fid)
     NoExistUnknown,
 }
@@ -535,7 +535,7 @@ pub enum DbFileStorage {
 #[derive(Debug, bincode::Encode, bincode::Decode, Clone)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct PluginFileObj {
-    pub id: Option<usize>,
+    pub id: Option<u64>,
     pub hash: Option<String>,
     pub ext: Option<String>,
     pub location: Option<String>,
@@ -545,7 +545,7 @@ pub struct PluginFileObj {
 #[derive(Debug, Clone, bincode::Encode, bincode::Decode)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct DbNamespaceObj {
-    pub id: usize,
+    pub id: u64,
     pub name: String,
     pub description: Option<String>,
 }
@@ -559,15 +559,15 @@ pub struct DbNamespaceObj {
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct DbJobsObj {
     /// id of the job. If exist then we are gravy baby
-    pub id: Option<usize>,
+    pub id: Option<u64>,
     /// time job was added into db
-    pub time: usize,
+    pub time: u64,
     /// Time to run job
-    pub reptime: usize,
+    pub reptime: u64,
     // Determines which job we should run first. Higher values go first
-    pub priority: usize,
+    pub priority: u64,
     // How long should we keep a job in cache
-    pub cachetime: Option<usize>,
+    pub cachetime: Option<u64>,
     // How should we deduplicate jobs
     pub cachechecktype: JobCacheType,
     /// Site we're processing
@@ -618,11 +618,11 @@ pub struct DbJobsManager {
 #[derive(Debug, Hash, Eq, PartialEq, Clone, bincode::Encode, bincode::Decode, Ord, PartialOrd)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum DbJobRecreation {
-    OnTagId(usize, Option<usize>),
-    OnTag(String, usize, Option<usize>),
+    OnTagId(u64, Option<u64>),
+    OnTag(String, u64, Option<u64>),
     // first number is the wait time betwen jobs second field is a count. If count is eq None then
     // we should never remove job. Else if count eq zero then remove job
-    AlwaysTime(usize, Option<usize>),
+    AlwaysTime(u64, Option<u64>),
 }
 
 /// Type of job in db. Will be used to confirm what the scraping logic should work.
@@ -666,17 +666,17 @@ pub enum DbJobType {
 )]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct DbParentsObj {
-    pub tag_id: usize,
-    pub relate_tag_id: usize,
+    pub tag_id: u64,
+    pub relate_tag_id: u64,
     /// IE Only limit this to A->B as it relates to C.
-    pub limit_to: Option<usize>,
+    pub limit_to: Option<u64>,
 }
 
 /// Database Relationship Object
 #[derive(Debug)]
 pub struct DbRelationshipObj {
-    pub fileid: usize,
-    pub tagid: usize,
+    pub fileid: u64,
+    pub tagid: u64,
 }
 
 /// Database Settings Object
@@ -685,7 +685,7 @@ pub struct DbRelationshipObj {
 pub struct DbSettingObj {
     pub name: String,
     pub pretty: Option<String>,
-    pub num: Option<usize>,
+    pub num: Option<u64>,
     pub param: Option<String>,
 }
 
@@ -694,7 +694,7 @@ pub struct DbSettingObj {
 pub struct DbSearchObject {
     pub tag: String,
     pub namespace: Option<String>,
-    pub namespace_id: Option<usize>,
+    pub namespace_id: Option<u64>,
 }
 
 /// Database search enum between 2 tags
@@ -909,7 +909,7 @@ pub enum SkipIf {
     FileTagRelationship(Tag),
     // The tag is qnique and if their are X number or more of GenericNamespaceObj
     // associated with the file Then we'll skip it
-    FileNamespaceNumber((Tag, GenericNamespaceObj, usize)),
+    FileNamespaceNumber((Tag, GenericNamespaceObj, u64)),
     // Skips a file if the hash X exists
     FileHash(String),
     // Skips if no files are downloaded
@@ -1004,7 +1004,7 @@ pub enum GlobalCallbacks {
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct CallbackInfoInput {
     // Version of the expected call. Its on the plugin to handle this properly
-    pub vers: usize,
+    pub vers: u64,
     // Name of variable
     pub data_name: Vec<String>,
     // Data for variable of data_name
@@ -1017,7 +1017,7 @@ pub struct CallbackInfo {
     // Name of plugin's function
     pub func: String,
     // Version of plugin
-    pub vers: usize,
+    pub vers: u64,
     // Name of variable
     pub data_name: Vec<String>,
     // Data for variable of data_name
@@ -1030,10 +1030,10 @@ pub struct CallbackInfo {
 pub enum CallbackCustomData {
     String,
     U8,
-    Usize,
+    u64,
     VString,
     VU8,
-    VUsize,
+    Vu64,
     VCallback,
 }
 
@@ -1045,10 +1045,10 @@ pub enum FileDownloadReturn {}
 pub enum CallbackCustomDataReturning {
     String(String),
     U8(Vec<u8>),
-    Usize(usize),
+    U64(u64),
     VString(Vec<String>),
     VU8(Vec<u8>),
-    VUsize(Vec<usize>),
+    Vu64(Vec<u64>),
     VCallback(Vec<CallbackCustomDataReturning>),
 }
 
@@ -1059,15 +1059,15 @@ impl std::fmt::Display for CallbackCustomDataReturning {
             CallbackCustomDataReturning::U8(bytes) => {
                 write!(f, "U8({:?})", bytes)
             }
-            CallbackCustomDataReturning::Usize(v) => write!(f, "Usize({})", v),
+            CallbackCustomDataReturning::U64(v) => write!(f, "u64({})", v),
             CallbackCustomDataReturning::VString(v) => {
                 write!(f, "VString({:?})", v)
             }
             CallbackCustomDataReturning::VU8(v) => {
                 write!(f, "VU8({:?})", v)
             }
-            CallbackCustomDataReturning::VUsize(v) => {
-                write!(f, "VUsize({:?})", v)
+            CallbackCustomDataReturning::Vu64(v) => {
+                write!(f, "Vu64({:?})", v)
             }
             CallbackCustomDataReturning::VCallback(list) => {
                 write!(f, "VCallback([")?;

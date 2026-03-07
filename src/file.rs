@@ -61,7 +61,7 @@ pub fn parse_file(
     sidecars: &Vec<PathBuf>,
     database: Main,
     manager_arc: GlobalLoad,
-) -> Option<usize> {
+) -> Option<u64> {
     let mut inside_files = Vec::new();
 
     let sha512hash = hash_file(

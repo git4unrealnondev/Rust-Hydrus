@@ -94,8 +94,8 @@ pub struct GlobalLoad {
             HashMap<
                 (
                     (Option<String>, Option<sharedtypes::RegexStorage>),
-                    Vec<usize>,
-                    Vec<usize>,
+                    Vec<u64>,
+                    Vec<u64>,
                 ),
                 Vec<sharedtypes::GlobalPluginScraper>,
             >,
@@ -138,12 +138,12 @@ impl GlobalLoad {
     fn db_upgrade_call(
         &self,
         libloading: &RwLock<libloading::Library>,
-        db_version: &usize,
+        db_version: &u64,
         site_struct: &sharedtypes::GlobalPluginScraper,
     ) {
         let libloading = libloading.read();
         let temp: libloading::Symbol<
-            unsafe extern "C" fn(&usize, &sharedtypes::GlobalPluginScraper),
+            unsafe extern "C" fn(&u64, &sharedtypes::GlobalPluginScraper),
         > = match unsafe { libloading.get(b"db_upgrade_call\0") } {
             Err(err) => {
                 logging::error_log(format!(
@@ -600,7 +600,7 @@ impl GlobalLoad {
     pub fn plugin_on_tag(
         &self,
 
-        tag: &sharedtypes::TagObject, //tag: &String,tag_nsid: &usize,
+        tag: &sharedtypes::TagObject, //tag: &String,tag_nsid: &u64,
     ) {
         // Designed to run regex on any tag that comes in. I'll leave the filtering to the plugins
         self.run_regex(&tag.tag, &tag.namespace);
@@ -720,7 +720,7 @@ impl GlobalLoad {
                             //db.jobs_add_new(job);
                         }
 
-                        let mut temp_vec: Vec<(Option<usize>, Option<usize>)> = Vec::new();
+                        let mut temp_vec: Vec<(Option<u64>, Option<u64>)> = Vec::new();
                         {
                             for relations in names.relationship {
                                 let file_id = self.db.file_get_hash(&&relations.file_hash);
@@ -754,8 +754,8 @@ impl GlobalLoad {
     ) -> HashMap<
         (
             (Option<String>, Option<sharedtypes::RegexStorage>),
-            Vec<usize>,
-            Vec<usize>,
+            Vec<u64>,
+            Vec<u64>,
         ),
         Vec<sharedtypes::GlobalPluginScraper>,
     > {
@@ -888,7 +888,7 @@ impl GlobalLoad {
     pub fn external_plugin_call(
         &self,
         func_name: &str,
-        vers: &usize,
+        vers: &u64,
         input_data: &sharedtypes::CallbackInfoInput,
     ) -> HashMap<String, sharedtypes::CallbackCustomDataReturning> {
         if let Some(callback_list) = self.callback_storage.read().get(func_name) {
@@ -976,7 +976,7 @@ impl GlobalLoad {
         &self.library_lib.read().cloned()
     }*/
 
-    pub fn run_upgrade_logic(&self, db_version: &usize) {
+    pub fn run_upgrade_logic(&self, db_version: &u64) {
         for internal_scraper in self.library_lib.read().keys() {
             if let Some(scraper_library) = self.library_lib.read().get(internal_scraper) {
                 self.db_upgrade_call(scraper_library, &db_version, internal_scraper);
@@ -1369,6 +1369,7 @@ pub fn scraper_file_return(
 pub(crate) mod test_globalload {
 
     use super::*;
+    use crate::database::database;
     pub fn emulate_loaded(db: database::Main, jobs: Arc<RwLock<Jobs>>) -> GlobalLoad {
         GlobalLoad::new(db, jobs)
     }

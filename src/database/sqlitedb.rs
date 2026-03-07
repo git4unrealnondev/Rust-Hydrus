@@ -60,7 +60,7 @@ pub(in crate::database) fn transaction_start<'a>(
 
 impl Main {
     /// Finds all tag ids where they dont hace a relationship
-    pub(in crate::database) fn get_empty_tagids(&self) -> HashSet<usize> {
+    pub(in crate::database) fn get_empty_tagids(&self) -> HashSet<u64> {
         let sql = "SELECT t.id
 FROM Tags t
 WHERE t.count ==0 AND NOT EXISTS (
@@ -78,9 +78,9 @@ AND NOT EXISTS (
         let conn = self.get_database_connection();
         let mut stmt = conn.prepare(sql).unwrap();
         wait_until_sqlite_ok!(
-            stmt.query_map(params![], |row| row.get::<_, usize>(0))
+            stmt.query_map(params![], |row| row.get::<_, u64>(0))
                 .unwrap()
-                .collect::<Result<HashSet<usize>, _>>()
+                .collect::<Result<HashSet<u64>, _>>()
         )
         .unwrap_or(HashSet::new())
     }
@@ -89,9 +89,9 @@ AND NOT EXISTS (
     pub(in crate::database) fn search_tags_sql(
         &self,
         search_string: &String,
-        limit_to: &usize,
+        limit_to: &u64,
         use_fts_only: sharedtypes::TagPartialSearchType,
-    ) -> Vec<(usize, usize)> {
+    ) -> Vec<(u64, u64)> {
         // Create the SQL query with a dynamic MATCH condition and limit
 
         let sql = match use_fts_only {
@@ -147,10 +147,10 @@ LIMIT ?;"#
         // Convert the parameters vector to a slice and pass to query_map
         wait_until_sqlite_ok!(
             stmt.query_map(params.as_slice(), |row| {
-                Ok((row.get::<_, usize>(0)?, row.get::<_, usize>(1)?))
+                Ok((row.get::<_, u64>(0)?, row.get::<_, u64>(1)?))
             })
             .unwrap()
-            .collect::<Result<Vec<(usize, usize)>, _>>()
+            .collect::<Result<Vec<(u64, u64)>, _>>()
         )
         .unwrap_or(Vec::new())
     }
@@ -675,10 +675,10 @@ WHERE Tags.id = sub.tagid;",
     ///
     pub fn relationship_get_tagid_where_namespace_count_sql(
         &self,
-        namespace_id: &usize,
-        count: &usize,
+        namespace_id: &u64,
+        count: &u64,
         direction: &sharedtypes::GreqLeqOrEq,
-    ) -> Vec<usize> {
+    ) -> Vec<u64> {
         let dir = match direction {
             sharedtypes::GreqLeqOrEq::GreaterThan => '>',
             sharedtypes::GreqLeqOrEq::LessThan => '<',
@@ -697,9 +697,9 @@ HAVING COUNT(r.fileid) {dir} ?;"
             ))
             .unwrap();
         wait_until_sqlite_ok!(
-            stmt.query_map(params![namespace_id, count], |row| row.get::<_, usize>(0))
+            stmt.query_map(params![namespace_id, count], |row| row.get::<_, u64>(0))
                 .unwrap()
-                .collect::<Result<Vec<usize>, _>>()
+                .collect::<Result<Vec<u64>, _>>()
         )
         .unwrap_or(Vec::new())
     }
@@ -710,10 +710,10 @@ HAVING COUNT(r.fileid) {dir} ?;"
     ///
     pub fn relationship_get_fileid_where_namespace_count_sql(
         &self,
-        namespace_id: &usize,
-        count: &usize,
+        namespace_id: &u64,
+        count: &u64,
         direction: &sharedtypes::GreqLeqOrEq,
-    ) -> Vec<usize> {
+    ) -> Vec<u64> {
         let dir = match direction {
             sharedtypes::GreqLeqOrEq::GreaterThan => '>',
             sharedtypes::GreqLeqOrEq::LessThan => '<',
@@ -729,9 +729,9 @@ HAVING COUNT(r.fileid) {dir} ?;"
             )
             .unwrap();
         wait_until_sqlite_ok!(
-            stmt.query_map(params![namespace_id, count], |row| row.get::<_, usize>(0))
+            stmt.query_map(params![namespace_id, count], |row| row.get::<_, u64>(0))
                 .unwrap()
-                .collect::<Result<Vec<usize>, _>>()
+                .collect::<Result<Vec<u64>, _>>()
         )
         .unwrap_or(Vec::new())
     }
@@ -742,8 +742,8 @@ HAVING COUNT(r.fileid) {dir} ?;"
     ///
     pub(in crate::database) fn relationship_get_fileid_search_sql(
         &self,
-        tag_ids: &[usize],
-    ) -> Vec<usize> {
+        tag_ids: &[u64],
+    ) -> Vec<u64> {
         if tag_ids.is_empty() {
             return vec![];
         }
@@ -751,7 +751,7 @@ HAVING COUNT(r.fileid) {dir} ?;"
         let tn = self.pool.get().unwrap();
 
         // 1️⃣ Deduplicate input tags
-        let mut tag_ids: Vec<usize> = tag_ids.to_vec();
+        let mut tag_ids: Vec<u64> = tag_ids.to_vec();
         tag_ids.sort_unstable();
         tag_ids.dedup();
 
@@ -770,9 +770,9 @@ HAVING COUNT(r.fileid) {dir} ?;"
 
         let mut stmt = tn.prepare(&count_sql).unwrap();
 
-        let sorted_tag_ids: Vec<usize> = stmt
+        let sorted_tag_ids: Vec<u64> = stmt
             .query_map(rusqlite::params_from_iter(&tag_ids), |row| {
-                row.get::<_, usize>(0)
+                row.get::<_, u64>(0)
             })
             .unwrap()
             .collect::<Result<Vec<_>, _>>()
@@ -806,7 +806,7 @@ HAVING COUNT(r.fileid) {dir} ?;"
         let required_count = sorted_tag_ids.len();
         params.push(&required_count);
 
-        stmt.query_map(&params[..], |row| row.get::<_, usize>(0))
+        stmt.query_map(&params[..], |row| row.get::<_, u64>(0))
             .unwrap()
             .collect::<Result<Vec<_>, _>>()
             .unwrap_or_else(|_| vec![])
@@ -814,7 +814,7 @@ HAVING COUNT(r.fileid) {dir} ?;"
     ///
     /// Checks if a relationship exists
     ///
-    fn relationship_exists(&self, tn: &Transaction, file_id: &usize, tag_id: &usize) -> bool {
+    fn relationship_exists(&self, tn: &Transaction, file_id: &u64, tag_id: &u64) -> bool {
         let table = if self.is_tag_count_greater_rel_limit(tn, tag_id) {
             "Relationship_Popular"
         } else {
@@ -844,7 +844,7 @@ HAVING COUNT(r.fileid) {dir} ?;"
     ///
     /// Gets all jobs from the sql tables
     ///
-    pub(in crate::database) fn jobs_get_all_sql(&self) -> HashMap<usize, sharedtypes::DbJobsObj> {
+    pub(in crate::database) fn jobs_get_all_sql(&self) -> HashMap<u64, sharedtypes::DbJobsObj> {
         let mut out = HashMap::new();
         let tn = self.pool.get().unwrap();
         let max_jobs = self.jobs_return_count_sql();
@@ -861,9 +861,9 @@ HAVING COUNT(r.fileid) {dir} ?;"
     ///
     /// Returns the total count of the jobs table
     ///
-    pub(in crate::database) fn jobs_return_count_sql(&self) -> usize {
+    pub(in crate::database) fn jobs_return_count_sql(&self) -> u64 {
         let tn = self.pool.get().unwrap();
-        let mut max: Option<usize> =
+        let mut max: Option<u64> =
             wait_until_sqlite_ok!(
                 tn.query_row("SELECT MAX(id) FROM Jobs", params![], |row| row.get(0))
             )
@@ -891,7 +891,7 @@ HAVING COUNT(r.fileid) {dir} ?;"
     ///
     /// Returns the total count of the namespace table
     ///
-    pub(in crate::database) fn namespace_return_count_sql(&self) -> usize {
+    pub(in crate::database) fn namespace_return_count_sql(&self) -> u64 {
         let tn = self.pool.get().unwrap();
         wait_until_sqlite_ok!(
             tn.query_row("SELECT COUNT(*) FROM Namespace", params![], |row| {
@@ -906,7 +906,7 @@ HAVING COUNT(r.fileid) {dir} ?;"
     ///
     pub(in crate::database) fn files_get_id_sql(
         &self,
-        file_id: &usize,
+        file_id: &u64,
     ) -> Option<sharedtypes::DbFileStorage> {
         let tn = self.pool.get().unwrap();
         let inp = "SELECT * FROM File where id = ?";
@@ -930,7 +930,7 @@ HAVING COUNT(r.fileid) {dir} ?;"
     ///
     /// Returns all namespace keys
     ///
-    pub(in crate::database) fn namespace_keys_sql(&self) -> Vec<usize> {
+    pub(in crate::database) fn namespace_keys_sql(&self) -> Vec<u64> {
         let tn = self.pool.get().unwrap();
         let mut out = Vec::new();
         let mut inp = tn.prepare("SELECT id FROM Namespace").unwrap();
@@ -946,7 +946,7 @@ HAVING COUNT(r.fileid) {dir} ?;"
     ///
     /// Get file if it exists by id
     ///
-    pub(in crate::database) fn namespace_get_tagids_sql(&self, ns_id: &usize) -> HashSet<usize> {
+    pub(in crate::database) fn namespace_get_tagids_sql(&self, ns_id: &u64) -> HashSet<u64> {
         let tn = self.pool.get().unwrap();
         let mut out = HashSet::new();
         let mut inp = tn
@@ -970,7 +970,7 @@ HAVING COUNT(r.fileid) {dir} ?;"
     ///
     pub(in crate::database) fn jobs_get_id_sql(
         &self,
-        job_id: &usize,
+        job_id: &u64,
     ) -> Option<sharedtypes::DbJobsObj> {
         let tn = self.pool.get().unwrap();
         let inp = "SELECT * FROM Jobs WHERE id = ? LIMIT 1";
@@ -1037,7 +1037,7 @@ HAVING COUNT(r.fileid) {dir} ?;"
         &self,
         tn: &Transaction,
         parent: &sharedtypes::DbParentsObj,
-    ) -> usize {
+    ) -> u64 {
         let inp = "INSERT INTO Parents(tag_id, relate_tag_id, limit_to) VALUES(?, ?, ?)";
         let limit_to = match parent.limit_to {
             None => &Null as &dyn ToSql,
@@ -1065,7 +1065,7 @@ HAVING COUNT(r.fileid) {dir} ?;"
     /// Returns a list of parents where: relate_tag_id
     /// exists
     ///
-    pub fn parents_relate_tag_get(&self, relate_tag: &usize) -> HashSet<sharedtypes::DbParentsObj> {
+    pub fn parents_relate_tag_get(&self, relate_tag: &u64) -> HashSet<sharedtypes::DbParentsObj> {
         let tn = self.pool.get().unwrap();
         let mut out = HashSet::new();
 
@@ -1073,9 +1073,9 @@ HAVING COUNT(r.fileid) {dir} ?;"
             .prepare("SELECT tag_id, relate_tag_id, limit_to FROM Parents WHERE relate_tag_id = ?")
             .unwrap();
         let temp = wait_until_sqlite_ok!(stmt.query_map(params![relate_tag], |row| {
-            let tag_id: usize = row.get(0).unwrap();
-            let relate_tag_id: usize = row.get(1).unwrap();
-            let limit_to: Option<usize> = row.get(2).unwrap();
+            let tag_id: u64 = row.get(0).unwrap();
+            let relate_tag_id: u64 = row.get(1).unwrap();
+            let limit_to: Option<u64> = row.get(2).unwrap();
 
             Ok(sharedtypes::DbParentsObj {
                 tag_id,
@@ -1094,7 +1094,7 @@ HAVING COUNT(r.fileid) {dir} ?;"
     /// Returns a list of parents where: tag_id
     /// exists
     ///
-    pub fn parents_tagid_tag_get(&self, tag_id: &usize) -> HashSet<sharedtypes::DbParentsObj> {
+    pub fn parents_tagid_tag_get(&self, tag_id: &u64) -> HashSet<sharedtypes::DbParentsObj> {
         let tn = self.pool.get().unwrap();
         let mut out = HashSet::new();
 
@@ -1102,9 +1102,9 @@ HAVING COUNT(r.fileid) {dir} ?;"
             .prepare("SELECT tag_id, relate_tag_id, limit_to FROM Parents WHERE tag_id = ?")
             .unwrap();
         let temp = wait_until_sqlite_ok!(stmt.query_map(params![tag_id], |row| {
-            let tag_id: usize = row.get(0).unwrap();
-            let relate_tag_id: usize = row.get(1).unwrap();
-            let limit_to: Option<usize> = row.get(2).unwrap();
+            let tag_id: u64 = row.get(0).unwrap();
+            let relate_tag_id: u64 = row.get(1).unwrap();
+            let limit_to: Option<u64> = row.get(2).unwrap();
 
             Ok(sharedtypes::DbParentsObj {
                 tag_id,
@@ -1123,7 +1123,7 @@ HAVING COUNT(r.fileid) {dir} ?;"
     /// Returns a list of relate_tag_ids where: tag_id
     /// exists
     ///
-    pub fn parents_tagid_get(&self, relate_tag: &usize) -> HashSet<usize> {
+    pub fn parents_tagid_get(&self, relate_tag: &u64) -> HashSet<u64> {
         let tn = self.pool.get().unwrap();
         let mut out = HashSet::new();
 
@@ -1131,7 +1131,7 @@ HAVING COUNT(r.fileid) {dir} ?;"
             .prepare("SELECT tag_id FROM Parents WHERE relate_tag_id = ?")
             .unwrap();
         let temp = wait_until_sqlite_ok!(stmt.query_map(params![relate_tag], |row| {
-            let tag_id: usize = row.get(0).unwrap();
+            let tag_id: u64 = row.get(0).unwrap();
 
             Ok(tag_id)
         }))
@@ -1146,7 +1146,7 @@ HAVING COUNT(r.fileid) {dir} ?;"
     /// Returns a list of relate_tag_ids where: tag_id
     /// exists
     ///
-    pub(in crate::database) fn parents_relatetagid_get(&self, tag_id: &usize) -> HashSet<usize> {
+    pub(in crate::database) fn parents_relatetagid_get(&self, tag_id: &u64) -> HashSet<u64> {
         let tn = self.pool.get().unwrap();
         let mut out = HashSet::new();
 
@@ -1154,7 +1154,7 @@ HAVING COUNT(r.fileid) {dir} ?;"
             .prepare("SELECT relate_tag_id FROM Parents WHERE tag_id = ?")
             .unwrap();
         let temp = wait_until_sqlite_ok!(stmt.query_map(params![tag_id], |row| {
-            let relate_tag_id: usize = row.get(0).unwrap();
+            let relate_tag_id: u64 = row.get(0).unwrap();
 
             Ok(relate_tag_id)
         }))
@@ -1166,7 +1166,7 @@ HAVING COUNT(r.fileid) {dir} ?;"
     }
 
     /// Adds job into db
-    pub fn jobs_add_new(&self, dbjobsobj: sharedtypes::DbJobsObj) -> usize {
+    pub fn jobs_add_new(&self, dbjobsobj: sharedtypes::DbJobsObj) -> u64 {
         let mut dbjobsobj = dbjobsobj.clone();
         let id = match dbjobsobj.id {
             None => self.jobs_get_max(),
@@ -1195,7 +1195,7 @@ HAVING COUNT(r.fileid) {dir} ?;"
     /// Returns a list of parents where: limit_to
     /// exists
     ///
-    pub fn parents_limitto_tag_get(&self, limitto: &usize) -> HashSet<sharedtypes::DbParentsObj> {
+    pub fn parents_limitto_tag_get(&self, limitto: &u64) -> HashSet<sharedtypes::DbParentsObj> {
         let tn = self.pool.get().unwrap();
         let mut out = HashSet::new();
 
@@ -1203,9 +1203,9 @@ HAVING COUNT(r.fileid) {dir} ?;"
             .prepare("SELECT tag_id, relate_tag_id, limit_to FROM Parents WHERE limit_to = ?")
             .unwrap();
         let temp = wait_until_sqlite_ok!(stmt.query_map(params![limitto], |row| {
-            let tag_id: usize = row.get(0).unwrap();
-            let relate_tag_id: usize = row.get(1).unwrap();
-            let limit_to: Option<usize> = row.get(2).unwrap();
+            let tag_id: u64 = row.get(0).unwrap();
+            let relate_tag_id: u64 = row.get(1).unwrap();
+            let limit_to: Option<u64> = row.get(2).unwrap();
 
             Ok(sharedtypes::DbParentsObj {
                 tag_id,
@@ -1220,7 +1220,7 @@ HAVING COUNT(r.fileid) {dir} ?;"
         out
     }
 
-    pub(in crate::database) fn parents_delete_sql(&self, tn: &Transaction, id: &usize) {
+    pub(in crate::database) fn parents_delete_sql(&self, tn: &Transaction, id: &u64) {
         self.parents_delete_tag_id_sql(tn, id);
         self.parents_delete_relate_tag_id_sql(tn, id);
         self.parents_delete_limit_to_sql(tn, id);
@@ -1242,7 +1242,7 @@ HAVING COUNT(r.fileid) {dir} ?;"
     ///
     /// Does namespace contains tagid. A more optimizes sqlite version
     ///
-    pub(in crate::database) fn namespace_contains_id_sql(&self, tid: &usize, nsid: &usize) -> bool {
+    pub(in crate::database) fn namespace_contains_id_sql(&self, tid: &u64, nsid: &u64) -> bool {
         let tn = self.pool.get().unwrap();
         wait_until_sqlite_ok!(tn.query_row(
             "SELECT id FROM Tags WHERE id = ? AND namespace = ?",
@@ -1255,7 +1255,7 @@ HAVING COUNT(r.fileid) {dir} ?;"
     ///
     /// Removes ALL of a tag_id from the parents collumn
     ///
-    pub(in crate::database) fn parents_delete_tag_id_sql(&self, tn: &Transaction, tag_id: &usize) {
+    pub(in crate::database) fn parents_delete_tag_id_sql(&self, tn: &Transaction, tag_id: &u64) {
         let _ = wait_until_sqlite_ok!(
             tn.execute("DELETE FROM Parents WHERE tag_id = ?", params![tag_id])
         );
@@ -1267,7 +1267,7 @@ HAVING COUNT(r.fileid) {dir} ?;"
     pub(in crate::database) fn parents_delete_relate_tag_id_sql(
         &self,
         tn: &Transaction,
-        relate_tag_id: &usize,
+        relate_tag_id: &u64,
     ) {
         let _ = wait_until_sqlite_ok!(tn.execute(
             "DELETE FROM Parents WHERE relate_tag_id = ?",
@@ -1281,7 +1281,7 @@ HAVING COUNT(r.fileid) {dir} ?;"
     pub(in crate::database) fn parents_delete_limit_to_sql(
         &self,
         tn: &Transaction,
-        limit_to: &usize,
+        limit_to: &u64,
     ) {
         let _ = wait_until_sqlite_ok!(
             tn.execute("DELETE FROM Parents WHERE limit_to = ?", params![limit_to])
@@ -1291,7 +1291,7 @@ HAVING COUNT(r.fileid) {dir} ?;"
     ///
     /// Gets a file storage location id
     ///
-    pub(in crate::database) fn storage_get_id(&self, location: &String) -> Option<usize> {
+    pub(in crate::database) fn storage_get_id(&self, location: &String) -> Option<u64> {
         let tn = self.pool.get().unwrap();
         wait_until_sqlite_ok!(tn.query_row(
             "SELECT id from FileStorageLocations where location = ?",
@@ -1307,7 +1307,7 @@ HAVING COUNT(r.fileid) {dir} ?;"
     /// Note needs to be offset by one because sqlite starts at 1 but the internal sqlite counter
     /// starts at zero but the stupid actual count starts at 1
     ///
-    pub(in crate::database) fn tags_max_return_sql(&self) -> usize {
+    pub(in crate::database) fn tags_max_return_sql(&self) -> u64 {
         let tn = self.pool.get().unwrap();
         wait_until_sqlite_ok!(tn.query_row("SELECT MAX(id) FROM Tags", params![], |row| row.get(0)))
             .unwrap_or(0)
@@ -1319,7 +1319,7 @@ HAVING COUNT(r.fileid) {dir} ?;"
     ///
     pub(in crate::database) fn tags_get_dbtagnns_sql(
         &self,
-        tag_id: &usize,
+        tag_id: &u64,
     ) -> Option<sharedtypes::DbTagNNS> {
         let tn = self.pool.get().unwrap();
         wait_until_sqlite_ok!(tn.query_row(
@@ -1340,7 +1340,7 @@ HAVING COUNT(r.fileid) {dir} ?;"
     ///
     /// Gets a list of tag ids
     ///
-    pub(in crate::database) fn tags_get_id_list_sql(&self) -> HashSet<usize> {
+    pub(in crate::database) fn tags_get_id_list_sql(&self) -> HashSet<u64> {
         let tn = self.pool.get().unwrap();
         let inp = "SELECT id FROM Tags";
 
@@ -1358,7 +1358,7 @@ HAVING COUNT(r.fileid) {dir} ?;"
     ///
     /// Gets a list of tag ids
     ///
-    pub(in crate::database) fn file_get_list_id_sql(&self) -> HashSet<usize> {
+    pub(in crate::database) fn file_get_list_id_sql(&self) -> HashSet<u64> {
         let tn = self.pool.get().unwrap();
         let inp = "SELECT id FROM File";
 
@@ -1376,7 +1376,7 @@ HAVING COUNT(r.fileid) {dir} ?;"
     ///
     /// Gets a string from the ID of the storage location
     ///
-    pub(in crate::database) fn storage_get_string(&self, id: &usize) -> Option<String> {
+    pub(in crate::database) fn storage_get_string(&self, id: &u64) -> Option<String> {
         let tn = self.pool.get().unwrap();
         wait_until_sqlite_ok!(tn.query_row(
             "SELECT location from FileStorageLocations where id = ?",
@@ -1394,7 +1394,7 @@ HAVING COUNT(r.fileid) {dir} ?;"
         &self,
         tn: &Transaction,
         location: &String,
-    ) -> usize {
+    ) -> u64 {
         {
             let mut prep = tn
                 .prepare("INSERT OR REPLACE INTO FileStorageLocations (location) VALUES (?)")
@@ -1413,10 +1413,10 @@ HAVING COUNT(r.fileid) {dir} ?;"
     pub(super) fn tag_add_sql(
         &self,
         tn: &Transaction,
-        tag_id: &usize,
+        tag_id: &u64,
         tag: &String,
-        namespace: &usize,
-    ) -> usize {
+        namespace: &u64,
+    ) -> u64 {
         let inp = "INSERT INTO Tags (id, name, namespace) VALUES(?, ?, ?) ON CONFLICT(id) DO UPDATE SET name = EXCLUDED.name, namespace = EXCLUDED.namespace";
         {
             {
@@ -1432,7 +1432,7 @@ HAVING COUNT(r.fileid) {dir} ?;"
     }
 
     /// Adds tags into sql database
-    pub(super) fn tag_add_no_id_sql(&self, tn: &Transaction, tag: &str, namespace: usize) -> usize {
+    pub(super) fn tag_add_no_id_sql(&self, tn: &Transaction, tag: &str, namespace: u64) -> u64 {
         let sql = r#"
 INSERT INTO Tags(name, namespace)
 VALUES (?, ?)
@@ -1450,8 +1450,8 @@ RETURNING id;
         tn: &Transaction,
         name: &String,
         description: &Option<String>,
-        name_id: Option<usize>,
-    ) -> usize {
+        name_id: Option<u64>,
+    ) -> u64 {
         {
             let inp = "INSERT INTO Namespace (id, name, description) VALUES(?, ?, ?)";
             {
@@ -1470,27 +1470,27 @@ RETURNING id;
     pub(super) fn load_parents(&self) {
         if matches!(self._cache, CacheType::Bare) {
             return;
-        }
+        } /*
         logging::info_log("Database is Loading: Parents".to_string());
         let tn = self.get_database_connection();
         let temp = tn.prepare("SELECT tag_id, relate_tag_id, limit_to FROM Parents");
         if let Ok(mut con) = temp {
-            let parents = wait_until_sqlite_ok!(con.query_map([], |row| {
-                Ok(sharedtypes::DbParentsObj {
-                    tag_id: row.get(0).unwrap(),
-                    relate_tag_id: row.get(1).unwrap(),
-                    limit_to: row.get(2).unwrap(),
-                })
-            }))
-            .unwrap();
-            for each in parents {
-                if let Ok(res) = each {
-                    self.parents_add_internal_db(res);
-                } else {
-                    error!("Bad Parent cant load {:?}", each);
-                }
-            }
+        let parents = wait_until_sqlite_ok!(con.query_map([], |row| {
+        Ok(sharedtypes::DbParentsObj {
+        tag_id: row.get(0).unwrap(),
+        relate_tag_id: row.get(1).unwrap(),
+        limit_to: row.get(2).unwrap(),
+        })
+        }))
+        .unwrap();
+        for each in parents {
+        if let Ok(res) = each {
+        self.parents_add_internal_db(res);
+        } else {
+        error!("Bad Parent cant load {:?}", each);
         }
+        }
+        }*/
     }
 
     ///
@@ -1499,7 +1499,7 @@ RETURNING id;
     pub(in crate::database) fn parents_get_id_list_sql(
         &self,
         par: &sharedtypes::DbParentsObj,
-    ) -> HashSet<usize> {
+    ) -> HashSet<u64> {
         let mut out = HashSet::new();
         let limit_to = match par.limit_to {
             None => &Null as &dyn ToSql,
@@ -1523,7 +1523,7 @@ RETURNING id;
                         let parents = wait_until_sqlite_ok!(con.query_map(
                             [&par.tag_id as &dyn ToSql, &par.relate_tag_id as &dyn ToSql],
                             |row| {
-                                let kep: usize = row.get(0).unwrap();
+                                let kep: u64 = row.get(0).unwrap();
 
                                 Ok(kep)
                             },
@@ -1532,7 +1532,7 @@ RETURNING id;
                         .flatten();
 
                         for each in parents {
-                            let ear: usize = each;
+                            let ear: u64 = each;
                             out.insert(ear);
                         }
                     }
@@ -1545,7 +1545,7 @@ RETURNING id;
                                 &lim as &dyn ToSql,
                             ],
                             |row| {
-                                let kep: usize = row.get(0).unwrap();
+                                let kep: u64 = row.get(0).unwrap();
 
                                 Ok(kep)
                             },
@@ -1553,7 +1553,7 @@ RETURNING id;
                         .unwrap()
                         .flatten();
                         for each in parents {
-                            let ear: usize = each;
+                            let ear: u64 = each;
                             out.insert(ear);
                         }
                     }
@@ -1566,18 +1566,18 @@ RETURNING id;
 
     pub(in crate::database) fn parents_dbobj_get_sql(
         &self,
-        parent_id: &usize,
+        parent_id: &u64,
     ) -> Option<DbParentsObj> {
         let tn = self.get_database_connection();
 
-        let result: Result<(usize, usize, Option<usize>), rusqlite::Error> = tn.query_row(
+        let result: Result<(u64, u64, Option<u64>), rusqlite::Error> = tn.query_row(
             "SELECT tag_id, relate_tag_id, limit_to FROM Parents WHERE id = ?",
             params![parent_id],
             |row| {
                 Ok((
-                    row.get::<_, usize>(0)?,
-                    row.get::<_, usize>(1)?,
-                    row.get::<_, Option<usize>>(2)?,
+                    row.get::<_, u64>(0)?,
+                    row.get::<_, u64>(1)?,
+                    row.get::<_, Option<u64>>(2)?,
                 ))
             },
         );
@@ -1595,7 +1595,7 @@ RETURNING id;
     pub(in crate::database) fn file_tag_relationship(
         &self,
         tn: &Transaction,
-        fid: &usize,
+        fid: &u64,
         tags: Vec<sharedtypes::TagObject>,
     ) {
         {
@@ -1651,7 +1651,7 @@ RETURNING id;
     pub(in crate::database) fn extensions_get_fileid_extstr_sql(
         &self,
         extensions: &[String],
-    ) -> HashSet<usize> {
+    ) -> HashSet<u64> {
         let mut ext_id_vec = Vec::new();
         for ext in extensions.iter() {
             if let Some(ext_id) = self.extension_get_id(ext) {
@@ -1666,8 +1666,8 @@ RETURNING id;
     ///
     pub(in crate::database) fn extension_get_fileid_extid_sql(
         &self,
-        extensions: &[usize],
-    ) -> HashSet<usize> {
+        extensions: &[u64],
+    ) -> HashSet<u64> {
         let conn = self.pool.get().unwrap();
         if extensions.is_empty() {
             return HashSet::new();
@@ -1688,9 +1688,9 @@ RETURNING id;
         let mut stmt = conn.prepare(&sql).unwrap();
 
         wait_until_sqlite_ok!(
-            stmt.query_map([], |row| row.get::<_, usize>(0))
+            stmt.query_map([], |row| row.get::<_, u64>(0))
                 .unwrap()
-                .collect::<Result<HashSet<usize>, _>>()
+                .collect::<Result<HashSet<u64>, _>>()
         )
         .unwrap_or(HashSet::new())
     }
@@ -1701,9 +1701,9 @@ RETURNING id;
     pub(in crate::database) fn extension_put_id_ext_sql(
         &self,
         tn: &Transaction,
-        id: Option<usize>,
+        id: Option<u64>,
         ext: &str,
-    ) -> usize {
+    ) -> u64 {
         {
             let _ = wait_until_sqlite_ok!(tn.execute(
                 "insert or ignore into FileExtensions(id, extension) VALUES (?,?)",
@@ -1722,7 +1722,7 @@ RETURNING id;
     ///
     /// Returns id if a hash exists
     ///
-    pub(in crate::database) fn file_get_id_sql(&self, hash: &str) -> Option<usize> {
+    pub(in crate::database) fn file_get_id_sql(&self, hash: &str) -> Option<u64> {
         let tn = self.pool.get().unwrap();
         wait_until_sqlite_ok!(tn.query_row(
             "SELECT id FROM File WHERE hash = ? LIMIT 1",
@@ -1738,7 +1738,7 @@ RETURNING id;
         &self,
         tn: &Transaction,
         hash: &str,
-    ) -> Option<usize> {
+    ) -> Option<u64> {
         wait_until_sqlite_ok!(tn.query_row(
             "SELECT id FROM File WHERE hash = ? LIMIT 1",
             params![hash],
@@ -1754,7 +1754,7 @@ RETURNING id;
         &self,
         tn: &Transaction,
         ext: &str,
-    ) -> Option<usize> {
+    ) -> Option<u64> {
         wait_until_sqlite_ok!(tn.query_row(
             "SELECT id FROM FileExtensions WHERE extension = ?",
             params![ext],
@@ -1765,7 +1765,7 @@ RETURNING id;
     ///
     /// Returns if an extension exists get by id
     ///
-    pub(in crate::database) fn extension_get_string_sql(&self, id: &usize) -> Option<String> {
+    pub(in crate::database) fn extension_get_string_sql(&self, id: &u64) -> Option<String> {
         let tn = self.pool.get().unwrap();
         wait_until_sqlite_ok!(tn.query_row(
             "select extension from FileExtensions where id = ?",
@@ -1776,11 +1776,7 @@ RETURNING id;
     }
 
     /// Adds file via SQL
-    pub(super) fn file_add_sql(
-        &self,
-        tn: &Transaction,
-        file: &sharedtypes::DbFileStorage,
-    ) -> usize {
+    pub(super) fn file_add_sql(&self, tn: &Transaction, file: &sharedtypes::DbFileStorage) -> u64 {
         let out_file_id;
         let file_id;
         let hash;
@@ -1840,27 +1836,34 @@ RETURNING id;
         if matches!(self._cache, CacheType::Bare) {
             return;
         }
-        let tn = self.pool.get().unwrap();
-        logging::info_log("Database is Loading: Relationships".to_string());
-        let temp = tn.prepare("SELECT fileid, tagid FROM Relationship");
-        if let Ok(mut con) = temp {
-            let relationship = wait_until_sqlite_ok!(con.query_map([], |row| {
-                Ok(sharedtypes::DbRelationshipObj {
-                    fileid: row.get(0).unwrap(),
-                    tagid: row.get(1).unwrap(),
-                })
-            }))
-            .unwrap();
-            for each in relationship {
-                match each {
-                    Ok(res) => {
-                        self.relationship_add_db(res.fileid, res.tagid);
-                    }
-                    Err(err) => {
-                        error!("Bad relationship cant load");
-                        err.to_string().contains("database disk image is malformed");
-                        error!("DATABASE IMAGE IS MALFORMED PANICING rel {:?}", &err);
-                        panic!("DATABASE IMAGE IS MALFORMED PANICING rel {:?}", &err);
+
+        if matches!(self._cache, CacheType::RelationshipRoaring)
+            && let Some(count) = *self.popular_relationship_count.lock()
+        {
+            let tn = self.pool.get().unwrap();
+            logging::info_log("Database is Loading: Relationships".to_string());
+            let temp = tn.prepare(&format!("SELECT fileid, tagid FROM Relationship WHERE tagid IN (SELECT id FROM Tags WHERE count >= {})", count));
+            if let Ok(mut con) = temp {
+                let relationship = wait_until_sqlite_ok!(con.query_map([], |row| {
+                    Ok(sharedtypes::DbRelationshipObj {
+                        fileid: row.get(0).unwrap(),
+                        tagid: row.get(1).unwrap(),
+                    })
+                }))
+                .unwrap();
+                let mut hold_cache = self.relationship_roaring_storage.write();
+                for each in relationship {
+                    match each {
+                        Ok(res) => {
+                            hold_cache.relationship_roaring_add(res.fileid, res.tagid);
+                        }
+
+                        Err(err) => {
+                            error!("Bad relationship cant load");
+                            err.to_string().contains("database disk image is malformed");
+                            error!("DATABASE IMAGE IS MALFORMED PANICING rel {:?}", &err);
+                            panic!("DATABASE IMAGE IS MALFORMED PANICING rel {:?}", &err);
+                        }
                     }
                 }
             }
@@ -1871,7 +1874,7 @@ RETURNING id;
     pub(in crate::database) fn is_tag_count_greater_rel_limit(
         &self,
         tn: &Transaction,
-        id: &usize,
+        id: &u64,
     ) -> bool {
         if let Some(db_count) = *self.popular_relationship_count.lock()
             && let Some(count) = self.get_count_for_tagid(tn, id)
@@ -1884,7 +1887,7 @@ RETURNING id;
     pub(in crate::database) fn is_tag_count_equal_rel_limit(
         &self,
         tn: &Transaction,
-        id: &usize,
+        id: &u64,
     ) -> bool {
         if let Some(db_count) = *self.popular_relationship_count.lock()
             && let Some(count) = self.get_count_for_tagid(tn, id)
@@ -1897,7 +1900,7 @@ RETURNING id;
     pub(in crate::database) fn is_tag_count_greq_rel_limit(
         &self,
         tn: &Transaction,
-        id: &usize,
+        id: &u64,
     ) -> GreqOrEq {
         if let Some(db_count) = *self.popular_relationship_count.lock()
             && let Some(count) = self.get_count_for_tagid(tn, id)
@@ -1915,8 +1918,8 @@ RETURNING id;
     pub(in crate::database) fn get_count_for_tagid(
         &self,
         tn: &Transaction,
-        id: &usize,
-    ) -> Option<usize> {
+        id: &u64,
+    ) -> Option<u64> {
         wait_until_sqlite_ok!(tn.query_row(
             "SELECT count FROM Tags WHERE id = ?",
             params![id],
@@ -1929,8 +1932,8 @@ RETURNING id;
     pub(in crate::database) fn add_relationship_sql(
         &self,
         tn: &Transaction,
-        file: &usize,
-        tag: &usize,
+        file: &u64,
+        tag: &u64,
     ) {
         let greq = self.is_tag_count_greq_rel_limit(tn, tag);
 
@@ -1943,6 +1946,13 @@ RETURNING id;
                 let sql = "INSERT OR IGNORE INTO Relationship VALUES(?, ?)";
 
                 tn.execute(sql, params![file, tag]).unwrap();
+
+                // Local cache for relationships
+                if matches!(self._cache, CacheType::RelationshipRoaring) {
+                    self.relationship_roaring_storage
+                        .write()
+                        .relationship_roaring_add(*file, *tag);
+                }
             }
             GreqOrEq::LessThan => {
                 let sql = "INSERT OR IGNORE INTO Relationship VALUES(?, ?)";
@@ -1963,7 +1973,7 @@ RETURNING id;
     pub(in crate::database) fn migrate_relationship_popular_tagid(
         &self,
         tn: &Transaction,
-        id: &usize,
+        id: &u64,
         popular: bool,
     ) {
         self.drop_trigger_manage_relationship_count(tn);
@@ -2138,8 +2148,8 @@ END;",
     pub(in crate::database) fn migrate_relationship_popular_count(
         &self,
         tn: &Transaction,
-        old_count: &usize,
-        new_count: &usize,
+        old_count: &u64,
+        new_count: &u64,
     ) {
         dbg!(old_count, new_count, new_count < old_count);
         self.drop_trigger_manage_relationship_count(tn);
@@ -2233,10 +2243,7 @@ WHERE count BETWEEN ? AND ?",
     ///
     /// Gets a list of fileid associated with a tagid
     ///
-    pub(in crate::database) fn relationship_get_fileid_sql(
-        &self,
-        tag_id: &usize,
-    ) -> HashSet<usize> {
+    pub(in crate::database) fn relationship_get_fileid_sql(&self, tag_id: &u64) -> HashSet<u64> {
         let mut out = HashSet::new();
 
         let tn = self.pool.get().unwrap();
@@ -2253,10 +2260,7 @@ WHERE count BETWEEN ? AND ?",
     ///
     /// Gets a list of tagid associated with a fileid
     ///
-    pub(in crate::database) fn relationship_get_tagid_sql(
-        &self,
-        file_id: &usize,
-    ) -> HashSet<usize> {
+    pub(in crate::database) fn relationship_get_tagid_sql(&self, file_id: &u64) -> HashSet<u64> {
         let mut out = HashSet::new();
 
         let tn = self.pool.get().unwrap();
@@ -2313,7 +2317,7 @@ WHERE count BETWEEN ? AND ?",
         tn: &Transaction,
         name: String,
         pretty: &Option<String>,
-        num: Option<usize>,
+        num: Option<u64>,
         param: &Option<String>,
     ) {
         {
@@ -2402,7 +2406,7 @@ WHERE count BETWEEN ? AND ?",
     pub(in crate::database) fn tags_get_id_sql(
         &self,
         db_tag_nns: &sharedtypes::DbTagNNS,
-    ) -> Option<usize> {
+    ) -> Option<u64> {
         let tn = self.pool.get().unwrap();
         wait_until_sqlite_ok!(tn.query_row(
             "SELECT id FROM Tags WHERE name = ? AND namespace = ?",
@@ -2418,8 +2422,8 @@ WHERE count BETWEEN ? AND ?",
     pub(in crate::database) fn migrate_relationship_tag_sql(
         &self,
         tn: &Transaction,
-        old_tag_id: &usize,
-        new_tag_id: &usize,
+        old_tag_id: &u64,
+        new_tag_id: &u64,
     ) {
         wait_until_sqlite_ok!(tn.execute(
             "UPDATE OR IGNORE Relationship SET tagid = ? WHERE tagid = ?",
@@ -2433,9 +2437,9 @@ WHERE count BETWEEN ? AND ?",
     pub(in crate::database) fn migrate_relationship_file_tag_sql(
         &self,
         tn: &Transaction,
-        file_id: &usize,
-        old_tag_id: &usize,
-        new_tag_id: &usize,
+        file_id: &u64,
+        old_tag_id: &u64,
+        new_tag_id: &u64,
     ) {
         wait_until_sqlite_ok!(tn.execute(
             "UPDATE OR REPLACE Relationship SET tagid = ? WHERE tagid = ? AND fileid=?",
@@ -2447,7 +2451,7 @@ WHERE count BETWEEN ? AND ?",
     ///
     /// Returns id if a namespace exists
     ///
-    pub(in crate::database) fn namespace_get_id_sql(&self, namespace: &String) -> Option<usize> {
+    pub(in crate::database) fn namespace_get_id_sql(&self, namespace: &String) -> Option<u64> {
         let tn = self.pool.get().unwrap();
         wait_until_sqlite_ok!(tn.query_row(
             "SELECT id FROM Namespace WHERE name = ?",
@@ -2461,7 +2465,7 @@ WHERE count BETWEEN ? AND ?",
     ///
     pub(in crate::database) fn namespace_get_namespaceobj_sql(
         &self,
-        ns_id: &usize,
+        ns_id: &u64,
     ) -> Option<sharedtypes::DbNamespaceObj> {
         let tn = self.pool.get().unwrap();
         wait_until_sqlite_ok!(tn.query_row(
@@ -2540,7 +2544,7 @@ WHERE count BETWEEN ? AND ?",
     }
 
     /// Removes a job from sql table by id
-    pub(in crate::database) fn del_from_jobs_table_sql_better(&self, id: &usize) {
+    pub(in crate::database) fn del_from_jobs_table_sql_better(&self, id: &u64) {
         {
             let tn = self.write_conn.lock();
             //let inp = "DELETE FROM Jobs WHERE id = ? LIMIT 1";
@@ -2564,8 +2568,8 @@ WHERE count BETWEEN ? AND ?",
     pub(in crate::database) fn delete_relationship_sql(
         &self,
         tn: &Transaction,
-        file_id: &usize,
-        tag_id: &usize,
+        file_id: &u64,
+        tag_id: &u64,
     ) {
         logging::log(format!(
             "Removing Relationship where fileid = {} and tagid = {}",
@@ -2586,7 +2590,7 @@ WHERE count BETWEEN ? AND ?",
     }
 
     /// Sqlite wrapper for deleteing a parent from table.
-    pub(in crate::database) fn delete_parent_sql(&self, tag_id: &usize, relate_tag_id: &usize) {
+    pub(in crate::database) fn delete_parent_sql(&self, tag_id: &u64, relate_tag_id: &u64) {
         let tn = self.write_conn.lock();
         let inp = "DELETE FROM Parents WHERE tag_id = ? AND relate_tag_id = ?";
         {
@@ -2597,7 +2601,7 @@ WHERE count BETWEEN ? AND ?",
     }
 
     /// Sqlite wrapper for deleteing a tag from table.
-    pub(in crate::database) fn delete_tag_sql(&self, tn: &Transaction, tag_id: &usize) {
+    pub(in crate::database) fn delete_tag_sql(&self, tn: &Transaction, tag_id: &u64) {
         logging::log(format!("Removing tag with id: {}", tag_id));
         let inp = "DELETE FROM Tags WHERE id = ?";
         {
@@ -2606,7 +2610,7 @@ WHERE count BETWEEN ? AND ?",
     }
 
     /// Sqlite wrapper for deleteing a tag from table.
-    pub(in crate::database) fn delete_namespace_sql(&self, namespace_id: &usize) {
+    pub(in crate::database) fn delete_namespace_sql(&self, namespace_id: &u64) {
         let tn = self.write_conn.lock();
         logging::info_log(format!(
             "Deleting namespace with id : {} from db",

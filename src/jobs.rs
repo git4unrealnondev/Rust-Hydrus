@@ -14,8 +14,8 @@ use std::collections::{HashMap, HashSet};
 struct PreviouslySeenObj {
     site: String,
     params: Vec<sharedtypes::ScraperParam>,
-    time: usize,
-    reptime: usize,
+    time: u64,
+    reptime: u64,
     user_data: BTreeMap<String, String>,
 }
 
@@ -198,7 +198,7 @@ impl Jobs {
 
         scraper: &sharedtypes::GlobalPluginScraper,
         data: &sharedtypes::DbJobsObj,
-        worker_id: &usize,
+        worker_id: &u64,
     ) {
         if let Some(job_list) = self.site_job.get_mut(scraper) {
             let job_list_static = job_list.clone();
@@ -233,7 +233,7 @@ impl Jobs {
 
         data: &sharedtypes::DbJobsObj,
         scraper: &sharedtypes::GlobalPluginScraper,
-        worker_id: &usize,
+        worker_id: &u64,
     ) {
         if let Some(job_list) = self.site_job.get_mut(scraper)
             && let Some(job) = job_list.get(data)

@@ -59,6 +59,15 @@ warp = { version = "0.4.2", features = ["server"] }
 utoipa = "5.4.0"
 utoipa-swagger-ui = { version = "9.0.2", features = ["axum"] }
 utoipauto = "0.2.0"
+nohash = "0.2.0"
+roaring = { version = "0.11.3", features = [] }
+
+[dev-dependencies]
+criterion = "0.5"
+
+[[bench]]
+name = "roaring_bitmap"
+harness = false
 
 [profile.dev]
 opt-level = 2

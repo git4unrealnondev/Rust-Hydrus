@@ -41,8 +41,8 @@ use std::thread;
 
 /// Makes ratelimiter and example
 pub fn ratelimiter_create(
-    workerid: &usize,
-    jobid: &usize,
+    workerid: &u64,
+    jobid: &u64,
     number: u64,
     duration: Duration,
 ) -> Ratelimiter {
@@ -184,7 +184,7 @@ pub async fn dltext_new(
     post_data: Option<String>,
     client: Arc<RwLock<Client>>,
     ratelimiter_obj: &Arc<RwLock<Ratelimiter>>,
-    worker_id: &usize,
+    worker_id: &u64,
 ) -> Result<(String, String), Box<dyn Error>> {
     // let mut ret: Vec<AHashMap<String, AHashMap<String, Vec`<String>`>>> =
     // Vec::new(); let ex = Executor::new(); let url =
@@ -411,7 +411,7 @@ pub enum FileReturnStatus {
     // If a URL is dead (400+) error
     DeadUrl(String),
     // File hash,ext
-    File((String, String, usize)),
+    File((String, String, u64)),
     // Other issue. Try again later
     TryLater,
 }
@@ -424,8 +424,8 @@ pub fn dlfile_new(
     globalload: Option<GlobalLoad>,
     ratelimiter_obj: &Arc<RwLock<Ratelimiter>>,
     source_url: &String,
-    workerid: &usize,
-    jobid: &usize,
+    workerid: &u64,
+    jobid: &u64,
     scraper: Option<&sharedtypes::GlobalPluginScraper>,
 ) -> FileReturnStatus {
     let mut boolloop = true;
@@ -600,7 +600,7 @@ pub fn process_bytes(
     db: Main,
     file: &mut sharedtypes::FileObject,
     source_url: Option<&String>,
-) -> Option<usize> {
+) -> Option<u64> {
     let mut out = None;
     // NOTE run the download / file actions first then run the plugin_on_download second.
     // That way if theirs any data that needs to get processed then we can do it while theirs a

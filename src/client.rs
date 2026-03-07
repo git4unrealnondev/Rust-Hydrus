@@ -18,9 +18,9 @@ pub mod types;
 /// their
 pub fn search_db_files(
     search: sharedtypes::SearchObj,
-    limit: Option<usize>,
-    offset: Option<usize>,
-) -> Option<HashSet<usize>> {
+    limit: Option<u64>,
+    offset: Option<u64>,
+) -> Option<HashSet<u64>> {
     init_data_request(&types::SupportedRequests::Database(
         types::SupportedDBRequests::Search((search, limit, offset)),
     ))
@@ -53,7 +53,7 @@ pub fn load_table(table: sharedtypes::LoadDBTable) -> bool {
     ))
 }
 
-pub fn get_file(fileid: usize) -> Option<String> {
+pub fn get_file(fileid: u64) -> Option<String> {
     init_data_request(&types::SupportedRequests::Database(
         types::SupportedDBRequests::GetFileLocation(fileid),
     ))
@@ -61,7 +61,7 @@ pub fn get_file(fileid: usize) -> Option<String> {
 ///
 /// Gets the dbfilestorage refence for everything
 ///
-pub fn get_file_raw(fileid: usize) -> Option<DbFileStorage> {
+pub fn get_file_raw(fileid: u64) -> Option<DbFileStorage> {
     init_data_request(&types::SupportedRequests::Database(
         types::SupportedDBRequests::GetFileRaw(fileid),
     ))
@@ -70,19 +70,19 @@ pub fn get_file_raw(fileid: usize) -> Option<DbFileStorage> {
 ///
 /// Returns all filesids of type
 ///
-pub fn get_fileid_where_extension(extype: sharedtypes::FileExtensionType) -> HashSet<usize> {
+pub fn get_fileid_where_extension(extype: sharedtypes::FileExtensionType) -> HashSet<u64> {
     init_data_request(&types::SupportedRequests::Database(
         types::SupportedDBRequests::GetFileIdsWhereExtensionIs(extype),
     ))
 }
 
-pub fn get_file_ext(fileext: usize) -> Option<String> {
+pub fn get_file_ext(fileext: u64) -> Option<String> {
     init_data_request(&types::SupportedRequests::Database(
         types::SupportedDBRequests::GetFileExt(fileext),
     ))
 }
 
-pub fn get_file_bytes(fileid: usize) -> Option<Vec<u8>> {
+pub fn get_file_bytes(fileid: u64) -> Option<Vec<u8>> {
     init_data_request(&types::SupportedRequests::Database(
         types::SupportedDBRequests::GetFileByte(fileid),
     ))
@@ -97,7 +97,7 @@ pub fn reload_loaded_plugins() -> bool {
 
 /// See the database reference for this function. I'm a lazy turd just check it
 /// their
-pub fn namespace_get_string(id: usize) -> Option<sharedtypes::DbNamespaceObj> {
+pub fn namespace_get_string(id: u64) -> Option<sharedtypes::DbNamespaceObj> {
     init_data_request(&types::SupportedRequests::Database(
         types::SupportedDBRequests::GetNamespaceString(id),
     ))
@@ -105,13 +105,13 @@ pub fn namespace_get_string(id: usize) -> Option<sharedtypes::DbNamespaceObj> {
 
 /// See the database reference for this function. I'm a lazy turd just check it
 /// their
-pub fn namespace_contains_id(namespaceid: usize, tagid: usize) -> bool {
+pub fn namespace_contains_id(namespaceid: u64, tagid: u64) -> bool {
     init_data_request(&types::SupportedRequests::Database(
         types::SupportedDBRequests::NamespaceContainsId(namespaceid, tagid),
     ))
 }
 
-pub fn filter_namespaces_by_id(tags: HashSet<usize>, namespaceid: usize) -> HashSet<usize> {
+pub fn filter_namespaces_by_id(tags: HashSet<u64>, namespaceid: u64) -> HashSet<u64> {
     init_data_request(&types::SupportedRequests::Database(
         types::SupportedDBRequests::FilterNamespaceById((tags, namespaceid)),
     ))
@@ -136,7 +136,7 @@ pub fn log_no_print(log: String) -> bool {
 pub fn setting_add(
     name: String,
     pretty: Option<String>,
-    num: Option<usize>,
+    num: Option<u64>,
     param: Option<String>,
 ) -> bool {
     init_data_request(&types::SupportedRequests::Database(
@@ -146,7 +146,7 @@ pub fn setting_add(
 
 /// See the database reference for this function. I'm a lazy turd just check it
 /// their
-pub fn namespace_get(name: String) -> Option<usize> {
+pub fn namespace_get(name: String) -> Option<u64> {
     init_data_request(&types::SupportedRequests::Database(
         types::SupportedDBRequests::GetNamespace(name),
     ))
@@ -154,7 +154,7 @@ pub fn namespace_get(name: String) -> Option<usize> {
 
 /// See the database reference for this function. I'm a lazy turd just check it
 /// their
-pub fn namespace_put(name: String, description: Option<String>) -> usize {
+pub fn namespace_put(name: String, description: Option<String>) -> u64 {
     init_data_request(&types::SupportedRequests::Database(
         types::SupportedDBRequests::CreateNamespace(name, description),
     ))
@@ -162,9 +162,9 @@ pub fn namespace_put(name: String, description: Option<String>) -> usize {
 
 /// See the database reference for this function. I'm a lazy turd just check it
 /// their
-pub fn testusize() -> usize {
+pub fn testu64() -> u64 {
     init_data_request(&types::SupportedRequests::Database(
-        types::SupportedDBRequests::TestUsize(),
+        types::SupportedDBRequests::Testu64(),
     ))
 }
 
@@ -178,7 +178,7 @@ pub fn transaction_flush() -> bool {
 
 /// See the database reference for this function. I'm a lazy turd just check it
 /// their
-pub fn relationship_add(file: usize, tag: usize) -> bool {
+pub fn relationship_add(file: u64, tag: u64) -> bool {
     init_data_request(&types::SupportedRequests::Database(
         types::SupportedDBRequests::RelationshipAdd(file, tag),
     ))
@@ -187,14 +187,14 @@ pub fn relationship_add(file: usize, tag: usize) -> bool {
 ///
 /// Removes a relationship from the db
 ///
-pub fn relationship_remove(file: usize, tag: usize) -> bool {
+pub fn relationship_remove(file: u64, tag: u64) -> bool {
     init_data_request(&types::SupportedRequests::Database(
         types::SupportedDBRequests::RelationshipRemove(file, tag),
     ))
 }
 /// See the database reference for this function. I'm a lazy turd just check it
 /// their
-pub fn file_get_list_id() -> HashSet<usize> {
+pub fn file_get_list_id() -> HashSet<u64> {
     init_data_request(&types::SupportedRequests::Database(
         types::SupportedDBRequests::GetFileListId(),
     ))
@@ -202,14 +202,14 @@ pub fn file_get_list_id() -> HashSet<usize> {
 
 /// See the database reference for this function. I'm a lazy turd just check it
 /// their
-pub fn relationship_get_fileid(id: usize) -> HashSet<usize> {
+pub fn relationship_get_fileid(id: u64) -> HashSet<u64> {
     init_data_request(&types::SupportedRequests::Database(
         types::SupportedDBRequests::RelationshipGetFileid(id),
     ))
 }
 
 /// Gets a file based on their ID
-pub fn file_get_id(fid: usize) -> Option<sharedtypes::DbFileStorage> {
+pub fn file_get_id(fid: u64) -> Option<sharedtypes::DbFileStorage> {
     init_data_request(&types::SupportedRequests::Database(
         types::SupportedDBRequests::GetFile(fid),
     ))
@@ -217,7 +217,7 @@ pub fn file_get_id(fid: usize) -> Option<sharedtypes::DbFileStorage> {
 
 /// See the database reference for this function. I'm a lazy turd just check it
 /// their
-pub fn relationship_get_tagid(id: usize) -> HashSet<usize> {
+pub fn relationship_get_tagid(id: u64) -> HashSet<u64> {
     init_data_request(&types::SupportedRequests::Database(
         types::SupportedDBRequests::RelationshipGetTagid(id),
     ))
@@ -225,7 +225,7 @@ pub fn relationship_get_tagid(id: usize) -> HashSet<usize> {
 
 /// See the database reference for this function. I'm a lazy turd just check it
 /// their
-pub fn tag_get_name(tag: String, namespaceid: usize) -> Option<usize> {
+pub fn tag_get_name(tag: String, namespaceid: u64) -> Option<u64> {
     init_data_request(&types::SupportedRequests::Database(
         types::SupportedDBRequests::GetTagName((tag, namespaceid)),
     ))
@@ -233,7 +233,7 @@ pub fn tag_get_name(tag: String, namespaceid: usize) -> Option<usize> {
 
 /// See the database reference for this function. I'm a lazy turd just check it
 /// their
-pub fn file_get_list_all() -> HashMap<usize, sharedtypes::DbFileStorage> {
+pub fn file_get_list_all() -> HashMap<u64, sharedtypes::DbFileStorage> {
     init_data_request(&types::SupportedRequests::Database(
         types::SupportedDBRequests::GetFileListAll(),
     ))
@@ -249,7 +249,7 @@ pub fn settings_get_name(name: String) -> Option<sharedtypes::DbSettingObj> {
 
 /// See the database reference for this function. I'm a lazy turd just check it
 /// their
-pub fn tag_get_id(id: usize) -> Option<sharedtypes::DbTagNNS> {
+pub fn tag_get_id(id: u64) -> Option<sharedtypes::DbTagNNS> {
     init_data_request(&types::SupportedRequests::Database(
         types::SupportedDBRequests::GetTagId(id),
     ))
@@ -257,7 +257,7 @@ pub fn tag_get_id(id: usize) -> Option<sharedtypes::DbTagNNS> {
 
 /// See the database reference for this function. I'm a lazy turd just check it
 /// their
-pub fn namespace_get_tagids(id: usize) -> HashSet<usize> {
+pub fn namespace_get_tagids(id: u64) -> HashSet<u64> {
     init_data_request(&types::SupportedRequests::Database(
         types::SupportedDBRequests::GetNamespaceTagIDs(id),
     ))
@@ -268,10 +268,7 @@ pub fn namespace_get_tagids(id: usize) -> HashSet<usize> {
 ///
 /// It's basically a 2 way pointer like the Relations table limit_to limits the
 /// exposure of
-pub fn parents_get(
-    parenttype: types::ParentsType,
-    id: usize,
-) -> HashSet<sharedtypes::DbParentsObj> {
+pub fn parents_get(parenttype: types::ParentsType, id: u64) -> HashSet<sharedtypes::DbParentsObj> {
     init_data_request(&types::SupportedRequests::Database(
         types::SupportedDBRequests::ParentsGet((parenttype, id)),
     ))
@@ -285,14 +282,14 @@ pub fn parents_delete(parentobj: sharedtypes::DbParentsObj) -> bool {
     ))
 }
 
-pub fn tag_remove(tag_id: usize) -> bool {
+pub fn tag_remove(tag_id: u64) -> bool {
     init_data_request(&types::SupportedRequests::Database(
         types::SupportedDBRequests::TagDelete(tag_id),
     ))
 }
 
 /// Adds a parent into the db returns the unique of the parent inserted
-pub fn parents_put(parentobj: sharedtypes::DbParentsObj) -> usize {
+pub fn parents_put(parentobj: sharedtypes::DbParentsObj) -> u64 {
     init_data_request(&types::SupportedRequests::Database(
         types::SupportedDBRequests::ParentsPut(parentobj),
     ))
@@ -308,7 +305,7 @@ pub fn location_get() -> String {
 
 /// See the database reference for this function. I'm a lazy turd just check it
 /// their
-pub fn tag_add(tag: String, namespace_id: usize, id: Option<usize>) -> usize {
+pub fn tag_add(tag: String, namespace_id: u64, id: Option<u64>) -> u64 {
     init_data_request(&types::SupportedRequests::Database(
         types::SupportedDBRequests::PutTag(tag, namespace_id, id),
     ))
@@ -316,7 +313,7 @@ pub fn tag_add(tag: String, namespace_id: usize, id: Option<usize>) -> usize {
 ///
 /// Migrates a tag from id to another id
 ///
-pub fn tag_migrate(old_tagid: usize, new_tag_id: usize) -> bool {
+pub fn tag_migrate(old_tagid: u64, new_tag_id: u64) -> bool {
     init_data_request(&types::SupportedRequests::Database(
         types::SupportedDBRequests::MigrateTag((old_tagid, new_tag_id)),
     ))
@@ -324,7 +321,7 @@ pub fn tag_migrate(old_tagid: usize, new_tag_id: usize) -> bool {
 ///
 /// Migrates a tag from id to another id
 ///
-pub fn file_relationship_migrate(file_id: usize, old_tagid: usize, new_tag_id: usize) -> bool {
+pub fn file_relationship_migrate(file_id: u64, old_tagid: u64, new_tag_id: u64) -> bool {
     init_data_request(&types::SupportedRequests::Database(
         types::SupportedDBRequests::MigrateRelationship((file_id, old_tagid, new_tag_id)),
     ))
@@ -342,7 +339,7 @@ pub fn reload_regex() -> bool {
 ///
 /// Gets a list of loaded namespace IDs
 ///
-pub fn namespace_get_tagids_all() -> Vec<usize> {
+pub fn namespace_get_tagids_all() -> Vec<u64> {
     init_data_request(&types::SupportedRequests::Database(
         types::SupportedDBRequests::GetNamespaceIDsAll,
     ))
@@ -366,10 +363,10 @@ pub fn condense_tags() -> bool {
 /// Can be slow
 ///
 pub fn relationship_get_tagid_where_namespace_count(
-    namespace_id: usize,
-    count: usize,
+    namespace_id: u64,
+    count: u64,
     dir: sharedtypes::GreqLeqOrEq,
-) -> Vec<usize> {
+) -> Vec<u64> {
     init_data_request(&types::SupportedRequests::Database(
         types::SupportedDBRequests::GetRelationshipTagidWhereNamespace((namespace_id, count, dir)),
     ))
@@ -379,10 +376,10 @@ pub fn relationship_get_tagid_where_namespace_count(
 /// Can be slow
 ///
 pub fn relationship_get_fileid_where_namespace_count(
-    namespace_id: usize,
-    count: usize,
+    namespace_id: u64,
+    count: u64,
     dir: sharedtypes::GreqLeqOrEq,
-) -> Vec<usize> {
+) -> Vec<u64> {
     init_data_request(&types::SupportedRequests::Database(
         types::SupportedDBRequests::GetRelationshipFileidWhereNamespace((namespace_id, count, dir)),
     ))
@@ -391,10 +388,10 @@ pub fn relationship_get_fileid_where_namespace_count(
 /// See the database reference for this function. I'm a lazy turd just check it
 /// their
 pub fn relationship_file_tag_add(
-    fileid: usize,
+    fileid: u64,
     tag: String,
-    namespace_id: usize,
-    id: Option<usize>,
+    namespace_id: u64,
+    id: Option<u64>,
 ) -> bool {
     init_data_request(&types::SupportedRequests::Database(
         types::SupportedDBRequests::PutTagRelationship(fileid, tag, namespace_id, id),
@@ -405,7 +402,7 @@ pub fn relationship_file_tag_add(
 /// work will test tomorrow
 pub fn external_plugin_call(
     func_name: String,
-    vers: usize,
+    vers: u64,
     input: sharedtypes::CallbackInfoInput,
 ) -> HashMap<String, sharedtypes::CallbackCustomDataReturning> {
     init_data_request(&types::SupportedRequests::Database(

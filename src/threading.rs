@@ -24,10 +24,10 @@ use std::time::Duration;
 use thread_control::*;
 
 pub struct Threads {
-    _workers: usize,
-    worker: HashMap<usize, Worker>,
-    worker_control: HashMap<usize, Flag>,
-    scraper_storage: HashMap<sharedtypes::GlobalPluginScraper, usize>,
+    _workers: u64,
+    worker: HashMap<u64, Worker>,
+    worker_control: HashMap<u64, Flag>,
+    scraper_storage: HashMap<sharedtypes::GlobalPluginScraper, u64>,
 }
 
 /// Holder for workers. Workers manage their own threads.
@@ -121,7 +121,7 @@ impl Threads {
 
 /// Worker holder for data. Will add a scraper processor soon tm.
 struct Worker {
-    id: usize,
+    id: u64,
     thread: Option<std::thread::JoinHandle<()>>,
 }
 
@@ -139,8 +139,8 @@ impl Drop for Worker {
 /// Creates a relelimiter object
 pub fn create_ratelimiter(
     input: (u64, Duration),
-    worker_id: &usize,
-    job_id: &usize,
+    worker_id: &u64,
+    job_id: &u64,
 ) -> Arc<RwLock<Ratelimiter>> {
     Arc::new(RwLock::new(download::ratelimiter_create(
         worker_id, job_id, input.0, input.1,
@@ -149,13 +149,14 @@ pub fn create_ratelimiter(
 
 impl Worker {
     fn new(
-        id: usize,
+        id: u64,
         jobstorage: Arc<RwLock<crate::jobs::Jobs>>,
         database: Main,
         scraper: sharedtypes::GlobalPluginScraper,
         globalload: GlobalLoad,
         threadflagcontrol: Control,
     ) -> Worker {
+        database.load_table(&sharedtypes::LoadDBTable::All);
         // info_log(&format!( "Creating Worker for id: {} Scraper Name: {} With a jobs
         // length of: {}", &id, &scraper._name, &jobstorage..len() ));
         let jobstorage = jobstorage.clone();
@@ -550,7 +551,7 @@ impl Worker {
                                     sharedtypes::ScraperReturn::RetryLater(time) => {
                                         let mut data = job.clone();
                                         data.time = crate::time_func::time_secs();
-                                        data.reptime = time.as_secs() as usize;
+                                        data.reptime = time.as_secs() as u64;
                                         database.jobs_update_db(data);
                                         should_remove_original_job = false;
                                     }
@@ -591,7 +592,7 @@ enum SkipResult {
     // Skip because of a dead url or someting
     SkipNoFile,
     // We've already got the file, with id x
-    SkipExistingFile(usize),
+    SkipExistingFile(u64),
     // Download that sucket
     Download,
 }
@@ -600,9 +601,9 @@ enum SkipResult {
 pub fn parse_tags_old(
     database: Main,
     tag: &sharedtypes::TagObject,
-    file_id: Option<usize>,
-    worker_id: &usize,
-    job_id: &usize,
+    file_id: Option<u64>,
+    worker_id: &u64,
+    job_id: &u64,
     manager: GlobalLoad,
 ) -> BTreeSet<sharedtypes::ScraperDataReturn> {
     let mut url_return: BTreeSet<sharedtypes::ScraperDataReturn> = BTreeSet::new();
@@ -635,10 +636,10 @@ fn download_add_to_db(
     client: Arc<RwLock<Client>>,
     database: Main,
     file: &mut sharedtypes::FileObject,
-    worker_id: &usize,
-    job_id: &usize,
+    worker_id: &u64,
+    job_id: &u64,
     scraper: &sharedtypes::GlobalPluginScraper,
-) -> Option<usize> {
+) -> Option<u64> {
     // Early exit for if the file is a dead url
     {
         if database.check_dead_url(&source) {
@@ -702,13 +703,13 @@ fn download_add_to_db(
 /// Simple code to add jobs from a tag object
 fn parse_jobs(
     tag: &sharedtypes::TagObject,
-    fileid: Option<usize>,
+    fileid: Option<u64>,
     jobstorage: Arc<RwLock<crate::jobs::Jobs>>,
     database: Main,
     scraper: &sharedtypes::GlobalPluginScraper,
 
-    worker_id: &usize,
-    job_id: &usize,
+    worker_id: &u64,
+    job_id: &u64,
     manager: GlobalLoad,
 ) {
     return;
@@ -721,14 +722,14 @@ fn parse_jobs(
 }
 */
 /// Parses weather we should skip downloading the file
-/// Returns a Some(usize) if the fileid exists
+/// Returns a Some(u64) if the fileid exists
 fn parse_skipif(
     skip_condition: &sharedtypes::SkipIf,
     file_url_source: &String,
     database: Main,
-    worker_id: &usize,
-    job_id: &usize,
-) -> Option<usize> {
+    worker_id: &u64,
+    job_id: &u64,
+) -> Option<u64> {
     match skip_condition {
         sharedtypes::SkipIf::NoFilesDownloaded => {}
         sharedtypes::SkipIf::FileHash(sha512hash) => {
@@ -763,7 +764,7 @@ fn parse_skipif(
                 info_log(
                     "Downloading due to unique namespace not existing or number less then limit number.".to_string(),
                 );
-                let vec: Vec<usize> = fids.iter().cloned().collect();
+                let vec: Vec<u64> = fids.iter().cloned().collect();
                 return Some(vec[0]);
             }
         }
@@ -793,8 +794,8 @@ pub fn main_file_loop(
     client: Arc<RwLock<Client>>,
     jobstorage: Arc<RwLock<crate::jobs::Jobs>>,
     scraper: &sharedtypes::GlobalPluginScraper,
-    worker_id: &usize,
-    job_id: &usize,
+    worker_id: &u64,
+    job_id: &u64,
 ) {
     let mut fileid = None;
 

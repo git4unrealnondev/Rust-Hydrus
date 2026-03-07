@@ -14,12 +14,12 @@ use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::OptionalExtension;
 use rusqlite::params;
 
-const DEFAULT_PRIORITY_DOWNLOAD: usize = 10;
-const DEFAULT_PRIORITY_PUT: usize = 5;
+const DEFAULT_PRIORITY_DOWNLOAD: u64 = 10;
+const DEFAULT_PRIORITY_PUT: u64 = 5;
 const DEFAULT_DOWNLOAD_DEFAULT: &str = "DownloadToDiskDefault";
 const DEFAULT_DOWNLOAD_DISK: &str = "DownloadToDisk";
 pub const DEFAULT_PUT_DISK: &str = "PutAtDefault";
-const DEFAULT_PRIORITY_LOWEST: usize = 0;
+const DEFAULT_PRIORITY_LOWEST: u64 = 0;
 
 impl Main {
     pub fn enclave_run_process(
@@ -30,7 +30,7 @@ impl Main {
         sha512hash: &String,
         source_url: Option<&String>,
         enclave_name: &str,
-    ) -> Option<usize> {
+    ) -> Option<u64> {
         if let Some(enclave_id) = self.enclave_name_get_id(enclave_name) {
             return self.enclave_run_logic(file, bytes, sha512hash, source_url, &enclave_id);
         }
@@ -46,8 +46,8 @@ impl Main {
         bytes: &Bytes,
         sha512hash: &String,
         source_url: Option<&String>,
-        enclave_id: &usize,
-    ) -> Option<usize> {
+        enclave_id: &u64,
+    ) -> Option<u64> {
         let loop_one;
         let source_url_ns_id;
         {
@@ -111,7 +111,7 @@ impl Main {
         bytes: &Bytes,
         sha512hash: &String,
         source_url: Option<&String>,
-    ) -> Option<usize> {
+    ) -> Option<u64> {
         logging::info_log(format!(
             "Enclave FileHash {}: Starting to process",
             &sha512hash
@@ -141,9 +141,9 @@ impl Main {
         bytes: &Bytes,
         sha512hash: &String,
         source_url: Option<&String>,
-        source_url_ns_id: usize,
-        enclave_id: &usize,
-    ) -> Option<usize> {
+        source_url_ns_id: u64,
+        enclave_id: &u64,
+    ) -> Option<u64> {
         let download_location = { self.location_get() };
 
         match action {
@@ -211,11 +211,11 @@ impl Main {
         bytes: &Bytes,
         sha512hash: &String,
         source_url: Option<&String>,
-        source_url_ns_id: usize,
-        enclave_id: &usize,
+        source_url_ns_id: u64,
+        enclave_id: &u64,
         download_location: &String,
         file: &mut sharedtypes::FileObject,
-    ) -> usize {
+    ) -> u64 {
         let fileid;
         let download_loc;
         // error checking. We should have all dirs needed but hey if we're missing
@@ -260,7 +260,7 @@ impl Main {
     fn enclave_condition_evaluate(
         &self,
 
-        condition_id: &usize,
+        condition_id: &u64,
         file: &sharedtypes::FileObject,
         bytes: &Bytes,
     ) -> (bool, Option<sharedtypes::EnclaveAction>) {
@@ -270,10 +270,10 @@ impl Main {
                     sharedtypes::EnclaveCondition::Any => true,
                     sharedtypes::EnclaveCondition::None => false,
                     sharedtypes::EnclaveCondition::FileSizeGreater(byte_len) => {
-                        byte_len < bytes.len()
+                        byte_len < bytes.len() as u64
                     }
                     sharedtypes::EnclaveCondition::FileSizeLessthan(byte_len) => {
-                        byte_len > bytes.len()
+                        byte_len > bytes.len() as u64
                     }
                     sharedtypes::EnclaveCondition::TagNameAndNamespace((tag_name, namespace)) => {
                         let mut out = false;
@@ -300,7 +300,7 @@ impl Main {
     ///
     /// Adds a filemapping if it doesn't exist
     ///
-    fn enclave_file_mapping_add(&self, tn: &Transaction, file_id: &usize, enclave_id: &usize) {
+    fn enclave_file_mapping_add(&self, tn: &Transaction, file_id: &u64, enclave_id: &u64) {
         let timestamp = Utc::now().timestamp_millis();
 
         if self.enclave_file_mapping_get(file_id, enclave_id).is_some() {
@@ -324,7 +324,7 @@ impl Main {
     ///
     /// Checks if a file mapping pair exists
     ///
-    fn enclave_file_mapping_get(&self, file_id: &usize, enclave_id: &usize) -> Option<usize> {
+    fn enclave_file_mapping_get(&self, file_id: &u64, enclave_id: &u64) -> Option<u64> {
         let tn = self.get_database_connection();
         tn.query_row(
             "SELECT file_id from FileEnclaveMapping where file_id = ? AND enclave_id = ? LIMIT 1",
@@ -522,7 +522,7 @@ impl Main {
     /// Inserts the enclave's name into the database
     /// Kinda a dumb way but hey it works
     ///
-    fn enclave_name_put(&self, tn: &Transaction, name: String, enclave_priority: &usize) -> usize {
+    fn enclave_name_put(&self, tn: &Transaction, name: String, enclave_priority: &u64) -> u64 {
         if let Some(out) = self.enclave_name_get_id(&name) {
             return out;
         }
@@ -536,12 +536,12 @@ impl Main {
 
         self.enclave_name_get_sql(tn, &name).unwrap()
     }
-    //  pub fn enclave_name_edit(&self, id: &usize, name: String) {}
+    //  pub fn enclave_name_edit(&self, id: &u64, name: String) {}
 
     ///
     /// Gets the enclave name from the enclave id
     ///
-    fn enclave_name_get_name(&self, id: &usize) -> Option<String> {
+    fn enclave_name_get_name(&self, id: &u64) -> Option<String> {
         let tn = self.get_database_connection();
         tn.query_row(
             "SELECT enclave_name from Enclave where id = ?",
@@ -555,7 +555,7 @@ impl Main {
     ///
     /// Raw sqlite call
     ///
-    fn enclave_name_get_sql(&self, tn: &Transaction, name: &str) -> Option<usize> {
+    fn enclave_name_get_sql(&self, tn: &Transaction, name: &str) -> Option<u64> {
         tn.query_row(
             "SELECT id from Enclave where enclave_name = ?",
             params![name],
@@ -568,7 +568,7 @@ impl Main {
     ///
     /// Gets the enclave id from the enclave name
     ///
-    pub fn enclave_name_get_id(&self, name: &str) -> Option<usize> {
+    pub fn enclave_name_get_id(&self, name: &str) -> Option<u64> {
         let mut tn = self.get_database_connection();
         self.enclave_name_get_sql(&tn.transaction().unwrap(), name)
     }
@@ -576,15 +576,15 @@ impl Main {
     ///
     /// Gets prioritys from Enclaves
     ///
-    fn enclave_get_id_from_priority(&self, priority_id: &usize) -> Vec<usize> {
-        let mut out: Vec<usize> = Vec::new();
+    fn enclave_get_id_from_priority(&self, priority_id: &u64) -> Vec<u64> {
+        let mut out: Vec<u64> = Vec::new();
         let tn = self.get_database_connection();
         let mut stmt = tn
             .prepare("SELECT id from Enclave WHERE priority = ?")
             .unwrap();
         let row = stmt
             .query_map(params![priority_id], |row| {
-                let id: Option<usize> = row.get(0).unwrap();
+                let id: Option<u64> = row.get(0).unwrap();
                 if let Some(id) = id {
                     Ok(id)
                 } else {
@@ -606,15 +606,15 @@ impl Main {
     ///
     /// Gets prioritys from Enclaves
     ///
-    fn enclave_priority_get(&self) -> Vec<usize> {
-        let mut out: Vec<usize> = Vec::new();
+    fn enclave_priority_get(&self) -> Vec<u64> {
+        let mut out: Vec<u64> = Vec::new();
         let tn = self.get_database_connection();
         let mut stmt = tn
             .prepare("SELECT priority from Enclave ORDER BY priority DESC")
             .unwrap();
         let row = stmt
             .query_map([], |row| {
-                let id: Option<usize> = row.get(0).unwrap();
+                let id: Option<u64> = row.get(0).unwrap();
                 if let Some(id) = id {
                     Ok(id)
                 } else {
@@ -639,7 +639,7 @@ impl Main {
         tn: &Transaction,
         action: &sharedtypes::EnclaveAction,
         condition: &sharedtypes::EnclaveCondition,
-    ) -> usize {
+    ) -> u64 {
         if let Some(out) = self.enclave_condition_get_id(tn, action) {
             return out;
         }
@@ -663,7 +663,7 @@ impl Main {
         &self,
         tn: &Transaction,
         name: &sharedtypes::EnclaveAction,
-    ) -> Option<usize> {
+    ) -> Option<u64> {
         self.enclave_condition_get_id_sql(tn, name)
     }
 
@@ -674,7 +674,7 @@ impl Main {
         &self,
         tn: &Transaction,
         name: &sharedtypes::EnclaveAction,
-    ) -> Option<usize> {
+    ) -> Option<u64> {
         tn.query_row(
             "SELECT id from EnclaveCondition where action_name = ?",
             params![serde_json::to_string(name).unwrap()],
@@ -690,7 +690,7 @@ impl Main {
     fn enclave_condition_get_data(
         &self,
 
-        condition_id: &usize,
+        condition_id: &u64,
     ) -> Option<(sharedtypes::EnclaveAction, sharedtypes::EnclaveCondition)> {
         let tn = self.get_database_connection();
         if let Ok(out) = tn
@@ -720,9 +720,9 @@ impl Main {
     fn enclave_action_order_link_put(
         &self,
         tn: &Transaction,
-        enclave_id: &usize,
-        enclave_conditional_list_id: &usize,
-        enclave_action_position: &usize,
+        enclave_id: &u64,
+        enclave_conditional_list_id: &u64,
+        enclave_action_position: &u64,
     ) {
         if self
             .enclave_action_order_link_get_id(enclave_id, enclave_conditional_list_id)
@@ -748,9 +748,9 @@ impl Main {
     fn enclave_action_order_link_get_id(
         &self,
 
-        enclave_id: &usize,
-        enclave_conditional_list_id: &usize,
-    ) -> Option<usize> {
+        enclave_id: &u64,
+        enclave_conditional_list_id: &u64,
+    ) -> Option<u64> {
         let tn = self.get_database_connection();
         tn
             .query_row(
@@ -764,15 +764,15 @@ impl Main {
     ///
     /// Gets enclave conditional jump by enclave_id
     ///
-    fn enclave_action_order_enclave_get_list_id(&self, enclave_id: &usize) -> Vec<usize> {
-        let mut out: Vec<usize> = Vec::new();
+    fn enclave_action_order_enclave_get_list_id(&self, enclave_id: &u64) -> Vec<u64> {
+        let mut out: Vec<u64> = Vec::new();
         let tn = self.get_database_connection();
         let mut stmt = tn
             .prepare("SELECT enclave_conditional_list_id from EnclaveActionOrderList where enclave_id = ? ORDER BY enclave_action_position DESC")
             .unwrap();
         let row = stmt
             .query_map([enclave_id], |row| {
-                let id: Option<usize> = row.get(0).unwrap();
+                let id: Option<u64> = row.get(0).unwrap();
                 if let Some(id) = id {
                     Ok(id)
                 } else {
@@ -797,10 +797,10 @@ impl Main {
     fn enclave_condition_link_put(
         &self,
         tn: &Transaction,
-        condition_id: &usize,
-        action_id: &usize,
-        failed_enclave_id: Option<&usize>,
-    ) -> usize {
+        condition_id: &u64,
+        action_id: &u64,
+        failed_enclave_id: Option<&u64>,
+    ) -> u64 {
         if let Some(out) = self.enclave_condition_link_get_id_sql(tn, condition_id, action_id) {
             out
         } else {
@@ -820,9 +820,9 @@ impl Main {
     fn enclave_condition_link_get_id_sql(
         &self,
         tn: &Transaction,
-        condition_id: &usize,
-        action_id: &usize,
-    ) -> Option<usize> {
+        condition_id: &u64,
+        action_id: &u64,
+    ) -> Option<u64> {
         tn.query_row(
             "SELECT id from EnclaveConditionList where enclave_action_id = ? AND condition_id = ?",
             params![action_id, condition_id],
@@ -838,8 +838,8 @@ impl Main {
     fn enclave_condition_list_get(
         &self,
 
-        condition_list_id: &usize,
-    ) -> Option<(usize, Option<usize>, usize)> {
+        condition_list_id: &u64,
+    ) -> Option<(u64, Option<u64>, u64)> {
         let tn = self.get_database_connection();
         if let Ok(out) = tn
             .query_row(
@@ -863,7 +863,7 @@ impl Main {
         tn: &Transaction,
         name: &String,
         action: sharedtypes::EnclaveAction,
-    ) -> usize {
+    ) -> u64 {
         // Quick out if we already have this inserted
         if let Some(out) = self.enclave_action_get_id_sql(tn, name) {
             return out;
@@ -883,7 +883,7 @@ impl Main {
     ///
     /// Raw SQL to check if the enclaveaction exists by name
     ///
-    fn enclave_action_get_id_sql(&self, tn: &Transaction, name: &String) -> Option<usize> {
+    fn enclave_action_get_id_sql(&self, tn: &Transaction, name: &String) -> Option<u64> {
         tn.query_row(
             "SELECT id from EnclaveAction where action_name = ?",
             params![name],

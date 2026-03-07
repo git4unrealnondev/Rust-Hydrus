@@ -216,7 +216,7 @@ impl PluginIpcInteract {
                     thread_list.lock().push(worker_id);
                 }
                 for stream in listener.incoming().flatten() {
-                    let worker_id = worker_id as usize;
+                    let worker_id = worker_id as u64;
                     handle_client(
                         stream,
                         &worker_id,
@@ -350,7 +350,7 @@ another process and try again.",
 }
 fn handle_client(
     stream: LocalSocketStream,
-    worker_id: &usize,
+    worker_id: &u64,
     db: Main,
     globalload: GlobalLoad,
     jobmanager: Arc<RwLock<Jobs>>,
@@ -556,7 +556,7 @@ pub fn dbactions_to_function(
             option_to_bytes(tmep.as_ref())
         }
         types::SupportedDBRequests::FilterNamespaceById((ids, namespace_id)) => {
-            let mut out: HashSet<usize> = HashSet::new();
+            let mut out: HashSet<u64> = HashSet::new();
             let unwrappy = database;
             for each in ids.iter() {
                 if unwrappy.namespace_contains_id(&namespace_id, each) {
@@ -678,8 +678,8 @@ pub fn dbactions_to_function(
             let tmep = unwrappy.namespace_get(&name);
             option_to_bytes(tmep.as_ref())
         }
-        types::SupportedDBRequests::TestUsize() => {
-            let test: usize = 32;
+        types::SupportedDBRequests::Testu64() => {
+            let test: u64 = 32;
             data_size_to_b(&test)
         }
         types::SupportedDBRequests::GetNamespaceString(id) => {

@@ -19,7 +19,7 @@ struct Row {
     tag: String,
     namespace: String,
     parent: Option<String>,
-    id: usize,
+    id: u64,
 }
 
 /// Just a holder for tasks. Can be called from here or any place really. :D

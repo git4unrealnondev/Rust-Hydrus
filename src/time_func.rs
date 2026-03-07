@@ -1,7 +1,7 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Returns time as seconds since unix_epoch
-pub fn time_secs() -> usize {
+pub fn time_secs() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
@@ -11,7 +11,7 @@ pub fn time_secs() -> usize {
 }
 
 /// Converts hour & day & minute repeatability.
-pub fn time_conv(inp: &str) -> usize {
+pub fn time_conv(inp: &str) -> u64 {
     if inp.to_lowercase() == *"now" {
         return 0;
     }
@@ -40,7 +40,7 @@ pub fn time_conv(inp: &str) -> usize {
             if tmp[0].is_empty() {
                 break;
             }
-            ttl += nums[cnt] * tmp[0].parse::<usize>().unwrap_or(0);
+            ttl += nums[cnt] * tmp[0].parse::<u64>().unwrap_or(0);
             st = tmp[1];
         }
     }
@@ -48,6 +48,6 @@ pub fn time_conv(inp: &str) -> usize {
     // for each in 0..strings.len() { dbg!(&each); if !st.contains(&strings[each]) {
     // continue; } let tmp: Vec<&str> = st.split(&strings[each]).collect(); if
     // tmp[0].is_empty() { break; } combine += nums[each] *
-    // tmp[0].parse::`<usize>`().unwrap(); st = tmp[1].to_string(); } combine
+    // tmp[0].parse::`<u64>`().unwrap(); st = tmp[1].to_string(); } combine
     ttl
 }

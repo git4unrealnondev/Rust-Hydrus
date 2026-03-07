@@ -143,7 +143,7 @@ pub struct NamespaceString {
 pub struct NamespaceId {
     /// Namespace Id to remove.
     #[arg(exclusive = true, required = true)]
-    pub namespace_id: usize,
+    pub namespace_id: u64,
 }
 
 #[derive(Debug, Subcommand)]
@@ -212,19 +212,19 @@ pub enum DbJobRecreationClap {
 #[derive(Debug, Parser, Clone, Eq, PartialEq, Hash)]
 pub struct IdTimestamp {
     #[arg(required = true, exclusive = true)]
-    pub id: usize,
+    pub id: u64,
     #[arg(exclusive = false, required = true)]
-    pub timestamp: Option<usize>,
+    pub timestamp: Option<u64>,
 }
 
 #[derive(Debug, Parser, Clone, Eq, PartialEq, Hash)]
 pub struct Timestamp {
     // Timestamp in seconds to start another job
     #[arg(exclusive = false, required = true)]
-    pub timestamp: usize,
+    pub timestamp: u64,
     /// Number of times to run a job
     #[arg(exclusive = false, required = false)]
-    pub count: Option<usize>,
+    pub count: Option<u64>,
 }
 
 #[derive(Debug, Hash, Eq, PartialEq, Clone, Parser)]
@@ -232,9 +232,9 @@ pub struct TagClap {
     #[arg(exclusive = false, required = true)]
     pub name: String,
     #[arg(exclusive = false, required = true)]
-    pub namespace: usize,
+    pub namespace: u64,
     #[arg(exclusive = false, required = true)]
-    pub timestamp: Option<usize>,
+    pub timestamp: Option<u64>,
 }
 
 /// Holder of job adding.
@@ -304,7 +304,7 @@ pub struct Parent {
     #[arg(required = true, exclusive = false)]
     pub tag: String,
     #[arg(required = true, exclusive = false)]
-    pub namespace: usize,
+    pub namespace: u64,
 }
 
 #[derive(Debug, Parser)]
@@ -318,7 +318,7 @@ pub struct Tag {
 #[derive(Debug, Parser, Clone, Eq, PartialEq, Hash)]
 pub struct Id {
     #[arg(required = true, exclusive = true)]
-    pub id: usize,
+    pub id: u64,
 }
 
 #[derive(Parser, Debug)]

@@ -7,6 +7,7 @@ use crate::globalload::GlobalLoad;
 use crate::helpers;
 use crate::helpers::check_url;
 use crate::logging;
+use crate::roaring_bitmap::RelationshipStorage;
 use crate::sharedtypes;
 use crate::sharedtypes::DEFAULT_CACHECHECK;
 use crate::sharedtypes::ScraperParam;
@@ -27,6 +28,7 @@ use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
+
 /// I dont want to keep writing .to_string on EVERY vector of strings. Keeps me
 /// lazy. vec_of_strings["one", "two"];
 #[macro_export]
@@ -42,23 +44,25 @@ fn dbinit(dbpath: &String) -> tnection {
 
 #[derive(Clone, Debug)]
 pub enum CacheType {
-    // Default option. Will use in memory DB to make store cached data.
+    // Will use in memory DB to make store cached data.
     InMemdb,
     // Not yet implmented will be used for using sqlite 3 inmemory db calls.
     InMemory(Pool<SqliteConnectionManager>),
-    // Will be use to query the DB directly. No caching.
+    // Will be use to query the DB directly. No caching. DEFAULT OPTION
     Bare,
+    // New cache method for relationships
+    RelationshipRoaring,
 }
 
 #[derive(Clone)]
 /// Holder of database self variables
 pub(crate) struct Main {
     pub(super) _dbpath: Option<String>,
-    pub(super) _vers: usize,
+    pub(super) _vers: u64,
     pub(super) pool: Pool<SqliteConnectionManager>,
     pub(in crate::database) write_conn: Arc<Mutex<PooledConnection<SqliteConnectionManager>>>,
     pub(super) write_conn_istransaction: Arc<Mutex<bool>>,
-    pub(super) _active_vers: usize,
+    pub(super) _active_vers: u64,
     pub(super) _inmemdb: Arc<RwLock<NewinMemDB>>,
     pub(super) tables_loaded: Arc<RwLock<Vec<sharedtypes::LoadDBTable>>>,
     pub(super) tables_loading: Arc<RwLock<Vec<sharedtypes::LoadDBTable>>>,
@@ -66,7 +70,8 @@ pub(crate) struct Main {
     pub globalload: Option<Arc<GlobalLoad>>,
     pub(super) localref: Option<Arc<RwLock<Main>>>,
     pub api_info: Arc<RwLock<Option<sharedtypes::ClientAPIInfo>>>,
-    pub(in crate::database) popular_relationship_count: Arc<Mutex<Option<usize>>>,
+    pub(in crate::database) popular_relationship_count: Arc<Mutex<Option<u64>>>,
+    pub(in crate::database) relationship_roaring_storage: Arc<RwLock<RelationshipStorage>>,
 }
 
 /// Handles transactional pushes.
@@ -104,7 +109,7 @@ impl Main {
     }
 
     /// Sets up new db instance.
-    pub fn new(path: Option<String>, vers: usize) -> Self {
+    pub fn new(path: Option<String>, vers: u64) -> Self {
         // Initiates two tnections to the DB. Cheap workaround to avoid loading errors.
         let mut first_time_load_flag = false;
         let mut main = match path {
@@ -140,6 +145,7 @@ impl Main {
                     localref: None,
                     api_info: Arc::new(None.into()),
                     popular_relationship_count: Arc::new(None.into()),
+                    relationship_roaring_storage: Arc::new(RwLock::new(RelationshipStorage::new())),
                 };
                 //                let tnection = dbinit(file_path);
                 let manager = SqliteConnectionManager::file(file_path).with_init(|conn| {
@@ -148,8 +154,8 @@ impl Main {
             PRAGMA journal_mode = WAL;
 PRAGMA synchronous = NORMAL;
 PRAGMA busy_timeout = 20000;
-PRAGMA wal_autocheckpoint = 5000;
-PRAGMA mmap_size = 1073741824; -- 1GB
+PRAGMA wal_autocheckpoint = 20000;
+PRAGMA mmap_size = 4294967296; -- 1GB
 ",
                     )?;
                     /*
@@ -167,7 +173,7 @@ PRAGMA mmap_size = 1073741824; -- 1GB
                     .unwrap();
                 let write_conn = Arc::new(Mutex::new(pool.get().unwrap()));
                 let write_conn_istransaction = Arc::new(Mutex::new(false));
-                let main = Main {
+                Main {
                     _dbpath: path,
                     _vers: vers,
                     pool,
@@ -182,8 +188,8 @@ PRAGMA mmap_size = 1073741824; -- 1GB
                     localref: None,
                     api_info: Arc::new(None.into()),
                     popular_relationship_count: Arc::new(None.into()),
-                };
-                main
+                    relationship_roaring_storage: Arc::new(RwLock::new(RelationshipStorage::new())),
+                }
             }
             None => {
                 first_time_load_flag = false;
@@ -212,7 +218,7 @@ PRAGMA journal_mode = WAL;
                 let write_conn = Arc::new(Mutex::new(pool.get().unwrap()));
                 let write_conn_istransaction = Arc::new(Mutex::new(false));
 
-                let main = Main {
+                Main {
                     _dbpath: None,
                     _vers: vers,
                     pool,
@@ -227,8 +233,8 @@ PRAGMA journal_mode = WAL;
                     localref: None,
                     api_info: Arc::new(None.into()),
                     popular_relationship_count: Arc::new(None.into()),
-                };
-                main
+                    relationship_roaring_storage: Arc::new(RwLock::new(RelationshipStorage::new())),
+                }
             }
         };
         // let path = String::from("./main.db");
@@ -237,10 +243,10 @@ PRAGMA journal_mode = WAL;
             {
                 let mut write_conn = main.write_conn.lock();
                 let mut transaction = write_conn.transaction().unwrap();
-                main.first_db(&mut transaction);
+                main.first_db(&transaction);
 
                 dbg!("made first db");
-                main.updatedb(&mut transaction);
+                main.updatedb(&transaction);
                 dbg!("made update db");
                 transaction.commit().unwrap();
             }
@@ -279,15 +285,8 @@ PRAGMA journal_mode = WAL;
         &self,
         tn: &Transaction,
         file: sharedtypes::DbFileStorage,
-    ) -> usize {
-        match self._cache {
-            CacheType::Bare => self.file_add_sql(tn, &file),
-            _ => {
-                self.file_add_sql(tn, &file);
-
-                self._inmemdb.write().file_put(file)
-            }
-        }
+    ) -> u64 {
+        self.file_add_sql(tn, &file)
     }
 
     /// Condesnes relationships between tags & files. Changes tag id's removes spaces
@@ -306,26 +305,14 @@ PRAGMA journal_mode = WAL;
         &self,
         tn: &Transaction,
         par: sharedtypes::DbParentsObj,
-    ) -> usize {
-        match self._cache {
-            CacheType::Bare => {
-                let tagid = self.parents_get_id_list_sql(&par);
+    ) -> u64 {
+        let tagid = self.parents_get_id_list_sql(&par);
 
-                if tagid.is_empty() {
-                    self.parents_add_sql(tn, &par)
-                } else {
-                    let tags: Vec<usize> = tagid.into_iter().collect();
-                    tags[0]
-                }
-            }
-            _ => {
-                let inmemdb = self._inmemdb.read();
-                let parent = inmemdb.parents_get(&par);
-                if parent.is_none() {
-                    self.parents_add_sql(tn, &par);
-                }
-                self.parents_add_internal_db(par)
-            }
+        if tagid.is_empty() {
+            self.parents_add_sql(tn, &par)
+        } else {
+            let tags: Vec<u64> = tagid.into_iter().collect();
+            tags[0]
         }
     }
     ///
@@ -334,21 +321,10 @@ PRAGMA journal_mode = WAL;
     pub(in crate::database) fn migrate_relationship_tag(
         &self,
         tn: &Transaction,
-        old_tag_id: &usize,
-        new_tag_id: &usize,
+        old_tag_id: &u64,
+        new_tag_id: &u64,
     ) {
-        match self._cache {
-            CacheType::Bare => {
-                self.migrate_relationship_tag_sql(tn, old_tag_id, new_tag_id);
-            }
-            _ => {
-                let fileids = self.relationship_get_fileid(old_tag_id);
-                for file_id in fileids {
-                    self.add_relationship_sql(tn, &file_id, &new_tag_id);
-                    self.delete_relationship_sql(tn, &file_id, old_tag_id);
-                }
-            }
-        }
+        self.migrate_relationship_tag_sql(tn, old_tag_id, new_tag_id);
         self.parents_migration(tn, old_tag_id, new_tag_id);
     }
     ///
@@ -357,20 +333,12 @@ PRAGMA journal_mode = WAL;
     pub(in crate::database) fn parents_tagid_remove_internal(
         &self,
         tn: &Transaction,
-        tag_id: &usize,
+        tag_id: &u64,
     ) -> HashSet<sharedtypes::DbParentsObj> {
-        match self._cache {
-            CacheType::Bare => {
-                let out = self.parents_tagid_tag_get(tag_id);
+        let out = self.parents_tagid_tag_get(tag_id);
 
-                self.parents_delete_tag_id_sql(tn, tag_id);
-                out
-            }
-            _ => {
-                self.parents_delete_tag_id_sql(tn, tag_id);
-                self._inmemdb.write().parents_tagid_remove(tag_id)
-            }
-        }
+        self.parents_delete_tag_id_sql(tn, tag_id);
+        out
     }
 
     ///
@@ -380,7 +348,7 @@ PRAGMA journal_mode = WAL;
         &self,
         tn: &Transaction,
         tag: &sharedtypes::TagObject,
-    ) -> Option<usize> {
+    ) -> Option<u64> {
         let mut limit_to = None;
 
         // If the tag is empty then dont push.
@@ -427,7 +395,7 @@ PRAGMA journal_mode = WAL;
     pub(in crate::database) fn add_tags_to_fileid_internal(
         &self,
         tn: &Transaction,
-        file_id: Option<usize>,
+        file_id: Option<u64>,
         tag_actions: &Vec<sharedtypes::FileTagAction>,
     ) {
         for tag_action in tag_actions {
@@ -456,7 +424,7 @@ PRAGMA journal_mode = WAL;
                     };
 
                     // 1️⃣ Build parser tags grouped by namespace
-                    let mut namespace_tags: HashMap<String, Vec<usize>> = HashMap::new();
+                    let mut namespace_tags: HashMap<String, Vec<u64>> = HashMap::new();
                     for tag in &tag_action.tags {
                         // Ignore special tag types
                         if !matches!(
@@ -475,7 +443,7 @@ PRAGMA journal_mode = WAL;
                     }
 
                     // 2️⃣ Fetch current tags for file grouped by namespace
-                    let mut namespace_file_tags: HashMap<String, Vec<usize>> = HashMap::new();
+                    let mut namespace_file_tags: HashMap<String, Vec<u64>> = HashMap::new();
                     for tag_id in self.relationship_get_tagid(&file_id) {
                         if let Some(tag_obj) = self.tag_id_get(&tag_id) {
                             if let Some(namespace) = self.namespace_get_string(&tag_obj.namespace) {
@@ -573,58 +541,31 @@ PRAGMA journal_mode = WAL;
     pub(in crate::database) fn parents_reltagid_remove(
         &self,
         tn: &Transaction,
-        reltag: &usize,
+        reltag: &u64,
     ) -> HashSet<sharedtypes::DbParentsObj> {
-        match self._cache {
-            CacheType::Bare => {
-                let out = self.parents_relate_tag_get(reltag);
+        let out = self.parents_relate_tag_get(reltag);
 
-                self.parents_delete_relate_tag_id_sql(tn, reltag);
-                out
-            }
-            _ => {
-                self.parents_delete_relate_tag_id_sql(tn, reltag);
-                self._inmemdb.write().parents_reltagid_remove(reltag)
-            }
-        }
+        self.parents_delete_relate_tag_id_sql(tn, reltag);
+        out
     }
 
     pub(in crate::database) fn parents_limitto_remove(
         &self,
         tn: &Transaction,
-        limit_to: Option<usize>,
+        limit_to: Option<u64>,
     ) -> HashSet<sharedtypes::DbParentsObj> {
-        match self._cache {
-            CacheType::Bare => {
-                if let Some(limit_to) = limit_to {
-                    let temp = self.parents_limitto_tag_get(&limit_to);
+        if let Some(limit_to) = limit_to {
+            let temp = self.parents_limitto_tag_get(&limit_to);
 
-                    self.parents_delete_limit_to_sql(tn, &limit_to);
-                    temp
-                } else {
-                    HashSet::new()
-                }
-            }
-            _ => {
-                if let Some(limit_to) = limit_to {
-                    self.parents_delete_limit_to_sql(tn, &limit_to);
-                    self._inmemdb.write().parents_limitto_remove(&limit_to)
-                } else {
-                    HashSet::new()
-                }
-            }
+            self.parents_delete_limit_to_sql(tn, &limit_to);
+            temp
+        } else {
+            HashSet::new()
         }
     }
 
     /// Clears in memdb structures
-    pub(in crate::database) fn clear_cache(&self) {
-        match self._cache {
-            CacheType::Bare => {}
-            _ => {
-                self._inmemdb.write().clear_all();
-            }
-        }
-    }
+    pub(in crate::database) fn clear_cache(&self) {}
 
     ///
     /// Gets one tnection from the sqlite pool
@@ -669,6 +610,7 @@ PRAGMA journal_mode = WAL;
                 let cachemode = match cache.as_str() {
                     "Bare" => Some(CacheType::Bare),
                     "InMemdb" => Some(CacheType::InMemdb),
+                    "RelationshipRoaring" => Some(CacheType::RelationshipRoaring),
                     "InMemory" => {
                         let manager = SqliteConnectionManager::memory();
 
@@ -760,7 +702,7 @@ PRAGMA journal_mode = WAL;
     /// Flips the running of a job by id
     /// Returns the status of the job if it exists
     ///
-    fn jobs_flip_running(&self, id: &usize) -> Option<bool> {
+    fn jobs_flip_running(&self, id: &u64) -> Option<bool> {
         match self._cache {
             CacheType::Bare => {
                 todo!("Bare implementation not implemineted");
@@ -810,15 +752,12 @@ PRAGMA journal_mode = WAL;
     ///
     ///Returns the max id of something inside of the db
     ///
-    fn tags_max_id(&self) -> usize {
-        match self._cache {
-            CacheType::Bare => self.tags_max_return_sql(),
-            _ => self._inmemdb.read().tags_max_return(),
-        }
+    fn tags_max_id(&self) -> u64 {
+        self.tags_max_return_sql()
     }
 
     /// Returns next jobid from _inmemdb
-    pub(in crate::database) fn jobs_get_max(&self) -> usize {
+    pub(in crate::database) fn jobs_get_max(&self) -> u64 {
         match self._cache {
             //  CacheType::Bare => self.jobs_return_count_sql(),
             _ => *self._inmemdb.read().jobs_get_max(),
@@ -1016,11 +955,11 @@ PRAGMA journal_mode = WAL;
             g1.clear();
             while let Some(each) = rows.next().unwrap() {
                 let ver: Result<String> = each.get(0);
-                let vers: Result<usize> = each.get(0);
+                let vers: Result<u64> = each.get(0);
 
                 // let izce;
                 let izce = match &ver {
-                    Ok(_string_ver) => ver.unwrap().parse::<usize>().unwrap(),
+                    Ok(_string_ver) => ver.unwrap().parse::<u64>().unwrap(),
                     Err(_unk_err) => vers.unwrap(),
                 };
                 g1.push(izce.try_into().unwrap())
@@ -1043,7 +982,7 @@ PRAGMA journal_mode = WAL;
             }
             logging::panic_log("check_version: Could not load DB properly PANICING!!!".to_string());
         }
-        let mut db_vers = g1[0] as usize;
+        let mut db_vers = g1[0] as u64;
         self._active_vers = db_vers;
         logging::info_log(format!("check_version: Loaded version {}", db_vers));
         if self._active_vers != self._vers {
@@ -1134,19 +1073,11 @@ PRAGMA journal_mode = WAL;
         tn: &Transaction,
         name: &String,
         description: &Option<String>,
-    ) -> usize {
+    ) -> u64 {
         if let Some(id) = self.namespace_get(name) {
             return id;
         }
-
-        match self._cache {
-            CacheType::Bare => self.namespace_add_sql(tn, name, description, None),
-            _ => {
-                let out = self.namespace_add_inmemdb(tn, name.clone(), description.clone());
-
-                out
-            }
-        }
+        self.namespace_add_sql(tn, name, description, None)
     }
 
     /// Creates a table name: The table name key: List of Collumn lables. dtype: List
@@ -1257,7 +1188,7 @@ PRAGMA journal_mode = WAL;
     }
 
     /// Sets DB Version
-    pub(super) fn db_version_set(&mut self, version: usize) {
+    pub(super) fn db_version_set(&mut self, version: u64) {
         logging::log(format!("Setting DB Version to: {}", &version));
         self._active_vers = version;
 
@@ -1296,14 +1227,14 @@ PRAGMA journal_mode = WAL;
         &self,
         tn: &Transaction,
         ext: &String,
-    ) -> usize {
+    ) -> u64 {
         match self.extension_get_id_sql(tn, ext) {
             Some(id) => id,
             None => self.extension_put_id_ext_sql(tn, None, ext),
         }
     }
 
-    pub fn extension_put_string(&self, ext: &String) -> usize {
+    pub fn extension_put_string(&self, ext: &String) -> u64 {
         if let Some(out) = self.extension_get_id(ext) {
             return out;
         }
@@ -1315,56 +1246,19 @@ PRAGMA journal_mode = WAL;
     ///
     /// Gets an ID if a extension string exists
     ///
-    pub fn extension_get_id(&self, ext: &String) -> Option<usize> {
+    pub fn extension_get_id(&self, ext: &String) -> Option<u64> {
         let mut db = self.get_database_connection();
         let tn = db.transaction().unwrap();
-        match self._cache {
-            CacheType::Bare => self.extension_get_id_sql(&tn, ext),
-            _ => self._inmemdb.read().extension_get_id(ext).copied(),
-        }
+        self.extension_get_id_sql(&tn, ext)
     }
 
     /// Puts extension into mem cache
-    pub(in crate::database) fn extension_load(&self, tn: &Transaction, id: usize, ext: String) {
+    pub(in crate::database) fn extension_load(&self, tn: &Transaction, id: u64, ext: String) {
         self.extension_put_id_ext_sql(tn, Some(id), &ext);
     }
 
     /// Same as above
-    pub(in crate::database) fn load_namespace(&self) {
-        if matches!(self._cache, CacheType::Bare) {
-            return;
-        }
-
-        let mut nses: Vec<sharedtypes::DbNamespaceObj> = vec![];
-        logging::info_log("Database is Loading: Namespace".to_string());
-        {
-            let tn = self.get_database_connection();
-            let temp = tn.prepare("SELECT * FROM Namespace");
-            if let Ok(mut con) = temp {
-                let namespaces = con
-                    .query_map([], |row| {
-                        Ok(sharedtypes::DbNamespaceObj {
-                            id: row.get(0).unwrap(),
-                            name: row.get(1).unwrap(),
-                            description: row.get(2).unwrap(),
-                        })
-                    })
-                    .unwrap();
-                for each in namespaces {
-                    if let Ok(res) = each {
-                        nses.push(res);
-                    } else {
-                        error!("Bad Namespace cant load {:?}", each);
-                    }
-                }
-            }
-        }
-
-        for ns in nses {
-            self.namespace_add_id_exists(ns);
-            //self.namespace_add(res.name, res.description);
-        }
-    }
+    pub(in crate::database) fn load_namespace(&self) {}
 
     /// Loads jobs in from DB tnection
     pub(in crate::database) fn load_jobs(&self) {
@@ -1418,11 +1312,8 @@ PRAGMA journal_mode = WAL;
     ///
     /// Gets a fileid from a hash
     ///
-    pub fn file_get_hash_internal(&self, tn: &Transaction, hash: &String) -> Option<usize> {
-        match self._cache {
-            CacheType::Bare => self.file_get_id_sql_internal(tn, hash),
-            _ => self._inmemdb.read().file_get_hash(hash).copied(),
-        }
+    pub fn file_get_hash_internal(&self, tn: &Transaction, hash: &String) -> Option<u64> {
+        self.file_get_id_sql_internal(tn, hash)
     }
 
     /// Adds a file into the db sqlite. Do this first.
@@ -1430,7 +1321,7 @@ PRAGMA journal_mode = WAL;
         &self,
         tn: &Transaction,
         file: &sharedtypes::DbFileStorage,
-    ) -> usize {
+    ) -> u64 {
         match file {
             sharedtypes::DbFileStorage::Exist(file_obj) => {
                 if self.file_get_hash_internal(tn, &file_obj.hash).is_none() {
@@ -1471,7 +1362,7 @@ PRAGMA journal_mode = WAL;
         tn: &Transaction,
         name: String,
         description: Option<String>,
-    ) -> usize {
+    ) -> u64 {
         let namespace_grab = {
             let inmemdb = self._inmemdb.read();
             inmemdb.namespace_get(&name).copied()
@@ -1498,7 +1389,7 @@ PRAGMA journal_mode = WAL;
     pub(in crate::database) fn parents_add_internal_db(
         &self,
         parent: sharedtypes::DbParentsObj,
-    ) -> usize {
+    ) -> u64 {
         self._inmemdb.write().parents_put(parent)
     }
 
@@ -1511,14 +1402,14 @@ PRAGMA journal_mode = WAL;
         &self,
         tn: &Transaction,
         namespace_obj: sharedtypes::GenericNamespaceObj,
-    ) -> usize {
+    ) -> u64 {
         self.namespace_add_internal(tn, &namespace_obj.name, &namespace_obj.description)
     }
 
     /*///
     /// Adds tags to a file id
     ///
-    fn relationship_tag_add(&self,tn: &Transaction, fid: &usize, tags: Vec<sharedtypes::TagObject>) {
+    fn relationship_tag_add(&self,tn: &Transaction, fid: &u64, tags: Vec<sharedtypes::TagObject>) {
         match self._cache {
             CacheType::Bare => {
                 self.file_tag_relationship(tn, &fid, tags);
@@ -1547,19 +1438,14 @@ PRAGMA journal_mode = WAL;
         &self,
         tn: &Transaction,
         tags: &String,
-        namespace: usize,
-        id: Option<usize>,
-    ) -> usize {
+        namespace: u64,
+        id: Option<u64>,
+    ) -> u64 {
         let tag = self.tag_get_name(tags.to_string(), namespace);
         match tag {
             None => self.tag_add_no_id_sql(tn, tags, namespace),
             Some(id) => id,
         }
-    }
-
-    /// Wrapper for inmemdb relationship adding
-    pub(super) fn relationship_add_db(&self, file: usize, tag: usize) {
-        self._inmemdb.write().relationship_add(file, tag);
     }
 
     ///
@@ -1569,18 +1455,18 @@ PRAGMA journal_mode = WAL;
     pub fn jobs_add(
         &self,
 
-        id: Option<usize>,
-        time: usize,
-        reptime: usize,
-        priority: usize,
-        cachetime: Option<usize>,
+        id: Option<u64>,
+        time: u64,
+        reptime: u64,
+        priority: u64,
+        cachetime: Option<u64>,
         cachechecktype: sharedtypes::JobCacheType,
         site: String,
         param: Vec<ScraperParam>,
         system_data: BTreeMap<String, String>,
         user_data: BTreeMap<String, String>,
         jobsmanager: sharedtypes::DbJobsManager,
-    ) -> usize {
+    ) -> u64 {
         let id = match id {
             None => self.jobs_get_max(),
             Some(id) => id,
@@ -1626,7 +1512,7 @@ PRAGMA journal_mode = WAL;
         &self,
         name: String,
         pretty: Option<String>,
-        num: Option<usize>,
+        num: Option<u64>,
         param: Option<String>,
     ) {
         self._inmemdb.write().settings_add(name, pretty, num, param);
@@ -1638,7 +1524,7 @@ PRAGMA journal_mode = WAL;
     }
 
     /// Parses data from search query to return an id
-    fn search_for_namespace(&self, search: &sharedtypes::DbSearchObject) -> Option<usize> {
+    fn search_for_namespace(&self, search: &sharedtypes::DbSearchObject) -> Option<u64> {
         match &search.namespace {
             None => search.namespace_id,
             Some(id_string) => self.namespace_get(id_string),
@@ -1648,7 +1534,7 @@ PRAGMA journal_mode = WAL;
     /*/// Raw Call to database. Try to only use internally to this file only. Doesn't
     /// support params nativly. Will not write changes to DB. Have to call write().
     /// Panics to help issues.
-    fn execute(&self, inp: String) -> usize {
+    fn execute(&self, inp: String) -> u64 {
         let tn = self.conn.lock();
         let out = tn.execute(&inp, params![]);
         match out {
@@ -1669,7 +1555,7 @@ PRAGMA journal_mode = WAL;
     }*/
 
     /// Removes job from inmemdb Removes by id
-    pub(in crate::database) fn del_from_jobs_inmemdb(&self, id: &usize) {
+    pub(in crate::database) fn del_from_jobs_inmemdb(&self, id: &u64) {
         self._inmemdb.write().jobref_remove(id)
     }
 
@@ -1679,19 +1565,11 @@ PRAGMA journal_mode = WAL;
     pub(in crate::database) fn migrate_relationship_file_tag_internal(
         &self,
         tn: &Transaction,
-        file_id: &usize,
-        old_tag_id: &usize,
-        new_tag_id: &usize,
+        file_id: &u64,
+        old_tag_id: &u64,
+        new_tag_id: &u64,
     ) {
-        match self._cache {
-            CacheType::Bare => {
-                self.migrate_relationship_file_tag_sql(tn, file_id, old_tag_id, new_tag_id);
-            }
-            _ => {
-                self.add_relationship_sql(tn, file_id, new_tag_id);
-                self.delete_relationship_sql(tn, file_id, old_tag_id);
-            }
-        }
+        self.migrate_relationship_file_tag_sql(tn, file_id, old_tag_id, new_tag_id);
         self.parents_migration(tn, old_tag_id, new_tag_id);
     }
 
@@ -1702,8 +1580,8 @@ PRAGMA journal_mode = WAL;
     pub(in crate::database) fn migrate_tag_internal(
         &self,
         tn: &Transaction,
-        old_tag_id: &usize,
-        new_tag_id: &usize,
+        old_tag_id: &u64,
+        new_tag_id: &u64,
     ) {
         if !matches!(self._cache, CacheType::InMemdb) {
             tn.execute(
@@ -1737,7 +1615,7 @@ PRAGMA journal_mode = WAL;
     }
 
     /// Removes tag & relationship from db.
-    fn delete_tag_relationship(&self, tn: &Transaction, tag_id: &usize) {
+    fn delete_tag_relationship(&self, tn: &Transaction, tag_id: &u64) {
         let relationships = self.relationship_get_fileid(tag_id);
 
         // Gets list of fileids from internal db.
@@ -1769,7 +1647,7 @@ PRAGMA journal_mode = WAL;
     ///
     /// Migrates a parent from a old tagid to a new id
     ///
-    fn parents_migration(&self, tn: &Transaction, old_tag_id: &usize, new_tag_id: &usize) {
+    fn parents_migration(&self, tn: &Transaction, old_tag_id: &u64, new_tag_id: &u64) {
         // Removes parent by ID and readds it with the new id
         for parent in self.parents_tagid_remove_internal(tn, old_tag_id) {
             logging::log(format!(
@@ -1829,7 +1707,7 @@ PRAGMA journal_mode = WAL;
     }
 
     /// Deletes namespace by id Removes tags & relationships assocated.
-    pub(in crate::database) fn namespace_delete_id(&self, tn: &Transaction, id: &usize) {
+    pub(in crate::database) fn namespace_delete_id(&self, tn: &Transaction, id: &u64) {
         logging::info_log(format!("Starting deletion work on namespace id: {}", id));
 
         // self.vacuum(); self.tn.lock().execute("create index ffid on
@@ -1854,18 +1732,18 @@ PRAGMA journal_mode = WAL;
     fn condense_file_locations(&self) {
         self.load_table(&sharedtypes::LoadDBTable::Files);
 
-        let mut file_id_list: Vec<usize> = self.file_get_list_id().into_iter().collect();
+        let mut file_id_list: Vec<u64> = self.file_get_list_id().into_iter().collect();
 
         file_id_list.par_sort_unstable();
 
         for (ref cnt, key) in file_id_list.iter().enumerate() {
-            if cnt != key {
+            if *cnt as u64 != *key {
                 dbg!("mismatch", &key, &cnt);
             }
         }
     }
 
-    fn get_starting_tag_id(&self) -> usize {
+    fn get_starting_tag_id(&self) -> u64 {
         let mut out = None;
 
         for id in 0..self.tags_max_id() {
@@ -1925,9 +1803,12 @@ PRAGMA journal_mode = WAL;
             flag = false;
         }
 
-        let mut cnt: usize = self.get_starting_tag_id();
-        let mut last_highest: usize = cnt;
-        let mut eta = Eta::new(tag_max - self.get_starting_tag_id(), TimeAcc::MILLI);
+        let mut cnt: u64 = self.get_starting_tag_id();
+        let mut last_highest: u64 = cnt;
+        let mut eta = Eta::new(
+            (tag_max - self.get_starting_tag_id()).try_into().unwrap(),
+            TimeAcc::MILLI,
+        );
         let count_percent = tag_max.div_ceil(100 / 2);
         for id in self.get_starting_tag_id()..tag_max + 1 {
             let tagnns = self.tag_id_get(&id);
@@ -1949,14 +1830,6 @@ PRAGMA journal_mode = WAL;
                 logging::info_log(format!("{}", &eta));
             }
         }
-
-        // Updating internal caches highest tag value
-        match self._cache {
-            CacheType::Bare => {}
-            _ => {
-                self._inmemdb.write().tag_max_set(last_highest + 1);
-            }
-        }
     }
 
     fn condense_namespace(&self) {
@@ -1974,7 +1847,7 @@ PRAGMA journal_mode = WAL;
     }
 
     /*/// Recreates the db with only one ns in it.
-    fn drop_recreate_ns(&self, id: &usize) {
+    fn drop_recreate_ns(&self, id: &u64) {
         // self.load_table(&sharedtypes::LoadDBTable::Relationship);
         // self.load_table(&sharedtypes::LoadDBTable::Parents);
         // self.load_table(&sharedtypes::LoadDBTable::Tags);
@@ -2102,7 +1975,7 @@ PRAGMA journal_mode = WAL;
     pub(in crate::database) fn get_relationship_popular_division_count(
         &self,
         tn: &Transaction,
-    ) -> usize {
+    ) -> u64 {
         if let Some(settingobj) =
             self.settings_get_name(&"SYSTEM_tag_count_popular_division".to_string())
             && let Some(number) = settingobj.num
@@ -2133,7 +2006,7 @@ PRAGMA journal_mode = WAL;
     pub(in crate::database) fn get_relationship_popular_division_count_old(
         &self,
         tn: &Transaction,
-    ) -> usize {
+    ) -> u64 {
         if let Some(settingobj) =
             self.settings_get_name(&"SYSTEM_tag_count_popular_division_old".to_string())
             && let Some(number) = settingobj.num
@@ -2183,7 +2056,7 @@ PRAGMA journal_mode = WAL;
         tn: &Transaction,
         name: String,
         pretty: Option<String>,
-        num: Option<usize>,
+        num: Option<u64>,
         param: Option<String>,
     ) {
         self.setting_add_sql(tn, name.to_string(), &pretty, num, &param);
@@ -2217,11 +2090,11 @@ pub(crate) mod test_database {
     #[test]
     fn db_relationship() {
         for mut main in setup_default_db() {
-            main.add_relationship_sql(0, 0);
+            main.add_relationship(&0, &0);
             dbg!(&main._cache, main.relationship_get_fileid(&0));
             assert_eq!(main.relationship_get_fileid(&0).len(), 1);
             assert_eq!(main.relationship_get_tagid(&0).len(), 1);
-            let mut test_hashset: HashSet<usize> = HashSet::new();
+            let mut test_hashset: HashSet<u64> = HashSet::new();
             test_hashset.insert(0);
             assert_eq!(main.relationship_get_fileid(&0), test_hashset);
             assert_eq!(main.relationship_get_tagid(&0), test_hashset);
@@ -2414,31 +2287,6 @@ pub(crate) mod test_database {
 
             assert!(main.check_dead_url(&"test".to_string()));
             assert!(!main.check_dead_url(&"Null".to_string()));
-        }
-    }
-
-    #[test]
-    fn file_add_test() {
-        let mut mains = setup_default_db();
-
-        for mut main in mains {
-            dbg!(&main._cache);
-            let id = main.file_add_db(sharedtypes::DbFileStorage::NoIdExist(
-                sharedtypes::DbFileObjNoId {
-                    hash: "yeet".to_string(),
-                    ext_id: 1,
-                    storage_id: 2,
-                },
-            ));
-            let id1 = main.file_add_db(sharedtypes::DbFileStorage::NoIdExist(
-                sharedtypes::DbFileObjNoId {
-                    hash: "yeet".to_string(),
-                    ext_id: 1,
-                    storage_id: 2,
-                },
-            ));
-
-            assert_eq!(id, id1);
         }
     }
 }

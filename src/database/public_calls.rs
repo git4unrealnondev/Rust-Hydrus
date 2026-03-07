@@ -10,11 +10,14 @@ use log::{error, info};
 use remove_empty_subdirs::remove_empty_subdirs;
 pub use rusqlite::types::ToSql;
 pub use rusqlite::{Connection, Result, Transaction, params, types::Null};
+use std::cmp::Reverse;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::path::Path;
 use std::path::PathBuf;
+use std::time::Instant;
 use web_api::web_api;
+
 #[web_api]
 impl Main {
     ///
@@ -93,7 +96,7 @@ impl Main {
         }
     }
     /// Deletes a namespace by id
-    pub fn delete_namespace_id(&self, nsid: &usize) {
+    pub fn delete_namespace_id(&self, nsid: &u64) {
         let mut write_conn = self.write_conn.lock();
         let tn = write_conn.transaction().unwrap();
 
@@ -118,14 +121,14 @@ impl Main {
     }
 
     /// Removes a job from the database by id. Removes from both memdb and sql.
-    pub fn del_from_jobs_byid(&self, id: Option<usize>) {
+    pub fn del_from_jobs_byid(&self, id: Option<u64>) {
         if let Some(ref id) = id {
             self.del_from_jobs_inmemdb(id);
             self.del_from_jobs_table_sql_better(id);
         }
     }
 
-    pub fn file_add(&self, file: sharedtypes::DbFileStorage) -> usize {
+    pub fn file_add(&self, file: sharedtypes::DbFileStorage) -> u64 {
         let mut write_conn = self.write_conn.lock();
         let tn = write_conn.transaction().unwrap();
         let out = self.file_add_internal(&tn, &file);
@@ -133,7 +136,7 @@ impl Main {
         out
     }
 
-    pub fn storage_put(&self, location: &String) -> usize {
+    pub fn storage_put(&self, location: &String) -> u64 {
         if let Some(out) = self.storage_get_id(location) {
             return out;
         }
@@ -147,7 +150,7 @@ impl Main {
     /// Adds tags to fileid  commits to db
     pub fn add_tags_to_fileid(
         &self,
-        file_id: Option<usize>,
+        file_id: Option<u64>,
         tag_actions: &Vec<sharedtypes::FileTagAction>,
     ) {
         let mut write_conn = self.write_conn.lock();
@@ -157,14 +160,14 @@ impl Main {
         out
     }
 
-    pub fn delete_tag(&self, tag: &usize) {
+    pub fn delete_tag(&self, tag: &u64) {
         let mut write_conn = self.write_conn.lock();
         let tn = write_conn.transaction().unwrap();
         self.delete_tag_sql(&tn, tag);
         tn.commit().unwrap();
     }
 
-    pub fn parents_tagid_remove(&self, tagid: &usize) -> HashSet<sharedtypes::DbParentsObj> {
+    pub fn parents_tagid_remove(&self, tagid: &u64) -> HashSet<sharedtypes::DbParentsObj> {
         let mut write_conn = self.write_conn.lock();
         let tn = write_conn.transaction().unwrap();
         let out = self.parents_tagid_remove_internal(&tn, tagid);
@@ -172,13 +175,13 @@ impl Main {
         out
     }
 
-    pub fn add_relationship(&self, file: &usize, tag: &usize) {
+    pub fn add_relationship(&self, file: &u64, tag: &u64) {
         let mut write_conn = self.write_conn.lock();
         let tn = write_conn.transaction().unwrap();
         self.add_relationship_sql(&tn, file, tag);
         tn.commit().unwrap();
     }
-    pub fn delete_relationship(&self, file: &usize, tag: &usize) {
+    pub fn delete_relationship(&self, file: &u64, tag: &u64) {
         let mut write_conn = self.write_conn.lock();
         let tn = write_conn.transaction().unwrap();
         self.delete_relationship_sql(&tn, file, tag);
@@ -188,7 +191,7 @@ impl Main {
     ///
     /// Adds the tag to the db. commits on finish
     ///
-    pub fn tag_add_tagobject(&self, tag: &sharedtypes::TagObject) -> Option<usize> {
+    pub fn tag_add_tagobject(&self, tag: &sharedtypes::TagObject) -> Option<u64> {
         let out;
         let mut write_conn = self.write_conn.lock();
         {
@@ -215,7 +218,7 @@ impl Main {
     }
 
     /// Sets a relationship between a fileid old and new tagid
-    pub fn migrate_tag(&self, old_tag_id: &usize, new_tag_id: &usize) {
+    pub fn migrate_tag(&self, old_tag_id: &u64, new_tag_id: &u64) {
         let mut write_conn = self.write_conn.lock();
         let tn = write_conn.transaction().unwrap();
         self.migrate_tag_internal(&tn, old_tag_id, new_tag_id);
@@ -223,12 +226,7 @@ impl Main {
     }
 
     /// Sets a relationship between a fileid old and new tagid
-    pub fn migrate_relationship_file_tag(
-        &self,
-        file_id: &usize,
-        old_tag_id: &usize,
-        new_tag_id: &usize,
-    ) {
+    pub fn migrate_relationship_file_tag(&self, file_id: &u64, old_tag_id: &u64, new_tag_id: &u64) {
         let mut write_conn = self.write_conn.lock();
         let tn = write_conn.transaction().unwrap();
         self.migrate_relationship_file_tag_internal(&tn, file_id, old_tag_id, new_tag_id);
@@ -262,7 +260,7 @@ impl Main {
     }
 
     /// Adds a parent into the db
-    pub fn parents_add(&self, par: sharedtypes::DbParentsObj) -> usize {
+    pub fn parents_add(&self, par: sharedtypes::DbParentsObj) -> u64 {
         let mut write_conn = self.write_conn.lock();
         let tn = write_conn.transaction().unwrap();
         let out = self.parents_add_internal(&tn, par);
@@ -271,7 +269,7 @@ impl Main {
     }
 
     /// Adds tag into db
-    pub fn tag_add(&self, tags: &String, namespace: usize, id: Option<usize>) -> usize {
+    pub fn tag_add(&self, tags: &String, namespace: u64, id: Option<u64>) -> u64 {
         let mut write_conn = self.write_conn.lock();
         let tn = write_conn.transaction().unwrap();
         let out = self.tag_add_internal(&tn, tags, namespace, id);
@@ -332,7 +330,7 @@ impl Main {
         &self,
         name: String,
         pretty: Option<String>,
-        num: Option<usize>,
+        num: Option<u64>,
         param: Option<String>,
     ) {
         let mut write_conn = self.write_conn.lock();
@@ -345,14 +343,6 @@ impl Main {
     ///
     pub fn add_dead_url(&self, url_string: &String) {
         self.add_dead_url_sql(url_string);
-        match self._cache {
-            CacheType::Bare => {}
-            _ => {
-                self._inmemdb
-                    .write()
-                    .add_dead_source_url(url_string.to_string());
-            }
-        }
     }
 
     /// Searches the database using FTS5 allows getting a list of tags and their count based on a
@@ -360,9 +350,9 @@ impl Main {
     pub fn search_tags(
         &self,
         search_string: &String,
-        limit_to: &usize,
+        limit_to: &u64,
         fts_or_count: sharedtypes::TagPartialSearchType,
-    ) -> Vec<(sharedtypes::Tag, usize, usize)> {
+    ) -> Vec<(sharedtypes::Tag, u64, u64)> {
         let mut out = Vec::new();
 
         for (tag_id, count) in self
@@ -393,9 +383,9 @@ impl Main {
     pub fn search_tags_ids(
         &self,
         search_string: &String,
-        limit_to: &usize,
+        limit_to: &u64,
         fts_or_count: sharedtypes::TagPartialSearchType,
-    ) -> Vec<(usize, usize)> {
+    ) -> Vec<(u64, u64)> {
         self.search_tags_sql(search_string, limit_to, fts_or_count)
     }
 
@@ -405,29 +395,23 @@ impl Main {
     }
 
     /// Returns the db version number
-    pub fn db_vers_get(&self) -> usize {
+    pub fn db_vers_get(&self) -> u64 {
         self._active_vers
     }
     ///
     /// Returns a list of loaded tag ids
     ///
-    pub fn tags_get_list_id(&self) -> HashSet<usize> {
-        match self._cache {
-            CacheType::Bare => self.tags_get_id_list_sql(),
-            _ => self._inmemdb.read().tags_get_list_id(),
-        }
+    pub fn tags_get_list_id(&self) -> HashSet<u64> {
+        self.tags_get_id_list_sql()
     }
 
     /// returns file id's based on relationships with a tag
-    pub fn relationship_get_fileid(&self, tag: &usize) -> HashSet<usize> {
-        match self._cache {
-            CacheType::Bare => self.relationship_get_fileid_sql(tag),
-            _ => self._inmemdb.read().relationship_get_fileid(tag),
-        }
+    pub fn relationship_get_fileid(&self, tag: &u64) -> HashSet<u64> {
+        self.relationship_get_fileid_sql(tag)
     }
 
     /// Gets one fileid from one tagid
-    pub fn relationship_get_one_fileid(&self, tag: &usize) -> Option<usize> {
+    pub fn relationship_get_one_fileid(&self, tag: &u64) -> Option<u64> {
         //self._inmemdb.relationship_get_one_fileid(tag)
         let temp = self.relationship_get_fileid(tag);
         let out = temp.iter().next();
@@ -435,11 +419,8 @@ impl Main {
     }
 
     /// Returns tagid's based on relationship with a fileid.
-    pub fn relationship_get_tagid(&self, file_id: &usize) -> HashSet<usize> {
-        match self._cache {
-            CacheType::Bare => self.relationship_get_tagid_sql(file_id),
-            _ => self._inmemdb.read().relationship_get_tagid(file_id),
-        }
+    pub fn relationship_get_tagid(&self, file_id: &u64) -> HashSet<u64> {
+        self.relationship_get_tagid_sql(file_id)
     }
 
     pub fn settings_get_name(&self, name: &String) -> Option<sharedtypes::DbSettingObj> {
@@ -658,7 +639,7 @@ impl Main {
     /// Returns a files bytes if the file exists. Note if called from intcom then this
     /// locks the DB while getting the file. One workaround it to use get_file and read
     /// bytes in manually in seperate thread. that way minimal locking happens.
-    pub fn get_file_bytes(&self, file_id: &usize) -> Option<Vec<u8>> {
+    pub fn get_file_bytes(&self, file_id: &u64) -> Option<Vec<u8>> {
         let loc = self.get_file(file_id);
         if let Some(loc) = loc {
             return Some(std::fs::read(loc).unwrap());
@@ -667,7 +648,7 @@ impl Main {
     }
 
     /// Gets the location of a file in the file system
-    pub fn get_file(&self, file_id: &usize) -> Option<String> {
+    pub fn get_file(&self, file_id: &u64) -> Option<String> {
         let file = self.file_get_id(file_id);
         if let Some(file_obj) = file {
             // Checks that the file with existing info exists
@@ -729,14 +710,7 @@ impl Main {
     ///Checks if a url is dead
     ///
     pub fn check_dead_url(&self, url_to_check: &String) -> bool {
-        match self._cache {
-            CacheType::Bare => self.does_dead_source_exist(url_to_check),
-            _ => match self._inmemdb.read().does_dead_source_exist(url_to_check) {
-                true => true,
-                // Need to check if we have a cache miss
-                false => self.does_dead_source_exist(url_to_check),
-            },
-        }
+        self.does_dead_source_exist(url_to_check)
     }
 
     /// Gets all running jobs in the db
@@ -753,7 +727,7 @@ impl Main {
     ///
     pub fn storage_get_all(&self) -> Vec<String> {
         let mut out = Vec::new();
-        for id in 1..usize::MAX {
+        for id in 1..u64::MAX {
             if let Some(location) = self.storage_get_string(&id) {
                 out.push(location);
             } else {
@@ -770,15 +744,14 @@ impl Main {
     pub fn search_db_files(
         &self,
         search: sharedtypes::SearchObj,
-        limit: Option<usize>,
-    ) -> Option<Vec<usize>> {
+        limit: Option<u64>,
+    ) -> Option<Vec<u64>> {
         use rusqlite::params_from_iter;
-        use std::collections::HashSet;
-
-        // --- Separate AND / OR / NOT tags ---
+        let start_time = Instant::now();
+        // Separate AND / OR / NOT
         let mut and_tags = Vec::new();
-        let mut or_groups: Vec<Vec<usize>> = Vec::new();
-        let mut not_groups: Vec<Vec<usize>> = Vec::new();
+        let mut or_groups: Vec<Vec<u64>> = Vec::new();
+        let mut not_groups: Vec<Vec<u64>> = Vec::new();
 
         for holder in search.searches {
             match holder {
@@ -793,103 +766,111 @@ impl Main {
             return None;
         }
 
-        let mut conn = self.get_database_connection();
+        // Cache returns locally if popular
+        if matches!(self._cache, CacheType::RelationshipRoaring) {
+            let mut test = self
+                .relationship_roaring_storage
+                .read()
+                .relationship_search_fileid_roaring_and(&and_tags);
 
-        // --- Split AND tags into popular and normal ---
-        let mut popular_tags = Vec::new();
-        let mut normal_tags = Vec::new();
-
-        for &tag in &and_tags {
-            if self.is_tag_count_greater_rel_limit(&conn.transaction().unwrap(), &tag) {
-                popular_tags.push(tag);
-            } else {
-                normal_tags.push(tag);
+            if let Some(limit) = limit {
+                test.truncate(limit as usize);
             }
+
+            test.sort_by_key(|&key| Reverse(key));
+
+
+            return Some(test);
         }
 
-        let mut sql_parts = Vec::new();
-        let mut params: Vec<usize> = Vec::new();
+        // Pick rarest AND tag dynamically
+        let placeholders = vec!["?"; and_tags.len()].join(", ");
+        let driver_sql = format!(
+            "SELECT id FROM Tags WHERE id IN ({}) ORDER BY count ASC LIMIT 1",
+            placeholders
+        );
 
-        // --- Derived table for popular AND tags ---
-        if !popular_tags.is_empty() {
-            let placeholders = vec!["?"; popular_tags.len()].join(", ");
-            sql_parts.push(format!(
-                "SELECT fileid
-             FROM Relationship_Popular
-             WHERE tagid IN ({})
-             GROUP BY fileid
-             HAVING COUNT(DISTINCT tagid) = ?",
-                placeholders
+        let mut conn = self.get_database_connection();
+        let driver_tag: u64 =
+            match conn.query_row(&driver_sql, params_from_iter(&and_tags), |row| row.get(0)) {
+                Ok(tag) => tag,
+                Err(_) => return None, // treat errors as no results
+            };
+
+        let remaining_and: Vec<u64> = and_tags
+            .into_iter()
+            .filter(|&id| id != driver_tag)
+            .collect();
+
+        let table =
+            if self.is_tag_count_greater_rel_limit(&conn.transaction().unwrap(), &driver_tag) {
+                "Relationship_Popular"
+            } else {
+                "Relationship"
+            };
+
+        // Build search SQL
+        let mut sql = format!(
+            "SELECT r.fileid
+         FROM {table} r 
+         WHERE r.tagid = ?",
+        );
+        let mut params: Vec<u64> = vec![driver_tag];
+
+        for tag in &remaining_and {
+            let table = if self.is_tag_count_greater_rel_limit(&conn.transaction().unwrap(), &tag) {
+                "Relationship_Popular"
+            } else {
+                "Relationship"
+            };
+
+            sql.push_str(&format!(
+                "
+            AND EXISTS (
+                SELECT 1 FROM {table} r2
+                WHERE r2.tagid = ?
+                  AND r2.fileid = r.fileid
+            )"
             ));
-            params.extend(&popular_tags);
-            params.push(popular_tags.len());
+            params.push(*tag);
         }
 
-        // --- Derived table for normal AND tags ---
-        if !normal_tags.is_empty() {
-            let placeholders = vec!["?"; normal_tags.len()].join(", ");
-            sql_parts.push(format!(
-                "SELECT fileid
-             FROM Relationship
-             WHERE tagid IN ({})
-             GROUP BY fileid
-             HAVING COUNT(DISTINCT tagid) = ?",
-                placeholders
-            ));
-            params.extend(&normal_tags);
-            params.push(normal_tags.len());
-        }
-
-        // --- Combine popular and normal derived tables ---
-        let mut sql = if sql_parts.len() == 2 {
-            // UNION ALL if both exist
-            format!(
-                "SELECT fileid FROM (\n{}\nUNION ALL\n{}\n) AS candidate_files\n",
-                sql_parts[0], sql_parts[1]
-            )
-        } else {
-            format!(
-                "SELECT fileid FROM (\n{}\n) AS candidate_files\n",
-                sql_parts[0]
-            )
-        };
-
-        // --- Add OR groups ---
         for group in &or_groups {
             let placeholders = vec!["?"; group.len()].join(", ");
             sql.push_str(&format!(
-                "AND EXISTS (
-                SELECT 1 FROM Relationship r_or
-                WHERE r_or.fileid = candidate_files.fileid
-                  AND r_or.tagid IN ({})
-            )\n",
+                "
+            AND EXISTS (
+                SELECT 1 FROM Relationship r3
+                WHERE r3.tagid IN ({})
+                  AND r3.fileid = r.fileid
+            )",
                 placeholders
             ));
             params.extend(group);
         }
 
-        // --- Add NOT groups ---
         for group in &not_groups {
             let placeholders = vec!["?"; group.len()].join(", ");
             sql.push_str(&format!(
-                "AND NOT EXISTS (
-                SELECT 1 FROM Relationship r_not
-                WHERE r_not.fileid = candidate_files.fileid
-                  AND r_not.tagid IN ({})
-            )\n",
+                "
+            AND NOT EXISTS (
+                SELECT 1 FROM Relationship r4
+                WHERE r4.tagid IN ({})
+                  AND r4.fileid = r.fileid
+            )",
                 placeholders
             ));
             params.extend(group);
         }
-
-        // --- Final ORDER BY + LIMIT ---
-        sql.push_str("ORDER BY fileid DESC\n");
+        sql.push_str(" ORDER BY r.fileid DESC");
         if let Some(lim) = limit {
-            sql.push_str("LIMIT ?");
+            sql.push_str(" LIMIT ?");
             params.push(lim);
         }
 
-        // --- Prepare and execute ---
+        dbg!(&sql, &params);
+
+        // Execute query
         let mut stmt = match conn.prepare(&sql) {
             Ok(s) => s,
             Err(_) => return None,
@@ -906,6 +887,11 @@ impl Main {
                 results.push(fileid);
             }
         }
+        let duration = start_time.elapsed();
+
+        // Print the duration in a readable format (e.g., seconds, milliseconds)
+        println!("Time taken: {:?}", duration);
+        println!("Time taken in seconds: {}", duration.as_secs_f64());
 
         if results.is_empty() {
             None
@@ -913,9 +899,8 @@ impl Main {
             Some(results)
         }
     }
-
     /// Gets all jobs loaded in the db
-    pub fn jobs_get_all(&self) -> HashMap<usize, sharedtypes::DbJobsObj> {
+    pub fn jobs_get_all(&self) -> HashMap<u64, sharedtypes::DbJobsObj> {
         match &self._cache {
             //CacheType::Bare => self.jobs_get_all_sql(),
             _ => self._inmemdb.read().jobs_get_all().clone(),
@@ -923,7 +908,7 @@ impl Main {
     }
 
     /// Pull job by id TODO NEEDS TO ADD IN PROPER POLLING FROM DB.
-    pub fn jobs_get(&self, id: &usize) -> Option<sharedtypes::DbJobsObj> {
+    pub fn jobs_get(&self, id: &u64) -> Option<sharedtypes::DbJobsObj> {
         match self._cache {
             // CacheType::Bare => self.jobs_get_id_sql( id),
             _ => self._inmemdb.read().jobs_get(id).cloned(),
@@ -933,11 +918,8 @@ impl Main {
     ///
     /// Gets a tag by id
     ///
-    pub fn tag_id_get(&self, uid: &usize) -> Option<sharedtypes::DbTagNNS> {
-        match self._cache {
-            CacheType::Bare => self.tags_get_dbtagnns_sql(uid),
-            _ => self._inmemdb.read().tags_get_data(uid).cloned(),
-        }
+    pub fn tag_id_get(&self, uid: &u64) -> Option<sharedtypes::DbTagNNS> {
+        self.tags_get_dbtagnns_sql(uid)
     }
 
     /// Vacuums database. cleans everything.
@@ -965,7 +947,7 @@ impl Main {
     ///
     /// Convience function to get a list of files that are images
     ///
-    pub fn extensions_images_get_fileid(&self) -> HashSet<usize> {
+    pub fn extensions_images_get_fileid(&self) -> HashSet<u64> {
         let exts = &["jpg".to_string(), "png".to_string(), "tiff".to_string()];
         self.extensions_get_fileid_extstr_sql(exts)
     }
@@ -973,7 +955,7 @@ impl Main {
     ///
     /// Convience function to get a list of files that are videos
     ///
-    pub fn extensions_videos_get_fileid(&self) -> HashSet<usize> {
+    pub fn extensions_videos_get_fileid(&self) -> HashSet<u64> {
         let exts = &[
             "mkv".to_string(),
             "webm".to_string(),
@@ -986,57 +968,40 @@ impl Main {
     ///
     /// Gets an ID if a extension string exists
     ///
-    pub fn extension_get_string(&self, ext_id: &usize) -> Option<String> {
-        match self._cache {
-            CacheType::Bare => self.extension_get_string_sql(ext_id),
-            _ => self._inmemdb.read().extension_get_string(ext_id).cloned(),
-        }
+    pub fn extension_get_string(&self, ext_id: &u64) -> Option<String> {
+        self.extension_get_string_sql(ext_id)
     }
     ///
     /// Gets a fileid from a hash
     ///
-    pub fn file_get_hash(&self, hash: &String) -> Option<usize> {
-        match self._cache {
-            CacheType::Bare => self.file_get_id_sql(hash),
-            _ => self._inmemdb.read().file_get_hash(hash).copied(),
-        }
+    pub fn file_get_hash(&self, hash: &String) -> Option<u64> {
+        self.file_get_id_sql(hash)
     }
 
     /// Gets a file from storage from its id
-    pub fn file_get_id(&self, file_id: &usize) -> Option<sharedtypes::DbFileStorage> {
-        match self._cache {
-            CacheType::Bare => self.files_get_id_sql(file_id),
-            _ => self._inmemdb.read().file_get_id(file_id).cloned(),
-        }
+    pub fn file_get_id(&self, file_id: &u64) -> Option<sharedtypes::DbFileStorage> {
+        self.files_get_id_sql(file_id)
     }
 
     /// Returns all file id's loaded in db
-    pub fn file_get_list_id(&self) -> HashSet<usize> {
-        match self._cache {
-            CacheType::Bare => self.file_get_list_id_sql(),
-            _ => self._inmemdb.read().file_get_list_id(),
-        }
+    pub fn file_get_list_id(&self) -> HashSet<u64> {
+        self.file_get_list_id_sql()
     }
 
-    pub fn file_get_list_all(&self) -> HashMap<usize, sharedtypes::DbFileStorage> {
-        match self._cache {
-            CacheType::Bare => {
-                let mut out = HashMap::new();
-                for fid in self.file_get_list_id() {
-                    if let Some(file) = self.file_get_id(&fid) {
-                        out.insert(fid, file);
-                    }
-                }
-                out
+    pub fn file_get_list_all(&self) -> HashMap<u64, sharedtypes::DbFileStorage> {
+        let mut out = HashMap::new();
+        for fid in self.file_get_list_id() {
+            if let Some(file) = self.file_get_id(&fid) {
+                out.insert(fid, file);
             }
-            _ => self._inmemdb.read().file_get_list_all().clone(),
         }
+        out
     }
 
     ///
     /// Gets a tagid from a unique tag and namespace combo
     ///
-    pub fn tag_get_name(&self, tag: String, namespace: usize) -> Option<usize> {
+    pub fn tag_get_name(&self, tag: String, namespace: u64) -> Option<u64> {
         let tagobj = &sharedtypes::DbTagNNS {
             name: tag,
             namespace,
@@ -1048,86 +1013,57 @@ impl Main {
     ///
     /// Gets a tagid from a tagobject
     ///
-    pub fn tag_get_name_tagobject(&self, tagobj: &sharedtypes::DbTagNNS) -> Option<usize> {
-        match self._cache {
-            CacheType::Bare => self.tags_get_id_sql(tagobj),
-            _ => self._inmemdb.read().tags_get_id(tagobj).copied(),
-        }
+    pub fn tag_get_name_tagobject(&self, tagobj: &sharedtypes::DbTagNNS) -> Option<u64> {
+        self.tags_get_id_sql(tagobj)
     }
 
     /// db get namespace wrapper
-    pub fn namespace_get(&self, namespace: &String) -> Option<usize> {
-        match self._cache {
-            CacheType::Bare => self.namespace_get_id_sql(namespace),
-            _ => self._inmemdb.read().namespace_get(namespace).copied(),
-        }
+    pub fn namespace_get(&self, namespace: &String) -> Option<u64> {
+        self.namespace_get_id_sql(namespace)
     }
 
     /// Returns namespace as a string from an ID returns None if it doesn't exist.
-    pub fn namespace_get_string(&self, ns_id: &usize) -> Option<sharedtypes::DbNamespaceObj> {
-        match self._cache {
-            CacheType::Bare => self.namespace_get_namespaceobj_sql(ns_id),
-            _ => self._inmemdb.read().namespace_id_get(ns_id).cloned(),
-        }
+    pub fn namespace_get_string(&self, ns_id: &u64) -> Option<sharedtypes::DbNamespaceObj> {
+        self.namespace_get_namespaceobj_sql(ns_id)
     }
 
     /// Gets all tag's assocated a singular namespace
-    pub fn namespace_get_tagids(&self, id: &usize) -> HashSet<usize> {
-        match self._cache {
-            CacheType::Bare => self.namespace_get_tagids_sql(id),
-            _ => self._inmemdb.read().namespace_get_tagids(id),
-        }
+    pub fn namespace_get_tagids(&self, id: &u64) -> HashSet<u64> {
+        self.namespace_get_tagids_sql(id)
     }
 
     /// Checks if a tag exists in a namespace
-    pub fn namespace_contains_id(&self, namespace_id: &usize, tag_id: &usize) -> bool {
-        match self._cache {
-            CacheType::Bare => self.namespace_contains_id_sql(tag_id, namespace_id),
-            _ => self.namespace_get_tagids(namespace_id).contains(tag_id),
-        }
+    pub fn namespace_contains_id(&self, namespace_id: &u64, tag_id: &u64) -> bool {
+        self.namespace_contains_id_sql(tag_id, namespace_id)
     }
 
     /// Retuns namespace id's
-    pub fn namespace_keys(&self) -> Vec<usize> {
-        match self._cache {
-            CacheType::Bare => self.namespace_keys_sql(),
-            _ => self._inmemdb.read().namespace_keys(),
-        }
+    pub fn namespace_keys(&self) -> Vec<u64> {
+        self.namespace_keys_sql()
     }
 
     ///
     /// Gets a parent id if they exist
     ///
-    pub(super) fn parents_get(&self, parent: &sharedtypes::DbParentsObj) -> Option<usize> {
-        match self._cache {
-            CacheType::Bare => {
-                let tagid = self.parents_get_id_list_sql(parent);
+    pub(super) fn parents_get(&self, parent: &sharedtypes::DbParentsObj) -> Option<u64> {
+        let tagid = self.parents_get_id_list_sql(parent);
 
-                if tagid.is_empty() {
-                    None
-                } else {
-                    let tags: Vec<usize> = tagid.into_iter().collect();
-                    Some(tags[0])
-                }
-            }
-            _ => self._inmemdb.read().parents_get(parent).copied(),
+        if tagid.is_empty() {
+            None
+        } else {
+            let tags: Vec<u64> = tagid.into_iter().collect();
+            Some(tags[0])
         }
     }
 
     /// Relates the list of relationships assoicated with tag
-    pub fn parents_rel_get(&self, relid: &usize) -> HashSet<usize> {
-        match self._cache {
-            CacheType::Bare => self.parents_tagid_get(relid),
-            _ => self._inmemdb.read().parents_rel_get(relid, None),
-        }
+    pub fn parents_rel_get(&self, relid: &u64) -> HashSet<u64> {
+        self.parents_tagid_get(relid)
     }
 
     /// Relates the list of tags assoicated with relations
-    pub fn parents_tag_get(&self, tagid: &usize) -> HashSet<usize> {
-        match self._cache {
-            CacheType::Bare => self.parents_relatetagid_get(tagid),
-            _ => self._inmemdb.read().parents_tag_get(tagid, None),
-        }
+    pub fn parents_tag_get(&self, tagid: &u64) -> HashSet<u64> {
+        self.parents_relatetagid_get(tagid)
     }
 
     /// Returns the location of the file storage path. Helper function
@@ -1153,7 +1089,7 @@ impl Main {
         }
     }
 
-    pub fn namespace_add(&self, name: &String, description: &Option<String>) -> usize {
+    pub fn namespace_add(&self, name: &String, description: &Option<String>) -> u64 {
         let mut write_conn = self.write_conn.lock();
         let tn = write_conn.transaction().unwrap();
         let out = self.namespace_add_internal(&tn, name, description);
@@ -1164,26 +1100,17 @@ impl Main {
     ///
     /// Adds a ns into the db if the id already exists
     ///
-    pub fn namespace_add_id_exists(&self, ns: sharedtypes::DbNamespaceObj) -> usize {
+    pub fn namespace_add_id_exists(&self, ns: sharedtypes::DbNamespaceObj) -> u64 {
         let mut write_conn = self.write_conn.lock();
         let mut tn = write_conn.transaction().unwrap();
-        match self._cache {
-            CacheType::Bare => {
-                self.namespace_add_sql(&mut tn, &ns.name, &ns.description, Some(ns.id));
-                tn.commit().unwrap();
-                self.namespace_get(&ns.name).unwrap()
-            }
-            _ => {
-                let out = self.namespace_add_inmemdb(&mut tn, ns.name, ns.description);
-                tn.commit().unwrap();
-                out
-            }
-        }
+        self.namespace_add_sql(&mut tn, &ns.name, &ns.description, Some(ns.id));
+        tn.commit().unwrap();
+        self.namespace_get(&ns.name).unwrap()
     }
     ///
     /// Gets a default namespace id if it doesn't exist
     ///
-    pub fn create_default_source_url_ns_id(&self) -> usize {
+    pub fn create_default_source_url_ns_id(&self) -> u64 {
         match self.namespace_get(&"source_url".to_string()) {
             None => self.namespace_add(
                 &"source_url".to_string(),
