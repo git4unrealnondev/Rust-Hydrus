@@ -114,6 +114,23 @@ impl RelationshipStorage {
     pub fn relationship_search_fileid_roaring_or(&self, tag_id_list: &[u64]) -> Vec<u64> {
         self.internal_search_item(tag_id_list, sharedtypes::DbSearchTypeEnum::Or)
     }
+
+    ///
+    /// Returns the tagids associated with a fileid
+    ///
+    pub fn relationship_search_tagid_roaring(&self, file_id: &u64) -> Vec<u64> {
+        let mut out = Vec::new();
+
+        if let Some(tags) = self.file_id.get(file_id) {
+            for tag in tags {
+
+            out.push(tag.into());
+            }
+        }
+
+
+        out
+    }
 }
 
 #[cfg(test)]
@@ -152,5 +169,8 @@ mod tests {
             storage.relationship_search_fileid_roaring_or(&[8, 5]),
             vec![1, 5]
         );
+
+        assert_eq!(storage.relationship_search_tagid_roaring(&1), &[5]);
+        assert_eq!(storage.relationship_search_tagid_roaring(&5), &[1,5,8]);
     }
 }

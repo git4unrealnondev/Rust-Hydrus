@@ -407,11 +407,31 @@ impl Main {
 
     /// returns file id's based on relationships with a tag
     pub fn relationship_get_fileid(&self, tag: &u64) -> HashSet<u64> {
+
+        if matches!(self._cache, CacheType::RelationshipRoaring) {
+            let list = self.relationship_roaring_storage.read().relationship_search_tagid_roaring(tag);
+            let mut out = HashSet::new();
+            for item in list {
+                out.insert(item);
+            }
+            return out;
+        }
+
         self.relationship_get_fileid_sql(tag)
     }
 
     /// Gets one fileid from one tagid
     pub fn relationship_get_one_fileid(&self, tag: &u64) -> Option<u64> {
+
+
+        if matches!(self._cache, CacheType::RelationshipRoaring) {
+
+            if let Some(list) = self.relationship_roaring_storage.read().relationship_search_fileid_roaring_and(&[*tag]).pop() {
+                return Some(list.into());
+            };
+        }
+
+
         //self._inmemdb.relationship_get_one_fileid(tag)
         let temp = self.relationship_get_fileid(tag);
         let out = temp.iter().next();
@@ -420,6 +440,14 @@ impl Main {
 
     /// Returns tagid's based on relationship with a fileid.
     pub fn relationship_get_tagid(&self, file_id: &u64) -> HashSet<u64> {
+        if matches!(self._cache, CacheType::RelationshipRoaring) {
+            let mut out = HashSet::new();
+            for tag in self.relationship_roaring_storage.read().relationship_search_tagid_roaring(file_id) {
+                out.insert(tag);
+            }
+            return out;
+
+        }
         self.relationship_get_tagid_sql(file_id)
     }
 
@@ -773,11 +801,11 @@ impl Main {
                 .read()
                 .relationship_search_fileid_roaring_and(&and_tags);
 
-            if let Some(limit) = limit {
+            
+            test.sort_by_key(|&key| Reverse(key));
+if let Some(limit) = limit {
                 test.truncate(limit as usize);
             }
-
-            test.sort_by_key(|&key| Reverse(key));
 
 
             return Some(test);
@@ -1019,7 +1047,8 @@ impl Main {
 
     /// db get namespace wrapper
     pub fn namespace_get(&self, namespace: &String) -> Option<u64> {
-        self.namespace_get_id_sql(namespace)
+        let mut tn = self.get_database_connection();
+        self.namespace_get_id_sql(&tn, namespace)
     }
 
     /// Returns namespace as a string from an ID returns None if it doesn't exist.
@@ -1103,9 +1132,10 @@ impl Main {
     pub fn namespace_add_id_exists(&self, ns: sharedtypes::DbNamespaceObj) -> u64 {
         let mut write_conn = self.write_conn.lock();
         let mut tn = write_conn.transaction().unwrap();
-        self.namespace_add_sql(&mut tn, &ns.name, &ns.description, Some(ns.id));
+        self.namespace_add_sql(&tn, &ns.name, &ns.description, Some(ns.id));
+        let out = self.namespace_get_id_sql(&tn,&ns.name).unwrap();
         tn.commit().unwrap();
-        self.namespace_get(&ns.name).unwrap()
+        out
     }
     ///
     /// Gets a default namespace id if it doesn't exist

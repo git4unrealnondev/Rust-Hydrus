@@ -18,7 +18,7 @@ macro_rules! vec_of_strings {
 }
 
 pub struct InternalScraper {
-    _version: usize,
+    _version: u64,
     _name: String,
     _sites: Vec<String>,
     _ratelimit: (u64, Duration),
@@ -1235,7 +1235,7 @@ pub fn db_upgrade_call_3(site: &Site) {
 }
 
 #[no_mangle]
-pub fn db_upgrade_call(db_version: &usize, site_struct: &sharedtypes::GlobalPluginScraper) {
+pub fn db_upgrade_call(db_version: &u64, site_struct: &sharedtypes::GlobalPluginScraper) {
     let mut site_op = None;
 
     if let Some(ref stored_info) = site_struct.stored_info {
@@ -1275,8 +1275,8 @@ pub fn db_upgrade_call(db_version: &usize, site_struct: &sharedtypes::GlobalPlug
 /// Determines what the fileid source is.
 ///
 fn determine_site_type(
-    file_id: &usize,
-    source_url_nsid: &usize,
+    file_id: &u64,
+    source_url_nsid: &u64,
 ) -> Option<(Site, sharedtypes::DbTagNNS)> {
     for tagid in client::relationship_get_tagid(*file_id) {
         if let Some(tag) = client::tag_get_id(tagid) {

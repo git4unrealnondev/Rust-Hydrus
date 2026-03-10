@@ -158,17 +158,17 @@ PRAGMA wal_autocheckpoint = 20000;
 PRAGMA mmap_size = 4294967296; -- 1GB
 ",
                     )?;
-                    /*
+                    
                                         // Enable SQL tracing
-                                        conn.trace(Some(|sql| {
+                                     /*   conn.trace(Some(|sql| {
                                             println!("[SQL TRACE] {}", sql);
-                                        }));
-                    */
+                                        }));*/
+                    
                     Ok(())
                 });
                 let pool = r2d2::Builder::new()
                     .idle_timeout(Some(Duration::from_secs(5)))
-                    .max_size(10)
+                    .max_size(200)
                     .build(manager)
                     .unwrap();
                 let write_conn = Arc::new(Mutex::new(pool.get().unwrap()));

@@ -12,7 +12,7 @@ use rusqlite::params;
 use rusqlite::types::Null;
 use std::collections::HashMap;
 use std::collections::HashSet;
-use std::time::Duration;
+use std::time::Duration;use std::ops::Deref;use rusqlite::Connection;
 
 const DEFAULT_DURATION_BACKOFF: Duration = Duration::from_millis(100);
 
@@ -1915,11 +1915,11 @@ RETURNING id;
     }
 
     /// Gets a count for a tagid that exists
-    pub(in crate::database) fn get_count_for_tagid(
+    pub(in crate::database) fn get_count_for_tagid<C>(
         &self,
-        tn: &Transaction,
+        tn: &C,
         id: &u64,
-    ) -> Option<u64> {
+    ) -> Option<u64> where C: Deref< Target=Connection> {
         wait_until_sqlite_ok!(tn.query_row(
             "SELECT count FROM Tags WHERE id = ?",
             params![id],
@@ -2451,16 +2451,21 @@ WHERE count BETWEEN ? AND ?",
     ///
     /// Returns id if a namespace exists
     ///
-    pub(in crate::database) fn namespace_get_id_sql(&self, namespace: &String) -> Option<u64> {
-        let tn = self.pool.get().unwrap();
-        wait_until_sqlite_ok!(tn.query_row(
-            "SELECT id FROM Namespace WHERE name = ?",
-            params![namespace],
-            |row| row.get(0),
-        ))
-        .unwrap_or(None)
-    }
-    ///
+    pub(in crate::database) fn namespace_get_id_sql<C>(
+    &self,
+    conn: &C,
+    namespace: &str,
+) -> Option<u64>
+where
+    C: Deref<Target = Connection>,
+{
+    wait_until_sqlite_ok!(conn.query_row(
+        "SELECT id FROM Namespace WHERE name = ?",
+        params![namespace],
+        |row| row.get(0),
+    ))
+    .unwrap_or(None)
+}    ///
     /// Returns dbnamespace if a namespace id exists
     ///
     pub(in crate::database) fn namespace_get_namespaceobj_sql(
@@ -2579,8 +2584,8 @@ WHERE count BETWEEN ? AND ?",
 
         let sql = "DELETE FROM Relationship WHERE fileid = ? AND tagid = ?";
         tn.execute(sql, params![file_id, tag_id]).unwrap();
-        let sql = "DELETE FROM Relationship_Popular WHERE fileid = ? AND tagid = ?";
-        tn.execute(sql, params![file_id, tag_id]).unwrap();
+        //let sql = "DELETE FROM Relationship_Popular WHERE fileid = ? AND tagid = ?";
+        //tn.execute(sql, params![file_id, tag_id]).unwrap();
         match greq {
             GreqOrEq::EqualTo => {
                 self.migrate_relationship_popular_tagid(tn, tag_id, false);
