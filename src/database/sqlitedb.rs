@@ -1935,6 +1935,12 @@ RETURNING id;
         file: &u64,
         tag: &u64,
     ) {
+
+        if matches!(self._cache, CacheType::RelationshipRoaring) {
+            self.relationship_roaring_storage.write().relationship_roaring_add(*file, *tag);
+        }
+
+
         let greq = self.is_tag_count_greq_rel_limit(tn, tag);
 
         match greq {
@@ -1947,12 +1953,12 @@ RETURNING id;
 
                 tn.execute(sql, params![file, tag]).unwrap();
 
-                // Local cache for relationships
+                /*// Local cache for relationships
                 if matches!(self._cache, CacheType::RelationshipRoaring) {
                     self.relationship_roaring_storage
                         .write()
                         .relationship_roaring_add(*file, *tag);
-                }
+                }*/
             }
             GreqOrEq::LessThan => {
                 let sql = "INSERT OR IGNORE INTO Relationship VALUES(?, ?)";
