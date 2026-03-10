@@ -846,6 +846,15 @@ impl std::hash::Hash for RegexStorage {
     }
 }
 
+#[derive(Debug, Eq, PartialEq, Hash, Clone, bincode::Encode, bincode::Decode, Default)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub struct NamespaceProperty {
+    pub id: Option<u64>,
+    pub name: String,
+    pub property_value: String,
+    pub description: Option<String>
+}
+
 /// Holder of Tag info. Keeps relationalship info into account.
 #[derive(Debug, Eq, PartialEq, Hash, Clone, bincode::Encode, bincode::Decode, Default)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]

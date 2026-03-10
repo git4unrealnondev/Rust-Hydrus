@@ -441,11 +441,11 @@ impl Main {
     /// Returns tagid's based on relationship with a fileid.
     pub fn relationship_get_tagid(&self, file_id: &u64) -> HashSet<u64> {
         if matches!(self._cache, CacheType::RelationshipRoaring) {
-            let mut out = HashSet::new();
+          /*  let mut out = HashSet::new();
             for tag in self.relationship_roaring_storage.read().relationship_search_tagid_roaring(file_id) {
                 out.insert(tag);
             }
-            return out;
+            return out;*/
 
         }
         self.relationship_get_tagid_sql(file_id)

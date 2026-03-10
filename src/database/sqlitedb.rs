@@ -1830,6 +1830,29 @@ RETURNING id;
         out_file_id
     }
 
+/*
+    pub (in crate::database) fn get_namespace_property(&self, tn: &Transaction, name: String) -> Option<sharedtypes::NamespaceProperty> {
+wait_until_sqlite_ok!(tn.query_row(
+                "SELECT id, name, property_value, description FROM NamespaceProperty WHERE name = ? LIMIT 1",
+                params![name],
+                |row| row.get(0),
+            ))
+            .unwrap_or(None)
+
+
+
+    }
+
+    pub(in crate::database) fn add_namespace_property(&self,tn: &Transaction, property: sharedtypes::NamespaceProperty) {
+        let inp = "INSERT OR REPLACE INTO NamespaceProperty VALUES(?, ?, ?, ?)";
+        {
+            let _ = wait_until_sqlite_ok!(
+                tn.execute(inp, params![property.id, property.name,property.property_value ,property.description])
+            );
+        }
+
+    }*/
+
     /// Loads Relationships in from DB tnection
     pub(super) fn load_relationships(&self) {
         //if self._cache == CacheType::Bare {
@@ -1837,8 +1860,13 @@ RETURNING id;
             return;
         }
 
-        if matches!(self._cache, CacheType::RelationshipRoaring)
-            && let Some(count) = *self.popular_relationship_count.lock()
+        if matches!(self._cache, CacheType::RelationshipRoaring) {
+
+
+
+
+
+            if let Some(count) = *self.popular_relationship_count.lock()
         {
             let tn = self.pool.get().unwrap();
             logging::info_log("Database is Loading: Relationships".to_string());
@@ -1868,7 +1896,7 @@ RETURNING id;
                 }
             }
         }
-    }
+    }}
 
     /// Checks if the count of a tag is greater or equal to the relationships count
     pub(in crate::database) fn is_tag_count_greater_rel_limit(
