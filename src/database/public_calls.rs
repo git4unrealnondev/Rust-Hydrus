@@ -409,7 +409,7 @@ impl Main {
     pub fn relationship_get_fileid(&self, tag: &u64) -> HashSet<u64> {
 
         if matches!(self._cache, CacheType::RelationshipRoaring) {
-            let list = self.relationship_roaring_storage.read().relationship_search_tagid_roaring(tag);
+            let list = self.relationship_roaring_storage.read().relationship_search_fileid_roaring_and(&[*tag]);
             let mut out = HashSet::new();
             for item in list {
                 out.insert(item);
