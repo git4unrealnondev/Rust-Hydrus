@@ -1,11 +1,25 @@
 use crate::Arc;
 use crate::Mutex;
+use crate::logging;
+use crate::logging::error_log;
 use crate::sharedtypes;
 use nohash::IntMap;
+use r2d2::PooledConnection;
+use r2d2_sqlite::SqliteConnectionManager;
 use roaring::bitmap::RoaringBitmap;
+use rusqlite::Transaction;
+use rusqlite::params;
+use std::io::Cursor;
 use std::ops::BitAndAssign;
 
 use crate::database::database::Main;
+
+/// Gets the cache type
+#[derive(Clone, Debug)]
+pub enum InternalCacheType {
+    Full,
+    Popular,
+}
 
 pub struct RelationshipStorage {
     file_id: IntMap<u64, RoaringBitmap>,
@@ -19,8 +33,140 @@ impl RelationshipStorage {
         RelationshipStorage {
             file_id: IntMap::default(),
             tag_id: IntMap::default(),
-            //  db,
         }
+    }
+
+    pub fn recache_roaring(&mut self, tn: &Transaction) {
+        self.file_id.clear();
+        self.tag_id.clear();
+
+        logging::info_log(format!(
+            "Starting to Recache everything inside of roaring cache"
+        ));
+
+        tn.execute("DELETE FROM RelationshipRoaringTagid", [])
+            .unwrap();
+        tn.execute("DELETE FROM RelationshipRoaringFileid", [])
+            .unwrap();
+
+        let temp = tn.prepare("SELECT fileid, tagid FROM Relationship");
+        if let Ok(mut con) = temp {
+            let relationship = con
+                .query_map([], |row| {
+                    Ok(sharedtypes::DbRelationshipObj {
+                        fileid: row.get(0).unwrap(),
+                        tagid: row.get(1).unwrap(),
+                    })
+                })
+                .unwrap();
+            for each in relationship {
+                match each {
+                    Ok(res) => {
+                        self.relationship_roaring_add(res.fileid, res.tagid);
+                    }
+
+                    Err(err) => {}
+                }
+            }
+        }
+
+        // Loads int sqlite
+        let mut temp = tn
+            .prepare("INSERT INTO RelationshipRoaringFileid(fileid, tagid_bitmap) VALUES (?, ?) ")
+            .unwrap();
+        for fileid in self.file_id.keys() {
+            if let Some(bitmap) = self.file_id.get(fileid) {
+                let mut bytes: Vec<u8> = Vec::new();
+                bitmap.serialize_into(&mut bytes).unwrap();
+
+                temp.execute(params![fileid, bytes]).unwrap();
+            }
+        }
+        let mut temp = tn
+            .prepare("INSERT INTO RelationshipRoaringTagid(Tagid, fileid_bitmap) VALUES (?, ?) ")
+            .unwrap();
+        for fileid in self.tag_id.keys() {
+            if let Some(bitmap) = self.tag_id.get(fileid) {
+                let mut bytes: Vec<u8> = Vec::new();
+                bitmap.serialize_into(&mut bytes).unwrap();
+
+                temp.execute(params![fileid, bytes]).unwrap();
+            }
+        }
+    }
+
+    /// Loads entire relationships into db
+    pub fn load_relationship_cache(
+        &mut self,
+        conn: PooledConnection<SqliteConnectionManager>,
+        cachetype: &InternalCacheType,
+    ) {
+        let mut stmt = conn
+            .prepare("SELECT fileid, tagid_bitmap FROM RelationshipRoaringFileid")
+            .unwrap();
+        let rows = stmt
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, u64>(0).unwrap(),     // fileid
+                    row.get::<_, Vec<u8>>(1).unwrap(), // tagid_bitmap
+                ))
+            })
+            .unwrap();
+
+        for (fileid, tagid_bitmap) in rows.flatten() {
+            if let Ok(bitmap) = RoaringBitmap::deserialize_unchecked_from(Cursor::new(tagid_bitmap))
+            {
+                self.file_id.insert(fileid, bitmap);
+            }
+        }
+        let mut stmt = conn
+            .prepare("SELECT tagid, fileid_bitmap FROM RelationshipRoaringTagid")
+            .unwrap();
+        let rows = stmt
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, u64>(0).unwrap(),     // tagid
+                    row.get::<_, Vec<u8>>(1).unwrap(), // tagid_bitmap
+                ))
+            })
+            .unwrap();
+
+        for (tagid, fileid_bitmap) in rows.flatten() {
+            if let Ok(bitmap) =
+                RoaringBitmap::deserialize_unchecked_from(Cursor::new(fileid_bitmap))
+            {
+                self.tag_id.insert(tagid, bitmap);
+            }
+        }
+    }
+
+    ///
+    /// Checks if a tagid exists in the cache
+    ///
+    pub fn relationship_cache_tagid_exists(&self, tag_id: &u64) -> bool {
+        self.tag_id.contains_key(tag_id)
+    }
+
+    fn relationship_cache_add_sql(&self, tn: &Transaction, file_id: &u64, tag_id: &u64) {
+        if let Some(tag_bitmap) = self.file_id.get(file_id) {
+            let mut bytes = vec![];
+            tag_bitmap.serialize_into(&mut bytes).unwrap();
+            tn.execute("INSERT OR REPLACE INTO RelationshipRoaringFileid (tagid_bitmap) VALUES (?) WHERE fileid = ?", params![bytes, file_id]).unwrap();
+        }
+        if let Some(file_bitmap) = self.tag_id.get(tag_id) {
+            let mut bytes = vec![];
+            file_bitmap.serialize_into(&mut bytes).unwrap();
+            tn.execute("INSERT OR REPLACE INTO RelationshipRoaringTagid (fileid_bitmap) VALUES (?) WHERE tagid = ?", params![bytes, tag_id]).unwrap();
+        }
+    }
+
+    ///
+    /// Adds a relationship to into cache and adds it to the db aswell
+    ///
+    pub fn relationship_roaring_add_sql(&mut self, tn: &Transaction, file_id: u64, tag_id: u64) {
+        self.relationship_roaring_add(file_id, tag_id);
+
+        self.relationship_cache_add_sql(tn, &file_id, &tag_id);
     }
 
     ///
@@ -34,7 +180,6 @@ impl RelationshipStorage {
                 self.file_id.insert(file_id, bitmap);
             }
             Some(bitmap) => {
-                let tag_id: u64 = tag_id.try_into().unwrap();
                 bitmap.insert(tag_id.try_into().unwrap());
             }
         }
@@ -45,7 +190,6 @@ impl RelationshipStorage {
                 self.tag_id.insert(tag_id, bitmap);
             }
             Some(bitmap) => {
-                let file_id: u64 = file_id.try_into().unwrap();
                 bitmap.insert(file_id.try_into().unwrap());
             }
         }
@@ -123,11 +267,9 @@ impl RelationshipStorage {
 
         if let Some(tags) = self.file_id.get(file_id) {
             for tag in tags {
-
-            out.push(tag.into());
+                out.push(tag.into());
             }
         }
-
 
         out
     }
@@ -171,6 +313,6 @@ mod tests {
         );
 
         assert_eq!(storage.relationship_search_tagid_roaring(&1), &[5]);
-        assert_eq!(storage.relationship_search_tagid_roaring(&5), &[1,5,8]);
+        assert_eq!(storage.relationship_search_tagid_roaring(&5), &[1, 5, 8]);
     }
 }

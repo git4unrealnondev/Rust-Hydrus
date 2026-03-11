@@ -407,30 +407,35 @@ impl Main {
 
     /// returns file id's based on relationships with a tag
     pub fn relationship_get_fileid(&self, tag: &u64) -> HashSet<u64> {
-
-        if matches!(self._cache, CacheType::RelationshipRoaring) {
-            let list = self.relationship_roaring_storage.read().relationship_search_fileid_roaring_and(&[*tag]);
+        if matches!(self._cache, CacheType::RelationshipRoaring(_)) {
+            if self.relationship_roaring_storage.read().relationship_cache_tagid_exists(tag) {
+            let list = self
+                .relationship_roaring_storage
+                .read()
+                .relationship_search_fileid_roaring_and(&[*tag]);
             let mut out = HashSet::new();
             for item in list {
                 out.insert(item);
             }
             return out;
-        }
+        }}
 
         self.relationship_get_fileid_sql(tag)
     }
 
     /// Gets one fileid from one tagid
     pub fn relationship_get_one_fileid(&self, tag: &u64) -> Option<u64> {
-
-
-        if matches!(self._cache, CacheType::RelationshipRoaring) {
-
-            if let Some(list) = self.relationship_roaring_storage.read().relationship_search_fileid_roaring_and(&[*tag]).pop() {
+        if matches!(self._cache, CacheType::RelationshipRoaring(_)) {
+            if self.relationship_roaring_storage.read().relationship_cache_tagid_exists(tag) {
+            if let Some(list) = self
+                .relationship_roaring_storage
+                .read()
+                .relationship_search_fileid_roaring_and(&[*tag])
+                .pop()
+            {
                 return Some(list.into());
             };
-        }
-
+        }}
 
         //self._inmemdb.relationship_get_one_fileid(tag)
         let temp = self.relationship_get_fileid(tag);
@@ -440,13 +445,12 @@ impl Main {
 
     /// Returns tagid's based on relationship with a fileid.
     pub fn relationship_get_tagid(&self, file_id: &u64) -> HashSet<u64> {
-        if matches!(self._cache, CacheType::RelationshipRoaring) {
-          /*  let mut out = HashSet::new();
+        if matches!(self._cache, CacheType::RelationshipRoaring(_)) {
+            /*  let mut out = HashSet::new();
             for tag in self.relationship_roaring_storage.read().relationship_search_tagid_roaring(file_id) {
                 out.insert(tag);
             }
             return out;*/
-
         }
         self.relationship_get_tagid_sql(file_id)
     }
@@ -770,135 +774,166 @@ impl Main {
     /// Returns file IDs matching the search.
     /// Supports AND, OR, NOT operations.
     pub fn search_db_files(
-    &self,
-    search: sharedtypes::SearchObj,
-    limit: Option<u64>,
-) -> Option<Vec<u64>> {
-    use rusqlite::params_from_iter;
-    use std::cmp::Reverse;
-    use std::time::Instant;
+        &self,
+        search: sharedtypes::SearchObj,
+        limit: Option<u64>,
+    ) -> Option<Vec<u64>> {
+        use rusqlite::params_from_iter;
+        use std::cmp::Reverse;
+        use std::time::Instant;
 
-    let start_time = Instant::now();
+        let start_time = Instant::now();
 
-    // 1. Extract and Categorize Tags
-    let mut and_tags = Vec::new();
-    let mut or_groups: Vec<Vec<u64>> = Vec::new();
-    let mut not_groups: Vec<Vec<u64>> = Vec::new();
+        // 1. Extract and Categorize Tags
+        let mut and_tags = Vec::new();
+        let mut or_groups: Vec<Vec<u64>> = Vec::new();
+        let mut not_groups: Vec<Vec<u64>> = Vec::new();
 
-    for holder in search.searches {
-        match holder {
-            sharedtypes::SearchHolder::And(ids) => and_tags.extend(ids),
-            sharedtypes::SearchHolder::Or(ids) if !ids.is_empty() => or_groups.push(ids),
-            sharedtypes::SearchHolder::Not(ids) if !ids.is_empty() => not_groups.push(ids),
-            _ => {}
-        }
-    }
-
-    if and_tags.is_empty() && or_groups.is_empty() {
-        return None;
-    }
-
-    // 2. PATH A: Roaring Bitmap Optimization (Memory Speed)
-    if matches!(self._cache, CacheType::RelationshipRoaring) {
-        
-let mut results = self
-                .relationship_roaring_storage
-                .read()
-                .relationship_search_fileid_roaring_and(&and_tags);
-
-            
-            results.sort_by_key(|&key| Reverse(key));
-if let Some(limit) = limit {
-                results.truncate(limit as usize);
+        for holder in search.searches {
+            match holder {
+                sharedtypes::SearchHolder::And(ids) => and_tags.extend(ids),
+                sharedtypes::SearchHolder::Or(ids) if !ids.is_empty() => or_groups.push(ids),
+                sharedtypes::SearchHolder::Not(ids) if !ids.is_empty() => not_groups.push(ids),
+                _ => {}
             }
-        
-        // Roaring Bitmaps iterate in ASC order. We need DESC for fileid.
-        results.sort_by_key(|&id| Reverse(id));
-
-        if let Some(l) = limit {
-            results.truncate(l as usize);
         }
 
-        println!("Roaring Search took: {:?}", start_time.elapsed());
-        return if results.is_empty() { None } else { Some(results) };
-    }
-
-    // 3. PATH B: Optimized SQL (Database Speed)
-    // If cache is off, we use Inner Joins on the rarest tag to minimize index lookups.
-    let mut conn = self.get_database_connection();
-
-    // Sort AND tags by rarity using the 'count' column in Tags table
-    let mut sorted_and = and_tags;
-    if sorted_and.len() > 1 {
-        let placeholders = vec!["?"; sorted_and.len()].join(",");
-        let count_sql = format!("SELECT id FROM Tags WHERE id IN ({}) ORDER BY count ASC", placeholders);
-        if let Ok(mut stmt) = conn.prepare(&count_sql) {
-            let ids: Vec<u64> = stmt.query_map(params_from_iter(&sorted_and), |r| r.get(0))
-                .unwrap()
-                .filter_map(|r| r.ok())
-                .collect();
-            if !ids.is_empty() { sorted_and = ids; }
+        if and_tags.is_empty() && or_groups.is_empty() {
+            return None;
         }
-    }
 
-let mut params = Vec::new();
-let driver_tag = sorted_and[0];
+        // 2. PATH A: Roaring Bitmap Optimization (Memory Speed)
+        if matches!(self._cache, CacheType::RelationshipRoaring(_)) {
+            let mut should_quick_search = true;
+            for and_tag in and_tags.iter() {
+                if !self
+                    .relationship_roaring_storage
+                    .read()
+                    .relationship_cache_tagid_exists(and_tag)
+                {
+                    should_quick_search = false;
+                    break;
+                }
+            }
+            if should_quick_search {
+                let mut results = self
+                    .relationship_roaring_storage
+                    .read()
+                    .relationship_search_fileid_roaring_and(&and_tags);
 
-// We start the query with our rarest tag
-let mut sql = "SELECT r0.fileid FROM Relationship r0".to_string();
+                results.sort_by_key(|&key| Reverse(key));
+                if let Some(limit) = limit {
+                    results.truncate(limit as usize);
+                }
 
-// Only add JOINs if there are more AND tags
-for (i, tag) in sorted_and.iter().skip(1).enumerate() {
-    let alias = format!("r{}", i + 1);
-    sql.push_str(&format!(
-        " JOIN Relationship {0} ON r0.fileid = {0}.fileid AND {0}.tagid = ?", 
-        alias
-    ));
-    params.push((*tag));
-}
+                // Roaring Bitmaps iterate in ASC order. We need DESC for fileid.
+                results.sort_by_key(|&id| Reverse(id));
 
-// Start conditions with the Driver Tag
-sql.push_str(" WHERE r0.tagid = ?");
-params.push(driver_tag);
+                if let Some(l) = limit {
+                    results.truncate(l as usize);
+                }
 
-// Add OR groups
-for (i, group) in or_groups.iter().enumerate() {
-    let placeholders = vec!["?"; group.len()].join(",");
-    sql.push_str(&format!(
+                println!("Roaring Search took: {:?}", start_time.elapsed());
+                return if results.is_empty() {
+                    None
+                } else {
+                    Some(results)
+                };
+            }
+        }
+
+        // 3. PATH B: Optimized SQL (Database Speed)
+        // If cache is off, we use Inner Joins on the rarest tag to minimize index lookups.
+        let conn = self.get_database_connection();
+
+        // Sort AND tags by rarity using the 'count' column in Tags table
+        let mut sorted_and = and_tags;
+        if sorted_and.len() > 1 {
+            let placeholders = vec!["?"; sorted_and.len()].join(",");
+            let count_sql = format!(
+                "SELECT id FROM Tags WHERE id IN ({}) ORDER BY count ASC",
+                placeholders
+            );
+            if let Ok(mut stmt) = conn.prepare(&count_sql) {
+                let ids: Vec<u64> = stmt
+                    .query_map(params_from_iter(&sorted_and), |r| r.get(0))
+                    .unwrap()
+                    .filter_map(|r| r.ok())
+                    .collect();
+                if !ids.is_empty() {
+                    sorted_and = ids;
+                }
+            }
+        }
+
+        let mut params = Vec::new();
+        let driver_tag = sorted_and[0];
+
+        // We start the query with our rarest tag
+        let mut sql = "SELECT r0.fileid FROM Relationship r0".to_string();
+
+        // Only add JOINs if there are more AND tags
+        for (i, tag) in sorted_and.iter().skip(1).enumerate() {
+            let alias = format!("r{}", i + 1);
+            sql.push_str(&format!(
+                " JOIN Relationship {0} ON r0.fileid = {0}.fileid AND {0}.tagid = ?",
+                alias
+            ));
+            params.push((*tag));
+        }
+
+        // Start conditions with the Driver Tag
+        sql.push_str(" WHERE r0.tagid = ?");
+        params.push(driver_tag);
+
+        // Add OR groups
+        for (i, group) in or_groups.iter().enumerate() {
+            let placeholders = vec!["?"; group.len()].join(",");
+            sql.push_str(&format!(
         " AND EXISTS (SELECT 1 FROM Relationship or{} WHERE or{}.fileid = r0.fileid AND or{}.tagid IN ({}))", 
         i, i, i, placeholders
     ));
-    for &tag_id in group { params.push(tag_id); }
-}
+            for &tag_id in group {
+                params.push(tag_id);
+            }
+        }
 
-// Add NOT groups
-for (i, group) in not_groups.iter().enumerate() {
-    let placeholders = vec!["?"; group.len()].join(",");
-    sql.push_str(&format!(
+        // Add NOT groups
+        for (i, group) in not_groups.iter().enumerate() {
+            let placeholders = vec!["?"; group.len()].join(",");
+            sql.push_str(&format!(
         " AND NOT EXISTS (SELECT 1 FROM Relationship not{} WHERE not{}.fileid = r0.fileid AND not{}.tagid IN ({}))", 
         i, i, i, placeholders
     ));
-    for &tag_id in group { params.push(tag_id); }
-}
+            for &tag_id in group {
+                params.push(tag_id);
+            }
+        }
 
-// Finalize
-sql.push_str(" ORDER BY r0.fileid DESC");
+        // Finalize
+        sql.push_str(" ORDER BY r0.fileid DESC");
 
-if let Some(l) = limit {
-    sql.push_str(" LIMIT ?");
-    params.push(l);
-}
+        if let Some(l) = limit {
+            sql.push_str(" LIMIT ?");
+            params.push(l);
+        }
         dbg!(&sql, &params);
 
-    let mut stmt = conn.prepare(&sql).ok()?;
-    let results: Vec<u64> = stmt.query_map(params_from_iter(params), |row| row.get(0))
-        .ok()?
-        .filter_map(|r| r.ok())
-        .collect();
+        let mut stmt = conn.prepare(&sql).ok()?;
+        let results: Vec<u64> = stmt
+            .query_map(params_from_iter(params), |row| row.get(0))
+            .ok()?
+            .filter_map(|r| r.ok())
+            .collect();
 
-    println!("SQL Search took: {:?}", start_time.elapsed());
-    if results.is_empty() { None } else { Some(results) }
-}    /// Gets all jobs loaded in the db
+        println!("SQL Search took: {:?}", start_time.elapsed());
+        if results.is_empty() {
+            None
+        } else {
+            Some(results)
+        }
+    }
+    /// Gets all jobs loaded in the db
     pub fn jobs_get_all(&self) -> HashMap<u64, sharedtypes::DbJobsObj> {
         match &self._cache {
             //CacheType::Bare => self.jobs_get_all_sql(),
@@ -1104,7 +1139,7 @@ if let Some(l) = limit {
         let mut write_conn = self.write_conn.lock();
         let mut tn = write_conn.transaction().unwrap();
         self.namespace_add_sql(&tn, &ns.name, &ns.description, Some(ns.id));
-        let out = self.namespace_get_id_sql(&tn,&ns.name).unwrap();
+        let out = self.namespace_get_id_sql(&tn, &ns.name).unwrap();
         tn.commit().unwrap();
         out
     }

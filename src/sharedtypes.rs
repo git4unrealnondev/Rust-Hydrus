@@ -852,7 +852,7 @@ pub struct NamespaceProperty {
     pub id: Option<u64>,
     pub name: String,
     pub property_value: String,
-    pub description: Option<String>
+    pub description: Option<String>,
 }
 
 /// Holder of Tag info. Keeps relationalship info into account.

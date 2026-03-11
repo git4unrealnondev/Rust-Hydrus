@@ -5,6 +5,7 @@ use crate::sharedtypes;
 use crate::sharedtypes::DbParentsObj;
 use r2d2::PooledConnection;
 use r2d2_sqlite::SqliteConnectionManager;
+use rusqlite::Connection;
 use rusqlite::OptionalExtension;
 use rusqlite::ToSql;
 use rusqlite::Transaction;
@@ -12,7 +13,8 @@ use rusqlite::params;
 use rusqlite::types::Null;
 use std::collections::HashMap;
 use std::collections::HashSet;
-use std::time::Duration;use std::ops::Deref;use rusqlite::Connection;
+use std::ops::Deref;
+use std::time::Duration;
 
 const DEFAULT_DURATION_BACKOFF: Duration = Duration::from_millis(100);
 
@@ -184,6 +186,40 @@ LIMIT ?;"#
 
         tn.execute(
             "CREATE INDEX idx_tagid_fileid ON Relationship(tagid, fileid)",
+            [],
+        )
+        .unwrap();
+    }
+
+    /// Creates the caching layers for roaring tables
+    pub(in crate::database) fn relationship_cache_v1(&self, tn: &Transaction) {
+        tn.execute(
+            "CREATE TABLE IF NOT EXISTS RelationshipRoaringFileid (
+    fileid INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    tagid_bitmap BLOB NOT NULL,
+
+
+    FOREIGN KEY (fileid)
+        REFERENCES Tags(id)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE
+)
+;",
+            [],
+        )
+        .unwrap();
+        tn.execute(
+            "CREATE TABLE IF NOT EXISTS RelationshipRoaringTagid (
+    tagid INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    fileid_bitmap BLOB NOT NULL,
+
+
+    FOREIGN KEY (tagid)
+        REFERENCES Tags(id)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE
+)
+;",
             [],
         )
         .unwrap();
@@ -815,15 +851,8 @@ HAVING COUNT(r.fileid) {dir} ?;"
     /// Checks if a relationship exists
     ///
     fn relationship_exists(&self, tn: &Transaction, file_id: &u64, tag_id: &u64) -> bool {
-        let table = if self.is_tag_count_greater_rel_limit(tn, tag_id) {
-            "Relationship_Popular"
-        } else {
-            "Relationship"
-        };
-
         let sql = format!(
-            "SELECT EXISTS(SELECT 1 FROM {} WHERE fileid=? AND tagid=? LIMIT 1)",
-            table
+            "SELECT EXISTS(SELECT 1 FROM Relationship WHERE fileid=? AND tagid=? LIMIT 1)",
         );
 
         let tn = match self.pool.get() {
@@ -1830,28 +1859,28 @@ RETURNING id;
         out_file_id
     }
 
-/*
-    pub (in crate::database) fn get_namespace_property(&self, tn: &Transaction, name: String) -> Option<sharedtypes::NamespaceProperty> {
-wait_until_sqlite_ok!(tn.query_row(
-                "SELECT id, name, property_value, description FROM NamespaceProperty WHERE name = ? LIMIT 1",
-                params![name],
-                |row| row.get(0),
-            ))
-            .unwrap_or(None)
+    /*
+        pub (in crate::database) fn get_namespace_property(&self, tn: &Transaction, name: String) -> Option<sharedtypes::NamespaceProperty> {
+    wait_until_sqlite_ok!(tn.query_row(
+                    "SELECT id, name, property_value, description FROM NamespaceProperty WHERE name = ? LIMIT 1",
+                    params![name],
+                    |row| row.get(0),
+                ))
+                .unwrap_or(None)
 
 
 
-    }
-
-    pub(in crate::database) fn add_namespace_property(&self,tn: &Transaction, property: sharedtypes::NamespaceProperty) {
-        let inp = "INSERT OR REPLACE INTO NamespaceProperty VALUES(?, ?, ?, ?)";
-        {
-            let _ = wait_until_sqlite_ok!(
-                tn.execute(inp, params![property.id, property.name,property.property_value ,property.description])
-            );
         }
 
-    }*/
+        pub(in crate::database) fn add_namespace_property(&self,tn: &Transaction, property: sharedtypes::NamespaceProperty) {
+            let inp = "INSERT OR REPLACE INTO NamespaceProperty VALUES(?, ?, ?, ?)";
+            {
+                let _ = wait_until_sqlite_ok!(
+                    tn.execute(inp, params![property.id, property.name,property.property_value ,property.description])
+                );
+            }
+
+        }*/
 
     /// Loads Relationships in from DB tnection
     pub(super) fn load_relationships(&self) {
@@ -1860,14 +1889,12 @@ wait_until_sqlite_ok!(tn.query_row(
             return;
         }
 
-        if matches!(self._cache, CacheType::RelationshipRoaring) {
-
-
-
-
-
-            if let Some(count) = *self.popular_relationship_count.lock()
-        {
+        if let CacheType::RelationshipRoaring(ref cachetype) = self._cache {
+            self.relationship_roaring_storage
+                .write()
+                .load_relationship_cache(self.get_database_connection(), &cachetype);
+        }
+        /*  if let Some(count) = *self.popular_relationship_count.lock() {
             let tn = self.pool.get().unwrap();
             logging::info_log("Database is Loading: Relationships".to_string());
             let temp = tn.prepare(&format!("SELECT fileid, tagid FROM Relationship WHERE tagid IN (SELECT id FROM Tags WHERE count >= {})", count));
@@ -1895,8 +1922,8 @@ wait_until_sqlite_ok!(tn.query_row(
                     }
                 }
             }
-        }
-    }}
+        }*/
+    }
 
     /// Checks if the count of a tag is greater or equal to the relationships count
     pub(in crate::database) fn is_tag_count_greater_rel_limit(
@@ -1943,11 +1970,10 @@ wait_until_sqlite_ok!(tn.query_row(
     }
 
     /// Gets a count for a tagid that exists
-    pub(in crate::database) fn get_count_for_tagid<C>(
-        &self,
-        tn: &C,
-        id: &u64,
-    ) -> Option<u64> where C: Deref< Target=Connection> {
+    pub(in crate::database) fn get_count_for_tagid<C>(&self, tn: &C, id: &u64) -> Option<u64>
+    where
+        C: Deref<Target = Connection>,
+    {
         wait_until_sqlite_ok!(tn.query_row(
             "SELECT count FROM Tags WHERE id = ?",
             params![id],
@@ -1963,44 +1989,15 @@ wait_until_sqlite_ok!(tn.query_row(
         file: &u64,
         tag: &u64,
     ) {
-
-        if matches!(self._cache, CacheType::RelationshipRoaring) {
-            self.relationship_roaring_storage.write().relationship_roaring_add(*file, *tag);
+        if matches!(self._cache, CacheType::RelationshipRoaring(_)) {
+            self.relationship_roaring_storage
+                .write()
+                .relationship_roaring_add_sql(tn, *file, *tag);
         }
 
+        let sql = "INSERT OR IGNORE INTO Relationship VALUES(?, ?)";
 
-        let greq = self.is_tag_count_greq_rel_limit(tn, tag);
-
-        match greq {
-            GreqOrEq::EqualTo | GreqOrEq::GreaterThan => {
-                let sql = "INSERT OR IGNORE INTO Relationship_Popular VALUES(?, ?)";
-
-                tn.execute(sql, params![file, tag]).unwrap();
-
-                let sql = "INSERT OR IGNORE INTO Relationship VALUES(?, ?)";
-
-                tn.execute(sql, params![file, tag]).unwrap();
-
-                /*// Local cache for relationships
-                if matches!(self._cache, CacheType::RelationshipRoaring) {
-                    self.relationship_roaring_storage
-                        .write()
-                        .relationship_roaring_add(*file, *tag);
-                }*/
-            }
-            GreqOrEq::LessThan => {
-                let sql = "INSERT OR IGNORE INTO Relationship VALUES(?, ?)";
-
-                tn.execute(sql, params![file, tag]).unwrap();
-            }
-        };
-
-        match greq {
-            GreqOrEq::EqualTo => {
-                self.migrate_relationship_popular_tagid(tn, tag, true);
-            }
-            _ => {}
-        }
+        tn.execute(sql, params![file, tag]).unwrap();
     }
 
     /// Migrates all tags with id into the popular table if true
@@ -2194,14 +2191,7 @@ END;",
             // Migrates tags
             if new_count < old_count {
                 // Insert into `Relationship_Popular` for tags with counts between new_count and old_count.
-                tn.execute(
-                    "INSERT INTO Relationship_Popular (fileid, tagid)
-            SELECT fileid, tagid
-            FROM Relationship
-            WHERE tagid IN (SELECT id FROM Tags WHERE count < ? AND count >= ?);",
-                    params![old_count, new_count],
-                )
-                .unwrap();
+
                 dbg!("a");
                 tn.execute(
                     "INSERT OR IGNORE INTO Tags_Popular_fts(rowid, name, namespace)
@@ -2233,12 +2223,7 @@ WHERE count BETWEEN ? AND ?",
                 .unwrap();*/
 
                 // Delete the relationships from `Relationship_Popular` where the tag count is between old_count and new_count.
-                tn.execute(
-                    "DELETE FROM Relationship_Popular
-            WHERE tagid IN (SELECT id FROM Tags WHERE count <= ? );",
-                    params![new_count],
-                )
-                .unwrap();
+
                 tn.execute(
                     "DELETE FROM Tags_Popular_fts
             WHERE rowid IN (SELECT id FROM Tags WHERE count <= ? );",
@@ -2486,20 +2471,21 @@ WHERE count BETWEEN ? AND ?",
     /// Returns id if a namespace exists
     ///
     pub(in crate::database) fn namespace_get_id_sql<C>(
-    &self,
-    conn: &C,
-    namespace: &str,
-) -> Option<u64>
-where
-    C: Deref<Target = Connection>,
-{
-    wait_until_sqlite_ok!(conn.query_row(
-        "SELECT id FROM Namespace WHERE name = ?",
-        params![namespace],
-        |row| row.get(0),
-    ))
-    .unwrap_or(None)
-}    ///
+        &self,
+        conn: &C,
+        namespace: &str,
+    ) -> Option<u64>
+    where
+        C: Deref<Target = Connection>,
+    {
+        wait_until_sqlite_ok!(conn.query_row(
+            "SELECT id FROM Namespace WHERE name = ?",
+            params![namespace],
+            |row| row.get(0),
+        ))
+        .unwrap_or(None)
+    }
+    ///
     /// Returns dbnamespace if a namespace id exists
     ///
     pub(in crate::database) fn namespace_get_namespaceobj_sql(
@@ -2618,7 +2604,6 @@ where
 
         let sql = "DELETE FROM Relationship WHERE fileid = ? AND tagid = ?";
         tn.execute(sql, params![file_id, tag_id]).unwrap();
-        //let sql = "DELETE FROM Relationship_Popular WHERE fileid = ? AND tagid = ?";
         //tn.execute(sql, params![file_id, tag_id]).unwrap();
         match greq {
             GreqOrEq::EqualTo => {

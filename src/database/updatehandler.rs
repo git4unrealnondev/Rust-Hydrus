@@ -1152,4 +1152,22 @@ WHERE p.tag_id != p.relate_tag_id;",
         self.vacuum();
         self.analyze();
     }
+
+    pub fn db_update_eleven_to_twelve(&mut self) {
+        {
+            let mut wruite_conn = self.write_conn.lock();
+            let tn = wruite_conn.transaction().unwrap();
+
+            self.relationship_cache_v1(&tn);
+
+            self.relationship_roaring_storage
+                .write()
+                .recache_roaring(&tn);
+
+            tn.execute("DROP TABLE Relationship_Popular", []).unwrap();
+
+            tn.commit().unwrap();
+        }
+        self.db_version_set(12);
+    }
 }

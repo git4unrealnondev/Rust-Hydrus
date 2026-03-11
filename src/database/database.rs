@@ -7,6 +7,7 @@ use crate::globalload::GlobalLoad;
 use crate::helpers;
 use crate::helpers::check_url;
 use crate::logging;
+use crate::roaring_bitmap::InternalCacheType;
 use crate::roaring_bitmap::RelationshipStorage;
 use crate::sharedtypes;
 use crate::sharedtypes::DEFAULT_CACHECHECK;
@@ -46,12 +47,10 @@ fn dbinit(dbpath: &String) -> tnection {
 pub enum CacheType {
     // Will use in memory DB to make store cached data.
     InMemdb,
-    // Not yet implmented will be used for using sqlite 3 inmemory db calls.
-    InMemory(Pool<SqliteConnectionManager>),
     // Will be use to query the DB directly. No caching. DEFAULT OPTION
     Bare,
     // New cache method for relationships
-    RelationshipRoaring,
+    RelationshipRoaring(InternalCacheType),
 }
 
 #[derive(Clone)]
@@ -158,12 +157,12 @@ PRAGMA wal_autocheckpoint = 20000;
 PRAGMA mmap_size = 4294967296; -- 1GB
 ",
                     )?;
-                    
-                                        // Enable SQL tracing
-                                     /*   conn.trace(Some(|sql| {
-                                            println!("[SQL TRACE] {}", sql);
-                                        }));*/
-                    
+
+                    // Enable SQL tracing
+                    /*   conn.trace(Some(|sql| {
+                        println!("[SQL TRACE] {}", sql);
+                    }));*/
+
                     Ok(())
                 });
                 let pool = r2d2::Builder::new()
@@ -610,7 +609,9 @@ PRAGMA journal_mode = WAL;
                 let cachemode = match cache.as_str() {
                     "Bare" => Some(CacheType::Bare),
                     "InMemdb" => Some(CacheType::InMemdb),
-                    "RelationshipRoaring" => Some(CacheType::RelationshipRoaring),
+                    "RelationshipRoaring" => {
+                        Some(CacheType::RelationshipRoaring(InternalCacheType::Full))
+                    }
                     "InMemory" => {
                         let manager = SqliteConnectionManager::memory();
 
@@ -620,11 +621,12 @@ PRAGMA journal_mode = WAL;
                             .build(manager)
                             .unwrap();
 
-                        Some(CacheType::InMemory(pool))
+                        //Some(CacheType::InMemory(pool))
+                        None
                     }
 
                     _ => {
-                        self.setup_default_cache(&mut tn);
+                        self.setup_default_cache(&tn);
                         None
                     }
                 };
@@ -633,7 +635,7 @@ PRAGMA journal_mode = WAL;
                     break;
                 }
             } else {
-                self.setup_default_cache(&mut tn);
+                self.setup_default_cache(&tn);
             }
         }
         tn.commit().unwrap();
@@ -841,7 +843,9 @@ PRAGMA journal_mode = WAL;
             )
             .unwrap();
 
-                self.relationship_create_v3(tn);
+                self.relationship_create_v2(tn);
+
+                self.relationship_cache_v1(tn);
 
                 self.migrate_relationships_based_on_count(tn);
 
@@ -1022,6 +1026,8 @@ PRAGMA journal_mode = WAL;
                 self.db_update_nine_to_ten();
             } else if db_vers == 10 {
                 self.db_update_ten_to_eleven();
+            } else if db_vers == 11 {
+                self.db_update_eleven_to_twelve();
             }
 
             logging::info_log(format!("Finished upgrade to V{}.", db_vers));
