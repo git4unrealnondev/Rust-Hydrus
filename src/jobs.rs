@@ -43,12 +43,14 @@ impl Jobs {
     /// Actual job adding logic. Only way to get around Mutex lock of the DB when regex gets
     /// called.
     ///
+    /// Returns the job id number if it exists
+    ///
     fn jobs_add_internal(
         &mut self,
 
         scraper: sharedtypes::GlobalPluginScraper,
         dbjobsobj: sharedtypes::DbJobsObj,
-    ) -> bool {
+    ) -> Option<u64> {
         let mut dbjobsobj = dbjobsobj;
 
         let obj = PreviouslySeenObj {
@@ -65,7 +67,7 @@ impl Jobs {
         // call then the program can poop itself
         if let Some(sharedtypes::ScraperOrPlugin::Scraper(_)) = scraper.storage_type {
         } else {
-            return false;
+            return None;
         }
 
         if let Some(list) = self.previously_seen.get(&scraper) {
@@ -75,7 +77,7 @@ impl Jobs {
                     "Skipping obj because I've seen it already: {:?}",
                     &obj
                 ));*/
-                return false;
+                return None;
             }
 
             for job_to_check in list {
@@ -89,19 +91,19 @@ impl Jobs {
                         );
                         if job_to_check.params == dbjobsobj.param {
                             dbg!("SKIPPING");
-                            return false;
+                            return None;
                         }
                     }
                 }
             }
         }
-        let mut out = false;
+        let mut out = None;
         if time_func::time_secs() >= dbjobsobj.time + dbjobsobj.reptime {
             if dbjobsobj.id.is_none() {
                 let mut temp = dbjobsobj.clone();
                 temp.id = None;
                 let id = self.db.jobs_add_new(temp);
-                out = true;
+                out = Some(id);
                 // Updates the ID field with something from the db
                 dbjobsobj.id = Some(id);
             }
@@ -148,7 +150,7 @@ impl Jobs {
 
         scraper: sharedtypes::GlobalPluginScraper,
         dbjobsobj: sharedtypes::DbJobsObj,
-    ) -> bool {
+    ) -> Option<u64> {
         self.jobs_add_internal(scraper, dbjobsobj)
     }
 
@@ -205,6 +207,7 @@ impl Jobs {
             for job in job_list_static {
                 if job.id == data.id && job_list.remove(&job) {
                     logging::info_log(format!("Worker: {worker_id} --Removing Job: {:?}", &job));
+                    dbg!(&job.id);
                     self.db.del_from_jobs_byid(job.id);
                 }
             }
@@ -329,7 +332,7 @@ impl Jobs {
             .collect();
         let mut commit = false;
         for (scraper, job) in jobs_vec {
-            if self.jobs_add(scraper, job) {
+            if self.jobs_add(scraper, job).is_some() {
                 commit = true;
             }
         }
@@ -430,14 +433,15 @@ pub(crate) mod test_database {
                 },
             ));
 
-            let dbjobsobj = return_dbjobsobj();
-            job.jobs_add(scraper.clone(), dbjobsobj.clone());
-            job.debug();
+            let mut dbjobsobj = return_dbjobsobj();
+            dbjobsobj.id = None;
+            let jobid = job.jobs_add(scraper.clone(), dbjobsobj.clone()).unwrap();
             assert_eq!(job.site_job.get(&scraper).unwrap().len(), 1);
             assert_eq!(job.previously_seen.get(&scraper).unwrap().len(), 1);
+            dbjobsobj.id = Some(jobid);
             job.jobs_remove_dbjob(&scraper, &dbjobsobj, &0);
-
             let unwrappy = job.db;
+            dbg!(unwrappy.jobs_get_all());
             assert_eq!(unwrappy.jobs_get_all().keys().len(), 0);
             assert_eq!(job.site_job.get(&scraper).unwrap().len(), 0);
         }

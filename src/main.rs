@@ -1,4 +1,4 @@
-#![recursion_limit = "9000"]
+#![recursion_limit = "18000"]
 #![allow(dead_code)]
 
 use log::{error, warn};

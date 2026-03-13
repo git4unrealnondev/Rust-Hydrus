@@ -408,17 +408,19 @@ impl Main {
     /// returns file id's based on relationships with a tag
     pub fn relationship_get_fileid(&self, tag: &u64) -> HashSet<u64> {
         if matches!(self._cache, CacheType::RelationshipRoaring(_)) {
-            if self.relationship_roaring_storage.read().relationship_cache_tagid_exists(tag) {
-            let list = self
-                .relationship_roaring_storage
-                .read()
-                .relationship_search_fileid_roaring_and(&[*tag]);
-            let mut out = HashSet::new();
-            for item in list {
-                out.insert(item);
+            if let Some(ref roaring) = self.relationship_roaring_storage {
+                if roaring.read().relationship_cache_tagid_exists(tag) {
+                    let list = roaring
+                        .read()
+                        .relationship_search_fileid_roaring_and(&[*tag]);
+                    let mut out = HashSet::new();
+                    for item in list {
+                        out.insert(item);
+                    }
+                    return out;
+                }
             }
-            return out;
-        }}
+        }
 
         self.relationship_get_fileid_sql(tag)
     }
@@ -426,16 +428,18 @@ impl Main {
     /// Gets one fileid from one tagid
     pub fn relationship_get_one_fileid(&self, tag: &u64) -> Option<u64> {
         if matches!(self._cache, CacheType::RelationshipRoaring(_)) {
-            if self.relationship_roaring_storage.read().relationship_cache_tagid_exists(tag) {
-            if let Some(list) = self
-                .relationship_roaring_storage
-                .read()
-                .relationship_search_fileid_roaring_and(&[*tag])
-                .pop()
-            {
-                return Some(list.into());
-            };
-        }}
+            if let Some(ref roaring) = self.relationship_roaring_storage {
+                if roaring.read().relationship_cache_tagid_exists(tag) {
+                    if let Some(list) = roaring
+                        .read()
+                        .relationship_search_fileid_roaring_and(&[*tag])
+                        .pop()
+                    {
+                        return Some(list.into());
+                    };
+                }
+            }
+        }
 
         //self._inmemdb.relationship_get_one_fileid(tag)
         let temp = self.relationship_get_fileid(tag);
@@ -804,41 +808,39 @@ impl Main {
 
         // 2. PATH A: Roaring Bitmap Optimization (Memory Speed)
         if matches!(self._cache, CacheType::RelationshipRoaring(_)) {
-            let mut should_quick_search = true;
-            for and_tag in and_tags.iter() {
-                if !self
-                    .relationship_roaring_storage
-                    .read()
-                    .relationship_cache_tagid_exists(and_tag)
-                {
-                    should_quick_search = false;
-                    break;
+            if let Some(ref roaring) = self.relationship_roaring_storage {
+                let mut should_quick_search = true;
+
+                for and_tag in and_tags.iter() {
+                    if !roaring.read().relationship_cache_tagid_exists(and_tag) {
+                        should_quick_search = false;
+                        break;
+                    }
                 }
-            }
-            if should_quick_search {
-                let mut results = self
-                    .relationship_roaring_storage
-                    .read()
-                    .relationship_search_fileid_roaring_and(&and_tags);
+                if should_quick_search {
+                    let mut results = roaring
+                        .read()
+                        .relationship_search_fileid_roaring_and(&and_tags);
 
-                results.sort_by_key(|&key| Reverse(key));
-                if let Some(limit) = limit {
-                    results.truncate(limit as usize);
+                    results.sort_by_key(|&key| Reverse(key));
+                    if let Some(limit) = limit {
+                        results.truncate(limit as usize);
+                    }
+
+                    // Roaring Bitmaps iterate in ASC order. We need DESC for fileid.
+                    results.sort_by_key(|&id| Reverse(id));
+
+                    if let Some(l) = limit {
+                        results.truncate(l as usize);
+                    }
+
+                    println!("Roaring Search took: {:?}", start_time.elapsed());
+                    return if results.is_empty() {
+                        None
+                    } else {
+                        Some(results)
+                    };
                 }
-
-                // Roaring Bitmaps iterate in ASC order. We need DESC for fileid.
-                results.sort_by_key(|&id| Reverse(id));
-
-                if let Some(l) = limit {
-                    results.truncate(l as usize);
-                }
-
-                println!("Roaring Search took: {:?}", start_time.elapsed());
-                return if results.is_empty() {
-                    None
-                } else {
-                    Some(results)
-                };
             }
         }
 

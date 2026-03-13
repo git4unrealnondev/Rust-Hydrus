@@ -1102,7 +1102,7 @@ WHERE p.tag_id != p.relate_tag_id;",
             let mut wruite_conn = self.write_conn.lock();
             let mut tn = wruite_conn.transaction().unwrap();
 
-            self.parents_create_v2(&mut tn);
+            self.parents_create_v2(&tn);
             tn.commit();
         }
         self.db_version_set(10);
@@ -1160,11 +1160,12 @@ WHERE p.tag_id != p.relate_tag_id;",
 
             self.relationship_cache_v1(&tn);
 
-            self.relationship_roaring_storage
-                .write()
-                .recache_roaring(&tn);
+            if let Some(ref roaring) = self.relationship_roaring_storage {
+                roaring.write().recache_roaring(&tn);
+            }
 
-            tn.execute("DROP TABLE Relationship_Popular", []).unwrap();
+            tn.execute("DROP TABLE IF EXISTS Relationship_Popular", [])
+                .unwrap();
 
             tn.commit().unwrap();
         }

@@ -195,12 +195,12 @@ LIMIT ?;"#
     pub(in crate::database) fn relationship_cache_v1(&self, tn: &Transaction) {
         tn.execute(
             "CREATE TABLE IF NOT EXISTS RelationshipRoaringFileid (
-    fileid INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    fileid INTEGER NOT NULL PRIMARY KEY,
     tagid_bitmap BLOB NOT NULL,
 
 
     FOREIGN KEY (fileid)
-        REFERENCES Tags(id)
+        REFERENCES File(id)
         ON DELETE CASCADE
         ON UPDATE CASCADE
 )
@@ -210,7 +210,7 @@ LIMIT ?;"#
         .unwrap();
         tn.execute(
             "CREATE TABLE IF NOT EXISTS RelationshipRoaringTagid (
-    tagid INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    tagid INTEGER NOT NULL PRIMARY KEY,
     fileid_bitmap BLOB NOT NULL,
 
 
@@ -1039,7 +1039,8 @@ HAVING COUNT(r.fileid) {dir} ?;"
     /// Adds a job to sql
     pub(in crate::database) fn jobs_add_sql(&self, data: &sharedtypes::DbJobsObj) {
         let tn = self.write_conn.lock();
-        let inp = "INSERT INTO Jobs VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        dbg!(data);
+        let inp = "INSERT OR REPLACE INTO Jobs VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
         {
             wait_until_sqlite_ok!(tn.execute(
                 inp,
@@ -1890,9 +1891,9 @@ RETURNING id;
         }
 
         if let CacheType::RelationshipRoaring(ref cachetype) = self._cache {
-            self.relationship_roaring_storage
-                .write()
-                .load_relationship_cache(self.get_database_connection(), &cachetype);
+            if let Some(ref roaring) = self.relationship_roaring_storage {
+                roaring.write().load_relationship_cache(cachetype.clone());
+            }
         }
         /*  if let Some(count) = *self.popular_relationship_count.lock() {
             let tn = self.pool.get().unwrap();
@@ -1989,8 +1990,8 @@ RETURNING id;
         file: &u64,
         tag: &u64,
     ) {
-        if matches!(self._cache, CacheType::RelationshipRoaring(_)) {
-            self.relationship_roaring_storage
+        if let Some(ref roaring) = self.relationship_roaring_storage {
+            roaring
                 .write()
                 .relationship_roaring_add_sql(tn, *file, *tag);
         }

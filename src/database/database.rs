@@ -70,7 +70,7 @@ pub(crate) struct Main {
     pub(super) localref: Option<Arc<RwLock<Main>>>,
     pub api_info: Arc<RwLock<Option<sharedtypes::ClientAPIInfo>>>,
     pub(in crate::database) popular_relationship_count: Arc<Mutex<Option<u64>>>,
-    pub(in crate::database) relationship_roaring_storage: Arc<RwLock<RelationshipStorage>>,
+    pub(in crate::database) relationship_roaring_storage: Option<Arc<RwLock<RelationshipStorage>>>,
 }
 
 /// Handles transactional pushes.
@@ -129,7 +129,7 @@ impl Main {
                     pool
                 }));
                 let write_conn_istransaction = Arc::new(Mutex::new(false));
-                let memdbmain = Main {
+                let mut memdbmain = Main {
                     _dbpath: path.clone(),
                     _vers: vers,
                     pool,
@@ -144,8 +144,12 @@ impl Main {
                     localref: None,
                     api_info: Arc::new(None.into()),
                     popular_relationship_count: Arc::new(None.into()),
-                    relationship_roaring_storage: Arc::new(RwLock::new(RelationshipStorage::new())),
+                    relationship_roaring_storage: None,
                 };
+                memdbmain.relationship_roaring_storage = Some(Arc::new(RwLock::new(
+                    RelationshipStorage::new(Arc::new(RwLock::new(memdbmain.clone()))),
+                )));
+
                 //                let tnection = dbinit(file_path);
                 let manager = SqliteConnectionManager::file(file_path).with_init(|conn| {
                     conn.execute_batch(
@@ -172,7 +176,7 @@ PRAGMA mmap_size = 4294967296; -- 1GB
                     .unwrap();
                 let write_conn = Arc::new(Mutex::new(pool.get().unwrap()));
                 let write_conn_istransaction = Arc::new(Mutex::new(false));
-                Main {
+                let mut main = Main {
                     _dbpath: path,
                     _vers: vers,
                     pool,
@@ -187,8 +191,13 @@ PRAGMA mmap_size = 4294967296; -- 1GB
                     localref: None,
                     api_info: Arc::new(None.into()),
                     popular_relationship_count: Arc::new(None.into()),
-                    relationship_roaring_storage: Arc::new(RwLock::new(RelationshipStorage::new())),
-                }
+                    relationship_roaring_storage: None,
+                };
+
+                main.relationship_roaring_storage = Some(Arc::new(RwLock::new(
+                    RelationshipStorage::new(Arc::new(RwLock::new(main.clone()))),
+                )));
+                main
             }
             None => {
                 first_time_load_flag = false;
@@ -217,7 +226,7 @@ PRAGMA journal_mode = WAL;
                 let write_conn = Arc::new(Mutex::new(pool.get().unwrap()));
                 let write_conn_istransaction = Arc::new(Mutex::new(false));
 
-                Main {
+                let mut main = Main {
                     _dbpath: None,
                     _vers: vers,
                     pool,
@@ -232,8 +241,14 @@ PRAGMA journal_mode = WAL;
                     localref: None,
                     api_info: Arc::new(None.into()),
                     popular_relationship_count: Arc::new(None.into()),
-                    relationship_roaring_storage: Arc::new(RwLock::new(RelationshipStorage::new())),
-                }
+                    relationship_roaring_storage: None,
+                };
+
+                main.relationship_roaring_storage = Some(Arc::new(RwLock::new(
+                    RelationshipStorage::new(Arc::new(RwLock::new(main.clone()))),
+                )));
+
+                main
             }
         };
         // let path = String::from("./main.db");
@@ -609,8 +624,11 @@ PRAGMA journal_mode = WAL;
                 let cachemode = match cache.as_str() {
                     "Bare" => Some(CacheType::Bare),
                     "InMemdb" => Some(CacheType::InMemdb),
-                    "RelationshipRoaring" => {
+                    "RelationshipRoaringFull" => {
                         Some(CacheType::RelationshipRoaring(InternalCacheType::Full))
+                    }
+                    "RelationshipRoaringTable" => {
+                        Some(CacheType::RelationshipRoaring(InternalCacheType::Table))
                     }
                     "InMemory" => {
                         let manager = SqliteConnectionManager::memory();
@@ -2293,6 +2311,41 @@ pub(crate) mod test_database {
 
             assert!(main.check_dead_url(&"test".to_string()));
             assert!(!main.check_dead_url(&"Null".to_string()));
+        }
+    }
+
+    #[test]
+    fn db_search_files() {
+        for mut main in setup_default_db() {
+            let fid1 = main.file_add(sharedtypes::DbFileStorage::NoIdExist(
+                sharedtypes::DbFileObjNoId {
+                    hash: "SOUP".to_string(),
+                    ext_id: 1,
+                    storage_id: 1,
+                },
+            ));
+            let fid2 = main.file_add(sharedtypes::DbFileStorage::NoIdExist(
+                sharedtypes::DbFileObjNoId {
+                    hash: "SOUP2".to_string(),
+                    ext_id: 1,
+                    storage_id: 1,
+                },
+            ));
+
+            main.add_relationship(&fid1, &1);
+            main.add_relationship(&fid2, &1);
+            main.add_relationship(&fid1, &2);
+
+            let fileids = main
+                .search_db_files(
+                    sharedtypes::SearchObj {
+                        search_relate: vec![].into(),
+                        searches: vec![sharedtypes::SearchHolder::And(vec![1, 2])],
+                    },
+                    Some(5),
+                )
+                .unwrap();
+            assert_eq!(fileids.len(), 1);
         }
     }
 }
