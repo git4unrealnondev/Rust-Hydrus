@@ -195,10 +195,8 @@ LIMIT ?;"#
     pub(in crate::database) fn relationship_cache_v1(&self, tn: &Transaction) {
         tn.execute(
             "CREATE TABLE IF NOT EXISTS RelationshipRoaringFileid (
-    fileid INTEGER NOT NULL PRIMARY KEY,
+    fileid INTEGER PRIMARY KEY,
     tagid_bitmap BLOB NOT NULL,
-
-
     FOREIGN KEY (fileid)
         REFERENCES File(id)
         ON DELETE CASCADE
@@ -210,10 +208,8 @@ LIMIT ?;"#
         .unwrap();
         tn.execute(
             "CREATE TABLE IF NOT EXISTS RelationshipRoaringTagid (
-    tagid INTEGER NOT NULL PRIMARY KEY,
+    tagid  INTEGER  PRIMARY KEY,
     fileid_bitmap BLOB NOT NULL,
-
-
     FOREIGN KEY (tagid)
         REFERENCES Tags(id)
         ON DELETE CASCADE
@@ -1991,9 +1987,7 @@ RETURNING id;
         tag: &u64,
     ) {
         if let Some(ref roaring) = self.relationship_roaring_storage {
-            roaring
-                .write()
-                .relationship_roaring_add_sql(tn, *file, *tag);
+            roaring.write().relationship_roaring_add(tn, *file, *tag);
         }
 
         let sql = "INSERT OR IGNORE INTO Relationship VALUES(?, ?)";

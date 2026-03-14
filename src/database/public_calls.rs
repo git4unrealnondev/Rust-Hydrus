@@ -5,6 +5,7 @@ use crate::file;
 use crate::helpers;
 use crate::helpers::getfinpath;
 use crate::logging;
+use crate::roaring_bitmap::SearchQuery;
 use crate::sharedtypes;
 use log::{error, info};
 use remove_empty_subdirs::remove_empty_subdirs;
@@ -410,13 +411,20 @@ impl Main {
         if matches!(self._cache, CacheType::RelationshipRoaring(_)) {
             if let Some(ref roaring) = self.relationship_roaring_storage {
                 if roaring.read().relationship_cache_tagid_exists(tag) {
-                    let list = roaring
+                    let mut out = HashSet::new();
+                    for fileid in SearchQuery::new(&roaring.read())
+                        .and_search(&[*tag])
+                        .build()
+                    {
+                        out.insert(fileid);
+                    }
+
+                    /* let list = roaring
                         .read()
                         .relationship_search_fileid_roaring_and(&[*tag]);
-                    let mut out = HashSet::new();
                     for item in list {
                         out.insert(item);
-                    }
+                    }*/
                     return out;
                 }
             }
@@ -430,13 +438,19 @@ impl Main {
         if matches!(self._cache, CacheType::RelationshipRoaring(_)) {
             if let Some(ref roaring) = self.relationship_roaring_storage {
                 if roaring.read().relationship_cache_tagid_exists(tag) {
-                    if let Some(list) = roaring
+                    let mut results = SearchQuery::new(&roaring.read())
+                        .limit(Some(1))
+                        .and_search(&[*tag])
+                        .build();
+                    return results.pop();
+
+                    /* if let Some(list) = roaring
                         .read()
                         .relationship_search_fileid_roaring_and(&[*tag])
                         .pop()
                     {
                         return Some(list.into());
-                    };
+                    };*/
                 }
             }
         }
@@ -807,40 +821,31 @@ impl Main {
         }
 
         // 2. PATH A: Roaring Bitmap Optimization (Memory Speed)
-        if matches!(self._cache, CacheType::RelationshipRoaring(_)) {
-            if let Some(ref roaring) = self.relationship_roaring_storage {
-                let mut should_quick_search = true;
+        if matches!(self._cache, CacheType::RelationshipRoaring(_))
+            && let Some(ref roaring) = self.relationship_roaring_storage
+        {
+            let mut should_quick_search = true;
 
-                for and_tag in and_tags.iter() {
-                    if !roaring.read().relationship_cache_tagid_exists(and_tag) {
-                        should_quick_search = false;
-                        break;
-                    }
+            for and_tag in and_tags.iter() {
+                if !roaring.read().relationship_cache_tagid_exists(and_tag) {
+                    should_quick_search = false;
+                    break;
                 }
-                if should_quick_search {
-                    let mut results = roaring
-                        .read()
-                        .relationship_search_fileid_roaring_and(&and_tags);
+            }
+            let start_time = Instant::now();
+            if should_quick_search {
+                let results = SearchQuery::new(&roaring.read())
+                    .sort()
+                    .limit(limit)
+                    .and_search(&and_tags)
+                    .build();
 
-                    results.sort_by_key(|&key| Reverse(key));
-                    if let Some(limit) = limit {
-                        results.truncate(limit as usize);
-                    }
-
-                    // Roaring Bitmaps iterate in ASC order. We need DESC for fileid.
-                    results.sort_by_key(|&id| Reverse(id));
-
-                    if let Some(l) = limit {
-                        results.truncate(l as usize);
-                    }
-
-                    println!("Roaring Search took: {:?}", start_time.elapsed());
-                    return if results.is_empty() {
-                        None
-                    } else {
-                        Some(results)
-                    };
-                }
+                println!("Roaring Search took: {:?}", start_time.elapsed());
+                return if results.is_empty() {
+                    None
+                } else {
+                    Some(results)
+                };
             }
         }
 

@@ -164,9 +164,7 @@ PRAGMA cache_size = -1000000;
                     )?;
 
                     // Enable SQL tracing
-                    /*   conn.trace(Some(|sql| {
-                        println!("[SQL TRACE] {}", sql);
-                    }));*/
+                    //conn.trace(Some(|sql| {println!("[SQL TRACE] {}", sql);}));
 
                     Ok(())
                 });
@@ -217,7 +215,7 @@ PRAGMA journal_mode = WAL;
 
                         ",
                     )?;
-                    conn.trace(Some(|sql| println!("[SQL TRACE] {}", sql)));
+                    // conn.trace(Some(|sql| println!("[SQL TRACE] {}", sql)));
                     Ok(())
                 });
 
@@ -630,6 +628,18 @@ PRAGMA journal_mode = WAL;
                     }
                     "RelationshipRoaringTable" => {
                         Some(CacheType::RelationshipRoaring(InternalCacheType::Table))
+                    }
+                    "RelationshipRoaringPopular" => {
+                        if let Some(popular_count) =
+                            self.settings_get_name(&"SYSTEM_tag_count_popular_division".to_string())
+                            && let Some(popular_count) = popular_count.num
+                        {
+                            Some(CacheType::RelationshipRoaring(InternalCacheType::Popular(
+                                popular_count,
+                            )))
+                        } else {
+                            None
+                        }
                     }
                     "InMemory" => {
                         let manager = SqliteConnectionManager::memory();
