@@ -508,7 +508,6 @@ fn json_sub_tag(
             }
         }
         Some(temp) => {
-            //let temp = relates.unwrap().1;
             for each in jso[name_search].members() {
                 tags_list.push(sharedtypes::TagObject {
                     namespace: ns.clone(),

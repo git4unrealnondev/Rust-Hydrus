@@ -22,19 +22,34 @@ impl RustHydrusApiClient {
     /// Gets a scraper folder. If it doesn't exist then please create it in db
     pub fn loaded_scraper_folder(&self) -> Result<PathBuf, ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "loaded_scraper_folder");
-        let res = ureq::get(url).call()?.body_mut().read_json::<PathBuf>()?;
+        let res = ureq::get(url)
+            .call()?
+            .body_mut()
+            .with_config()
+            .limit(u64::MAX)
+            .read_json::<PathBuf>()?;
         Ok(res)
     }
     /// Gets a plugin folder. If it doesn't exist then please create it in db
     pub fn loaded_plugin_folder(&self) -> Result<PathBuf, ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "loaded_plugin_folder");
-        let res = ureq::get(url).call()?.body_mut().read_json::<PathBuf>()?;
+        let res = ureq::get(url)
+            .call()?
+            .body_mut()
+            .with_config()
+            .limit(u64::MAX)
+            .read_json::<PathBuf>()?;
         Ok(res)
     }
     /// Deletes a namespace by id
     pub fn delete_namespace_id(&self, nsid: &u64) -> Result<(), ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "delete_namespace_id");
-        let res = ureq::post(url).send_json(&(nsid))?.body_mut().read_json::<()>()?;
+        let res = ureq::post(url)
+            .send_json(&(nsid))?
+            .body_mut()
+            .with_config()
+            .limit(u64::MAX)
+            .read_json::<()>()?;
         Ok(res)
     }
     ///
@@ -45,7 +60,12 @@ impl RustHydrusApiClient {
         let url = format!(
             "{}/{}/{}", self.base_url, "main", "check_default_source_urls"
         );
-        let res = ureq::post(url).send_json(&(action))?.body_mut().read_json::<()>()?;
+        let res = ureq::post(url)
+            .send_json(&(action))?
+            .body_mut()
+            .with_config()
+            .limit(u64::MAX)
+            .read_json::<()>()?;
         Ok(res)
     }
     /// Checks relationships with table for any dead tagids
@@ -53,13 +73,23 @@ impl RustHydrusApiClient {
         let url = format!(
             "{}/{}/{}", self.base_url, "main", "check_relationship_tag_relations"
         );
-        let res = ureq::get(url).call()?.body_mut().read_json::<()>()?;
+        let res = ureq::get(url)
+            .call()?
+            .body_mut()
+            .with_config()
+            .limit(u64::MAX)
+            .read_json::<()>()?;
         Ok(res)
     }
     /// Removes a job from the database by id. Removes from both memdb and sql.
     pub fn del_from_jobs_byid(&self, id: Option<u64>) -> Result<(), ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "del_from_jobs_byid");
-        let res = ureq::post(url).send_json(&(id))?.body_mut().read_json::<()>()?;
+        let res = ureq::post(url)
+            .send_json(&(id))?
+            .body_mut()
+            .with_config()
+            .limit(u64::MAX)
+            .read_json::<()>()?;
         Ok(res)
     }
     ///
@@ -68,13 +98,23 @@ impl RustHydrusApiClient {
         file: sharedtypes::DbFileStorage,
     ) -> Result<u64, ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "file_add");
-        let res = ureq::post(url).send_json(&(file))?.body_mut().read_json::<u64>()?;
+        let res = ureq::post(url)
+            .send_json(&(file))?
+            .body_mut()
+            .with_config()
+            .limit(u64::MAX)
+            .read_json::<u64>()?;
         Ok(res)
     }
     ///
     pub fn storage_put(&self, location: &String) -> Result<u64, ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "storage_put");
-        let res = ureq::post(url).send_json(&(location))?.body_mut().read_json::<u64>()?;
+        let res = ureq::post(url)
+            .send_json(&(location))?
+            .body_mut()
+            .with_config()
+            .limit(u64::MAX)
+            .read_json::<u64>()?;
         Ok(res)
     }
     /// Adds tags to fileid  commits to db
@@ -87,13 +127,20 @@ impl RustHydrusApiClient {
         let res = ureq::post(url)
             .send_json(&(file_id, tag_actions))?
             .body_mut()
+            .with_config()
+            .limit(u64::MAX)
             .read_json::<()>()?;
         Ok(res)
     }
     ///
     pub fn delete_tag(&self, tag: &u64) -> Result<(), ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "delete_tag");
-        let res = ureq::post(url).send_json(&(tag))?.body_mut().read_json::<()>()?;
+        let res = ureq::post(url)
+            .send_json(&(tag))?
+            .body_mut()
+            .with_config()
+            .limit(u64::MAX)
+            .read_json::<()>()?;
         Ok(res)
     }
     ///
@@ -105,19 +152,31 @@ impl RustHydrusApiClient {
         let res = ureq::post(url)
             .send_json(&(tagid))?
             .body_mut()
+            .with_config()
+            .limit(u64::MAX)
             .read_json::<HashSet<sharedtypes::DbParentsObj>>()?;
         Ok(res)
     }
     ///
     pub fn add_relationship(&self, file: &u64, tag: &u64) -> Result<(), ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "add_relationship");
-        let res = ureq::post(url).send_json(&(file, tag))?.body_mut().read_json::<()>()?;
+        let res = ureq::post(url)
+            .send_json(&(file, tag))?
+            .body_mut()
+            .with_config()
+            .limit(u64::MAX)
+            .read_json::<()>()?;
         Ok(res)
     }
     ///
     pub fn delete_relationship(&self, file: &u64, tag: &u64) -> Result<(), ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "delete_relationship");
-        let res = ureq::post(url).send_json(&(file, tag))?.body_mut().read_json::<()>()?;
+        let res = ureq::post(url)
+            .send_json(&(file, tag))?
+            .body_mut()
+            .with_config()
+            .limit(u64::MAX)
+            .read_json::<()>()?;
         Ok(res)
     }
     /// Adds the tag to the db. commits on finish
@@ -129,19 +188,31 @@ impl RustHydrusApiClient {
         let res = ureq::post(url)
             .send_json(&(tag))?
             .body_mut()
+            .with_config()
+            .limit(u64::MAX)
             .read_json::<Option<u64>>()?;
         Ok(res)
     }
     /// condesnes everything in db
     pub fn condense_db_all(&self) -> Result<(), ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "condense_db_all");
-        let res = ureq::get(url).call()?.body_mut().read_json::<()>()?;
+        let res = ureq::get(url)
+            .call()?
+            .body_mut()
+            .with_config()
+            .limit(u64::MAX)
+            .read_json::<()>()?;
         Ok(res)
     }
     /// Sets a relationship between a fileid old and new tagid
     pub fn condense_tags(&self) -> Result<(), ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "condense_tags");
-        let res = ureq::get(url).call()?.body_mut().read_json::<()>()?;
+        let res = ureq::get(url)
+            .call()?
+            .body_mut()
+            .with_config()
+            .limit(u64::MAX)
+            .read_json::<()>()?;
         Ok(res)
     }
     /// Sets a relationship between a fileid old and new tagid
@@ -154,6 +225,8 @@ impl RustHydrusApiClient {
         let res = ureq::post(url)
             .send_json(&(old_tag_id, new_tag_id))?
             .body_mut()
+            .with_config()
+            .limit(u64::MAX)
             .read_json::<()>()?;
         Ok(res)
     }
@@ -170,6 +243,8 @@ impl RustHydrusApiClient {
         let res = ureq::post(url)
             .send_json(&(file_id, old_tag_id, new_tag_id))?
             .body_mut()
+            .with_config()
+            .limit(u64::MAX)
             .read_json::<()>()?;
         Ok(res)
     }
@@ -179,7 +254,12 @@ impl RustHydrusApiClient {
         jobs_obj: sharedtypes::DbJobsObj,
     ) -> Result<(), ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "jobs_update_db");
-        let res = ureq::post(url).send_json(&(jobs_obj))?.body_mut().read_json::<()>()?;
+        let res = ureq::post(url)
+            .send_json(&(jobs_obj))?
+            .body_mut()
+            .with_config()
+            .limit(u64::MAX)
+            .read_json::<()>()?;
         Ok(res)
     }
     /// Removes a parent selectivly
@@ -188,7 +268,12 @@ impl RustHydrusApiClient {
         parentobj: &sharedtypes::DbParentsObj,
     ) -> Result<(), ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "parents_selective_remove");
-        let res = ureq::post(url).send_json(&(parentobj))?.body_mut().read_json::<()>()?;
+        let res = ureq::post(url)
+            .send_json(&(parentobj))?
+            .body_mut()
+            .with_config()
+            .limit(u64::MAX)
+            .read_json::<()>()?;
         Ok(res)
     }
     /// Adds a parent into the db
@@ -197,7 +282,12 @@ impl RustHydrusApiClient {
         par: sharedtypes::DbParentsObj,
     ) -> Result<u64, ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "parents_add");
-        let res = ureq::post(url).send_json(&(par))?.body_mut().read_json::<u64>()?;
+        let res = ureq::post(url)
+            .send_json(&(par))?
+            .body_mut()
+            .with_config()
+            .limit(u64::MAX)
+            .read_json::<u64>()?;
         Ok(res)
     }
     /// Adds tag into db
@@ -211,6 +301,8 @@ impl RustHydrusApiClient {
         let res = ureq::post(url)
             .send_json(&(tags, namespace, id))?
             .body_mut()
+            .with_config()
+            .limit(u64::MAX)
             .read_json::<u64>()?;
         Ok(res)
     }
@@ -220,7 +312,12 @@ impl RustHydrusApiClient {
         table: &sharedtypes::LoadDBTable,
     ) -> Result<(), ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "load_table");
-        let res = ureq::post(url).send_json(&(table))?.body_mut().read_json::<()>()?;
+        let res = ureq::post(url)
+            .send_json(&(table))?
+            .body_mut()
+            .with_config()
+            .limit(u64::MAX)
+            .read_json::<()>()?;
         Ok(res)
     }
     ///
@@ -235,6 +332,8 @@ impl RustHydrusApiClient {
         let res = ureq::post(url)
             .send_json(&(name, pretty, num, param))?
             .body_mut()
+            .with_config()
+            .limit(u64::MAX)
             .read_json::<()>()?;
         Ok(res)
     }
@@ -244,6 +343,8 @@ impl RustHydrusApiClient {
         let res = ureq::post(url)
             .send_json(&(url_string))?
             .body_mut()
+            .with_config()
+            .limit(u64::MAX)
             .read_json::<()>()?;
         Ok(res)
     }
@@ -260,6 +361,8 @@ impl RustHydrusApiClient {
         let res = ureq::post(url)
             .send_json(&(search_string, limit_to, fts_or_count))?
             .body_mut()
+            .with_config()
+            .limit(u64::MAX)
             .read_json::<Vec<(sharedtypes::Tag, u64, u64)>>()?;
         Ok(res)
     }
@@ -276,25 +379,42 @@ impl RustHydrusApiClient {
         let res = ureq::post(url)
             .send_json(&(search_string, limit_to, fts_or_count))?
             .body_mut()
+            .with_config()
+            .limit(u64::MAX)
             .read_json::<Vec<(u64, u64)>>()?;
         Ok(res)
     }
     /// A test function to return 1
     pub fn test(&self) -> Result<u32, ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "test");
-        let res = ureq::get(url).call()?.body_mut().read_json::<u32>()?;
+        let res = ureq::get(url)
+            .call()?
+            .body_mut()
+            .with_config()
+            .limit(u64::MAX)
+            .read_json::<u32>()?;
         Ok(res)
     }
     /// Returns the db version number
     pub fn db_vers_get(&self) -> Result<u64, ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "db_vers_get");
-        let res = ureq::get(url).call()?.body_mut().read_json::<u64>()?;
+        let res = ureq::get(url)
+            .call()?
+            .body_mut()
+            .with_config()
+            .limit(u64::MAX)
+            .read_json::<u64>()?;
         Ok(res)
     }
     /// Returns a list of loaded tag ids
     pub fn tags_get_list_id(&self) -> Result<HashSet<u64>, ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "tags_get_list_id");
-        let res = ureq::get(url).call()?.body_mut().read_json::<HashSet<u64>>()?;
+        let res = ureq::get(url)
+            .call()?
+            .body_mut()
+            .with_config()
+            .limit(u64::MAX)
+            .read_json::<HashSet<u64>>()?;
         Ok(res)
     }
     /// returns file id's based on relationships with a tag
@@ -306,6 +426,8 @@ impl RustHydrusApiClient {
         let res = ureq::post(url)
             .send_json(&(tag))?
             .body_mut()
+            .with_config()
+            .limit(u64::MAX)
             .read_json::<HashSet<u64>>()?;
         Ok(res)
     }
@@ -320,6 +442,8 @@ impl RustHydrusApiClient {
         let res = ureq::post(url)
             .send_json(&(tag))?
             .body_mut()
+            .with_config()
+            .limit(u64::MAX)
             .read_json::<Option<u64>>()?;
         Ok(res)
     }
@@ -332,6 +456,8 @@ impl RustHydrusApiClient {
         let res = ureq::post(url)
             .send_json(&(file_id))?
             .body_mut()
+            .with_config()
+            .limit(u64::MAX)
             .read_json::<HashSet<u64>>()?;
         Ok(res)
     }
@@ -344,19 +470,31 @@ impl RustHydrusApiClient {
         let res = ureq::post(url)
             .send_json(&(name))?
             .body_mut()
+            .with_config()
+            .limit(u64::MAX)
             .read_json::<Option<sharedtypes::DbSettingObj>>()?;
         Ok(res)
     }
     /// Correct any weird paths existing inside of the db.
     pub fn check_db_paths(&self) -> Result<(), ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "check_db_paths");
-        let res = ureq::get(url).call()?.body_mut().read_json::<()>()?;
+        let res = ureq::get(url)
+            .call()?
+            .body_mut()
+            .with_config()
+            .limit(u64::MAX)
+            .read_json::<()>()?;
         Ok(res)
     }
     /// Backs up the DB file.
     pub fn backup_db(&self) -> Result<(), ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "backup_db");
-        let res = ureq::get(url).call()?.body_mut().read_json::<()>()?;
+        let res = ureq::get(url)
+            .call()?
+            .body_mut()
+            .with_config()
+            .limit(u64::MAX)
+            .read_json::<()>()?;
         Ok(res)
     }
     /** Returns a files bytes if the file exists. Note if called from intcom then this
@@ -369,6 +507,8 @@ impl RustHydrusApiClient {
         let res = ureq::post(url)
             .send_json(&(file_id))?
             .body_mut()
+            .with_config()
+            .limit(u64::MAX)
             .read_json::<Option<Vec<u8>>>()?;
         Ok(res)
     }
@@ -378,6 +518,8 @@ impl RustHydrusApiClient {
         let res = ureq::post(url)
             .send_json(&(file_id))?
             .body_mut()
+            .with_config()
+            .limit(u64::MAX)
             .read_json::<Option<String>>()?;
         Ok(res)
     }
@@ -387,6 +529,8 @@ impl RustHydrusApiClient {
         let res = ureq::post(url)
             .send_json(&(url_to_check))?
             .body_mut()
+            .with_config()
+            .limit(u64::MAX)
             .read_json::<bool>()?;
         Ok(res)
     }
@@ -398,13 +542,20 @@ impl RustHydrusApiClient {
         let res = ureq::get(url)
             .call()?
             .body_mut()
+            .with_config()
+            .limit(u64::MAX)
             .read_json::<HashSet<sharedtypes::DbJobsObj>>()?;
         Ok(res)
     }
     /// Returns all locations currently inside of the db.
     pub fn storage_get_all(&self) -> Result<Vec<String>, ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "storage_get_all");
-        let res = ureq::get(url).call()?.body_mut().read_json::<Vec<String>>()?;
+        let res = ureq::get(url)
+            .call()?
+            .body_mut()
+            .with_config()
+            .limit(u64::MAX)
+            .read_json::<Vec<String>>()?;
         Ok(res)
     }
     /** Handles the searching of the DB dynamically. Returns the file id's associated
@@ -423,6 +574,8 @@ impl RustHydrusApiClient {
         let res = ureq::post(url)
             .send_json(&(search, limit))?
             .body_mut()
+            .with_config()
+            .limit(u64::MAX)
             .read_json::<Option<Vec<u64>>>()?;
         Ok(res)
     }
@@ -434,6 +587,8 @@ impl RustHydrusApiClient {
         let res = ureq::get(url)
             .call()?
             .body_mut()
+            .with_config()
+            .limit(u64::MAX)
             .read_json::<HashMap<u64, sharedtypes::DbJobsObj>>()?;
         Ok(res)
     }
@@ -446,6 +601,8 @@ impl RustHydrusApiClient {
         let res = ureq::post(url)
             .send_json(&(id))?
             .body_mut()
+            .with_config()
+            .limit(u64::MAX)
             .read_json::<Option<sharedtypes::DbJobsObj>>()?;
         Ok(res)
     }
@@ -458,19 +615,31 @@ impl RustHydrusApiClient {
         let res = ureq::post(url)
             .send_json(&(uid))?
             .body_mut()
+            .with_config()
+            .limit(u64::MAX)
             .read_json::<Option<sharedtypes::DbTagNNS>>()?;
         Ok(res)
     }
     /// Vacuums database. cleans everything.
     pub fn vacuum(&self) -> Result<(), ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "vacuum");
-        let res = ureq::get(url).call()?.body_mut().read_json::<()>()?;
+        let res = ureq::get(url)
+            .call()?
+            .body_mut()
+            .with_config()
+            .limit(u64::MAX)
+            .read_json::<()>()?;
         Ok(res)
     }
     /// Analyzes the sqlite database. Shouldn't need this but will be nice for indexes
     pub fn analyze(&self) -> Result<(), ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "analyze");
-        let res = ureq::get(url).call()?.body_mut().read_json::<()>()?;
+        let res = ureq::get(url)
+            .call()?
+            .body_mut()
+            .with_config()
+            .limit(u64::MAX)
+            .read_json::<()>()?;
         Ok(res)
     }
     /// Convience function to get a list of files that are images
@@ -478,7 +647,12 @@ impl RustHydrusApiClient {
         let url = format!(
             "{}/{}/{}", self.base_url, "main", "extensions_images_get_fileid"
         );
-        let res = ureq::get(url).call()?.body_mut().read_json::<HashSet<u64>>()?;
+        let res = ureq::get(url)
+            .call()?
+            .body_mut()
+            .with_config()
+            .limit(u64::MAX)
+            .read_json::<HashSet<u64>>()?;
         Ok(res)
     }
     /// Convience function to get a list of files that are videos
@@ -486,7 +660,12 @@ impl RustHydrusApiClient {
         let url = format!(
             "{}/{}/{}", self.base_url, "main", "extensions_videos_get_fileid"
         );
-        let res = ureq::get(url).call()?.body_mut().read_json::<HashSet<u64>>()?;
+        let res = ureq::get(url)
+            .call()?
+            .body_mut()
+            .with_config()
+            .limit(u64::MAX)
+            .read_json::<HashSet<u64>>()?;
         Ok(res)
     }
     /// Gets an ID if a extension string exists
@@ -498,6 +677,8 @@ impl RustHydrusApiClient {
         let res = ureq::post(url)
             .send_json(&(ext_id))?
             .body_mut()
+            .with_config()
+            .limit(u64::MAX)
             .read_json::<Option<String>>()?;
         Ok(res)
     }
@@ -507,6 +688,8 @@ impl RustHydrusApiClient {
         let res = ureq::post(url)
             .send_json(&(hash))?
             .body_mut()
+            .with_config()
+            .limit(u64::MAX)
             .read_json::<Option<u64>>()?;
         Ok(res)
     }
@@ -519,13 +702,20 @@ impl RustHydrusApiClient {
         let res = ureq::post(url)
             .send_json(&(file_id))?
             .body_mut()
+            .with_config()
+            .limit(u64::MAX)
             .read_json::<Option<sharedtypes::DbFileStorage>>()?;
         Ok(res)
     }
     /// Returns all file id's loaded in db
     pub fn file_get_list_id(&self) -> Result<HashSet<u64>, ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "file_get_list_id");
-        let res = ureq::get(url).call()?.body_mut().read_json::<HashSet<u64>>()?;
+        let res = ureq::get(url)
+            .call()?
+            .body_mut()
+            .with_config()
+            .limit(u64::MAX)
+            .read_json::<HashSet<u64>>()?;
         Ok(res)
     }
     ///
@@ -536,6 +726,8 @@ impl RustHydrusApiClient {
         let res = ureq::get(url)
             .call()?
             .body_mut()
+            .with_config()
+            .limit(u64::MAX)
             .read_json::<HashMap<u64, sharedtypes::DbFileStorage>>()?;
         Ok(res)
     }
@@ -549,6 +741,8 @@ impl RustHydrusApiClient {
         let res = ureq::post(url)
             .send_json(&(tag, namespace))?
             .body_mut()
+            .with_config()
+            .limit(u64::MAX)
             .read_json::<Option<u64>>()?;
         Ok(res)
     }
@@ -561,6 +755,8 @@ impl RustHydrusApiClient {
         let res = ureq::post(url)
             .send_json(&(tagobj))?
             .body_mut()
+            .with_config()
+            .limit(u64::MAX)
             .read_json::<Option<u64>>()?;
         Ok(res)
     }
@@ -570,6 +766,8 @@ impl RustHydrusApiClient {
         let res = ureq::post(url)
             .send_json(&(namespace))?
             .body_mut()
+            .with_config()
+            .limit(u64::MAX)
             .read_json::<Option<u64>>()?;
         Ok(res)
     }
@@ -582,6 +780,8 @@ impl RustHydrusApiClient {
         let res = ureq::post(url)
             .send_json(&(ns_id))?
             .body_mut()
+            .with_config()
+            .limit(u64::MAX)
             .read_json::<Option<sharedtypes::DbNamespaceObj>>()?;
         Ok(res)
     }
@@ -591,6 +791,8 @@ impl RustHydrusApiClient {
         let res = ureq::post(url)
             .send_json(&(id))?
             .body_mut()
+            .with_config()
+            .limit(u64::MAX)
             .read_json::<HashSet<u64>>()?;
         Ok(res)
     }
@@ -604,13 +806,20 @@ impl RustHydrusApiClient {
         let res = ureq::post(url)
             .send_json(&(namespace_id, tag_id))?
             .body_mut()
+            .with_config()
+            .limit(u64::MAX)
             .read_json::<bool>()?;
         Ok(res)
     }
     /// Retuns namespace id's
     pub fn namespace_keys(&self) -> Result<Vec<u64>, ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "namespace_keys");
-        let res = ureq::get(url).call()?.body_mut().read_json::<Vec<u64>>()?;
+        let res = ureq::get(url)
+            .call()?
+            .body_mut()
+            .with_config()
+            .limit(u64::MAX)
+            .read_json::<Vec<u64>>()?;
         Ok(res)
     }
     /// Gets a parent id if they exist
@@ -622,6 +831,8 @@ impl RustHydrusApiClient {
         let res = ureq::post(url)
             .send_json(&(parent))?
             .body_mut()
+            .with_config()
+            .limit(u64::MAX)
             .read_json::<Option<u64>>()?;
         Ok(res)
     }
@@ -631,6 +842,8 @@ impl RustHydrusApiClient {
         let res = ureq::post(url)
             .send_json(&(relid))?
             .body_mut()
+            .with_config()
+            .limit(u64::MAX)
             .read_json::<HashSet<u64>>()?;
         Ok(res)
     }
@@ -640,19 +853,31 @@ impl RustHydrusApiClient {
         let res = ureq::post(url)
             .send_json(&(tagid))?
             .body_mut()
+            .with_config()
+            .limit(u64::MAX)
             .read_json::<HashSet<u64>>()?;
         Ok(res)
     }
     /// Returns the location of the file storage path. Helper function
     pub fn location_get(&self) -> Result<String, ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "location_get");
-        let res = ureq::get(url).call()?.body_mut().read_json::<String>()?;
+        let res = ureq::get(url)
+            .call()?
+            .body_mut()
+            .with_config()
+            .limit(u64::MAX)
+            .read_json::<String>()?;
         Ok(res)
     }
     /// commits an exclusive write transaction
     pub fn transaction_flush(&self) -> Result<(), ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "transaction_flush");
-        let res = ureq::get(url).call()?.body_mut().read_json::<()>()?;
+        let res = ureq::get(url)
+            .call()?
+            .body_mut()
+            .with_config()
+            .limit(u64::MAX)
+            .read_json::<()>()?;
         Ok(res)
     }
     ///
@@ -665,6 +890,8 @@ impl RustHydrusApiClient {
         let res = ureq::post(url)
             .send_json(&(name, description))?
             .body_mut()
+            .with_config()
+            .limit(u64::MAX)
             .read_json::<u64>()?;
         Ok(res)
     }
@@ -674,7 +901,12 @@ impl RustHydrusApiClient {
         ns: sharedtypes::DbNamespaceObj,
     ) -> Result<u64, ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "namespace_add_id_exists");
-        let res = ureq::post(url).send_json(&(ns))?.body_mut().read_json::<u64>()?;
+        let res = ureq::post(url)
+            .send_json(&(ns))?
+            .body_mut()
+            .with_config()
+            .limit(u64::MAX)
+            .read_json::<u64>()?;
         Ok(res)
     }
     /// Gets a default namespace id if it doesn't exist
@@ -682,7 +914,12 @@ impl RustHydrusApiClient {
         let url = format!(
             "{}/{}/{}", self.base_url, "main", "create_default_source_url_ns_id"
         );
-        let res = ureq::get(url).call()?.body_mut().read_json::<u64>()?;
+        let res = ureq::get(url)
+            .call()?
+            .body_mut()
+            .with_config()
+            .limit(u64::MAX)
+            .read_json::<u64>()?;
         Ok(res)
     }
 }

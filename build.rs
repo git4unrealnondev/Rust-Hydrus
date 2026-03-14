@@ -91,7 +91,7 @@ fn generate_client_code(api_file: &str) -> io::Result<String> {
                                 let url = format!("{}/{}/{}", self.base_url, #base_path, #route_name);
                                 let res = ureq::post(url)
                                     .send_json(&(#(#arg_names),*))?
-                                    .body_mut()
+                                    .body_mut().with_config().limit(u64::MAX)
                                     .read_json::<#ret_type>()?;
                                 Ok(res)
                             }
@@ -104,7 +104,7 @@ fn generate_client_code(api_file: &str) -> io::Result<String> {
                                 let url = format!("{}/{}/{}", self.base_url, #base_path, #route_name);
                                 let res = ureq::get(url)
                                     .call()?
-                                    .body_mut()
+                                    .body_mut().with_config().limit(u64::MAX)
                                     .read_json::<#ret_type>()?;
                                 Ok(res)
                             }

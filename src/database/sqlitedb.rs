@@ -2605,6 +2605,9 @@ WHERE count BETWEEN ? AND ?",
 
         let sql = "DELETE FROM Relationship WHERE fileid = ? AND tagid = ?";
         tn.execute(sql, params![file_id, tag_id]).unwrap();
+        if let Some(ref roaring) = self.relationship_roaring_storage {
+            roaring.write().remove_roaring(tn, tag_id, file_id);
+        }
         //tn.execute(sql, params![file_id, tag_id]).unwrap();
         match greq {
             GreqOrEq::EqualTo => {

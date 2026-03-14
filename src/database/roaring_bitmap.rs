@@ -44,6 +44,34 @@ impl RelationshipStorage {
         }
     }
 
+    ///
+    /// Removes a relationship
+    ///
+    pub fn remove_roaring(&mut self, tn: &Transaction, tag_id: &u64, file_id: &u64) {
+        match self.internal_cache {
+            InternalCacheType::Full => {
+                if let Some(tagid_bitmap) = self.file_id.get_mut(file_id) {
+                    tagid_bitmap.remove(*tag_id as u32);
+                }
+                if let Some(fileid_bitmap) = self.tag_id.get_mut(tag_id) {
+                    fileid_bitmap.remove(*file_id as u32);
+                }
+            }
+            InternalCacheType::Table => {}
+        }
+
+        if let Some(mut tag_bitmap) = self.relationship_cache_fileid_get(tn, file_id) {
+            tag_bitmap.remove(*tag_id as u32);
+
+            self.relationship_cache_add_fileid_sql(tn, file_id, &tag_bitmap);
+        }
+        if let Some(mut file_bitmap) = self.relationship_cache_tagid_get(tn, tag_id) {
+            file_bitmap.remove(*file_id as u32);
+
+            self.relationship_cache_add_tagid_sql(tn, tag_id, &file_bitmap);
+        }
+    }
+
     pub fn recache_roaring(&mut self, tn: &Transaction) -> Result<(), Error> {
         self.file_id.clear();
         self.tag_id.clear();
@@ -104,7 +132,7 @@ impl RelationshipStorage {
                     self.relationship_cache_add_tagid_sql(tn, &prev_tagid, &bitmap);
                     processed += 1;
                     if processed % 10_000 == 0 {
-                        println!("Processed {} fileids...", processed);
+                        println!("Processed {} tagids...", processed);
                     }
                 }
                 bitmap.clear();
