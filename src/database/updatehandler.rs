@@ -1161,7 +1161,7 @@ WHERE p.tag_id != p.relate_tag_id;",
             self.relationship_cache_v1(&tn);
 
             if let Some(ref roaring) = self.relationship_roaring_storage {
-                roaring.write().recache_roaring(&tn);
+                roaring.write().recache_roaring(&tn).unwrap();
             }
 
             tn.execute("DROP TABLE IF EXISTS Relationship_Popular", [])
