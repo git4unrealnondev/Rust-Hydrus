@@ -76,30 +76,31 @@ impl RelationshipStorage {
         self.file_id.clear();
         self.tag_id.clear();
 
-        logging::info_log(format!(
-            "Starting to Recache everything inside of roaring cache"
-        ));
+        logging::info_log("Starting to Recache everything inside of roaring cache".to_string());
 
+        let mut processed: u64 = 0;
         tn.execute("DELETE FROM RelationshipRoaringTagid", [])
             .unwrap();
         tn.execute("DELETE FROM RelationshipRoaringFileid", [])
             .unwrap();
-        let mut processed: u64 = 0;
         let mut stmt = tn.prepare("SELECT CAST(fileid AS INTEGER), CAST(tagid AS INTEGER) FROM Relationship ORDER BY fileid")?;
-        let mut rows =
-            stmt.query_map([], |row| Ok((row.get::<_, u64>(0).unwrap(), row.get::<_, u64>(1).unwrap()))).unwrap();
+        let rows = stmt
+            .query_map([], |row| {
+                Ok((row.get::<_, u64>(0).unwrap(), row.get::<_, u64>(1).unwrap()))
+            })
+            .unwrap();
 
         let mut current_fileid: Option<u64> = None;
         let mut bitmap = RoaringBitmap::new();
 
-        while let Some(row) = rows.next() {
+        for row in rows {
             let (fileid, tagid) = row.unwrap();
 
             if Some(fileid) != current_fileid {
                 if let Some(prev_fileid) = current_fileid {
                     self.relationship_cache_add_fileid_sql(tn, &prev_fileid, &bitmap);
                     processed += 1;
-                    if processed % 10_000 == 0 {
+                    if processed.is_multiple_of(10_000) {
                         println!("Processed {} fileids...", processed);
                     }
                 }
@@ -116,22 +117,21 @@ impl RelationshipStorage {
         }
 
         let mut stmt = tn.prepare("SELECT CAST(fileid AS INTEGER), CAST(tagid AS INTEGER) FROM Relationship ORDER BY tagid")?;
-        let mut rows =
-            stmt.query_map([], |row| Ok((row.get::<_, u64>(0)?, row.get::<_, u64>(1)?)))?;
+        let rows = stmt.query_map([], |row| Ok((row.get::<_, u64>(0)?, row.get::<_, u64>(1)?)))?;
 
         processed = 0;
 
         let mut current_tagid: Option<u64> = None;
         let mut bitmap = RoaringBitmap::new();
 
-        while let Some(row) = rows.next() {
-            let (tagid, fileid) = row.unwrap();
+        for row in rows {
+            let (fileid, tagid) = row.unwrap();
 
             if Some(tagid) != current_tagid {
                 if let Some(prev_tagid) = current_tagid {
                     self.relationship_cache_add_tagid_sql(tn, &prev_tagid, &bitmap);
                     processed += 1;
-                    if processed % 10_000 == 0 {
+                    if processed.is_multiple_of(10_000) {
                         println!("Processed {} tagids...", processed);
                     }
                 }
