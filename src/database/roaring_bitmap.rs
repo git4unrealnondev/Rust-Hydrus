@@ -85,15 +85,15 @@ impl RelationshipStorage {
         tn.execute("DELETE FROM RelationshipRoaringFileid", [])
             .unwrap();
         let mut processed: u64 = 0;
-        let mut stmt = tn.prepare("SELECT fileid, tagid FROM Relationship ORDER BY fileid")?;
+        let mut stmt = tn.prepare("SELECT CAST(fileid AS INTEGER), CAST(tagid AS INTEGER) FROM Relationship ORDER BY fileid")?;
         let mut rows =
-            stmt.query_map([], |row| Ok((row.get::<_, u64>(0)?, row.get::<_, u32>(1)?)))?;
+            stmt.query_map([], |row| Ok((row.get::<_, u64>(0).unwrap(), row.get::<_, u64>(1).unwrap()))).unwrap();
 
         let mut current_fileid: Option<u64> = None;
         let mut bitmap = RoaringBitmap::new();
 
         while let Some(row) = rows.next() {
-            let (fileid, tagid) = row?;
+            let (fileid, tagid) = row.unwrap();
 
             if Some(fileid) != current_fileid {
                 if let Some(prev_fileid) = current_fileid {
@@ -107,7 +107,7 @@ impl RelationshipStorage {
                 current_fileid = Some(fileid);
             }
 
-            bitmap.insert(tagid);
+            bitmap.insert(tagid.try_into().unwrap());
         }
 
         // Flush last fileid
