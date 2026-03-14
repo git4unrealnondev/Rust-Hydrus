@@ -8,6 +8,7 @@ use nohash::IntMap;
 use r2d2::PooledConnection;
 use r2d2_sqlite::SqliteConnectionManager;
 use roaring::bitmap::RoaringBitmap;
+use rusqlite::Error;
 use rusqlite::Transaction;
 use rusqlite::params;
 use std::io::Cursor;
@@ -43,7 +44,7 @@ impl RelationshipStorage {
         }
     }
 
-    pub fn recache_roaring(&mut self, tn: &Transaction) {
+    pub fn recache_roaring(&mut self, tn: &Transaction) -> Result<(), Error> {
         self.file_id.clear();
         self.tag_id.clear();
 
@@ -56,26 +57,60 @@ impl RelationshipStorage {
         tn.execute("DELETE FROM RelationshipRoaringFileid", [])
             .unwrap();
 
-        let temp = tn.prepare("SELECT fileid, tagid FROM Relationship");
-        if let Ok(mut con) = temp {
-            let relationship = con
-                .query_map([], |row| {
-                    Ok(sharedtypes::DbRelationshipObj {
-                        fileid: row.get(0).unwrap(),
-                        tagid: row.get(1).unwrap(),
-                    })
-                })
-                .unwrap();
-            for each in relationship {
-                match each {
-                    Ok(res) => {
-                        self.relationship_roaring_add(tn, res.fileid, res.tagid);
-                    }
+        let mut stmt = tn.prepare("SELECT fileid, tagid FROM Relationship ORDER BY fileid")?;
+let mut rows = stmt.query_map([], |row| Ok((row.get::<_, u64>(0)?, row.get::<_, u32>(1)?)))?;
 
-                    Err(err) => {}
-                }
-            }
+let mut current_fileid: Option<u64> = None;
+let mut bitmap = RoaringBitmap::new();
+
+while let Some(row) = rows.next() {
+    let (fileid, tagid) = row?;
+
+    if Some(fileid) != current_fileid {
+        if let Some(prev_fileid) = current_fileid {
+            self.relationship_cache_add_fileid_sql(tn, &prev_fileid, &bitmap);
         }
+        bitmap.clear();
+        current_fileid = Some(fileid);
+    }
+
+    bitmap.insert(tagid);
+}
+
+// Flush last fileid
+if let Some(fileid) = current_fileid {
+    self.relationship_cache_add_fileid_sql(tn, &fileid, &bitmap);
+}   
+
+
+let mut stmt = tn.prepare("SELECT tagid, fileid FROM Relationship ORDER BY tagid")?;
+let mut rows = stmt.query_map([], |row| Ok((row.get::<_, u64>(0)?, row.get::<_, u64>(1)?)))?;
+
+let mut current_tagid: Option<u64> = None;
+let mut bitmap = RoaringBitmap::new();
+
+while let Some(row) = rows.next() {
+    let (tagid, fileid) = row.unwrap();
+
+    if Some(tagid) != current_tagid {
+        if let Some(prev_tagid) = current_tagid {
+            self.relationship_cache_add_tagid_sql(tn, &prev_tagid, &bitmap);
+        }
+        bitmap.clear();
+        current_tagid = Some(tagid);
+    }
+
+    bitmap.insert(fileid as u32);
+}
+
+// Flush last tagid
+if let Some(tagid) = current_tagid {
+    self.relationship_cache_add_tagid_sql(tn, &tagid, &bitmap);
+}
+
+Ok(())
+
+
         /*
         // Loads int sqlite
         let mut temp = tn

@@ -116,7 +116,7 @@ impl Main {
                 first_time_load_flag = Path::new(&file_path).exists();
                 let memdb = Arc::new(RwLock::new(NewinMemDB::new()));
                 let manager = SqliteConnectionManager::memory();
-                let pool = r2d2::Builder::new().max_size(200).build(manager).unwrap();
+                let pool = r2d2::Builder::new().max_size(10).build(manager).unwrap();
                 let write_conn = Arc::new(Mutex::new({
                     let mut pool = pool.get().unwrap();
                     pool.execute_batch(
@@ -159,6 +159,7 @@ PRAGMA synchronous = FULL;
 PRAGMA busy_timeout = 20000;
 PRAGMA wal_autocheckpoint = 20000;
 PRAGMA mmap_size = 4294967296; -- 1GB
+PRAGMA cache_size = -1000000;
 ",
                     )?;
 
