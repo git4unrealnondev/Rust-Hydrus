@@ -115,7 +115,7 @@ impl RelationshipStorage {
             self.relationship_cache_add_fileid_sql(tn, &fileid, &bitmap);
         }
 
-        let mut stmt = tn.prepare("SELECT tagid, fileid FROM Relationship ORDER BY tagid")?;
+        let mut stmt = tn.prepare("SELECT CAST(fileid AS INTEGER), CAST(tagid AS INTEGER) FROM Relationship ORDER BY tagid")?;
         let mut rows =
             stmt.query_map([], |row| Ok((row.get::<_, u64>(0)?, row.get::<_, u64>(1)?)))?;
 
@@ -139,7 +139,7 @@ impl RelationshipStorage {
                 current_tagid = Some(tagid);
             }
 
-            bitmap.insert(fileid as u32);
+            bitmap.insert(fileid.try_into().unwrap());
         }
 
         // Flush last tagid
