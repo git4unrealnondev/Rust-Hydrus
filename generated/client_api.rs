@@ -193,6 +193,22 @@ impl RustHydrusApiClient {
             .read_json::<Option<u64>>()?;
         Ok(res)
     }
+    /// Adds multiple tags to the db. commits on finish
+    pub fn tag_add_tagobject_multiple(
+        &self,
+        tag_list: &HashSet<sharedtypes::TagObject>,
+    ) -> Result<(), ureq::Error> {
+        let url = format!(
+            "{}/{}/{}", self.base_url, "main", "tag_add_tagobject_multiple"
+        );
+        let res = ureq::post(url)
+            .send_json(&(tag_list))?
+            .body_mut()
+            .with_config()
+            .limit(u64::MAX)
+            .read_json::<()>()?;
+        Ok(res)
+    }
     /// condesnes everything in db
     pub fn condense_db_all(&self) -> Result<(), ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "condense_db_all");

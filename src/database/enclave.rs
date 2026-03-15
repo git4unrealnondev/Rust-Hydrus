@@ -217,7 +217,11 @@ impl Main {
         file: &mut sharedtypes::FileObject,
     ) -> u64 {
         let fileid;
-        let download_loc;
+        let download_loc = std::path::Path::new(&download_location)
+            .canonicalize()
+            .unwrap(); // Gives file extension
+        let file_ext = FileFormat::from_bytes(bytes).extension().to_string();
+
         // error checking. We should have all dirs needed but hey if we're missing
         std::fs::create_dir_all(download_location).unwrap();
         {
@@ -225,21 +229,13 @@ impl Main {
             let tn = write_conn.transaction().unwrap();
 
             let storage_id = self.storage_put_internal(&tn, download_location);
-
-            // Gives file extension
-            let file_ext = FileFormat::from_bytes(bytes).extension().to_string();
-
             let ext_id = self.extension_put_string_internal(&tn, &file_ext);
-
-            download_loc = std::path::Path::new(&download_location)
-                .canonicalize()
-                .unwrap();
-
             let filestorage = sharedtypes::DbFileStorage::NoIdExist(sharedtypes::DbFileObjNoId {
                 hash: sha512hash.to_string(),
                 ext_id,
                 storage_id,
             });
+
             fileid = self.file_add_internal(&tn, &filestorage);
             if let Some(source_url) = source_url {
                 let tagid = self.tag_add_internal(&tn, source_url, source_url_ns_id, None);

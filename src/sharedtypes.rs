@@ -503,6 +503,7 @@ pub struct ScraperFileReturn {
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct DbFileObj {
     pub id: u64,
+    // SHA512SUM
     pub hash: String,
     pub ext_id: u64,
     pub storage_id: u64,
@@ -783,6 +784,7 @@ pub enum FileSource {
 #[derive(Debug, Eq, Hash, PartialEq, bincode::Encode, bincode::Decode, Clone, Default)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct FileObject {
+    pub file_info: Option<DbFileObj>,
     pub source: Option<FileSource>,
     // Hash of file
     pub hash: HashesSupported,

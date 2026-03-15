@@ -4,7 +4,6 @@ use crate::RwLock;
 use crate::database::inmemdbnew::NewinMemDB;
 use crate::file;
 use crate::globalload::GlobalLoad;
-use crate::helpers;
 use crate::helpers::check_url;
 use crate::logging;
 use crate::roaring_bitmap::InternalCacheType;
@@ -25,7 +24,6 @@ use std::collections::HashSet;
 use std::net::SocketAddr;
 use std::panic;
 use std::path::Path;
-use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
@@ -164,7 +162,7 @@ PRAGMA cache_size = -1000000;
                     )?;
 
                     // Enable SQL tracing
-                    //conn.trace(Some(|sql| {println!("[SQL TRACE] {}", sql);}));
+                    conn.trace(Some(|sql| {logging::info_log(format!("[SQL TRACE] {}", sql));}));
 
                     Ok(())
                 });
@@ -1282,9 +1280,8 @@ PRAGMA journal_mode = WAL;
     /// Gets an ID if a extension string exists
     ///
     pub fn extension_get_id(&self, ext: &String) -> Option<u64> {
-        let mut db = self.get_database_connection();
-        let tn = db.transaction().unwrap();
-        self.extension_get_id_sql(&tn, ext)
+        let conn = self.get_database_connection();
+        self.extension_get_id_sql(&conn, ext)
     }
 
     /// Puts extension into mem cache

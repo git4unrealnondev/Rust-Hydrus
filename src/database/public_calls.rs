@@ -7,16 +7,13 @@ use crate::helpers::getfinpath;
 use crate::logging;
 use crate::roaring_bitmap::SearchQuery;
 use crate::sharedtypes;
-use log::{error, info};
 use remove_empty_subdirs::remove_empty_subdirs;
 pub use rusqlite::types::ToSql;
 pub use rusqlite::{Connection, Result, Transaction, params, types::Null};
-use std::cmp::Reverse;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::path::Path;
 use std::path::PathBuf;
-use std::time::Instant;
 use web_api::web_api;
 
 #[web_api]
@@ -31,9 +28,9 @@ impl Main {
                     Path::new(param).to_path_buf()
                 } else {
                     let mut write_conn = self.write_conn.lock();
-                    let mut tn = write_conn.transaction().unwrap();
+                    let tn = write_conn.transaction().unwrap();
                     self.setting_add_internal(
-                        &mut tn,
+                        &tn,
                         "scraperloadloc".to_string(),
                         Some("Where scrapers get loaded into.".to_string()),
                         None,
@@ -45,9 +42,9 @@ impl Main {
             }
             None => {
                 let mut write_conn = self.write_conn.lock();
-                let mut tn = write_conn.transaction().unwrap();
+                let tn = write_conn.transaction().unwrap();
                 self.setting_add_internal(
-                    &mut tn,
+                    &tn,
                     "scraperloadloc".to_string(),
                     Some("Where scrapers get loaded into.".to_string()),
                     None,
@@ -69,9 +66,9 @@ impl Main {
                     Path::new(param).to_path_buf()
                 } else {
                     let mut write_conn = self.write_conn.lock();
-                    let mut tn = write_conn.transaction().unwrap();
+                    let tn = write_conn.transaction().unwrap();
                     self.setting_add_internal(
-                        &mut tn,
+                        &tn,
                         "pluginloadloc".to_string(),
                         Some("Where plugins get loaded into.".to_string()),
                         None,
@@ -83,9 +80,9 @@ impl Main {
             }
             None => {
                 let mut write_conn = self.write_conn.lock();
-                let mut tn = write_conn.transaction().unwrap();
+                let tn = write_conn.transaction().unwrap();
                 self.setting_add_internal(
-                    &mut tn,
+                    &tn,
                     "pluginloadloc".to_string(),
                     Some("Where plugins get loaded into.".to_string()),
                     None,
@@ -202,6 +199,21 @@ impl Main {
         }
         out
     }
+
+    ///
+    /// Adds multiple tags to the db. commits on finish
+    ///
+    pub fn tag_add_tagobject_multiple(&self, tag_list: &HashSet<sharedtypes::TagObject>) {
+        let mut write_conn = self.write_conn.lock();
+        {
+            let tn = write_conn.transaction().unwrap();
+            for tag in tag_list.iter() {
+                self.tag_add_tagobject_internal(&tn, tag);
+            }
+            tn.commit().unwrap();
+        }
+    }
+
     /// condesnes everything in db
     pub fn condense_db_all(&self) {
         let mut write_conn = self.write_conn.lock();
@@ -797,7 +809,6 @@ impl Main {
         limit: Option<u64>,
     ) -> Option<Vec<u64>> {
         use rusqlite::params_from_iter;
-        use std::cmp::Reverse;
         use std::time::Instant;
 
         let start_time = Instant::now();

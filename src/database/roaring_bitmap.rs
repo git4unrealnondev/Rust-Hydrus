@@ -433,61 +433,59 @@ impl RelationshipStorage {
         }
         self.relationship_cache_add_sql(tn, &file_id, &tag_id);
     }
-    
 
-
-fn internal_search_item(
-    &self,
-    tag_id_list: &[u64],
-    searchtype: sharedtypes::DbSearchTypeEnum,
-) -> Option<RoaringBitmap> {
-    if tag_id_list.is_empty() {
-        return None;
-    }
-
-    let conn = self.db.read().get_database_connection();
-
-    // iterator over all non-empty bitmaps
-    let mut bitmaps_iter = tag_id_list
-        .iter()
-        .filter_map(|tag| self.relationship_cache_tagid_get(&conn, tag));
-
-    match searchtype {
-        sharedtypes::DbSearchTypeEnum::Or => {
-            // fold all into one bitmap
-            let result = bitmaps_iter.fold(RoaringBitmap::new(), |mut acc, b| {
-                acc |= b; // in-place union
-                acc
-            });
-
-            if result.is_empty() {
-                None
-            } else {
-                Some(result)
-            }
+    fn internal_search_item(
+        &self,
+        tag_id_list: &[u64],
+        searchtype: sharedtypes::DbSearchTypeEnum,
+    ) -> Option<RoaringBitmap> {
+        if tag_id_list.is_empty() {
+            return None;
         }
 
-        sharedtypes::DbSearchTypeEnum::And => {
-            // for AND, we need at least one bitmap to start
-            let first = bitmaps_iter.next()?;
-            // sort not needed here; we could optionally do a single pass if desired
-            let result = bitmaps_iter.fold(first, |mut acc, b| {
-                if acc.is_empty() {
-                    acc // short-circuit
-                } else {
-                    acc &= b; // in-place intersection
+        let conn = self.db.read().get_database_connection();
+
+        // iterator over all non-empty bitmaps
+        let mut bitmaps_iter = tag_id_list
+            .iter()
+            .filter_map(|tag| self.relationship_cache_tagid_get(&conn, tag));
+
+        match searchtype {
+            sharedtypes::DbSearchTypeEnum::Or => {
+                // fold all into one bitmap
+                let result = bitmaps_iter.fold(RoaringBitmap::new(), |mut acc, b| {
+                    acc |= b; // in-place union
                     acc
-                }
-            });
+                });
 
-            if result.is_empty() {
-                None
-            } else {
-                Some(result)
+                if result.is_empty() {
+                    None
+                } else {
+                    Some(result)
+                }
+            }
+
+            sharedtypes::DbSearchTypeEnum::And => {
+                // for AND, we need at least one bitmap to start
+                let first = bitmaps_iter.next()?;
+                // sort not needed here; we could optionally do a single pass if desired
+                let result = bitmaps_iter.fold(first, |mut acc, b| {
+                    if acc.is_empty() {
+                        acc // short-circuit
+                    } else {
+                        acc &= b; // in-place intersection
+                        acc
+                    }
+                });
+
+                if result.is_empty() {
+                    None
+                } else {
+                    Some(result)
+                }
             }
         }
     }
-}
     /*fn internal_search_item(
         &self,
         tag_id_list: &[u64],
@@ -594,6 +592,11 @@ impl<'a> SearchQuery<'a> {
 
         self
     }
+    pub fn or_search(mut self, tag_ids: &'a [u64]) -> Self {
+        self.and_search = Some((sharedtypes::DbSearchTypeEnum::Or, tag_ids));
+
+        self
+    }
 
     /// Finalizes the search returns applicable fileids
     pub fn build(self) -> Vec<u64> {
@@ -633,24 +636,21 @@ mod tests {
             dbg!(&storage.file_id, &storage.tag_id);
 
             assert_eq!(
-                storage.relationship_search_fileid_roaring_and(&[]),
+                SearchQuery::new(&storage).and_search(&[]).build(),
                 Vec::<u64>::new()
             );
             assert_eq!(
-                storage.relationship_search_fileid_roaring_and(&[9999]),
+                SearchQuery::new(&storage).and_search(&[9999]).build(),
                 Vec::<u64>::new()
             );
+            assert_eq!(SearchQuery::new(&storage).and_search(&[2]).build(), vec![1]);
             assert_eq!(
-                storage.relationship_search_fileid_roaring_and(&[2]),
+                SearchQuery::new(&storage).and_search(&[2, 1]).build(),
                 vec![1]
             );
-            assert_eq!(
-                storage.relationship_search_fileid_roaring_and(&[2, 1]),
-                vec![1]
-            );
-            assert_eq!(storage.relationship_search_fileid_roaring_or(&[2]), vec![1]);
+            assert_eq!(SearchQuery::new(&storage).or_search(&[2]).build(), vec![1]);
 
-            assert_eq!(storage.relationship_search_tagid_roaring(&1), &[1]);
+            assert_eq!(storage.relationship_search_tagid_roaring(&1), &[1, 2]);
             assert_eq!(storage.relationship_search_tagid_roaring(&2), &[1]);
         }
     }

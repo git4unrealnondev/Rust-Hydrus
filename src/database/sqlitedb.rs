@@ -1776,11 +1776,10 @@ RETURNING id;
     ///
     /// Returns if an extension exists gey by ext string
     ///
-    pub(in crate::database) fn extension_get_id_sql(
-        &self,
-        tn: &Transaction,
-        ext: &str,
-    ) -> Option<u64> {
+    pub(in crate::database) fn extension_get_id_sql<C>(&self, tn: &C, ext: &str) -> Option<u64>
+    where
+        C: Deref<Target = Connection>,
+    {
         wait_until_sqlite_ok!(tn.query_row(
             "SELECT id FROM FileExtensions WHERE extension = ?",
             params![ext],
@@ -2005,18 +2004,18 @@ RETURNING id;
         self.drop_trigger_manage_relationship_count(tn);
 
         if popular {
-            let sql = "INSERT OR IGNORE INTO Relationship_Popular (fileid, tagid) SELECT fileid, tagid FROM Relationship WHERE tagid = ?";
+           // let sql = "INSERT OR IGNORE INTO Relationship_Popular (fileid, tagid) SELECT fileid, tagid FROM Relationship WHERE tagid = ?";
 
-            tn.execute(sql, params![id]).unwrap();
+           // tn.execute(sql, params![id]).unwrap();
             let sql = "INSERT OR IGNORE INTO Tags_Popular_fts (rowid, name, namespace) SELECT rowid, name, namespace FROM Tags_fts WHERE rowid = ?";
 
             tn.execute(sql, params![id]).unwrap();
         }
 
         if !popular {
-            let sql = "DELETE FROM Relationship_Popular WHERE tagid = ?";
+          //  let sql = "DELETE FROM Relationship_Popular WHERE tagid = ?";
 
-            tn.execute(sql, params![id]).unwrap();
+          //  tn.execute(sql, params![id]).unwrap();
             let sql = "DELETE FROM Tags_Popular_fts WHERE rowid = ?";
             tn.execute(sql, params![id]).unwrap();
         }
@@ -2461,17 +2460,14 @@ WHERE count BETWEEN ? AND ?",
         ))
         .unwrap();
     }
-
     ///
     /// Returns id if a namespace exists
     ///
-    pub(in crate::database) fn namespace_get_id_sql<C>(
+    pub(in crate::database) fn namespace_get_id_sql(
         &self,
-        conn: &C,
+        conn: &Connection,
         namespace: &str,
     ) -> Option<u64>
-    where
-        C: Deref<Target = Connection>,
     {
         wait_until_sqlite_ok!(conn.query_row(
             "SELECT id FROM Namespace WHERE name = ?",

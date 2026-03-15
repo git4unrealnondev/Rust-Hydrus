@@ -490,9 +490,7 @@ impl Worker {
                                         let pool = ThreadPool::default();
 
                                         // Adds tags into db
-                                        for tag in out_st.tags.iter() {
-                                            database.tag_add_tagobject( tag);
-                                        }
+                                        database.tag_add_tagobject_multiple(&out_st.tags);
 
                                         // Parses files from urls
                                         for mut file in out_st.files.clone() {

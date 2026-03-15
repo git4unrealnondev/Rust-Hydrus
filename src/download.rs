@@ -32,11 +32,8 @@ extern crate reqwest;
 use ratelimit::Ratelimiter;
 use std::fs::File;
 
-// use std::sync::{Arc, Mutex};
-use std::sync::Arc;
-//use std::sync::Mutex;
-use crate::Mutex;
 use crate::RwLock;
+use std::sync::Arc;
 use std::thread;
 
 /// Makes ratelimiter and example
@@ -611,7 +608,7 @@ pub fn process_bytes(
         }
     }
 
-    logging::info_log(format!("Finished enclave_determine_processing"));
+    logging::info_log("Finished enclave_determine_processing".to_string());
     // Flushes to disk before we run the plugins on_download hook.
 
     // If the plugin manager is None then don't do anything plugin wise. Useful for if

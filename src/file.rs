@@ -155,6 +155,7 @@ pub fn parse_file(
                         hash: sharedtypes::HashesSupported::Sha512(sha512hash.clone()),
                         tag_list: tag_list.clone(),
                         skip_if: vec![sharedtypes::SkipIf::FileHash(sha512hash.clone())],
+                        ..Default::default()
                     },
                     &bytes,
                     &sha512hash,
@@ -200,6 +201,7 @@ pub fn parse_file(
                             hash: sharedtypes::HashesSupported::Sha512(sub_sha512hash.clone()),
                             tag_list: tags.clone(),
                             skip_if: vec![sharedtypes::SkipIf::FileHash(sub_sha512hash.clone())],
+                            ..Default::default()
                         },
                         &file_bytes,
                         &sub_sha512hash,
@@ -270,10 +272,10 @@ pub fn parse_sidecar(file_location: &Path, sidecar_location: &Path, database: Ma
                 }
                 database.enclave_run_process(
                     &mut sharedtypes::FileObject {
-                        source: None,
                         hash: sharedtypes::HashesSupported::Sha512(sha512hash.clone()),
                         tag_list,
                         skip_if: vec![sharedtypes::SkipIf::FileHash(sha512hash.clone())],
+                        ..Default::default()
                     },
                     &bytes,
                     &sha512hash,
