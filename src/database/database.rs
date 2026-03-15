@@ -162,7 +162,7 @@ PRAGMA cache_size = -1000000;
                     )?;
 
                     // Enable SQL tracing
-                    conn.trace(Some(|sql| {logging::info_log(format!("[SQL TRACE] {}", sql));}));
+                    //conn.trace(Some(|sql| {logging::info_log(format!("[SQL TRACE] {}", sql));}));
 
                     Ok(())
                 });
