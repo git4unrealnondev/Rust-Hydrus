@@ -1105,6 +1105,35 @@ impl Main {
         self.namespace_get_tagids_sql(id)
     }
 
+    /// Returns the tags object for each namesapce  for the fileid
+    pub fn namespace_get_tags_from_fileid(
+        &self,
+        ns_id: &u64,
+        file_id: &u64,
+    ) -> Vec<sharedtypes::DbTagNNS> {
+        let mut out = Vec::new();
+
+        for tag_id in self.namespace_get_tagids_from_fileid(ns_id, file_id).iter() {
+            if let Some(tag) = self.tag_id_get(tag_id) {
+                out.push(tag);
+            }
+        }
+
+        out
+    }
+
+    /// Gets all tagids that are in a namespace from a fileid
+    pub fn namespace_get_tagids_from_fileid(&self, ns_id: &u64, file_id: &u64) -> Vec<u64> {
+        let mut out = Vec::new();
+        for tag_id in self.relationship_get_tagid(file_id) {
+            if self.namespace_contains_id(ns_id, &tag_id) {
+                out.push(tag_id);
+            }
+        }
+
+        out
+    }
+
     /// Checks if a tag exists in a namespace
     pub fn namespace_contains_id(&self, namespace_id: &u64, tag_id: &u64) -> bool {
         self.namespace_contains_id_sql(tag_id, namespace_id)

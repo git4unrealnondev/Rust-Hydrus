@@ -829,6 +829,40 @@ impl RustHydrusApiClient {
             .read_json::<HashSet<u64>>()?;
         Ok(res)
     }
+    /// Returns the tags object for each namesapce  for the fileid
+    pub fn namespace_get_tags_from_fileid(
+        &self,
+        ns_id: &u64,
+        file_id: &u64,
+    ) -> Result<Vec<sharedtypes::DbTagNNS>, ureq::Error> {
+        let url = format!(
+            "{}/{}/{}", self.base_url, "main", "namespace_get_tags_from_fileid"
+        );
+        let res = ureq::post(url)
+            .send_json(&(ns_id, file_id))?
+            .body_mut()
+            .with_config()
+            .limit(u64::MAX)
+            .read_json::<Vec<sharedtypes::DbTagNNS>>()?;
+        Ok(res)
+    }
+    /// Gets all tagids that are in a namespace from a fileid
+    pub fn namespace_get_tagids_from_fileid(
+        &self,
+        ns_id: &u64,
+        file_id: &u64,
+    ) -> Result<Vec<u64>, ureq::Error> {
+        let url = format!(
+            "{}/{}/{}", self.base_url, "main", "namespace_get_tagids_from_fileid"
+        );
+        let res = ureq::post(url)
+            .send_json(&(ns_id, file_id))?
+            .body_mut()
+            .with_config()
+            .limit(u64::MAX)
+            .read_json::<Vec<u64>>()?;
+        Ok(res)
+    }
     /// Checks if a tag exists in a namespace
     pub fn namespace_contains_id(
         &self,

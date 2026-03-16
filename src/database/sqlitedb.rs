@@ -1728,11 +1728,9 @@ RETURNING id;
         tn: &C,
         id: Option<u64>,
         ext: &str,
-    ) -> u64 
-
+    ) -> u64
     where
         C: Deref<Target = Connection>,
-
     {
         {
             let _ = wait_until_sqlite_ok!(tn.execute(
@@ -1741,7 +1739,7 @@ RETURNING id;
             ));
         }
 
-        self.extension_get_id_sql(tn, ext)        .unwrap()
+        self.extension_get_id_sql(tn, ext).unwrap()
     }
     ///
     /// Returns id if a hash exists

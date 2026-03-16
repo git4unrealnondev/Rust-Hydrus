@@ -280,8 +280,8 @@ PRAGMA journal_mode = WAL;
         // popular_fts or relaitonship table
         {
             let mut write_conn = main.write_conn.lock();
-            let mut tn = write_conn.transaction().unwrap();
-            main.migrate_relationships_based_on_count(&mut tn);
+            let tn = write_conn.transaction().unwrap();
+            main.migrate_relationships_based_on_count(&tn);
             tn.commit().unwrap();
         }
 
@@ -603,12 +603,12 @@ PRAGMA journal_mode = WAL;
         let temp;
 
         let mut write_conn = self.write_conn.lock();
-        let mut tn = write_conn.transaction().unwrap();
+        let tn = write_conn.transaction().unwrap();
 
         loop {
             let cache = match self.settings_get_name(&"dbcachemode".into()) {
                 None => {
-                    self.setup_default_cache(&mut tn);
+                    self.setup_default_cache(&tn);
                     self.settings_get_name(&"dbcachemode".into())
                         .unwrap()
                         .param
@@ -706,9 +706,9 @@ PRAGMA journal_mode = WAL;
 
         if flag {
             let mut write_conn = self.write_conn.lock();
-            let mut tn = write_conn.transaction().unwrap();
+            let tn = write_conn.transaction().unwrap();
             logging::info_log("Relationship-Tag-Relations checker condensing tags");
-            self.condense_tags_internal(&mut tn);
+            self.condense_tags_internal(&tn);
             tn.commit().unwrap();
             self.vacuum();
         }
@@ -1227,10 +1227,10 @@ PRAGMA journal_mode = WAL;
         self._active_vers = version;
 
         let mut write_conn = self.write_conn.lock();
-        let mut tn = write_conn.transaction().unwrap();
+        let tn = write_conn.transaction().unwrap();
 
         self.setting_add_internal(
-            &mut tn,
+            &tn,
             "VERSION".to_string(),
             Some("Version that the database is currently on.".to_string()),
             Some(version),
@@ -1248,11 +1248,7 @@ PRAGMA journal_mode = WAL;
 
     /// NOTE USES PASSED tnECTION FROM FUNCTION NOT THE DB CONNECTION GETS ARROUND
     /// MEMROY SAFETY ISSUES WITH CLASSES IN RUST
-    pub(in crate::database) fn load_files(&self) {
-        if matches!(self._cache, CacheType::Bare) {
-            return;
-        }
-    }
+    pub(in crate::database) fn load_files(&self) {}
 
     ///
     /// Gets an extension id and creates it if it does not exist
