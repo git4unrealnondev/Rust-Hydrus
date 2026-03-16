@@ -52,7 +52,7 @@ impl Main {
                 }
                 {
                     let mut write_conn = self.write_conn.lock();
-                    let mut tn = write_conn.transaction().unwrap();
+                    let tn = write_conn.transaction().unwrap();
                     let keys = &vec_of_strings!(
                         "id",
                         "time",
@@ -65,7 +65,7 @@ impl Main {
                     let vals = &vec_of_strings!(
                         "INTEGER", "INTEGER", "INTEGER", "TEXT", "TEXT", "TEXT", "TEXT"
                     );
-                    self.table_create(&mut tn, &"Jobs".to_string(), keys, vals);
+                    self.table_create(&tn, &"Jobs".to_string(), keys, vals);
 
                     // Putting blank parenthesis forces rust to drop tn which is locking our
                     // reference to self
@@ -80,7 +80,7 @@ impl Main {
                             stmt.execute(item).unwrap();
                         }
                     }
-                    tn.commit();
+                    tn.commit().unwrap();
                 }
                 self.db_drop_table(&"Jobs_Old".to_string());
             }
@@ -146,10 +146,10 @@ impl Main {
                 }
                 {
                     let mut write_conn = self.write_conn.lock();
-                    let mut tn = write_conn.transaction().unwrap();
+                    let tn = write_conn.transaction().unwrap();
                     let keys = &vec_of_strings!("id", "name", "namespace");
                     let vals = &vec_of_strings!("INTEGER", "TEXT", "INTEGER");
-                    self.table_create(&mut tn, &"Tags".to_string(), keys, vals);
+                    self.table_create(&tn, &"Tags".to_string(), keys, vals);
 
                     // Putting blank parenthesis forces rust to drop tn which is locking our
                     // reference to self
@@ -213,8 +213,8 @@ impl Main {
                 let keys = &vec_of_strings!("tag_id", "relate_tag_id", "limit_to");
                 let vals = &vec_of_strings!("INTEGER", "INTEGER", "INTEGER");
                 let mut write_conn = self.write_conn.lock();
-                let mut tn = write_conn.transaction().unwrap();
-                self.table_create(&mut tn, &"Parents".to_string(), keys, vals);
+                let tn = write_conn.transaction().unwrap();
+                self.table_create(&tn, &"Parents".to_string(), keys, vals);
 
                 // Putting blank parenthesis forces rust to drop tn which is locking our
                 // reference to self
@@ -297,8 +297,8 @@ impl Main {
                     "INTEGER", "INTEGER", "INTEGER", "TEXT", "TEXT", "TEXT", "TEXT", "TEXT", "TEXT"
                 );
                 let mut write_conn = self.write_conn.lock();
-                let mut tn = write_conn.transaction().unwrap();
-                self.table_create(&mut tn, &"Jobs".to_string(), keys, vals);
+                let tn = write_conn.transaction().unwrap();
+                self.table_create(&tn, &"Jobs".to_string(), keys, vals);
                 {
                     let mut stmt =
                         tn
@@ -384,8 +384,8 @@ impl Main {
         logging::info_log("Creating tables inside of DB for V5 upgrade".to_string());
         {
             let mut write_conn = self.write_conn.lock();
-            let mut tn = write_conn.transaction().unwrap();
-            self.enclave_create_database_v5(&mut tn);
+            let tn = write_conn.transaction().unwrap();
+            self.enclave_create_database_v5(&tn);
             tn.commit().unwrap();
         }
 
@@ -416,30 +416,30 @@ impl Main {
         let mut location_to_enclave = std::collections::HashMap::new();
         {
             let mut write_conn = self.write_conn.lock();
-            let mut tn = write_conn.transaction().unwrap();
+            let tn = write_conn.transaction().unwrap();
 
             // Sets up missing enclave location
-            self.enclave_create_default_file_download(&mut tn, self.location_get());
+            self.enclave_create_default_file_download(&tn, self.location_get());
 
             // Super dirty way of getting around the borrow checker
             {
                 for (location_string, storage_id) in location_storage.iter() {
-                    self.enclave_create_default_file_download(&mut tn, location_string.clone());
+                    self.enclave_create_default_file_download(&tn, location_string.clone());
 
                     let file_enclave = format!("File_Download_location_{}", location_string);
                     location_to_enclave
                         .insert(storage_id.unwrap(), self.enclave_name_get_id(&file_enclave));
                 }
             }
-            tn.commit();
+            tn.commit().unwrap();
         }
 
         {
             let keys = &vec_of_strings!("id", "hash", "extension", "storage_id");
             let vals = &vec_of_strings!("INTEGER", "TEXT", "INTEGER", "INTEGER");
             let mut write_conn = self.write_conn.lock();
-            let mut tn = write_conn.transaction().unwrap();
-            self.table_create(&mut tn, &"File".to_string(), keys, vals);
+            let tn = write_conn.transaction().unwrap();
+            self.table_create(&tn, &"File".to_string(), keys, vals);
             tn.commit().unwrap();
         }
 
@@ -494,8 +494,8 @@ impl Main {
             let keys = &vec_of_strings!("id", "name", "namespace");
             let vals = &vec_of_strings!("INTEGER PRIMARY KEY", "TEXT NOT NULL", "INTEGER NOT NULL");
             let mut write_conn = self.write_conn.lock();
-            let mut tn = write_conn.transaction().unwrap();
-            self.table_create(&mut tn, &"Tags".to_string(), keys, vals);
+            let tn = write_conn.transaction().unwrap();
+            self.table_create(&tn, &"Tags".to_string(), keys, vals);
             tn.commit().unwrap();
         }
 
@@ -566,8 +566,8 @@ impl Main {
             );
 
             let mut write_conn = self.write_conn.lock();
-            let mut tn = write_conn.transaction().unwrap();
-            self.table_create(&mut tn, &"Jobs".to_string(), keys, vals);
+            let tn = write_conn.transaction().unwrap();
+            self.table_create(&tn, &"Jobs".to_string(), keys, vals);
             tn.commit().unwrap();
         }
 
@@ -617,9 +617,9 @@ impl Main {
         // If table does not exist then create the dead source url tables
         if !self.check_table_exists("dead_source_urls".to_string()) {
             let mut write_conn = self.write_conn.lock();
-            let mut tn = write_conn.transaction().unwrap();
+            let tn = write_conn.transaction().unwrap();
             self.table_create(
-                &mut tn,
+                &tn,
                 &"dead_source_urls".to_string(),
                 &vec_of_strings!("id", "dead_url"),
                 &vec_of_strings!("INTEGER PRIMARY KEY", "TEXT NOT NULL"),
@@ -661,9 +661,9 @@ impl Main {
                 "TEXT NOT NULL"
             );
             let mut write_conn = self.write_conn.lock();
-            let mut tn = write_conn.transaction().unwrap();
+            let tn = write_conn.transaction().unwrap();
 
-            self.table_create(&mut tn, &"Jobs".to_string(), keys, vals);
+            self.table_create(&tn, &"Jobs".to_string(), keys, vals);
 
             // Loads the Files into memory
             // Creates storage id's for them
@@ -734,8 +734,8 @@ impl Main {
             let vals = &vec_of_strings!("INTEGER PRIMARY KEY NOT NULL", "TEXT NOT NULL", "TEXT");
 
             let mut write_conn = self.write_conn.lock();
-            let mut tn = write_conn.transaction().unwrap();
-            self.table_create(&mut tn, &"Namespace".to_string(), keys, vals);
+            let tn = write_conn.transaction().unwrap();
+            self.table_create(&tn, &"Namespace".to_string(), keys, vals);
 
             logging::info_log("Starting to process Namespace for DB V7 Upgrade".to_string());
 
@@ -768,8 +768,8 @@ impl Main {
             );
 
             let mut write_conn = self.write_conn.lock();
-            let mut tn = write_conn.transaction().unwrap();
-            self.table_create(&mut tn, &"Parents".to_string(), keys, vals);
+            let tn = write_conn.transaction().unwrap();
+            self.table_create(&tn, &"Parents".to_string(), keys, vals);
 
             logging::info_log("Starting to process Parents for DB V7 Upgrade".to_string());
 
@@ -802,8 +802,8 @@ impl Main {
             );
 
             let mut write_conn = self.write_conn.lock();
-            let mut tn = write_conn.transaction().unwrap();
-            self.table_create(&mut tn, &"Tags".to_string(), keys, vals);
+            let tn = write_conn.transaction().unwrap();
+            self.table_create(&tn, &"Tags".to_string(), keys, vals);
 
             logging::info_log("Starting to process Tags for DB V7 Upgrade".to_string());
 
@@ -985,8 +985,8 @@ impl Main {
 
             {
                 let mut write_conn = self.write_conn.lock();
-                let mut tn = write_conn.transaction().unwrap();
-                self.table_create(&mut tn, &name, &keys, &vals);
+                let tn = write_conn.transaction().unwrap();
+                self.table_create(&tn, &name, &keys, &vals);
 
                 tn.execute("INSERT INTO Jobs (id, time, reptime, priority, cachetime, cachechecktype, Manager, site, param, SystemData, UserData) SELECT  id, time, reptime, priority, cachetime, cachechecktype, Manager, site, param, SystemData, UserData FROM Jobs_Old", []).unwrap();
                 tn.commit().unwrap();
@@ -1008,7 +1008,7 @@ impl Main {
     pub fn db_update_eight_to_nine(&mut self) {
         {
             let mut write_conn = self.write_conn.lock();
-            let mut tn = write_conn.transaction().unwrap();
+            let tn = write_conn.transaction().unwrap();
             tn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_file_hash ON File (hash)",
                 [],
@@ -1032,12 +1032,12 @@ impl Main {
             write_conn
                 .execute("PRAGMA cache_size = -500000;", [])
                 .unwrap();
-            let mut tn = write_conn.transaction().unwrap();
+            let tn = write_conn.transaction().unwrap();
             tn.execute("ALTER TABLE Relationship RENAME TO Relationship_old", [])
                 .unwrap();
 
             logging::info_log("Starting to migrate data... This will take a while");
-            self.relationship_create_v2(&mut tn);
+            self.relationship_create_v2(&tn);
 
             // Performance thing will get recreated on call
             tn.execute("DROP INDEX IF EXISTS idx_tagid_fileid", [])
@@ -1065,14 +1065,14 @@ FROM Relationship_old;",
 
             logging::info_log("creating relationship index");
             // Call to recreate index
-            self.relationship_create_v2(&mut tn);
+            self.relationship_create_v2(&tn);
 
             // updating paretnts
             logging::info_log("Starting to upgrade parents table");
             tn.execute("ALTER TABLE Parents RENAME TO Parents_old", [])
                 .unwrap();
 
-            self.parents_create_v2(&mut tn);
+            self.parents_create_v2(&tn);
 
             tn.execute(
                 "INSERT INTO Parents (tag_id, relate_tag_id, limit_to)
@@ -1084,12 +1084,12 @@ WHERE p.tag_id != p.relate_tag_id;",
             .unwrap();
 
             logging::info_log("Creating FTS search");
-            self.tags_fts_create_v1(&mut tn);
+            self.tags_fts_create_v1(&tn);
 
             logging::info_log("Creating Count");
-            self.namespace_properties_create_v1(&mut tn);
+            self.namespace_properties_create_v1(&tn);
 
-            self.tag_count_create_v1(&mut tn);
+            self.tag_count_create_v1(&tn);
 
             tn.commit().unwrap();
             write_conn.execute("PRAGMA temp_store = FILE;", []).unwrap();
@@ -1100,10 +1100,10 @@ WHERE p.tag_id != p.relate_tag_id;",
         // Will recreate indexes on parents table
         {
             let mut wruite_conn = self.write_conn.lock();
-            let mut tn = wruite_conn.transaction().unwrap();
+            let tn = wruite_conn.transaction().unwrap();
 
             self.parents_create_v2(&tn);
-            tn.commit();
+            tn.commit().unwrap();
         }
         self.db_version_set(10);
         self.vacuum();

@@ -157,7 +157,7 @@ impl RustHydrusApiClient {
             .read_json::<HashSet<sharedtypes::DbParentsObj>>()?;
         Ok(res)
     }
-    ///
+    /// Adds relationship into db
     pub fn add_relationship(&self, file: &u64, tag: &u64) -> Result<(), ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "add_relationship");
         let res = ureq::post(url)
@@ -177,6 +177,23 @@ impl RustHydrusApiClient {
             .with_config()
             .limit(u64::MAX)
             .read_json::<()>()?;
+        Ok(res)
+    }
+    /// Checks if a relationship exists in the db
+    pub fn check_relationship_exists(
+        &self,
+        file_id: &u64,
+        tag_id: &u64,
+    ) -> Result<bool, ureq::Error> {
+        let url = format!(
+            "{}/{}/{}", self.base_url, "main", "check_relationship_exists"
+        );
+        let res = ureq::post(url)
+            .send_json(&(file_id, tag_id))?
+            .body_mut()
+            .with_config()
+            .limit(u64::MAX)
+            .read_json::<bool>()?;
         Ok(res)
     }
     /// Adds the tag to the db. commits on finish

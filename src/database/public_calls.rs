@@ -173,17 +173,33 @@ impl Main {
         out
     }
 
+    /// Adds relationship into db
     pub fn add_relationship(&self, file: &u64, tag: &u64) {
-        let mut write_conn = self.write_conn.lock();
-        let tn = write_conn.transaction().unwrap();
-        self.add_relationship_sql(&tn, file, tag);
-        tn.commit().unwrap();
+        if !self.check_relationship_exists(file, tag) {
+            let mut write_conn = self.write_conn.lock();
+            let tn = write_conn.transaction().unwrap();
+            self.add_relationship_sql(&tn, file, tag);
+            tn.commit().unwrap();
+        }
     }
     pub fn delete_relationship(&self, file: &u64, tag: &u64) {
         let mut write_conn = self.write_conn.lock();
         let tn = write_conn.transaction().unwrap();
         self.delete_relationship_sql(&tn, file, tag);
         tn.commit().unwrap();
+    }
+
+    /// Checks if a relationship exists in the db
+    pub fn check_relationship_exists(&self, file_id: &u64, tag_id: &u64) -> bool {
+        if let Some(roaring) = &self.relationship_roaring_storage
+            && roaring
+                .read()
+                .relationship_cache_relationship_exists(file_id, tag_id)
+        {
+            return true;
+        }
+
+        self.relationship_exists(file_id, tag_id)
     }
 
     ///
@@ -1071,6 +1087,10 @@ impl Main {
 
     /// db get namespace wrapper
     pub fn namespace_get(&self, namespace: &String) -> Option<u64> {
+        if let Some(id) = self._inmemdb.read().namespace_get_id(namespace) {
+            return Some(*id);
+        }
+
         let mut tn = self.get_database_connection();
         self.namespace_get_id_sql(&tn, namespace)
     }
@@ -1154,6 +1174,10 @@ impl Main {
     /// Adds a ns into the db if the id already exists
     ///
     pub fn namespace_add_id_exists(&self, ns: sharedtypes::DbNamespaceObj) -> u64 {
+        if let Some(out) = self._inmemdb.read().namespace_get_id(&ns.name) {
+            return *out;
+        }
+
         let mut write_conn = self.write_conn.lock();
         let mut tn = write_conn.transaction().unwrap();
         self.namespace_add_sql(&tn, &ns.name, &ns.description, Some(ns.id));

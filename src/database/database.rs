@@ -668,6 +668,7 @@ PRAGMA journal_mode = WAL;
         tn.commit().unwrap();
         self._cache = temp
     }
+
     ///
     /// Sets up the default location to dump misbehaving files
     ///
@@ -1235,7 +1236,7 @@ PRAGMA journal_mode = WAL;
             Some(version),
             None,
         );
-        tn.commit();
+        tn.commit().unwrap();
     }
 
     pub(super) fn db_drop_table(&self, table: &String) {
@@ -1272,25 +1273,50 @@ PRAGMA journal_mode = WAL;
             return out;
         }
 
-        let out = self.extension_put_string(ext);
-        out
+        self.extension_put_string(ext)
     }
 
     ///
     /// Gets an ID if a extension string exists
     ///
-    pub fn extension_get_id(&self, ext: &String) -> Option<u64> {
+    pub fn extension_get_id(&self, ext: &str) -> Option<u64> {
         let conn = self.get_database_connection();
         self.extension_get_id_sql(&conn, ext)
     }
 
     /// Puts extension into mem cache
-    pub(in crate::database) fn extension_load(&self, tn: &Transaction, id: u64, ext: String) {
-        self.extension_put_id_ext_sql(tn, Some(id), &ext);
+    pub(in crate::database) fn extension_load(&self, tn: &Transaction, id: u64, ext: &str) {
+        self.extension_put_id_ext_sql(tn, Some(id), ext);
     }
 
     /// Same as above
-    pub(in crate::database) fn load_namespace(&self) {}
+    pub(in crate::database) fn load_namespace(&self) {
+        logging::info_log("Database is Loading: Namespace".to_string());
+
+        let tn = self.get_database_connection();
+
+        let prep = tn.prepare("SELECT id, name, description FROM Namespace;");
+
+        if let Ok(mut con) = prep {
+            let namespaces = con
+                .query_map([], |row| {
+                    let id = row.get(0).unwrap();
+                    let name = row.get(1).unwrap();
+                    let description = row.get(2).unwrap();
+
+                    Ok(sharedtypes::DbNamespaceObj {
+                        name,
+                        id,
+                        description,
+                    })
+                })
+                .unwrap();
+
+            for namespace in namespaces.flatten() {
+                self._inmemdb.write().namespace_put(namespace);
+            }
+        }
+    }
 
     /// Loads jobs in from DB tnection
     pub(in crate::database) fn load_jobs(&self) {
@@ -1344,7 +1370,7 @@ PRAGMA journal_mode = WAL;
     ///
     /// Gets a fileid from a hash
     ///
-    pub fn file_get_hash_internal(&self, tn: &Transaction, hash: &String) -> Option<u64> {
+    pub fn file_get_hash_internal(&self, tn: &Transaction, hash: &str) -> Option<u64> {
         self.file_get_id_sql_internal(tn, hash)
     }
 

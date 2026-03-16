@@ -131,7 +131,6 @@ pub fn main(data: Main) {
         cli_structs::Test::Job(jobstruct) => {
             match jobstruct {
                 cli_structs::JobStruct::Add(addstruct) => {
-                    dbg!(&addstruct);
                     let mut system_data = BTreeMap::new();
                     for each in addstruct.system_data.chunks(2) {
                         system_data.insert(each[0].clone(), each[1].clone());

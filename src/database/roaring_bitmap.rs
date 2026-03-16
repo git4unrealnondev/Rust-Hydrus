@@ -246,6 +246,16 @@ impl RelationshipStorage {
         }
     }
 
+    /// Checks if a relationship exists
+    pub fn relationship_cache_relationship_exists(&self, file_id: &u64, tag_id: &u64) -> bool {
+        let conn = self.db.read().get_database_connection();
+        if let Some(roaring) = self.relationship_cache_tagid_get(&conn, tag_id) {
+            return roaring.contains(*file_id as u32);
+        }
+
+        false
+    }
+
     ///
     /// Checks if a tagid exists in the cache
     ///

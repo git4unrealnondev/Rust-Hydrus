@@ -846,7 +846,7 @@ HAVING COUNT(r.fileid) {dir} ?;"
     ///
     /// Checks if a relationship exists
     ///
-    fn relationship_exists(&self, tn: &Transaction, file_id: &u64, tag_id: &u64) -> bool {
+    pub(in crate::database) fn relationship_exists(&self, file_id: &u64, tag_id: &u64) -> bool {
         let sql = format!(
             "SELECT EXISTS(SELECT 1 FROM Relationship WHERE fileid=? AND tagid=? LIMIT 1)",
         );
@@ -1035,7 +1035,6 @@ HAVING COUNT(r.fileid) {dir} ?;"
     /// Adds a job to sql
     pub(in crate::database) fn jobs_add_sql(&self, data: &sharedtypes::DbJobsObj) {
         let tn = self.write_conn.lock();
-        dbg!(data);
         let inp = "INSERT OR REPLACE INTO Jobs VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
         {
             wait_until_sqlite_ok!(tn.execute(
@@ -1724,12 +1723,17 @@ RETURNING id;
     ///
     /// Adds a extension and an id OPTIONAL into the db
     ///
-    pub(in crate::database) fn extension_put_id_ext_sql(
+    pub(in crate::database) fn extension_put_id_ext_sql<C>(
         &self,
-        tn: &Transaction,
+        tn: &C,
         id: Option<u64>,
         ext: &str,
-    ) -> u64 {
+    ) -> u64 
+
+    where
+        C: Deref<Target = Connection>,
+
+    {
         {
             let _ = wait_until_sqlite_ok!(tn.execute(
                 "insert or ignore into FileExtensions(id, extension) VALUES (?,?)",
@@ -1737,13 +1741,7 @@ RETURNING id;
             ));
         }
 
-        wait_until_sqlite_ok!(tn.query_row(
-            "SELECT id FROM FileExtensions WHERE extension = ?",
-            params![ext],
-            |row| row.get(0),
-        ))
-        .unwrap_or(None)
-        .unwrap()
+        self.extension_get_id_sql(tn, ext)        .unwrap()
     }
     ///
     /// Returns id if a hash exists
@@ -2004,18 +2002,18 @@ RETURNING id;
         self.drop_trigger_manage_relationship_count(tn);
 
         if popular {
-           // let sql = "INSERT OR IGNORE INTO Relationship_Popular (fileid, tagid) SELECT fileid, tagid FROM Relationship WHERE tagid = ?";
+            // let sql = "INSERT OR IGNORE INTO Relationship_Popular (fileid, tagid) SELECT fileid, tagid FROM Relationship WHERE tagid = ?";
 
-           // tn.execute(sql, params![id]).unwrap();
+            // tn.execute(sql, params![id]).unwrap();
             let sql = "INSERT OR IGNORE INTO Tags_Popular_fts (rowid, name, namespace) SELECT rowid, name, namespace FROM Tags_fts WHERE rowid = ?";
 
             tn.execute(sql, params![id]).unwrap();
         }
 
         if !popular {
-          //  let sql = "DELETE FROM Relationship_Popular WHERE tagid = ?";
+            //  let sql = "DELETE FROM Relationship_Popular WHERE tagid = ?";
 
-          //  tn.execute(sql, params![id]).unwrap();
+            //  tn.execute(sql, params![id]).unwrap();
             let sql = "DELETE FROM Tags_Popular_fts WHERE rowid = ?";
             tn.execute(sql, params![id]).unwrap();
         }
@@ -2109,7 +2107,7 @@ END;",
             tn.execute(
                 &format!(
                     "
-        CREATE TRIGGER IF NOT EXISTS Tags_au AFTER UPDATE ON Tags
+        CREATE TRIGGER IF NOT EXISTS Tags_au AFTER UPDATE OF name, namespace ON Tags
         BEGIN
           UPDATE Tags_fts
           SET name = new.name, namespace = new.namespace
@@ -2152,7 +2150,7 @@ END;",
             tn.execute(
                 &format!(
                     "
-        CREATE TRIGGER IF NOT EXISTS Tags_Popular_au AFTER UPDATE ON Tags WHEN new.count >= {}
+        CREATE TRIGGER IF NOT EXISTS Tags_Popular_au AFTER UPDATE OF name, namespace ON Tags WHEN new.count >= {}
         BEGIN
           UPDATE Tags_Popular_fts
           SET name = new.name, namespace = new.namespace
@@ -2467,8 +2465,7 @@ WHERE count BETWEEN ? AND ?",
         &self,
         conn: &Connection,
         namespace: &str,
-    ) -> Option<u64>
-    {
+    ) -> Option<u64> {
         wait_until_sqlite_ok!(conn.query_row(
             "SELECT id FROM Namespace WHERE name = ?",
             params![namespace],
@@ -2483,6 +2480,10 @@ WHERE count BETWEEN ? AND ?",
         &self,
         ns_id: &u64,
     ) -> Option<sharedtypes::DbNamespaceObj> {
+        if let Some(namespaceobj) = self._inmemdb.read().namespace_get_dbnamespaceobj(ns_id) {
+            return Some(namespaceobj.clone());
+        }
+
         let tn = self.pool.get().unwrap();
         wait_until_sqlite_ok!(tn.query_row(
             "SELECT * FROM Namespace WHERE id = ?",

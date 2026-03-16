@@ -280,6 +280,11 @@ impl NewinMemDB {
         }
     }
 
+    /// Returns the dbnamespaceobj that we store
+    pub fn namespace_get_dbnamespaceobj(&self, id: &u64) -> Option<&sharedtypes::DbNamespaceObj> {
+        self._namespace_id_data.get(id)
+    }
+
     /// Returns a list of file id's based on a tag id.
     pub fn relationship_get_fileid(&self, tag: &u64) -> HashSet<u64> {
         match self._relationship_tag_file.get(tag) {
@@ -566,6 +571,10 @@ impl NewinMemDB {
         } else {
             self._namespace_max
         }
+    }
+
+    pub fn namespace_get_id(&self, namespace: &String) -> Option<&u64> {
+        self._namespace_name_id.get(namespace)
     }
 
     /// Deletes a namespace from db
