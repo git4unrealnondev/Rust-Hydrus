@@ -3,10 +3,10 @@
 
 use crate::sharedtypes::DbFileStorage;
 use crate::sharedtypes::{self};
-use interprocess::local_socket::GenericNamespaced;
-use interprocess::local_socket::ToNsName;
 use interprocess::local_socket::prelude::LocalSocketStream;
 use interprocess::local_socket::traits::Stream;
+use interprocess::local_socket::GenericNamespaced;
+use interprocess::local_socket::ToNsName;
 use std::collections::{HashMap, HashSet};
 use std::io::BufReader;
 use std::time::Duration;

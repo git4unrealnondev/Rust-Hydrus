@@ -171,7 +171,46 @@ impl GlobalLoad {
         }
 
         let api = db.api_info.read();
-        for (cnt, lib_path) in libpath.iter().enumerate() {
+        for (cnt, lib) in self.get_library_from_callback(&sharedtypes::GlobalCallbacks::Download).into_iter().enumerate() {
+                        let output;
+                        let lib = lib.read();
+            unsafe {
+                let plugindatafunc: libloading::Symbol<
+                    unsafe extern "C" fn(
+                        &[u8],
+                        &String,
+                        &String,
+                        &sharedtypes::ClientAPIInfo,
+                    )
+                        -> Vec<sharedtypes::DBPluginOutputEnum>,
+                    //unsafe extern "C" fn(Cursor<Bytes>, &String, &String, database::Main),
+                > = match lib.get(b"on_download") {
+                    Ok(lib) => lib,
+                    Err(_) => {
+                        logging::info_log(format!(
+                            "Could not find on_download for plugin: {}",
+                            libpath.get(cnt).unwrap().to_string_lossy()
+                        ));
+                        continue;
+                    }
+                };
+                // If the api isnt set then just return and dont call anything
+                if let Some(ref api_info) = *api {
+                    output = plugindatafunc(cursorpass, hash, ext, &api_info);
+                } else {
+                    return;
+                }
+            }
+
+            let jobmanager;
+            {
+                jobmanager = self.jobmanager.clone();
+            }
+            self.parse_plugin_output(output, db.clone(), libscraper.get(cnt).unwrap(), jobmanager);
+        }
+
+
+        /*for (cnt, lib_path) in libpath.iter().enumerate() {
             let lib;
             unsafe {
                 match libloading::Library::new(lib_path) {
@@ -219,7 +258,7 @@ impl GlobalLoad {
                 jobmanager = self.jobmanager.clone();
             }
             self.parse_plugin_output(output, db.clone(), libscraper.get(cnt).unwrap(), jobmanager);
-        }
+        }*/
     }
 
     ///
@@ -837,6 +876,22 @@ impl GlobalLoad {
             }
         }
         out
+    }
+
+    fn get_library_from_callback(&self, callback: &sharedtypes::GlobalCallbacks) -> Vec<Arc<RwLock<libloading::Library>>> {
+    let mut out = Vec::new();
+if let Some(callbacklist) = self.callback.read().get(callback) {
+            for callback_item in callbacklist {
+                if let Some(libp) = self.library_lib.read().get(callback_item) {
+                    out.push(libp.clone());
+                }
+            }
+        }
+
+
+
+
+    out
     }
 
     /*///

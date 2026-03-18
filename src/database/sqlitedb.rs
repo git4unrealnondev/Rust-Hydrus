@@ -447,7 +447,7 @@ LIMIT ?;"#
             tn.execute(
                 &format!(
                     "
-        CREATE TRIGGER IF NOT EXISTS Tags_Popular_ad AFTER DELETE ON Tags WHEN new.count < {}
+        CREATE TRIGGER IF NOT EXISTS Tags_Popular_ad AFTER DELETE ON Tags WHEN old.count < {}
         BEGIN
           DELETE FROM Tags_Popular_fts WHERE rowid = old.id;
         END;
