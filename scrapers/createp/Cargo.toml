@@ -24,9 +24,11 @@ chrono = "0.4.31"
 url = "2.5.8"
 scraper = "0.25.0"
 unescape = "0.1.0"
-
+serde = { version = "1.0.228", features = ["derive"] }
+bitcode = { version = "0.6.9", features = ["arrayvec", "derive", "serde"] }
+redact = { git = "https://github.com/git4unrealnondev/redact",  features = ["serde", "bitcode"] }
 
 [features]
-regex = []
-clap = []
-serde = []
+clap= []
+serde=[]
+default = ["serde"]
