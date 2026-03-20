@@ -3,10 +3,10 @@
 
 use crate::sharedtypes::DbFileStorage;
 use crate::sharedtypes::{self};
-use interprocess::local_socket::prelude::LocalSocketStream;
-use interprocess::local_socket::traits::Stream;
 use interprocess::local_socket::GenericNamespaced;
 use interprocess::local_socket::ToNsName;
+use interprocess::local_socket::prelude::LocalSocketStream;
+use interprocess::local_socket::traits::Stream;
 use std::collections::{HashMap, HashSet};
 use std::io::BufReader;
 use std::time::Duration;
@@ -412,7 +412,9 @@ pub fn external_plugin_call(
 
 /// This shouldn't come back to haunt me. :x Returns a Vec of bytes that represent
 /// the data structure sent from server.
-fn init_data_request<T: serde::de::DeserializeOwned>(requesttype: &types::SupportedRequests) -> T {
+fn init_data_request<T: bitcode::Encode + for<'de> bitcode::Decode<'de>>(
+    requesttype: &types::SupportedRequests,
+) -> T {
     let name = types::SOCKET_NAME
         .to_ns_name::<GenericNamespaced>()
         .unwrap();

@@ -1,0 +1,42 @@
+[package]
+name = "bsky"
+version = "0.1.0"
+edition = "2024"
+
+[profile.release]
+opt-level = "z"
+lto=true
+codegenunits=1
+strip = true
+debug=false
+
+[lib]
+doc=true
+name = "bsky"
+path = "src/lib.rs"
+crate-type = ["dylib"]
+
+
+[dependencies]
+atrium-api = "0.25.7"
+atrium-xrpc-client = { version = "0.5.15", features = ["reqwest"] }
+bluesky-firehose-stream = "0.5.0"
+futures = "0.3.32"
+ipld = "0.0.2"
+ipld-core = "0.4.3"
+itertools = "0.14.0"
+serde = { version = "1.0.228", features = ["derive"] }
+tokio = { version = "1.50.0", features = ["full", "rt-multi-thread"] }
+ureq = { version = "3.2.0", features = ["json"] }
+redact = { git = "https://github.com/git4unrealnondev/redact",  features = ["serde", "bitcode"] }
+bitcode = { version = "0.6.9", features = ["arrayvec", "derive", "serde"] }
+m3u8-rs = "6.0.0"
+reqwest = { version = "0.13.2", features = ["blocking"] }
+url = "2.5.8"
+serde_json = "1.0.149"
+interprocess = "2.4.0"
+
+[features]
+clap= []
+serde=[]
+default = ["serde"]

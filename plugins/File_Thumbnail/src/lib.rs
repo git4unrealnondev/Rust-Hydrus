@@ -63,7 +63,7 @@ pub fn get_global_info() -> Vec<sharedtypes::GlobalPluginScraper> {
             func: format!("{}_generate_thumbnail_fid", PLUGIN_NAME),
             vers: 0,
             data_name: vec!["file_id".into()],
-            data: vec![sharedtypes::CallbackCustomData::u64],
+            data: vec![sharedtypes::CallbackCustomData::U64],
         }),
     ];
     let out = vec![main];
@@ -242,11 +242,11 @@ pub fn on_start() {
         ));
         return;
     } else {
-        client::log(format!("{} - Running main processing job", PLUGIN_NAME));
+        client::log_no_print(format!("{} - Running main processing job", PLUGIN_NAME));
     }
 
     if should_run == "Clear" {
-        client::log(format!(
+        client::log_no_print(format!(
             "{} - Will delete previous file_thumbnails from the system",
             PLUGIN_NAME
         ));
@@ -287,7 +287,7 @@ pub fn on_start() {
     }
 
     // Logs info to screen
-    client::log(format!(
+    client::log_no_print(format!(
         "{} - We've got {} files to parse.",
         PLUGIN_NAME,
         file_ids.len()
@@ -320,7 +320,7 @@ pub fn on_start() {
             });
         });
     }
-    client::log(format!("{} - generation done", PLUGIN_NAME));
+    client::log_no_print(format!("{} - generation done", PLUGIN_NAME));
     api.setting_add(
         format!("{}-shouldrun", PLUGIN_NAME),
         format!(
@@ -340,7 +340,7 @@ fn process_fid(fid: &u64, location: &PathBuf, _utable: &u64) -> Option<String> {
             let (thumb_path, thumb_hash) = make_thumbnail_path(location, &thumb_file);
             let thpath = thumb_path.join(thumb_hash.clone());
             let pa = thpath.to_string_lossy().to_string();
-            /*client::log(format!(
+            /*client::log_no_print(format!(
                 "{}: Writing fileid: {} thumbnail to {}",
                 PLUGIN_NAME, fid, &pa
             ));*/
@@ -353,7 +353,7 @@ fn process_fid(fid: &u64, location: &PathBuf, _utable: &u64) -> Option<String> {
             }
         }
         Err(st) => {
-            client::log(format!("{} Fid: {} ERR- {}", PLUGIN_NAME, &fid, st));
+            client::log_no_print(format!("{} Fid: {} ERR- {}", PLUGIN_NAME, &fid, st));
         }
     }
     None
@@ -785,7 +785,7 @@ pub fn on_download(
                     output.push(sharedtypes::DBPluginOutputEnum::Add(vec![plugin_output]));
                 }
                 Err(err) => {
-                    client::log(format!(
+                    client::log_no_print(format!(
                         "Plugin: {} -- {hash_in} Failed to write: {}, {:?}",
                         PLUGIN_NAME, hash_in, err,
                     ));
@@ -793,7 +793,7 @@ pub fn on_download(
             }
         }
         Err(err) => {
-            client::log(format!(
+            client::log_no_print(format!(
                 "Plugin: {} -- {hash_in} Failed to load: {}, {:?}",
                 PLUGIN_NAME, hash_in, err,
             ));

@@ -88,7 +88,7 @@ another process and try again.",
             com_type: types::EComType::BiDirectional,
             control: types::EControlSigs::Send,
         };
-        let b_struct = bincode::encode_to_vec(&coms_struct, bincode::config::standard()).unwrap();
+        let b_struct = bitcode::encode(&coms_struct);
 
         // Wrap the connection into a buffered reader right away so that we could read a
         // single line out of it.
@@ -106,10 +106,7 @@ another process and try again.",
         // write, do it. (`.get_mut()` is to get the writer, `BufReader` doesn't implement
         // a pass-through `Write`.) conn.get_mut().write_all(b"Hello from server!\n")?;
         // Print out the result, getting the newline for free!
-        let instruct: types::Coms =
-            bincode::decode_from_slice(&buffer[..], bincode::config::standard())
-                .unwrap()
-                .0;
+        let instruct: types::Coms = bitcode::decode(&buffer[..]).unwrap();
 
         // std::mem::forget(buffer.clone());
         match instruct.control {
@@ -395,12 +392,9 @@ impl DbInteract {}
 
 /// Storage object for database interactions with the plugin system
 /// Helper function to return data about a passed object into size and bytes array.
-fn data_size_to_b<T: serde::Serialize>(data_object: &T) -> Vec<u8> {
-    let tmp = data_object;
-
+fn data_size_to_b<T: bitcode::Encode + ?Sized>(data_object: &T) -> Vec<u8> {
     // let bytd = types::x_to_bytes(tmp).to_vec();
-    let byt: Vec<u8> = bincode::serde::encode_to_vec(tmp, bincode::config::standard()).unwrap();
-    byt
+    bitcode::encode(data_object)
 }
 
 /// Packages functions from the DB into their self owned versions before packaging
@@ -543,7 +537,7 @@ pub fn dbactions_to_function(
                 types::ParentsType::LimitTo => &unwrappy.parents_limitto_tag_get(&id),
             };
 
-            data_size_to_b(&out)
+            data_size_to_b(out)
         }
         types::SupportedDBRequests::ParentsDelete(parentobj) => {
             let unwrappy = database;
@@ -711,7 +705,7 @@ pub fn dbactions_to_function(
             let unwrappy = database;
             let tmep = unwrappy.file_get_list_all();
             data_size_to_b(&tmep)
-            //bincode::serialize(&tmep).unwrap()
+            //bitcode::serialize(&tmep).unwrap()
         }
         types::SupportedDBRequests::ReloadRegex => {
             globalload.reload_regex();
@@ -722,9 +716,9 @@ pub fn dbactions_to_function(
 }
 
 /// Turns an Option<&T> into a bytes object.
-fn option_to_bytes<T: serde::Serialize + Clone>(input: Option<&T>) -> Vec<u8> {
+fn option_to_bytes<T: bitcode::Encode + Clone>(input: Option<&T>) -> Vec<u8> {
     match input {
-        None => data_size_to_b(&input),
+        None => data_size_to_b(&input.cloned()),
         Some(item) => {
             let i: Option<T> = Some(item.clone());
             data_size_to_b(&i)

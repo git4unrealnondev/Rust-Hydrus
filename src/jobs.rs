@@ -296,47 +296,218 @@ impl Jobs {
         &mut self,
         globalplugin_sites: Vec<(sharedtypes::GlobalPluginScraper, String)>,
     ) {
-        let hashjobs;
-        let mut jobs_vec = Vec::new();
+        use std::collections::HashMap;
 
-        {
-            hashjobs = self.db.jobs_get_all().clone();
-        }
+        let hashjobs = self.db.jobs_get_all().clone();
 
-        {
-            'mainloop: for (scraper, sites) in globalplugin_sites {
-                // Stupid prefilter because an item can be either a scraper or a plugin. Not sure how I
-                // didn't hit this issue sooner lol
-                if let Some(sharedtypes::ScraperOrPlugin::Scraper(_)) = scraper.storage_type {
-                } else {
-                    continue 'mainloop;
+        // job_id -> (best_scraper, job)
+        let mut best_jobs: HashMap<
+            u64,
+            (sharedtypes::GlobalPluginScraper, sharedtypes::DbJobsObj),
+        > = HashMap::new();
+
+        for (_, job) in hashjobs.iter() {
+            if job.priority == 0 {
+                continue;
+            }
+
+            let job_id = match job.id {
+                Some(id) => id,
+                None => continue,
+            };
+
+            for (scraper, site) in &globalplugin_sites {
+                // Only allow actual scrapers
+                let scraper_info = match &scraper.storage_type {
+                    Some(sharedtypes::ScraperOrPlugin::Scraper(info)) => info,
+                    _ => continue,
+                };
+
+                if site != &job.site {
+                    continue;
                 }
 
-                //for sites in global_load.read().sites_get(&scraper) {
-                for (_, job) in hashjobs.iter() {
-                    if sites == job.site && job.priority != 0 {
-                        jobs_vec.push((scraper.clone(), job.clone()));
-                    }
-                }
-                //}
+                best_jobs
+                    .entry(job_id)
+                    .and_modify(|(existing_scraper, _)| {
+                        let existing_priority = match &existing_scraper.storage_type {
+                            Some(sharedtypes::ScraperOrPlugin::Scraper(info)) => info.priority,
+                            _ => 0,
+                        };
+
+                        if scraper_info.priority > existing_priority {
+                            *existing_scraper = scraper.clone();
+                        }
+                    })
+                    .or_insert((scraper.clone(), job.clone()));
             }
         }
 
-        // Sorts by priority
-        jobs_vec.sort_by_key(|job| job.1.priority);
+        let mut jobs_vec: Vec<_> = best_jobs.into_values().collect();
 
-        let jobs_vec: Vec<(sharedtypes::GlobalPluginScraper, sharedtypes::DbJobsObj)> = jobs_vec
-            .into_iter()
-            .filter(|job| job.1.priority != 0)
-            .collect();
+        // Optional: sort by scraper priority (higher first)
+        jobs_vec.sort_by_key(|(scraper, _)| match &scraper.storage_type {
+            Some(sharedtypes::ScraperOrPlugin::Scraper(info)) => std::cmp::Reverse(info.priority),
+            _ => std::cmp::Reverse(0),
+        });
+
         let mut commit = false;
-        for (scraper, job) in jobs_vec {
-            if self.jobs_add(scraper, job).is_some() {
+
+        for (scraper, job) in jobs_vec.iter_mut() {
+            self.process_logintype(job, scraper);
+            if self.jobs_add(scraper.clone(), job.clone()).is_some() {
                 commit = true;
             }
         }
+
         if commit {
             self.db.transaction_flush();
+        }
+    }
+
+    /// Gets all logins for the the job that are needed
+    fn process_logintype(
+        &self,
+        job: &mut sharedtypes::DbJobsObj,
+        scraper: &sharedtypes::GlobalPluginScraper,
+    ) {
+        for (key, login, login_needed, help_text, overwrite_db_entry) in scraper.login_type.iter() {
+            match login {
+                sharedtypes::LoginType::Api(_name, _api_key) => {
+                    todo!();
+                }
+                sharedtypes::LoginType::ApiNamespaced(name, api_namespace, api_body) => {
+                    /* {
+                        if *overwrite_db_entry && api_namespace.is_some() {
+                            self.db.setting_add(
+                                format!("API_NAMESPACED_NAMESPACE_{}_{}", key, name),
+                                None,
+                                None,
+                                api_namespace.clone(),
+                            );
+                        }
+                        if *overwrite_db_entry && api_body.is_some() {
+                            self.db.setting_add(
+                                format!("API_NAMESPACED_BODY_{}_{}", key, name),
+                                None,
+                                None,
+                                api_body.clone(),
+                            );
+                        }
+                    }*/
+                    let ns_stored = if let Some(setting_obj) = self
+                        .db
+                        .settings_get_name(&format!("API_NAMESPACED_NAMESPACE_{}_{}", key, name))
+                    {
+                        setting_obj.param.clone()
+                    } else {
+                        None
+                    };
+                    let body_stored = if let Some(setting_obj) = self
+                        .db
+                        .settings_get_name(&format!("API_NAMESPACED_BODY_{}_{}", key, name))
+                    {
+                        setting_obj.param.clone()
+                    } else {
+                        None
+                    };
+
+                    // If we have nothing in either of these then we likely need to
+                    // pull info from the plugins this is used to pull login info
+                    // from an external plugin like a web interface or UI
+                    if (ns_stored.is_none() | body_stored.is_none())
+                        & (*login_needed == sharedtypes::LoginNeed::Required)
+                    {
+                        dbg!(&login_needed);
+                        todo!();
+                    }
+
+                    // Special actions need to be taken if we are logging into
+                    // something that requires a login
+                    if *login_needed == sharedtypes::LoginNeed::Required {
+                        break;
+                    }
+
+                    /* if ns_stored.is_some() | body_stored.is_some() {
+                        let apins = sharedtypes::LoginType::ApiNamespaced(
+                            name.to_string(),
+                            ns_stored.into(),
+                            body_stored.into(),
+                        );
+                        job.param.push(sharedtypes::ScraperParam::Login(apins));
+                    }*/
+                }
+                sharedtypes::LoginType::Cookie(_name, _cookie) => {
+                    todo!();
+                }
+                sharedtypes::LoginType::Other(_name, _other) => {
+                    todo!();
+                }
+                sharedtypes::LoginType::Login(name, login_info) => {
+                    let username_string = format!("{}_username", name);
+                    let password_string = format!("{}_password", name);
+                    let username = self.db.settings_get_name(&username_string);
+                    let password = self.db.settings_get_name(&password_string);
+
+                    match (username, password) {
+                        (Some(username), Some(password)) => {
+                            job.param.push(sharedtypes::ScraperParam::Login(
+                                sharedtypes::LoginType::Login(
+                                    name.clone(),
+                                    Some(sharedtypes::LoginUsernameOrPassword {
+                                        username: username.param.unwrap().into(),
+                                        password: password.param.unwrap().into(),
+                                    }),
+                                ),
+                            ));
+                        }
+                        (Some(username), None) => {}
+                        (None, Some(password)) => {}
+                        (None, None) => {
+                            if sharedtypes::LoginNeed::Required == *login_needed {
+                                if let Some(help_text) = help_text {
+                                    logging::info_log(help_text);
+                                }
+
+                                logging::info_log("Username for site: ");
+
+                                let mut input = String::new();
+                                std::io::stdin()
+                                    .read_line(&mut input)
+                                    .expect("Failed to read line");
+                                self.db.setting_add(
+                                    username_string.clone(),
+                                    Some("Username for site.".into()),
+                                    None,
+                                    Some(input.trim().into()),
+                                );
+                                logging::info_log("Password for site: ");
+                                let mut input = String::new();
+                                std::io::stdin()
+                                    .read_line(&mut input)
+                                    .expect("Failed to read line");
+
+                                self.db.setting_add(
+                                    password_string.clone(),
+                                    Some("Password for site.".into()),
+                                    None,
+                                    Some(input.trim().into()),
+                                );
+
+                                job.param.push(sharedtypes::ScraperParam::Login(
+                                    sharedtypes::LoginType::Login(
+                                        name.to_string(),
+                                        Some(sharedtypes::LoginUsernameOrPassword {
+                                            username: username_string.into(),
+                                            password: password_string.into(),
+                                        }),
+                                    ),
+                                ));
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }

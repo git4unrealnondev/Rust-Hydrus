@@ -216,7 +216,7 @@ fn check_existing_db() {
             }
         };
 
-        client::log(format!("Starting to process table: {:?}", &table));
+        client::log_no_print(format!("Starting to process table: {:?}", &table));
 
         let table_temp = sharedtypes::LoadDBTable::Files;
         client::load_table(table_temp);
@@ -247,7 +247,7 @@ fn check_existing_db() {
                 }
             }
         }
-        client::log(format!("Ended table loop for table: {:?}", &table));
+        client::log_no_print(format!("Ended table loop for table: {:?}", &table));
     }
 
     let failed_id: Arc<Mutex<HashMap<Supset, u64>>> = Arc::new(Mutex::new(HashMap::new()));
@@ -278,7 +278,7 @@ fn check_existing_db() {
             );
             client::transaction_flush();
         } else {
-            client::log(format!(
+            client::log_no_print(format!(
                 "FileHash - we've got {} files to parse for {}.",
                 total,
                 get_set(table).name
@@ -313,7 +313,7 @@ fn check_existing_db() {
                 }
             }
         } else {
-            client::log(format!("FileHash - Couldn't find: {}  ", modern.0));
+            client::log_no_print(format!("FileHash - Couldn't find: {}  ", modern.0));
         }
     });
 

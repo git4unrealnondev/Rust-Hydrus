@@ -83,7 +83,7 @@ pub fn get_global_info() -> Vec<sharedtypes::GlobalPluginScraper> {
                 LOCAL_NAME.into(),
                 LOCAL_NAME.to_lowercase(),
             ],
-            priority: DEFAULT_PRIORITY,
+            priority: DEFAULT_PRIORITY - 3,
             num_threads: None,
             modifiers: vec![
                 // Emulates discord when reaching out to fxembed service to pull info
@@ -375,8 +375,12 @@ pub fn parser(
                     files.insert(sharedtypes::FileObject {
                         source: Some(sharedtypes::FileSource::Url(vec![indivimg])),
                         hash: sharedtypes::HashesSupported::None,
-                        tag_list: vec![pos_tag],
+                        tag_list: vec![sharedtypes::FileTagAction {
+                operation: sharedtypes::TagOperation::Add,
+                tags: vec![pos_tag],
+            }],
                         skip_if: vec![],
+                        ..Default::default()
                     });
                 }
             }

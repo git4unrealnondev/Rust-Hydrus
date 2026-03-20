@@ -169,7 +169,7 @@ impl NewinMemDB {
                 self._settings_max += 1;
             }
             Some(setting_id) => {
-                logging::info_log(format!(
+                logging::log(format!(
                     "Updating setting_id: {} with {} {:?} {:?} {:?}.",
                     &setting_id, &name, &pretty, &num, &param
                 ));

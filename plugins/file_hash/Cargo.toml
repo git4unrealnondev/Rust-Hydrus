@@ -13,7 +13,6 @@ strum_macros = "0.27.2"
 libc = { version = "0.2", default-features = false }
 log = "0.4.20"
 anyhow = "1.0.79"
-bincode = { version = "2.0.1", features = ["serde","alloc"] }
 interprocess = "2.1.0"
 serde_bytes = "0.11.14"
 struct_iterable = "0.1.1"
@@ -27,7 +26,8 @@ clap = { version = "4.5.17", features = ["derive"] }
 image_hasher = {version="3.0.0", features=[]}
 image = {version="0.25.9"}
 regex = "1.11.1"
-
+bitcode = { version = "0.6.9", features = ["arrayvec", "derive", "serde"] }
+redact = { git = "https://github.com/git4unrealnondev/redact",  features = ["serde", "bitcode"] }
 [features]
 default = ["serde"]
 serde = []

@@ -18,6 +18,8 @@ use std::collections::HashSet;
 use strum_macros::EnumIter;
 #[cfg(feature = "clap")]
 use strum_macros::{Display, EnumString};
+
+use redact::{Secret, expose_secret};
 // Default priority for a scraper
 pub const DEFAULT_PRIORITY: u64 = 10;
 
@@ -55,7 +57,7 @@ pub struct ClientAPIInfo {
 /// Note a direct match is also performed and if the job is seen then we ignore it.
 ///
 #[derive(
-    Debug, Hash, Eq, PartialEq, Clone, bincode::Encode, bincode::Decode, PartialOrd, Ord, Default,
+    Debug, Hash, Eq, PartialEq, Clone, bitcode::Encode, bitcode::Decode, PartialOrd, Ord, Default,
 )]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum JobCacheType {
@@ -65,7 +67,7 @@ pub enum JobCacheType {
     // Just checks the params field
     Param,
 }
-#[derive(Debug, Hash, Eq, PartialEq, Clone, bincode::Encode, bincode::Decode)]
+#[derive(Debug, Hash, Eq, PartialEq, Clone, bitcode::Encode, bitcode::Decode)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum GreqLeqOrEq {
     GreaterThan,
@@ -84,7 +86,7 @@ pub enum CheckSourceUrlsEnum {
 ///
 /// Manages the conditions that determines which enclave should trigger
 ///
-#[derive(Debug, bincode::Encode, bincode::Decode)]
+#[derive(Debug, bitcode::Encode, bitcode::Decode)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum EnclaveCondition {
     Any,
@@ -94,7 +96,7 @@ pub enum EnclaveCondition {
     TagNameAndNamespace((String, String)),
 }
 
-#[derive(Debug, bincode::Encode, bincode::Decode)]
+#[derive(Debug, bitcode::Encode, bitcode::Decode)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum FileExtensionType {
     Image,
@@ -104,14 +106,14 @@ pub enum FileExtensionType {
 ///
 /// Manages the conditions that determines which enclave stop processing at
 ///
-#[derive(Debug, bincode::Encode, bincode::Decode)]
+#[derive(Debug, bitcode::Encode, bitcode::Decode)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum EnclaveStopCondition {
     /// We've found a location to put our file
     FileDownloadLocation,
 }
 
-#[derive(Debug, bincode::Encode, bincode::Decode)]
+#[derive(Debug, bitcode::Encode, bitcode::Decode)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum EnclaveAction {
     DownloadToLocation(u64),
@@ -123,7 +125,7 @@ pub enum EnclaveAction {
 }
 
 /// Database Tags Object
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, bincode::Encode, bincode::Decode, Clone)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, bitcode::Encode, bitcode::Decode, Clone)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct DbTagNNS {
     pub name: String,
@@ -131,7 +133,7 @@ pub struct DbTagNNS {
 }
 
 /// Database Tags Object
-#[derive(Debug, bincode::Encode, bincode::Decode)]
+#[derive(Debug, bitcode::Encode, bitcode::Decode)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct DbTagObjCompatability {
     pub id: u64,
@@ -166,7 +168,7 @@ pub enum TasksRemove {
     None,
 }
 
-#[derive(Debug, Clone, Eq, Hash, PartialEq, Ord, PartialOrd, bincode::Encode, bincode::Decode)]
+#[derive(Debug, Clone, Eq, Hash, PartialEq, Ord, PartialOrd, bitcode::Encode, bitcode::Decode)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 ///
 /// Holds the login type that we need
@@ -175,10 +177,21 @@ pub enum LoginType {
     Cookie(String, Option<String>),
     Api(String, Option<String>),
     ApiNamespaced(String, Option<String>, Option<String>),
-    Login(String, Option<(String, String)>),
+    Login(String, Option<LoginUsernameOrPassword>),
     Other(String, Option<String>),
 }
-#[derive(Debug, Clone, Eq, Hash, PartialEq, Ord, PartialOrd, bincode::Encode, bincode::Decode)]
+
+/// Struct holding username and password as secrets
+#[derive(Debug, Clone, Eq, Hash, PartialEq, Ord, PartialOrd, bitcode::Encode, bitcode::Decode)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub struct LoginUsernameOrPassword {
+    #[serde(serialize_with = "expose_secret")]
+    pub username: Secret<String>,
+    #[serde(serialize_with = "expose_secret")]
+    pub password: Secret<String>,
+}
+
+#[derive(Debug, Clone, Eq, Hash, PartialEq, Ord, PartialOrd, bitcode::Encode, bitcode::Decode)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 ///
 /// Data storage for the login type needed to determine if we have to use this to access a site or
@@ -211,7 +224,7 @@ pub struct ScraperInfo {
 ///
 /// Modifiers to add to a scraper job
 ///
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Ord, PartialOrd, bincode::Encode, bincode::Decode)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Ord, PartialOrd, bitcode::Encode, bitcode::Decode)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum ScraperModifiers {
     // A useragent to use when scraping text or pulling siteinfo
@@ -225,14 +238,14 @@ pub enum ScraperModifiers {
 ///
 /// Determines if we should apply this to a text or media entry
 ///
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Ord, PartialOrd, bincode::Encode, bincode::Decode)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Ord, PartialOrd, bitcode::Encode, bitcode::Decode)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct TargetModifiers {
     pub target: ModifierTarget,
     pub modifier: ScraperModifiers,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Ord, PartialOrd, bincode::Encode, bincode::Decode)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Ord, PartialOrd, bitcode::Encode, bitcode::Decode)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum ModifierTarget {
     Text,
@@ -261,7 +274,7 @@ pub enum ScraperOrPlugin {
 }
 
 /// A conjoined twin of scrapers and plugins
-#[derive(Debug, Clone, Eq, Hash, PartialEq)]
+#[derive(Debug, Clone, Eq, Hash, PartialEq, Default)]
 pub struct GlobalPluginScraper {
     /// Name of the site (human readable plz)
     pub name: String,
@@ -323,7 +336,7 @@ pub enum CsvCopyMvHard {
 }
 
 /// Tells DB which table to load.
-#[derive(PartialEq, Debug, bincode::Encode, bincode::Decode, Clone, Copy)]
+#[derive(PartialEq, Debug, bitcode::Encode, bitcode::Decode, Clone, Copy)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[cfg_attr(feature = "clap", derive(EnumIter))]
 pub enum LoadDBTable {
@@ -364,7 +377,7 @@ pub fn stringto_commit_type(into: &String) -> CommitType {
 
 /// Dummy Holder Dummy thick
 #[allow(dead_code)]
-#[derive(Debug, PartialEq, bincode::Encode, bincode::Decode)]
+#[derive(Debug, PartialEq, bitcode::Encode, bitcode::Decode)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[cfg_attr(feature = "clap", derive(EnumIter))]
 pub enum SearchHolder {
@@ -377,7 +390,7 @@ pub enum SearchHolder {
 /// & 1 are an AND search then the 4 search items are AND searched in db in
 /// addition to the 4 terms in the searches
 #[allow(dead_code)]
-#[derive(Debug, PartialEq, bincode::Encode, bincode::Decode)]
+#[derive(Debug, PartialEq, bitcode::Encode, bitcode::Decode)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct SearchObj {
     pub search_relate: Option<Vec<SearchHolder>>,
@@ -461,7 +474,7 @@ pub struct ScraperObject {
 }
 
 /// Shared data to be passed for jobs
-#[derive(Debug, Clone, Eq, PartialEq, Hash, Ord, PartialOrd, bincode::Encode, bincode::Decode)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash, Ord, PartialOrd, bitcode::Encode, bitcode::Decode)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct ScraperDataOld {
     pub job: JobScraper,
@@ -471,7 +484,7 @@ pub struct ScraperDataOld {
 
 /// Shared data to be returned from scrapers
 #[derive(
-    Debug, Clone, Eq, PartialEq, Hash, Ord, PartialOrd, bincode::Encode, bincode::Decode, Default,
+    Debug, Clone, Eq, PartialEq, Hash, Ord, PartialOrd, bitcode::Encode, bitcode::Decode, Default,
 )]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct ScraperDataReturn {
@@ -499,7 +512,7 @@ pub struct ScraperFileReturn {
 }
 
 /// File object should of done this sooner lol
-#[derive(Debug, bincode::Encode, bincode::Decode, Clone, Eq, Hash, PartialEq)]
+#[derive(Debug, bitcode::Encode, bitcode::Decode, Clone, Eq, Hash, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct DbFileObj {
     pub id: u64,
@@ -510,7 +523,7 @@ pub struct DbFileObj {
 }
 
 /// File object with no id field if unknown
-#[derive(Debug, bincode::Encode, bincode::Decode, Clone, Eq, Hash, PartialEq)]
+#[derive(Debug, bitcode::Encode, bitcode::Decode, Clone, Eq, Hash, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct DbFileObjNoId {
     pub hash: String,
@@ -519,7 +532,7 @@ pub struct DbFileObjNoId {
 }
 
 /// Wrapper for DbFileStorage
-#[derive(Debug, bincode::Encode, bincode::Decode, Clone, Eq, Hash, PartialEq)]
+#[derive(Debug, bitcode::Encode, bitcode::Decode, Clone, Eq, Hash, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum DbFileStorage {
     // Complete file object
@@ -533,7 +546,7 @@ pub enum DbFileStorage {
 }
 
 /// File object Should only be used for parsing data from plugins
-#[derive(Debug, bincode::Encode, bincode::Decode, Clone)]
+#[derive(Debug, bitcode::Encode, bitcode::Decode, Clone)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct PluginFileObj {
     pub id: Option<u64>,
@@ -543,7 +556,7 @@ pub struct PluginFileObj {
 }
 
 /// Namespace object should of done this sooner lol
-#[derive(Debug, Clone, bincode::Encode, bincode::Decode)]
+#[derive(Debug, Clone, bitcode::Encode, bitcode::Decode)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct DbNamespaceObj {
     pub id: u64,
@@ -556,7 +569,7 @@ pub struct DbNamespaceObj {
 // pub tag: Option`<String>`, pub name: Option`<String>`, pub description:
 // Option`<String>`, }
 /// Database Jobs object
-#[derive(Debug, Hash, Eq, PartialOrd, Ord, PartialEq, Clone, bincode::Encode, bincode::Decode)]
+#[derive(Debug, Hash, Eq, PartialOrd, Ord, PartialEq, Clone, bitcode::Encode, bitcode::Decode)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct DbJobsObj {
     /// id of the job. If exist then we are gravy baby
@@ -606,7 +619,7 @@ impl Default for DbJobsObj {
 
 /// Manager on job type and logic
 #[derive(
-    Debug, Hash, Eq, PartialEq, Clone, bincode::Encode, bincode::Decode, Ord, PartialOrd, Default,
+    Debug, Hash, Eq, PartialEq, Clone, bitcode::Encode, bitcode::Decode, Ord, PartialOrd, Default,
 )]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct DbJobsManager {
@@ -616,7 +629,7 @@ pub struct DbJobsManager {
 }
 
 /// Recreate current job on x event
-#[derive(Debug, Hash, Eq, PartialEq, Clone, bincode::Encode, bincode::Decode, Ord, PartialOrd)]
+#[derive(Debug, Hash, Eq, PartialEq, Clone, bitcode::Encode, bitcode::Decode, Ord, PartialOrd)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum DbJobRecreation {
     OnTagId(u64, Option<u64>),
@@ -634,8 +647,8 @@ pub enum DbJobRecreation {
     Eq,
     PartialEq,
     Clone,
-    bincode::Encode,
-    bincode::Decode,
+    bitcode::Encode,
+    bitcode::Decode,
     Ord,
     PartialOrd,
     Default,
@@ -663,7 +676,7 @@ pub enum DbJobType {
 
 /// Database Parents Object.
 #[derive(
-    Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy, bincode::Encode, bincode::Decode,
+    Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy, bitcode::Encode, bitcode::Decode,
 )]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct DbParentsObj {
@@ -681,7 +694,7 @@ pub struct DbRelationshipObj {
 }
 
 /// Database Settings Object
-#[derive(Debug, Clone, bincode::Encode, bincode::Decode)]
+#[derive(Debug, Clone, bitcode::Encode, bitcode::Decode)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct DbSettingObj {
     pub name: String,
@@ -773,7 +786,7 @@ pub struct DBPluginOutput {
     pub file: Vec<PluginFileObj>,
 }
 
-#[derive(Debug, Eq, Hash, PartialEq, bincode::Encode, bincode::Decode, Clone)]
+#[derive(Debug, Eq, Hash, PartialEq, bitcode::Encode, bitcode::Decode, Clone)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum FileSource {
     Url(Vec<String>),
@@ -781,7 +794,7 @@ pub enum FileSource {
 }
 
 /// Represents one file
-#[derive(Debug, Eq, Hash, PartialEq, bincode::Encode, bincode::Decode, Clone, Default)]
+#[derive(Debug, Eq, Hash, PartialEq, bitcode::Encode, bitcode::Decode, Clone, Default)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct FileObject {
     pub file_info: Option<DbFileObj>,
@@ -793,14 +806,14 @@ pub struct FileObject {
     pub skip_if: Vec<SkipIf>,
 }
 
-#[derive(Debug, Eq, Hash, PartialEq, bincode::Encode, bincode::Decode, Clone, Default)]
+#[derive(Debug, Eq, Hash, PartialEq, bitcode::Encode, bitcode::Decode, Clone, Default)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct FileTagAction {
     pub operation: TagOperation,
     pub tags: Vec<TagObject>,
 }
 
-#[derive(Debug, Eq, Hash, PartialEq, bincode::Encode, bincode::Decode, Clone, Default)]
+#[derive(Debug, Eq, Hash, PartialEq, bitcode::Encode, bitcode::Decode, Clone, Default)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum TagOperation {
     #[default]
@@ -809,7 +822,7 @@ pub enum TagOperation {
     Set,
 }
 
-#[derive(Debug, Eq, Hash, PartialEq, bincode::Encode, bincode::Decode)]
+#[derive(Debug, Eq, Hash, PartialEq, bitcode::Encode, bitcode::Decode)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum SourceOrUrl {
     Url(String),
@@ -848,7 +861,7 @@ impl std::hash::Hash for RegexStorage {
     }
 }
 
-#[derive(Debug, Eq, PartialEq, Hash, Clone, bincode::Encode, bincode::Decode, Default)]
+#[derive(Debug, Eq, PartialEq, Hash, Clone, bitcode::Encode, bitcode::Decode, Default)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct NamespaceProperty {
     pub id: Option<u64>,
@@ -858,7 +871,7 @@ pub struct NamespaceProperty {
 }
 
 /// Holder of Tag info. Keeps relationalship info into account.
-#[derive(Debug, Eq, PartialEq, Hash, Clone, bincode::Encode, bincode::Decode, Default)]
+#[derive(Debug, Eq, PartialEq, Hash, Clone, bitcode::Encode, bitcode::Decode, Default)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct TagObject {
     pub namespace: GenericNamespaceObj,
@@ -867,7 +880,7 @@ pub struct TagObject {
     pub relates_to: Option<SubTag>,
 }
 
-#[derive(Debug, Eq, PartialEq, Hash, Clone, bincode::Encode, bincode::Decode)]
+#[derive(Debug, Eq, PartialEq, Hash, Clone, bitcode::Encode, bitcode::Decode, Default)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct SubTag {
     pub namespace: GenericNamespaceObj,
@@ -877,7 +890,7 @@ pub struct SubTag {
 }
 
 #[derive(
-    Debug, Eq, PartialEq, Hash, Clone, bincode::Encode, bincode::Decode, PartialOrd, Ord, Default,
+    Debug, Eq, PartialEq, Hash, Clone, bitcode::Encode, bitcode::Decode, PartialOrd, Ord, Default,
 )]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct GenericNamespaceObj {
@@ -888,7 +901,7 @@ pub struct GenericNamespaceObj {
 /// Tag Type object. Represents metadata for parser.
 #[derive(Debug, Clone, Default)]
 #[allow(dead_code)]
-#[derive(Eq, Hash, PartialEq, bincode::Encode, bincode::Decode, Ord, PartialOrd)]
+#[derive(Eq, Hash, PartialEq, bitcode::Encode, bitcode::Decode, Ord, PartialOrd)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum TagType {
     // Normal tag.
@@ -903,7 +916,7 @@ pub enum TagType {
     Special,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, bincode::Encode, bincode::Decode, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, bitcode::Encode, bitcode::Decode, PartialOrd, Ord)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Tag {
     pub tag: String,
@@ -913,7 +926,7 @@ pub struct Tag {
 }
 
 /// Used for skipping a ParseUrl in TagType if a tag exists.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, bincode::Encode, bincode::Decode, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, bitcode::Encode, bitcode::Decode, PartialOrd, Ord)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum SkipIf {
     // If a relationship between any file and tag exists.
@@ -927,7 +940,7 @@ pub enum SkipIf {
     NoFilesDownloaded,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Ord, PartialOrd, bincode::Encode, bincode::Decode)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Ord, PartialOrd, bitcode::Encode, bitcode::Decode)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct JobScraper {
     pub site: String,
@@ -936,7 +949,7 @@ pub struct JobScraper {
 }
 
 /// Supported types of hashes in Rust Hydrus
-#[derive(Debug, Clone, bincode::Encode, bincode::Decode, Default)]
+#[derive(Debug, Clone, bitcode::Encode, bitcode::Decode, Default)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[allow(dead_code)]
 #[derive(Eq, Hash, PartialEq)]
@@ -1011,7 +1024,7 @@ pub enum GlobalCallbacks {
 }
 
 /// Callback info for live plugins Gets sent to plugins
-#[derive(Debug, PartialEq, Eq, Hash, bincode::Encode, bincode::Decode)]
+#[derive(Debug, PartialEq, Eq, Hash, bitcode::Encode, bitcode::Decode)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct CallbackInfoInput {
     // Version of the expected call. Its on the plugin to handle this properly
@@ -1036,12 +1049,12 @@ pub struct CallbackInfo {
 }
 
 /// Data that's to be recieved to a plugin
-#[derive(Debug, PartialEq, Eq, Hash, Clone, bincode::Encode, bincode::Decode)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone, bitcode::Encode, bitcode::Decode)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum CallbackCustomData {
     String,
     U8,
-    u64,
+    U64,
     VString,
     VU8,
     Vu64,
@@ -1051,7 +1064,7 @@ pub enum CallbackCustomData {
 pub enum FileDownloadReturn {}
 
 /// Data that gets sent to a plugin
-#[derive(Debug, PartialEq, Eq, Hash, bincode::Encode, bincode::Decode, Clone)]
+#[derive(Debug, PartialEq, Eq, Hash, bitcode::Encode, bitcode::Decode, Clone)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum CallbackCustomDataReturning {
     String(String),
@@ -1060,7 +1073,7 @@ pub enum CallbackCustomDataReturning {
     VString(Vec<String>),
     VU8(Vec<u8>),
     Vu64(Vec<u64>),
-    VCallback(Vec<CallbackCustomDataReturning>),
+    //VCallback(Vec<CallbackCustomDataReturning>),
 }
 
 impl std::fmt::Display for CallbackCustomDataReturning {
@@ -1079,17 +1092,16 @@ impl std::fmt::Display for CallbackCustomDataReturning {
             }
             CallbackCustomDataReturning::Vu64(v) => {
                 write!(f, "Vu64({:?})", v)
-            }
-            CallbackCustomDataReturning::VCallback(list) => {
-                write!(f, "VCallback([")?;
-                for (i, item) in list.iter().enumerate() {
-                    if i > 0 {
-                        write!(f, ", ")?;
-                    }
-                    write!(f, "{}", item)?;
-                }
-                write!(f, "])")
-            }
+            } /*  CallbackCustomDataReturning::VCallback(list) => {
+                  write!(f, "VCallback([")?;
+                  for (i, item) in list.iter().enumerate() {
+                      if i > 0 {
+                          write!(f, ", ")?;
+                      }
+                      write!(f, "{}", item)?;
+                  }
+                  write!(f, "])")
+              }*/
         }
     }
 }
@@ -1119,7 +1131,7 @@ pub enum PluginCommunicationChannel {
 
 /// Scraper type passed to params
 /// Generic holder for params that are from a job
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Ord, PartialOrd, bincode::Encode, bincode::Decode)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Ord, PartialOrd, bitcode::Encode, bitcode::Decode)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum ScraperParam {
     // User defined params like search terms
@@ -1135,7 +1147,7 @@ pub enum ScraperParam {
 }
 
 #[derive(
-    Debug, Clone, PartialEq, Eq, Hash, Ord, PartialOrd, bincode::Encode, bincode::Decode, Default,
+    Debug, Clone, PartialEq, Eq, Hash, Ord, PartialOrd, bitcode::Encode, bitcode::Decode, Default,
 )]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct UrlPost {

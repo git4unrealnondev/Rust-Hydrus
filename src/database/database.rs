@@ -256,16 +256,12 @@ PRAGMA journal_mode = WAL;
                 let mut transaction = write_conn.transaction().unwrap();
                 main.first_db(&transaction);
 
-                dbg!("made first db");
                 main.updatedb(&transaction);
-                dbg!("made update db");
                 transaction.commit().unwrap();
             }
             main.create_default_source_url_ns_id();
             main.load_table(&sharedtypes::LoadDBTable::Settings);
-            dbg!("made loaded table db");
             main.load_caching();
-            dbg!("cached  db");
         } else {
             // Database does exist.
             logging::log(format!(
@@ -1166,7 +1162,6 @@ PRAGMA journal_mode = WAL;
             ");".to_string(),
         ]
         .concat();
-        dbg!(&endresult);
         info!("Creating table as: {}", endresult);
         tn.execute_batch(&endresult).unwrap();
         //stocat = endresult;
@@ -1189,17 +1184,10 @@ PRAGMA journal_mode = WAL;
     pub(super) fn check_table_exists(&self, table: String) -> bool {
         let mut out = false;
         let query_string = "SELECT * FROM sqlite_master WHERE type='table' AND name=? ;";
-        dbg!("setup");
         let tn = self.get_database_connection();
-        dbg!("connection");
-        dbg!(&self._cache);
-        dbg!(&table);
-        dbg!(self.pool.state());
         //panic!();
         let mut toexec = tn.prepare(query_string).unwrap();
-        dbg!("query");
         let mut rows = toexec.query(params![table]).unwrap();
-        dbg!("rows");
         if let Some(_each) = rows.next().unwrap() {
             out = true;
         }

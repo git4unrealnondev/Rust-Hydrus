@@ -342,7 +342,6 @@ LIMIT ?;"#
             .unwrap();
         let popular_lock = self.popular_relationship_count.lock();
 
-        dbg!(&popular_lock);
         if let Some(count) = *popular_lock {
             tn.execute(
                 r#"
@@ -751,9 +750,6 @@ HAVING COUNT(r.fileid) {dir} ?;"
             sharedtypes::GreqLeqOrEq::LessThan => '<',
             sharedtypes::GreqLeqOrEq::Equal => '=',
         };
-        dbg!(format!(
-            "SELECT r.fileid FROM Relationship r LEFT JOIN Tags t ON r.tagid = t.id AND t.namespace = ? GROUP BY r.fileid HAVING COUNT(t.id) {dir} ?;"
-        ));
         let conn = self.get_database_connection();
         let mut stmt = conn
             .prepare(
@@ -1204,7 +1200,6 @@ HAVING COUNT(r.fileid) {dir} ?;"
                 && dbjobsobj.site == each.1.site
                 && dbjobsobj.param == each.1.param
             {
-                dbg!("RET");
                 return id;
             }
         }
@@ -2134,7 +2129,7 @@ END;",
             tn.execute(
                 &format!(
                     "
-        CREATE TRIGGER IF NOT EXISTS Tags_Popular_ad AFTER DELETE ON Tags WHEN new.count < {}
+        CREATE TRIGGER IF NOT EXISTS Tags_Popular_ad AFTER DELETE ON Tags WHEN old.count < {}
         BEGIN
           DELETE FROM Tags_Popular_fts WHERE rowid = old.id;
         END;
@@ -2172,7 +2167,6 @@ END;",
         old_count: &u64,
         new_count: &u64,
     ) {
-        dbg!(old_count, new_count, new_count < old_count);
         self.drop_trigger_manage_relationship_count(tn);
         // If the counts have changed, we need to update the triggers.
         if old_count != new_count {
@@ -2182,7 +2176,6 @@ END;",
             if new_count < old_count {
                 // Insert into `Relationship_Popular` for tags with counts between new_count and old_count.
 
-                dbg!("a");
                 tn.execute(
                     "INSERT OR IGNORE INTO Tags_Popular_fts(rowid, name, namespace)
 SELECT id, name, namespace
@@ -2221,7 +2214,6 @@ WHERE count BETWEEN ? AND ?",
                 )
                 .unwrap();
             }
-            dbg!("b");
             self.create_trigger_manage_relationship_count_v1(tn);
         }
     }

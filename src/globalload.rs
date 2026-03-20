@@ -171,9 +171,13 @@ impl GlobalLoad {
         }
 
         let api = db.api_info.read();
-        for (cnt, lib) in self.get_library_from_callback(&sharedtypes::GlobalCallbacks::Download).into_iter().enumerate() {
-                        let output;
-                        let lib = lib.read();
+        for (cnt, lib) in self
+            .get_library_from_callback(&sharedtypes::GlobalCallbacks::Download)
+            .into_iter()
+            .enumerate()
+        {
+            let output;
+            let lib = lib.read();
             unsafe {
                 let plugindatafunc: libloading::Symbol<
                     unsafe extern "C" fn(
@@ -208,7 +212,6 @@ impl GlobalLoad {
             }
             self.parse_plugin_output(output, db.clone(), libscraper.get(cnt).unwrap(), jobmanager);
         }
-
 
         /*for (cnt, lib_path) in libpath.iter().enumerate() {
             let lib;
@@ -388,6 +391,7 @@ impl GlobalLoad {
             > = unsafe { lib.get(b"text_scraping\0").unwrap() };
             unsafe { temp(url_output, actual_params, scraperdata) }
         } else {
+            logging::error_log(format!("Could not find text_scraping for {}", scraper.name));
             vec![sharedtypes::ScraperReturn::Nothing]
         }
     }
@@ -878,9 +882,12 @@ impl GlobalLoad {
         out
     }
 
-    fn get_library_from_callback(&self, callback: &sharedtypes::GlobalCallbacks) -> Vec<Arc<RwLock<libloading::Library>>> {
-    let mut out = Vec::new();
-if let Some(callbacklist) = self.callback.read().get(callback) {
+    fn get_library_from_callback(
+        &self,
+        callback: &sharedtypes::GlobalCallbacks,
+    ) -> Vec<Arc<RwLock<libloading::Library>>> {
+        let mut out = Vec::new();
+        if let Some(callbacklist) = self.callback.read().get(callback) {
             for callback_item in callbacklist {
                 if let Some(libp) = self.library_lib.read().get(callback_item) {
                     out.push(libp.clone());
@@ -888,10 +895,7 @@ if let Some(callbacklist) = self.callback.read().get(callback) {
             }
         }
 
-
-
-
-    out
+        out
     }
 
     /*///

@@ -10,7 +10,6 @@ strum = { version = "0.25.0", features = ["strum_macros"] }
 strum_macros = "0.25.3"
 serde = { version = "1.0.228", features = ["serde_derive"] }
 thumbnailer = {path= "thumbnailer"} 
-bincode = { version = "2.0.1", features = ["serde","alloc"] }
 serde_bytes = "0.11.19"
 interprocess = "2.3.1"
 anyhow = "1.0.101"
@@ -21,6 +20,10 @@ image = { version = "^0.25.9", default-features = true, features = ["jpeg", "png
 webp-animation = { version = "0.9.0", features = ["image", "static"] }
 ureq = { version = "3.2.0", features = ["json"] }
 gif = "0.14.1"
+bitcode = { version = "0.6.9", features = ["arrayvec", "derive", "serde"] }
+redact = { git = "https://github.com/git4unrealnondev/redact",  features = ["serde", "bitcode"] }
+
+
 [lib]
 crate-type = ["dylib"]
 
