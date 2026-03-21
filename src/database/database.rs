@@ -2025,7 +2025,7 @@ PRAGMA journal_mode = WAL;
             return number;
         }
 
-        let popular_number = 10000;
+        let popular_number = 5;
         self.setting_add_internal(
             tn,
             "SYSTEM_tag_count_popular_division".to_string(),
@@ -2056,7 +2056,7 @@ PRAGMA journal_mode = WAL;
             return number;
         }
 
-        let popular_number = 10000;
+        let popular_number = 5;
         self.setting_add_internal(
              tn,
             "SYSTEM_tag_count_popular_division_old".to_string(),

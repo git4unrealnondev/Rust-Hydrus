@@ -352,7 +352,6 @@ pub fn parser(
         }
 
         for files in json["results"].members() {
-            let mut tag = HashSet::new();
             let mut tag_list = Vec::new();
 
             // Sets up userid for username searching
@@ -368,14 +367,14 @@ pub fn parser(
 
                 // if we get recursion,true as an input then we should rescrape otherwise skip
 
-                let should_grab_post = match scraperdata
+                let skip_conditions = match scraperdata
                     .job
                     .system_data
                     .get("recursion")
                     .map(String::as_str)
                 {
-                    Some("true") => None,
-                    _ => Some(sharedtypes::SkipIf::FileTagRelationship(sharedtypes::Tag {
+                    Some("true") => vec![],
+                    _ => vec![sharedtypes::SkipIf::FileTagRelationship(sharedtypes::Tag {
                         namespace: sharedtypes::GenericNamespaceObj {
                             name: format!("createporn_{}_id", scraperdata.job.site),
                             description: Some(
@@ -383,10 +382,11 @@ pub fn parser(
                             ),
                         },
                         tag: files["_id"].to_string(),
-                    })),
+                    })],
                 };
                 jobs.insert(sharedtypes::ScraperDataReturn {
                     job: sharedtypes::DbJobsObj {
+                    priority: sharedtypes::DEFAULT_PRIORITY - 2,
                         site: scraperdata.job.site.to_string(),
                         param: vec![sharedtypes::ScraperParam::Url(url_to_scrape.clone())],
                         jobmanager: sharedtypes::DbJobsManager {
@@ -395,7 +395,7 @@ pub fn parser(
                         },
                         ..Default::default()
                     },
-                    ..Default::default()
+                    skip_conditions, 
                 });
 
                 /*    // Adds job for getting file details
@@ -420,13 +420,7 @@ pub fn parser(
                     )),
                     relates_to: None,
                 });*/
-                out.push(sharedtypes::ScraperReturn::Data(
-                    sharedtypes::ScraperObject {
-                        tags: tag,
-                        ..Default::default()
-                    },
-                ));
-
+                
                 tag_list.push(sharedtypes::TagObject {
                     namespace: sharedtypes::GenericNamespaceObj {
                         name: format!("createporn_{}_id", scraperdata.job.site),
@@ -844,6 +838,7 @@ fn add_username_search(
             if let Some(scrape_url) = parse_url(&user_post_url) {
                 jobs.insert(sharedtypes::ScraperDataReturn {
                     job: sharedtypes::DbJobsObj {
+                        priority: sharedtypes::DEFAULT_PRIORITY - 2,
                         site: scraperdata.job.site.to_string(),
                         param: vec![sharedtypes::ScraperParam::Url(scrape_url.clone())],
                         jobmanager: sharedtypes::DbJobsManager {

@@ -3,8 +3,6 @@ use crate::error;
 use crate::logging;
 use crate::sharedtypes;
 use crate::sharedtypes::DbParentsObj;
-use r2d2::PooledConnection;
-use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::Connection;
 use rusqlite::OptionalExtension;
 use rusqlite::ToSql;
