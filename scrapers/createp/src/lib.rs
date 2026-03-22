@@ -79,7 +79,7 @@ pub fn get_global_info() -> Vec<sharedtypes::GlobalPluginScraper> {
 ///
 #[unsafe(no_mangle)]
 pub fn url_dump(
-    params: &[sharedtypes::ScraperParam],
+    _params: &[sharedtypes::ScraperParam],
     scraperdata: &sharedtypes::ScraperDataReturn,
 ) -> Vec<sharedtypes::ScraperDataReturn> {
     let mut ret = Vec::new();
@@ -138,13 +138,13 @@ fn parse_url(input: &str) -> Option<String> {
 
     let segments: Vec<&str> = src.path_segments().map(|s| s.collect()).unwrap_or_default();
 
-    if segments.first() == Some(&"post") {
-        if let Some(second) = segments.get(1) {
-            if *second != "search" {
-                return Some(input.to_string());
-            }
-        }
+    if segments.first() == Some(&"post")
+        && let Some(second) = segments.get(1)
+        && *second != "search"
+    {
+        return Some(input.to_string());
     }
+
     let params: HashMap<String, String> = src.query_pairs().into_owned().collect();
 
     let filter = params.get("filter").map(String::as_str);
@@ -222,10 +222,10 @@ fn parse_url(input: &str) -> Option<String> {
                 query.push(("type", sort));
             }
 
-            if let Some(s) = style {
-                if s != "all" {
-                    query.push(("generatorId", s));
-                }
+            if let Some(s) = style
+                && s != "all"
+            {
+                query.push(("generatorId", s));
             }
         }
 
@@ -319,36 +319,6 @@ pub fn parser(
                     ..Default::default()
                 },
             ));
-
-            /*   tag.insert(sharedtypes::TagObject {
-                namespace: sharedtypes::GenericNamespaceObj {
-                    name: "".to_string(),
-                    description: None,
-                },
-                tag: json["info"]["next"].to_string(),
-                tag_type: sharedtypes::TagType::ParseUrl((
-                    sharedtypes::ScraperData {
-                        job: sharedtypes::JobScraper {
-                            site: scraperdata.job.site.to_string(),
-                            param: vec![sharedtypes::ScraperParam::Url(
-                                json["info"]["next"].to_string(),
-                            )],
-                            job_type: sharedtypes::DbJobType::Scraper,
-                        },
-
-                        system_data: scraperdata.job.system_data.clone(),
-                        user_data: BTreeMap::new(),
-                    },
-                    None,
-                )),
-                relates_to: None,
-            });*/
-            /* out.push(sharedtypes::ScraperReturn::Data(
-                sharedtypes::ScraperObject {
-                    tags: tag,
-                    ..Default::default()
-                },
-            ));*/
         }
 
         for files in json["results"].members() {
@@ -386,7 +356,7 @@ pub fn parser(
                 };
                 jobs.insert(sharedtypes::ScraperDataReturn {
                     job: sharedtypes::DbJobsObj {
-                    priority: sharedtypes::DEFAULT_PRIORITY - 2,
+                        priority: sharedtypes::DEFAULT_PRIORITY - 2,
                         site: scraperdata.job.site.to_string(),
                         param: vec![sharedtypes::ScraperParam::Url(url_to_scrape.clone())],
                         jobmanager: sharedtypes::DbJobsManager {
@@ -395,32 +365,9 @@ pub fn parser(
                         },
                         ..Default::default()
                     },
-                    skip_conditions, 
+                    skip_conditions,
                 });
 
-                /*    // Adds job for getting file details
-                tag.insert(sharedtypes::TagObject {
-                    namespace: sharedtypes::GenericNamespaceObj {
-                        name: "".to_string(),
-                        description: None,
-                    },
-                    tag: url_to_scrape.clone(),
-                    tag_type: sharedtypes::TagType::ParseUrl((
-                        sharedtypes::ScraperData {
-                            job: sharedtypes::JobScraper {
-                                site: scraperdata.job.site.to_string(),
-                                param: vec![sharedtypes::ScraperParam::Url(url_to_scrape)],
-                                job_type: sharedtypes::DbJobType::Scraper,
-                            },
-
-                            system_data: scraperdata.job.system_data.clone(),
-                            user_data: BTreeMap::new(),
-                        },
-                        should_grab_post,
-                    )),
-                    relates_to: None,
-                });*/
-                
                 tag_list.push(sharedtypes::TagObject {
                     namespace: sharedtypes::GenericNamespaceObj {
                         name: format!("createporn_{}_id", scraperdata.job.site),
@@ -505,9 +452,6 @@ pub fn parser(
                         find_posts(&v, &mut posts);
 
                         for post in posts {
-                            //let _id = post["_id"].as_str().unwrap_or("");
-                            //let url = post["imageUrl"].as_str().unwrap_or("");
-                            //let _prompt = post["customPrompt"].as_str().unwrap_or("");
                             let mut tags: Vec<sharedtypes::TagObject> = Vec::new();
                             // Extracts out the tags from an entry
                             for (tag_id, json_val) in post["tags"].entries() {

@@ -156,11 +156,11 @@ pub fn main(data: Main) {
                     let (_jobtype, jobsmanager) =
                         return_jobtypemanager(addstruct.jobtype, addstruct.recursion.as_ref());
                     data.load_table(&sharedtypes::LoadDBTable::Jobs);
-                    for bulk in addstruct.bulkadd.iter() {
-                        let mut vars = HashMap::new();
-                        vars.insert("inject".to_string(), bulk.to_string());
-                        let temp = addstruct.query.format(&vars);
-                        if let Ok(ins) = temp {
+                  //  for bulk in addstruct.bulkadd.iter() {
+                   //     let mut vars = HashMap::new();
+                   //     vars.insert("inject".to_string(), bulk.to_string());
+                   //     let temp = addstruct.query.format(&vars);
+                    //    if let Ok(ins) = temp {
                             data.jobs_add(
                                 None,
                                 crate::time_func::time_secs(),
@@ -169,13 +169,14 @@ pub fn main(data: Main) {
                                 DEFAULT_CACHETIME,
                                 DEFAULT_CACHECHECK,
                                 addstruct.site.clone(),
-                                parse_string_to_scraperparam(&ins),
+                        parse_string_to_scraperparam(&addstruct.query),
+                              //  parse_string_to_scraperparam(&ins),
                                 BTreeMap::new(),
                                 BTreeMap::new(),
                                 jobsmanager.clone(),
                             );
-                        }
-                    }
+                      //  }
+                //    }
                 }
                 cli_structs::JobStruct::Remove(_remove) => {
                     // return sharedtypes::AllFields::JobsRemove(sharedtypes::JobsRemove { site:

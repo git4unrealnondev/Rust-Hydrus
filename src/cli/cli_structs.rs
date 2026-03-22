@@ -179,8 +179,8 @@ pub struct JobBulkAddStruct {
     pub jobtype: Option<sharedtypes::DbJobType>,
     /// Loops through all items have a , to seperate the items currently injects into
     /// the query parameter of the job using {inject} as the injection point
-    #[arg(value_delimiter = ',', exclusive = false, required = true)]
-    pub bulkadd: Vec<String>,
+   // #[arg(value_delimiter = ',', exclusive = false, required = false)]
+   // pub bulkadd: Vec<String>,
     #[clap(subcommand)]
     pub recursion: Option<DbJobRecreationClap>,
     #[arg(
@@ -190,6 +190,7 @@ pub struct JobBulkAddStruct {
         value_delimiter = ',',
         value_terminator = ";"
     )]
+    #[arg(exclusive = false, required = false)]
     pub system_data: Option<Vec<String>>,
 }
 

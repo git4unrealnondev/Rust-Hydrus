@@ -17,16 +17,15 @@ path = "src/lib.rs"
 crate-type = ["dylib"]
 
 [dependencies]
-#base64 = "0.22.1"
-#clap = { version = "4.5.16", features = ["derive"] }
-#hex = "0.4.3"
 json = "0.12.4"
-#rand = "0.8.5"
 serde = { version = "1.0.192", features = ["derive"] }
-#strum = "0.25.0"
-#strum_macros = "0.25.1"
-bincode = { version = "2.0.1", features = ["serde","alloc"] }
 regex = "1.11.1"
 chrono = "0.4.41"
-#anyhow = "1.0.98"
 interprocess = "2.2.3"
+bitcode = { version = "0.6.9", features = ["arrayvec", "derive", "serde"] }
+redact = { git = "https://github.com/git4unrealnondev/redact",  features = ["serde", "bitcode"] }
+
+[features]
+clap= []
+serde=[]
+default = ["serde"]

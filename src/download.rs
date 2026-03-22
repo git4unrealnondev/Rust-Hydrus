@@ -129,7 +129,7 @@ fn process_modifiers(
                 client = client.user_agent(useragent);
             }
             sharedtypes::ScraperModifiers::Timeout(timeout) => {
-                client = client.timeout(time::Duration::from_secs(timeout));
+                client = client.timeout(timeout);
             }
         }
     }
@@ -454,6 +454,9 @@ pub fn dlfile_new(
         while boolloop {
             let mut hasher = Sha512::new();
             loop {
+                if cnt >= 3 {
+                    return FileReturnStatus::TryLater;
+                }
                 let fileurlmatch = match &file.source {
                     None => {
                         panic!(
@@ -476,10 +479,29 @@ pub fn dlfile_new(
                     client.get(url.as_ref()).send()
                 };
                 loop {
+                    if cnt >= 3 {
+                        return FileReturnStatus::TryLater;
+                    }
                     match &futureresult {
                         Ok(result) => {
                             if let Err(err) = result.error_for_status_ref() {
                                 if let Some(status) = err.status() {
+                                    if status.is_server_error() {
+                                        logging::error_log(&format!(
+                                            "Worker: {workerid} JobID: {jobid} -- Repeating job due to server err {:?} url: {}",
+                                            err, &url.to_string()
+                                        ));
+                                        let time_dur = Duration::from_secs(10);
+                                        thread::sleep(time_dur);
+                                        futureresult = {
+                                            let client = client.read();
+                                            client.get(url.as_ref()).send()
+                                        };
+
+                                        cnt += 1;
+
+                                        continue;
+                                    }
                                     if status.is_client_error() {
                                         logging::error_log(&format!(
                                             "Worker: {workerid} JobID: {jobid} -- Stopping file download due to: {:?}",
@@ -500,6 +522,7 @@ pub fn dlfile_new(
                                 let client = client.read();
                                 client.get(url.as_ref()).send()
                             };
+                            cnt += 1;
                         }
                     }
                 }
@@ -527,9 +550,6 @@ pub fn dlfile_new(
                         let time_dur = Duration::from_secs(10);
                         thread::sleep(time_dur);
                     }
-                }
-                if cnt >= 3 {
-                    return FileReturnStatus::TryLater;
                 }
                 cnt += 1;
             }
