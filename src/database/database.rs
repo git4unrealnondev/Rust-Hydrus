@@ -1502,20 +1502,40 @@ PRAGMA journal_mode = WAL;
     /// Fixes any files storage locations
     ///
     pub fn fix_storage_locations(&self) {
+        fn make_relative(path: &Path) -> Option<std::path::PathBuf> {
+            let cwd = std::env::current_dir().ok()?;
+            path.strip_prefix(&cwd).ok().map(|p| p.to_path_buf())
+        }
+
         let mut storage_cache = HashMap::new();
 
-            let mut write_conn = self.write_conn.lock();
-            let tn = write_conn.transaction().unwrap();
+        let mut write_conn = self.write_conn.lock();
+        let tn = write_conn.transaction().unwrap();
         for storage in self.storage_get_all() {
-                dbg!(&storage);
+            let storage_path = path::Path::new(&storage);
+
+            if let Some(storage) = make_relative(storage_path) {
+                let storage = storage.to_string_lossy().to_string();
+                if let Some(storage_id) = self.storage_get_id(&storage) {
+                    let storage = std::fs::canonicalize(storage)
+                        .unwrap()
+                        .to_string_lossy()
+                        .to_string();
+                    self.storage_update(&tn, &storage_id, &storage);
+                    storage_cache.insert(storage.clone(), storage_id);
+                }
+            }
+
             if let Some(storage_id) = self.storage_get_id(&storage) {
-                let storage = std::fs::canonicalize(storage).unwrap().to_string_lossy().to_string();
-                dbg!(&storage);
+                let storage = std::fs::canonicalize(storage)
+                    .unwrap()
+                    .to_string_lossy()
+                    .to_string();
                 self.storage_update(&tn, &storage_id, &storage);
                 storage_cache.insert(storage.clone(), storage_id);
             }
         }
-            tn.commit().unwrap();
+        tn.commit().unwrap();
 
         let mut fileid_storage = HashMap::new();
 
@@ -1548,7 +1568,6 @@ PRAGMA journal_mode = WAL;
             }
             tn.commit().unwrap();
             logging::info_log("Finished migrating data.");
-
         } else {
             logging::info_log("Nothing do change everything seems good");
         }

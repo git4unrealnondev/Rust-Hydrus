@@ -1431,8 +1431,17 @@ HAVING COUNT(r.fileid) {dir} ?;"
     ///
     /// Updates a location where an id is x
     ///
-    pub(in crate::database) fn storage_update(&self, tn: &Transaction, id: &u64, location: &String) {
-        tn.execute("UPDATE FileStorageLocations SET location = ? WHERE id = ?", params![location, id]).unwrap();
+    pub(in crate::database) fn storage_update(
+        &self,
+        tn: &Transaction,
+        id: &u64,
+        location: &String,
+    ) {
+        tn.execute(
+            "UPDATE FileStorageLocations SET location = ? WHERE id = ?",
+            params![location, id],
+        )
+        .unwrap();
     }
 
     ///
