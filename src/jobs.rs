@@ -1,8 +1,8 @@
 use crate::Main;
-use crate::database;
 use crate::logging;
 use crate::sharedtypes;
 use crate::time_func;
+use rusqlite::Transaction;
 use std::collections::BTreeMap;
 use std::collections::{HashMap, HashSet};
 //use std::sync::Mutex;
@@ -39,15 +39,23 @@ impl Jobs {
         dbg!(&self.site_job, &self.previously_seen);
     }
 
+    pub fn jobs_add(
+        &mut self,
+        scraper: sharedtypes::GlobalPluginScraper,
+        dbjobsobj: sharedtypes::DbJobsObj,
+    ) -> Option<u64> {
+        self.jobs_add_internal(None, scraper, dbjobsobj)
+    }
+
     ///
     /// Actual job adding logic. Only way to get around Mutex lock of the DB when regex gets
     /// called.
     ///
     /// Returns the job id number if it exists
     ///
-    fn jobs_add_internal(
+    pub fn jobs_add_internal(
         &mut self,
-
+        tn: Option<&Transaction>,
         scraper: sharedtypes::GlobalPluginScraper,
         dbjobsobj: sharedtypes::DbJobsObj,
     ) -> Option<u64> {
@@ -102,7 +110,10 @@ impl Jobs {
             if dbjobsobj.id.is_none() {
                 let mut temp = dbjobsobj.clone();
                 temp.id = None;
-                let id = self.db.jobs_add_new(temp);
+                let id = match tn {
+                    Some(tn) => self.db.jobs_add_new_internal(tn, temp),
+                    None => self.db.jobs_add_new(temp),
+                };
                 out = Some(id);
                 // Updates the ID field with something from the db
                 dbjobsobj.id = Some(id);
@@ -131,27 +142,6 @@ impl Jobs {
             }
         }
         out
-    }
-
-    pub fn jobs_add_nolock(
-        &mut self,
-
-        scraper: sharedtypes::GlobalPluginScraper,
-        dbjobsobj: sharedtypes::DbJobsObj,
-    ) {
-        self.jobs_add_internal(scraper, dbjobsobj);
-    }
-
-    ///
-    /// Adds job into the storage
-    ///
-    pub fn jobs_add(
-        &mut self,
-
-        scraper: sharedtypes::GlobalPluginScraper,
-        dbjobsobj: sharedtypes::DbJobsObj,
-    ) -> Option<u64> {
-        self.jobs_add_internal(scraper, dbjobsobj)
     }
 
     ///

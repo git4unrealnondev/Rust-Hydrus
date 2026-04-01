@@ -1,6 +1,6 @@
 use crate::logging::error_log;
 /// Returns the location as a string that will store the string
-pub fn getfinpath(location: &String, hash: &String, create_dir: bool) -> String {
+pub fn getfinpath(location: &str, hash: &String, create_dir: bool) -> String {
     // Gets and makes folderpath.
     let final_loc = format!(
         "{}/{}{}/{}{}/{}{}",

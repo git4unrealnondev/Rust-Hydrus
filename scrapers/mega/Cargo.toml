@@ -4,7 +4,6 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-bincode = { version = "2.0.1", features = ["serde","alloc"] }
 interprocess = "2.2.1"
 mega = {path="./mega-rs"}
 regex = "1.11.1"
@@ -16,17 +15,17 @@ reqwest-proxy-pool = {path = "./reqwest-proxy-pool"}
 reqwest-middleware = "0.4.2"
 chrono = "0.4.42"
 sysinfo = "0.37.2"
+bitcode = { version = "0.6.9", features = ["arrayvec", "derive", "serde"] }
+redact = { git = "https://github.com/git4unrealnondev/redact",  features = ["serde", "bitcode"] }
 
 [profile.release-with-debug]
 inherits = "release"
 debug = true
 
 [features]
-default = ["exe_build"]
-exe_build = []
-# Enables sending and recieving regex
-regex = []
-
+clap= []
+serde=[]
+default = ["serde"]
 [profile.release]
 opt-level = "z"
 lto=true

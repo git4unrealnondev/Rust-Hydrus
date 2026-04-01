@@ -1,5 +1,6 @@
 extern crate clap;
 
+use crate::cli::cli_structs::CheckFilesEnum;
 use rayon::prelude::*;
 use std::collections::HashSet;
 use std::collections::{BTreeMap, HashMap};
@@ -8,7 +9,6 @@ use std::path::{self, Path};
 use strfmt::Format;
 use url::Url;
 use walkdir::WalkDir;
-
 // use std::str::pattern::Searcher;
 use crate::Main;
 use crate::Mutex;
@@ -156,27 +156,27 @@ pub fn main(data: Main) {
                     let (_jobtype, jobsmanager) =
                         return_jobtypemanager(addstruct.jobtype, addstruct.recursion.as_ref());
                     data.load_table(&sharedtypes::LoadDBTable::Jobs);
-                  //  for bulk in addstruct.bulkadd.iter() {
-                   //     let mut vars = HashMap::new();
-                   //     vars.insert("inject".to_string(), bulk.to_string());
-                   //     let temp = addstruct.query.format(&vars);
+                    //  for bulk in addstruct.bulkadd.iter() {
+                    //     let mut vars = HashMap::new();
+                    //     vars.insert("inject".to_string(), bulk.to_string());
+                    //     let temp = addstruct.query.format(&vars);
                     //    if let Ok(ins) = temp {
-                            data.jobs_add(
-                                None,
-                                crate::time_func::time_secs(),
-                                crate::time_func::time_conv(&addstruct.time),
-                                DEFAULT_PRIORITY,
-                                DEFAULT_CACHETIME,
-                                DEFAULT_CACHECHECK,
-                                addstruct.site.clone(),
+                    data.jobs_add(
+                        None,
+                        crate::time_func::time_secs(),
+                        crate::time_func::time_conv(&addstruct.time),
+                        DEFAULT_PRIORITY,
+                        DEFAULT_CACHETIME,
+                        DEFAULT_CACHECHECK,
+                        addstruct.site.clone(),
                         parse_string_to_scraperparam(&addstruct.query),
-                              //  parse_string_to_scraperparam(&ins),
-                                BTreeMap::new(),
-                                BTreeMap::new(),
-                                jobsmanager.clone(),
-                            );
-                      //  }
-                //    }
+                        //  parse_string_to_scraperparam(&ins),
+                        BTreeMap::new(),
+                        BTreeMap::new(),
+                        jobsmanager.clone(),
+                    );
+                    //  }
+                    //    }
                 }
                 cli_structs::JobStruct::Remove(_remove) => {
                     // return sharedtypes::AllFields::JobsRemove(sharedtypes::JobsRemove { site:
@@ -530,7 +530,13 @@ pub fn main(data: Main) {
                         data.backup_db();
                     }
                     cli_structs::Database::CheckFiles(action) => {
-                        data.check_db_paths();
+                        match action {
+                            CheckFilesEnum::StorageCheck => {
+                                data.fix_storage_locations();
+                            }
+                            _ => {}
+                        }
+                        /*   data.check_db_paths();
 
                         // This will check files in the database and will see if they even exist.
                         let db_location = data.location_get();
@@ -576,7 +582,7 @@ pub fn main(data: Main) {
                             1,
                             std::time::Duration::from_secs(1),
                         )));
-                        todo!("Will fix later");
+                        todo!("Will fix later");*/
                         /*lis.par_iter().for_each(|(fid, storage)| {
                             if fiexist.lock().unwrap().contains(fid) {
                                 return;

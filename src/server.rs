@@ -1,7 +1,6 @@
 #![allow(dead_code)]
 #![allow(unused_variables)]
 use crate::Main;
-use crate::database;
 use crate::download;
 use crate::globalload::GlobalLoad;
 use crate::jobs::Jobs;
@@ -13,7 +12,6 @@ use anyhow::Context;
 use crate::RwLock;
 use interprocess::local_socket::{GenericNamespaced, ListenerOptions, prelude::*};
 use std::collections::HashSet;
-use std::panic;
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;

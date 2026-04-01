@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::path::PathBuf;
+use std::collections::BTreeMap;
 use crate::sharedtypes;
 #[derive(Debug)]
 pub struct RustHydrusApiClient {
@@ -281,20 +282,6 @@ impl RustHydrusApiClient {
             .read_json::<()>()?;
         Ok(res)
     }
-    /// Updates the database for inmemdb and sql
-    pub fn jobs_update_db(
-        &self,
-        jobs_obj: sharedtypes::DbJobsObj,
-    ) -> Result<(), ureq::Error> {
-        let url = format!("{}/{}/{}", self.base_url, "main", "jobs_update_db");
-        let res = ureq::post(url)
-            .send_json(&(jobs_obj))?
-            .body_mut()
-            .with_config()
-            .limit(u64::MAX)
-            .read_json::<()>()?;
-        Ok(res)
-    }
     /// Removes a parent selectivly
     pub fn parents_selective_remove(
         &self,
@@ -556,6 +543,72 @@ impl RustHydrusApiClient {
             .read_json::<Option<String>>()?;
         Ok(res)
     }
+    ///
+    pub fn jobs_update_db(
+        &self,
+        jobs_obj: sharedtypes::DbJobsObj,
+    ) -> Result<(), ureq::Error> {
+        let url = format!("{}/{}/{}", self.base_url, "main", "jobs_update_db");
+        let res = ureq::post(url)
+            .send_json(&(jobs_obj))?
+            .body_mut()
+            .with_config()
+            .limit(u64::MAX)
+            .read_json::<()>()?;
+        Ok(res)
+    }
+    ///
+    pub fn jobs_add_new(
+        &self,
+        jobs_obj: sharedtypes::DbJobsObj,
+    ) -> Result<u64, ureq::Error> {
+        let url = format!("{}/{}/{}", self.base_url, "main", "jobs_add_new");
+        let res = ureq::post(url)
+            .send_json(&(jobs_obj))?
+            .body_mut()
+            .with_config()
+            .limit(u64::MAX)
+            .read_json::<u64>()?;
+        Ok(res)
+    }
+    ///
+    pub fn jobs_add(
+        &self,
+        id: Option<u64>,
+        time: u64,
+        reptime: u64,
+        priority: u64,
+        cachetime: Option<u64>,
+        cachechecktype: sharedtypes::JobCacheType,
+        site: String,
+        param: Vec<sharedtypes::ScraperParam>,
+        system_data: BTreeMap<String, String>,
+        user_data: BTreeMap<String, String>,
+        jobmanager: sharedtypes::DbJobsManager,
+    ) -> Result<u64, ureq::Error> {
+        let url = format!("{}/{}/{}", self.base_url, "main", "jobs_add");
+        let res = ureq::post(url)
+            .send_json(
+                &(
+                    id,
+                    time,
+                    reptime,
+                    priority,
+                    cachetime,
+                    cachechecktype,
+                    site,
+                    param,
+                    system_data,
+                    user_data,
+                    jobmanager,
+                ),
+            )?
+            .body_mut()
+            .with_config()
+            .limit(u64::MAX)
+            .read_json::<u64>()?;
+        Ok(res)
+    }
     ///Checks if a url is dead
     pub fn check_dead_url(&self, url_to_check: &String) -> Result<bool, ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "check_dead_url");
@@ -578,6 +631,17 @@ impl RustHydrusApiClient {
             .with_config()
             .limit(u64::MAX)
             .read_json::<HashSet<sharedtypes::DbJobsObj>>()?;
+        Ok(res)
+    }
+    /// Returns the most likely locations for a file to be at
+    pub fn storage_get_likely(&self, file_id: &u64) -> Result<Vec<String>, ureq::Error> {
+        let url = format!("{}/{}/{}", self.base_url, "main", "storage_get_likely");
+        let res = ureq::post(url)
+            .send_json(&(file_id))?
+            .body_mut()
+            .with_config()
+            .limit(u64::MAX)
+            .read_json::<Vec<String>>()?;
         Ok(res)
     }
     /// Returns all locations currently inside of the db.

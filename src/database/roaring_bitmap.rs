@@ -1,21 +1,15 @@
 use crate::Arc;
 use crate::RwLock;
-use crate::file;
 use crate::logging;
-use crate::logging::error_log;
 use crate::sharedtypes;
 use nohash::IntMap;
-use r2d2::PooledConnection;
-use r2d2_sqlite::SqliteConnectionManager;
 use roaring::bitmap::RoaringBitmap;
 use rusqlite::Error;
 use rusqlite::OptionalExtension;
 use rusqlite::Transaction;
 use rusqlite::params;
 use rusqlite::params_from_iter;
-use std::cmp::Reverse;
 use std::io::Cursor;
-use std::ops::BitAndAssign;
 
 use crate::Connection;
 use crate::database::database::Main;
@@ -47,6 +41,17 @@ impl RelationshipStorage {
             internal_cache: InternalCacheType::Table,
             db,
         }
+    }
+
+    ///
+    /// Clears local caches and reloads everything into local memory.
+    /// Used when a tag crosses the popular threshold
+    ///
+    pub fn reload_local_roaring_cache(&mut self) {
+        self.file_id.clear();
+        self.tag_id.clear();
+
+        self.load_relationship_cache(self.internal_cache.clone());
     }
 
     ///

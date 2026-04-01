@@ -23,6 +23,7 @@ use crate::sharedtypes::DEFAULT_PRIORITY;
 pub const REGEX_COLLECTIONS: &str =
     r"https?://mega\.nz/(folder/|file/|#F?!)[a-zA-Z0-9\-_]*(#|!)[a-zA-Z0-9\-_]*";
 
+pub const DEFAULT_SITE: &str = "mega";
 // Time in seconds to cache the result
 pub const DEFAULT_CACHE: Option<usize> = Some(600);
 
@@ -36,7 +37,7 @@ pub fn get_global_info() -> Vec<sharedtypes::GlobalPluginScraper> {
     let tag_vec = (
         Some(sharedtypes::SearchType::Regex(REGEX_COLLECTIONS.into())),
         vec![],
-        vec!["source_url".to_string(), "Mega Scraper".into()],
+        vec!["source_url".to_string(), "Mega Scraper".into(), "Mega_Source".into(), "Mega_Timestamp_Url".into()],
     );
 
     let callbackvec = vec![
@@ -78,24 +79,28 @@ pub fn get_global_info() -> Vec<sharedtypes::GlobalPluginScraper> {
 #[unsafe(no_mangle)]
 pub fn url_dump(
     params: &[sharedtypes::ScraperParam],
-    scraperdata: &sharedtypes::ScraperData,
-) -> Vec<(String, sharedtypes::ScraperData)> {
+    scraperdata: &sharedtypes::ScraperDataReturn,
+) -> Vec<sharedtypes::ScraperDataReturn> {
     let mut out = Vec::new();
 
     let regex = Regex::new(REGEX_COLLECTIONS).unwrap();
 
     let mut scraperdata = scraperdata.clone();
-    scraperdata.job.job_type = sharedtypes::DbJobType::Scraper;
     scraperdata.job.param.clear();
 
     for param in params {
-        if let sharedtypes::ScraperParam::Normal(temp) = param {
+        if let sharedtypes::ScraperParam::Normal(temp) | sharedtypes::ScraperParam::Url(temp) =
+            param
+        {
             for item_match in regex.find_iter(temp).map(|c| c.as_str()) {
                 let mut sc = scraperdata.clone();
                 sc.job
                     .param
                     .push(sharedtypes::ScraperParam::Url(item_match.into()));
-                out.push((item_match.into(), sc));
+                out.push(sharedtypes::ScraperDataReturn {
+                    job: sc.job.clone(),
+                    ..Default::default()
+                });
             }
         }
     }
@@ -114,7 +119,6 @@ fn get_last_modification_time(nodes: &Nodes) -> Option<DateTime<Utc>> {
         }
     }
 
-    dbg!(&out);
 
     out
 }
@@ -129,7 +133,7 @@ fn find_sub_dirs_and_files(
     taglist: &mut HashSet<sharedtypes::TagObject>,
     url_input: &str,
     client: &mega::Client,
-    flag: &mut Vec<sharedtypes::Flags>,
+    flag: &mut Vec<sharedtypes::ScraperFlags>,
     cnt: &mut i32,
     mod_time: sharedtypes::Tag,
 ) -> Vec<MegaDirOrFile> {
@@ -185,9 +189,7 @@ fn find_sub_dirs_and_files(
                             search = false;
                         }
 
-                        if client::tag_get_name(node.handle().into(), namespace_id).is_none()
-                            || search
-                        {
+                        if search {
                             client::log(format!("MEGA - Downloading: {}", &fpath));
 
                             sys.refresh_memory_specifics(MemoryRefreshKind::everything());
@@ -196,9 +198,8 @@ fn find_sub_dirs_and_files(
                             // Want to leave 1/2 of memory available because I dont want to estop
                             // the system.
                             // The node size is in bytes but the sys used memory is in kb.
-
-                            if node.size() * 1000 > sys.used_memory() / 2 {
-                                flag.push(sharedtypes::Flags::Redo);
+                            if node.size() > sys.free_memory() {
+                                flag.push(sharedtypes::ScraperFlags::Redo);
                                 client::log(format!(
                                     "Stopping due to Memory being too much: {}",
                                     cnt
@@ -226,7 +227,6 @@ fn find_sub_dirs_and_files(
                                 break;
                             }
                             *cnt += 1;*/
-                        } else {
                         }
                     }
                 }
@@ -265,23 +265,21 @@ pub fn on_regex_match(
     regex_match: &str,
     _plugin_callback: &Option<sharedtypes::SearchType>,
 ) -> Vec<sharedtypes::DBPluginOutputEnum> {
-    let mut job = sharedtypes::return_default_jobsobj();
-    job.site = "mega".into();
-    job.param = vec![sharedtypes::ScraperParam::Normal(regex_match.into())];
-    job.jobmanager = sharedtypes::DbJobsManager {
-        jobtype: sharedtypes::DbJobType::Params,
-        recreation: None,
+    let job = sharedtypes::DbJobsObj {
+        site: DEFAULT_SITE.to_string(),
+        param: vec![sharedtypes::ScraperParam::Normal(regex_match.into())],
+        jobmanager: sharedtypes::DbJobsManager {
+            jobtype: sharedtypes::DbJobType::Params,
+            recreation: None,
+        },
+        priority: sharedtypes::DEFAULT_PRIORITY - 2,
+        ..Default::default()
     };
-
-    job.priority = 0;
 
     let out = vec![sharedtypes::DBPluginOutputEnum::Add(vec![
         sharedtypes::DBPluginOutput {
-            tag: vec![],
-            setting: vec![],
-            relationship: vec![],
             jobs: vec![job],
-            file: vec![],
+            ..Default::default()
         },
     ])];
 
@@ -295,15 +293,15 @@ pub fn on_regex_match(
 pub fn text_scraping(
     url_input: &str,
     _params: &[sharedtypes::ScraperParam],
-    _scraperdata: &sharedtypes::ScraperData,
-) -> Result<sharedtypes::ScraperObject, sharedtypes::ScraperReturn> {
+    _scraperdata: &sharedtypes::ScraperDataReturn,
+) -> Vec<sharedtypes::ScraperReturn> {
     let mut cnt = 0;
 
-    let mut file = HashSet::new();
-    let mut tag = HashSet::new();
+    let mut files = HashSet::new();
+    let mut tags = HashSet::new();
 
     let mut fileordir = Vec::new();
-    let mut flag = Vec::new();
+    let mut flags = Vec::new();
 
     client::log("Starting pool init".to_string());
 
@@ -405,7 +403,7 @@ pub fn text_scraping(
                     tag_type: sharedtypes::TagType::Normal,
                 };
 
-                tag.insert(sharedtypes::TagObject {
+                tags.insert(sharedtypes::TagObject {
                     tag: time,
                     tag_type: sharedtypes::TagType::Normal,
                     relates_to: Some(subtag.clone()),
@@ -417,7 +415,7 @@ pub fn text_scraping(
                     },
                 });
             } else {
-                return Err(sharedtypes::ScraperReturn::Nothing);
+                return vec![sharedtypes::ScraperReturn::Nothing];
             }
 
             let rootnew = MegaDir {
@@ -438,11 +436,11 @@ pub fn text_scraping(
                 for item in find_sub_dirs_and_files(
                     nodes,
                     &rootnew,
-                    &mut file,
-                    &mut tag,
+                    &mut files,
+                    &mut tags,
                     url_input,
                     &client,
-                    &mut flag,
+                    &mut flags,
                     &mut cnt,
                     joined_url_time.clone(),
                 ) {
@@ -451,7 +449,7 @@ pub fn text_scraping(
 
                     fileordir.push(item);
                 }
-                if !flag.is_empty() {
+                if !flags.is_empty() {
                     client::log("Stopping due to flags are empty".to_string());
                     break;
                 }
@@ -472,7 +470,7 @@ pub fn text_scraping(
                     limit_to: Some(joined_url_time.clone()),
                 };
 
-                let tags = vec![sharedtypes::TagObject {
+                let root_tags = vec![sharedtypes::TagObject {
                     tag: root.handle().into(),
                     tag_type: sharedtypes::TagType::Normal,
                     relates_to: Some(sub_link),
@@ -521,8 +519,8 @@ pub fn text_scraping(
 
                         //fileordir.push(MegaDirOrFile::File(megafile));
                     } else {
-                        for tags in tags {
-                            tag.insert(tags);
+                        for tag in root_tags {
+                            tags.insert(tag);
                         }
                     }
                 }
@@ -532,45 +530,51 @@ pub fn text_scraping(
     if let Err(err) = nref {
         dbg!(&err);
     }
-    for file in file.iter() {
-        dbg!(&file.tag_list);
-    }
-    Ok(sharedtypes::ScraperObject { file, tag, flag })
+    vec![sharedtypes::ScraperReturn::Data(
+        sharedtypes::ScraperObject {
+            files,
+            tags,
+            flags,
+            ..Default::default()
+        },
+    )]
 }
 
 fn download_file(
     client: &mega::Client,
     file_list: Arc<Mutex<HashSet<sharedtypes::FileObject>>>,
-    tag_list: Arc<Mutex<HashSet<sharedtypes::TagObject>>>,
-    url_input: &str,
+    _tag_list: Arc<Mutex<HashSet<sharedtypes::TagObject>>>,
+    _url_input: &str,
     node: &Node,
-    localpath: &String,
-    mod_time: sharedtypes::Tag,
+    _localpath: &String,
+    _mod_time: sharedtypes::Tag,
 ) {
     // Ghetto way to pre-filter if we've already downloaded a file
-    if let Some(namespace_id) = client::namespace_get("Mega_Handle".into()) {
-        let tags = vec![sharedtypes::TagObject {
-            tag: node.handle().into(),
-            tag_type: sharedtypes::TagType::Normal,
-            relates_to: None,
-            namespace: sharedtypes::GenericNamespaceObj {
-                name: "Mega_Handle".into(),
-                description: Some("A individual handle that links a file to a dir in mega".into()),
-            },
+        let tag_list = vec![sharedtypes::FileTagAction {
+            operation: sharedtypes::TagOperation::Add,
+            tags: vec![sharedtypes::TagObject {
+                tag: node.handle().into(),
+                tag_type: sharedtypes::TagType::Normal,
+                relates_to: None,
+                namespace: sharedtypes::GenericNamespaceObj {
+                    name: "Mega_Handle".into(),
+                    description: Some(
+                        "A individual handle that links a file to a dir in mega".into(),
+                    ),
+                },
+            }],
         }];
 
         let mut err_num = 0;
 
-        if client::tag_get_name(node.handle().into(), namespace_id).is_none() {
             let mut temp = Vec::new();
             'errloop: loop {
                 match task::block_on(client.download_node(node, &mut temp)) {
                     Ok(_) => {
-                        err_num = 0;
                         file_list.lock().unwrap().insert(sharedtypes::FileObject {
                             source: Some(sharedtypes::FileSource::Bytes(temp)),
                             hash: sharedtypes::HashesSupported::None,
-                            tag_list: tags,
+                            tag_list,
                             skip_if:
                                 vec![sharedtypes::SkipIf::FileTagRelationship(sharedtypes::Tag {
                         tag: node.handle().into(),
@@ -581,6 +585,8 @@ fn download_file(
                             ),
                         },
                     })],
+
+                            ..Default::default()
                         });
                         break;
                     }
@@ -593,8 +599,6 @@ fn download_file(
                     }
                 };
             }
-        }
-    }
 }
 
 #[derive(Debug, Clone)]

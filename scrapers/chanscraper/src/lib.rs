@@ -304,10 +304,7 @@ pub fn parser(
     scraperdata: &sharedtypes::ScraperData,
 ) -> Vec<sharedtypes::ScraperReturn> {
     let mut scraper_data = scraperdata.clone();
-    let mut out = sharedtypes::ScraperObject {
-        file: HashSet::new(),
-        tag: HashSet::new(),
-        flag: Vec::new(),
+    let mut out = sharedtypes::ScraperObject {..Default::default()
     };
 
     let site = get_site(&scraperdata.job.site);
@@ -320,7 +317,7 @@ pub fn parser(
             match jobtype_str {
                 "Thread" => {
                     if let Ok(chjson) = json::parse(html_input) {
-                        out.tag.insert(sharedtypes::TagObject {
+                        out.tags.insert(sharedtypes::TagObject {
                             namespace: nsout(&Nsid::ThreadSite),
                             tag: site.site_get().to_string(),
                             tag_type: sharedtypes::TagType::Normal,
@@ -347,7 +344,7 @@ pub fn parser(
                             tag_type: sharedtypes::TagType::Normal,
                             relates_to: Some(boatd),
                         };
-                        out.tag.insert(thread);
+                        out.tags.insert(thread);
                         let subthread = sharedtypes::SubTag {
                             namespace: nsout(&Nsid::ThreadId),
                             tag: scraperdata.user_data.get("ThreadID").unwrap().to_string(),
@@ -369,7 +366,7 @@ pub fn parser(
                                     limit_to: Some(tagthread.clone()),
                                 };
                                 if let Some(comment) = each["com"].as_str() {
-                                    out.tag.insert(sharedtypes::TagObject {
+                                    out.tags.insert(sharedtypes::TagObject {
                                         namespace: nsout(&Nsid::PostComment),
                                         tag: comment.to_string().replace("<wbr>", ""),
                                         tag_type: sharedtypes::TagType::Normal,
@@ -377,7 +374,7 @@ pub fn parser(
                                     });
                                 }
                                 if let Some(comment) = each["time"].as_usize() {
-                                    out.tag.insert(sharedtypes::TagObject {
+                                    out.tags.insert(sharedtypes::TagObject {
                                         namespace: nsout(&Nsid::PostTimestamp),
                                         tag: comment.to_string(),
                                         tag_type: sharedtypes::TagType::Normal,
@@ -385,7 +382,7 @@ pub fn parser(
                                     });
                                 }
 
-                                out.tag.insert(sharedtypes::TagObject {
+                                out.tags.insert(sharedtypes::TagObject {
                                     namespace: nsout(&Nsid::PostId),
                                     tag: comment.to_string(),
                                     tag_type: sharedtypes::TagType::Normal,
@@ -393,7 +390,7 @@ pub fn parser(
                                 });
                             } else {
                                 if let Some(comment) = each["com"].as_str() {
-                                    out.tag.insert(sharedtypes::TagObject {
+                                    out.tags.insert(sharedtypes::TagObject {
                                         namespace: nsout(&Nsid::PostComment),
                                         tag: comment.to_string(),
                                         tag_type: sharedtypes::TagType::Normal,
@@ -513,7 +510,7 @@ pub fn parser(
                                 usr_data.insert("JobType".to_string(), "Thread".to_string());
                                 usr_data
                                     .insert("ThreadID".to_string(), format!("{}", thread["no"]));
-                                out.tag.insert(sharedtypes::TagObject {
+                                out.tags.insert(sharedtypes::TagObject {
                                     namespace: sharedtypes::GenericNamespaceObj {
                                         name: "DO NOT ADD".to_string(),
                                         description: Some("DO NOT PARSE".to_string()),

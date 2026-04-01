@@ -489,7 +489,8 @@ pub fn dlfile_new(
                                     if status.is_server_error() {
                                         logging::error_log(&format!(
                                             "Worker: {workerid} JobID: {jobid} -- Repeating job due to server err {:?} url: {}",
-                                            err, &url.to_string()
+                                            err,
+                                            &url.to_string()
                                         ));
                                         let time_dur = Duration::from_secs(10);
                                         thread::sleep(time_dur);

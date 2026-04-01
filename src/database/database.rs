@@ -21,8 +21,10 @@ pub use rusqlite::{Connection, Result, Transaction, params, types::Null};
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::collections::HashSet;
+use std::fs::Metadata;
 use std::net::SocketAddr;
 use std::panic;
+use std::path;
 use std::path::Path;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -364,7 +366,11 @@ PRAGMA journal_mode = WAL;
             return None;
         }
 
-        self.tag_run_on_tag(tag);
+        {
+            for (plugin_data, ref scraper) in self.tag_run_on_tag(tag) {
+                self.parse_plugin_output_local(tn, plugin_data, scraper);
+            }
+        }
         let nsid = self.namespace_add_namespaceobject(tn, tag.namespace.clone());
         let tag_id = self.tag_add_internal(tn, &tag.tag, nsid, None);
 
@@ -393,6 +399,100 @@ PRAGMA journal_mode = WAL;
             self.parents_add_internal(tn, par);
         }
         Some(tag_id)
+    }
+
+    fn parse_plugin_output_local(
+        &self,
+        tn: &Transaction,
+        plugin_data: Vec<sharedtypes::DBPluginOutputEnum>,
+        scraper: &sharedtypes::GlobalPluginScraper,
+    ) {
+        for each in plugin_data {
+            match each {
+                sharedtypes::DBPluginOutputEnum::Add(name) => {
+                    for names in name {
+                        // Loops through the namespace objects and selects the last one that's valid.
+                        // IF ONE IS NOT VALID THEN THEIR WILL NOT BE ONE ADDED INTO THE DB
+                        for files in names.file {
+                            if files.id.is_none() && files.hash.is_some() && files.ext.is_some() {
+                                // Gets the extension id
+                                let ext_id =
+                                    self.extension_put_string_internal(tn, &files.ext.unwrap());
+
+                                let storage_id = match files.location {
+                                    Some(exists) => self.storage_put_internal(tn, &exists),
+                                    None => {
+                                        let exists = self.location_get();
+                                        self.storage_put_internal(tn, &exists)
+                                    }
+                                };
+
+                                let file = sharedtypes::DbFileStorage::NoIdExist(
+                                    sharedtypes::DbFileObjNoId {
+                                        hash: files.hash.unwrap(),
+                                        ext_id,
+                                        storage_id,
+                                    },
+                                );
+                                self.file_add_internal(tn, &file);
+                            }
+                        }
+                        for tag in names.tag {
+                            if tag.tag_type != sharedtypes::TagType::NormalNoRegex {
+                                for (plugin_data, ref scraper) in self.tag_run_on_tag(&tag) {
+                                    self.parse_plugin_output_local(tn, plugin_data, scraper);
+                                }
+                            }
+                            {
+                                self.tag_add_tagobject_internal(tn, &tag);
+                            }
+                        }
+                        for settings in names.setting {
+                            self.setting_add_internal(
+                                tn,
+                                settings.name,
+                                settings.pretty,
+                                settings.num,
+                                settings.param,
+                            );
+                        }
+
+                        if let Some(ref globalload) = self.globalload {
+                            for job in names.jobs {
+                                globalload.jobmanager.write().jobs_add_internal(
+                                    Some(tn),
+                                    scraper.clone(),
+                                    job,
+                                );
+                            }
+                        }
+
+                        let mut temp_vec: Vec<(Option<u64>, Option<u64>)> = Vec::new();
+                        {
+                            for relations in names.relationship {
+                                let file_id = self.file_get_hash(&&relations.file_hash);
+                                let namespace_id = self.namespace_get(&&relations.tag_namespace);
+                                let tag_id = self.tag_get_name(
+                                    relations.tag_name.clone(),
+                                    namespace_id.unwrap(),
+                                );
+                                temp_vec.push((file_id, tag_id));
+                                /*println!(
+                                    "plugins356 relating: file id {:?} to {:?}",
+                                    file_id, relations.tag_name
+                                );*/
+                                //db.relationship_add(file, tag, addtodb)
+                            }
+                        }
+                        for (file_id, tag_id) in temp_vec {
+                            self.add_relationship_sql(tn, &file_id.unwrap(), &tag_id.unwrap());
+                        }
+                    }
+                }
+                sharedtypes::DBPluginOutputEnum::Del(name) => for _names in name {},
+                sharedtypes::DBPluginOutputEnum::Set(_) => {}
+            }
+        }
     }
 
     ///
@@ -961,7 +1061,7 @@ PRAGMA journal_mode = WAL;
             "dbcachemode".to_string(),
             Some("The database caching options. Supports: Bare, InMemdb and InMemory".to_string()),
             None,
-            Some("Bare".to_string()),
+            Some("RelationshipRoaringPopular".to_string()),
         );
     }
     /// Checks if db version is consistent. If this function returns false signifies
@@ -1398,6 +1498,62 @@ PRAGMA journal_mode = WAL;
         }
     }
 
+    ///
+    /// Fixes any files storage locations
+    ///
+    pub fn fix_storage_locations(&self) {
+        let mut storage_cache = HashMap::new();
+
+            let mut write_conn = self.write_conn.lock();
+            let tn = write_conn.transaction().unwrap();
+        for storage in self.storage_get_all() {
+                dbg!(&storage);
+            if let Some(storage_id) = self.storage_get_id(&storage) {
+                let storage = std::fs::canonicalize(storage).unwrap().to_string_lossy().to_string();
+                dbg!(&storage);
+                self.storage_update(&tn, &storage_id, &storage);
+                storage_cache.insert(storage.clone(), storage_id);
+            }
+        }
+            tn.commit().unwrap();
+
+        let mut fileid_storage = HashMap::new();
+
+        logging::info_log("Collecting data about current system this may take a bit.");
+        let binding = self.file_get_list_id();
+        for file_id in binding.iter() {
+            for (cnt, storage) in self.storage_get_likely(file_id).iter().enumerate() {
+                if let Some(storage_id) = storage_cache.get(storage.as_str())
+                    && std::fs::metadata(storage).is_ok()
+                {
+                    if cnt != 0 {
+                        fileid_storage.insert(file_id, storage_id);
+                    } else {
+                        break;
+                    }
+                }
+            }
+        }
+
+        if !fileid_storage.is_empty() {
+            logging::info_log("Starting to migrate data this may take a bit.");
+            let mut write_conn = self.write_conn.lock();
+            let tn = write_conn.transaction().unwrap();
+            for (file_id, storage_id) in fileid_storage.iter() {
+                logging::log(format!(
+                    "Moving file_id: {} storage_id to {}",
+                    file_id, storage_id
+                ));
+                self.file_update_storage_location(&tn, file_id, storage_id);
+            }
+            tn.commit().unwrap();
+            logging::info_log("Finished migrating data.");
+
+        } else {
+            logging::info_log("Nothing do change everything seems good");
+        }
+    }
+
     /// Adds namespace into DB. Returns the ID of the namespace.
     pub(super) fn namespace_add_inmemdb(
         &self,
@@ -1467,12 +1623,20 @@ PRAGMA journal_mode = WAL;
     }*/
 
     /// Runs regex mostly when a tag gets added
-    fn tag_run_on_tag(&self, tag: &sharedtypes::TagObject) {
+    fn tag_run_on_tag(
+        &self,
+        tag: &sharedtypes::TagObject,
+    ) -> Vec<(
+        Vec<sharedtypes::DBPluginOutputEnum>,
+        sharedtypes::GlobalPluginScraper,
+    )> {
+        let mut out = vec![];
         if tag.tag_type != sharedtypes::TagType::NormalNoRegex {
             if let Some(ref globalload) = self.globalload {
-                globalload.plugin_on_tag(tag);
+                out.extend(globalload.plugin_on_tag(tag));
             }
         }
+        out
     }
 
     /// Adds tag into DB if it doesn't exist in the memdb.
@@ -1494,9 +1658,9 @@ PRAGMA journal_mode = WAL;
     /// Adds a job into a DB.
     /// Going to make a better job adding function
     ///
-    pub fn jobs_add(
+    pub(in crate::database) fn jobs_add_internal(
         &self,
-
+        tn: &Transaction,
         id: Option<u64>,
         time: u64,
         reptime: u64,
@@ -1538,12 +1702,33 @@ PRAGMA journal_mode = WAL;
             system_data: system_data.clone(),
             user_data: user_data.clone(),
         };
-        self.jobs_update_db(jobs_obj.clone());
+        self.jobs_update_db_internal(tn, jobs_obj.clone());
 
         // let jobsmanager = sharedtypes::DbJobsManager { jobtype: *dbjobtype, recreation:
         // None, additionaldata: None, };
         id
     }
+
+    /// Updates the database for inmemdb and sql
+    pub fn jobs_update_db_internal(&self, tn: &Transaction, jobs_obj: sharedtypes::DbJobsObj) {
+        match self._cache {
+            /*CacheType::Bare => {
+                if self.jobs_get_id_sql( &jobs_obj.id.unwrap()).is_none() {
+                    self.jobs_add_sql( &jobs_obj)
+                } else {
+                    self.jobs_update_by_id( &jobs_obj);
+                }
+            }*/
+            _ => {
+                if self._inmemdb.write().jobref_new(jobs_obj.clone()) {
+                    self.jobs_update_by_id(tn, &jobs_obj);
+                } else {
+                    self.jobs_add_sql(tn, &jobs_obj)
+                }
+            }
+        }
+    }
+
     /// Adds global load into db
     pub fn setup_globalload(&mut self, globalload: GlobalLoad) {
         self.globalload = Some(globalload.into());

@@ -1,5 +1,4 @@
 use crate::Main;
-use crate::Mutex;
 use crate::RwLock;
 use crate::download;
 use crate::download::hash_bytes;
@@ -16,7 +15,6 @@ use rayon::iter::IntoParallelRefMutIterator;
 use rayon::iter::ParallelIterator;
 use reqwest::blocking::Client;
 use rusty_pool::ThreadPool;
-use std::collections::BTreeSet;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::thread;

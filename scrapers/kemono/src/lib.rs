@@ -1,7 +1,7 @@
 use chrono::{DateTime, Utc};
 use json::JsonValue;
 use regex::Regex;
-use std::{collections::HashSet, default, time::Duration};
+use std::{collections::HashSet, time::Duration};
 
 #[path = "../../../src/client.rs"]
 mod client;
@@ -25,27 +25,26 @@ pub fn get_global_info() -> Vec<sharedtypes::GlobalPluginScraper> {
             ],
             priority: DEFAULT_PRIORITY,
             num_threads: None,
-            modifiers: vec![sharedtypes::TargetModifiers {
-                target: sharedtypes::ModifierTarget::Media,
-                modifier: sharedtypes::ScraperModifiers::Useragent(
-                    "Mozilla/5.0 (X11; Linux x86_64; rv:147.0) Gecko/20100101 Firefox/147.0"
-                        .to_string(),
-                ),
-            },
-sharedtypes::TargetModifiers {
-                target: sharedtypes::ModifierTarget::Media,
-                modifier: sharedtypes::ScraperModifiers::Header(
-                        ( "Accept".to_string(),
-                    "image/avif,image/webp,image/png,image/svg+xml,image/*;q=0.8,*/*;q=0.5".to_string())
-                ),
-            },
-sharedtypes::TargetModifiers {
-                target: sharedtypes::ModifierTarget::Media,
-                modifier: sharedtypes::ScraperModifiers::Timeout(
-                       None                ),
-            }
-
-                
+            modifiers: vec![
+                sharedtypes::TargetModifiers {
+                    target: sharedtypes::ModifierTarget::Media,
+                    modifier: sharedtypes::ScraperModifiers::Useragent(
+                        "Mozilla/5.0 (X11; Linux x86_64; rv:147.0) Gecko/20100101 Firefox/147.0"
+                            .to_string(),
+                    ),
+                },
+                sharedtypes::TargetModifiers {
+                    target: sharedtypes::ModifierTarget::Media,
+                    modifier: sharedtypes::ScraperModifiers::Header((
+                        "Accept".to_string(),
+                        "image/avif,image/webp,image/png,image/svg+xml,image/*;q=0.8,*/*;q=0.5"
+                            .to_string(),
+                    )),
+                },
+                sharedtypes::TargetModifiers {
+                    target: sharedtypes::ModifierTarget::Media,
+                    modifier: sharedtypes::ScraperModifiers::Timeout(None),
+                },
             ],
         },
     ));
@@ -126,27 +125,27 @@ fn parse_post(
     });
 
     // --- Title ---
-    if let Some(title) = input_post["title"].as_str() {
-        if !title.is_empty() {
-            tags.insert(sharedtypes::TagObject {
-                namespace: get_genericnamespaceobj(Returntype::PostTitle, sitetype),
-                tag: title.to_string(),
-                tag_type: sharedtypes::TagType::Normal,
-                relates_to: version_subtag.clone(),
-            });
-        }
+    if let Some(title) = input_post["title"].as_str()
+        && !title.is_empty()
+    {
+        tags.insert(sharedtypes::TagObject {
+            namespace: get_genericnamespaceobj(Returntype::PostTitle, sitetype),
+            tag: title.to_string(),
+            tag_type: sharedtypes::TagType::Normal,
+            relates_to: version_subtag.clone(),
+        });
     }
 
     // --- Content ---
-    if let Some(content) = input_post["content"].as_str() {
-        if !content.is_empty() {
-            tags.insert(sharedtypes::TagObject {
-                namespace: get_genericnamespaceobj(Returntype::PostContent, sitetype),
-                tag: content.to_string(),
-                tag_type: sharedtypes::TagType::Normal,
-                relates_to: version_subtag.clone(),
-            });
-        }
+    if let Some(content) = input_post["content"].as_str()
+        && !content.is_empty()
+    {
+        tags.insert(sharedtypes::TagObject {
+            namespace: get_genericnamespaceobj(Returntype::PostContent, sitetype),
+            tag: content.to_string(),
+            tag_type: sharedtypes::TagType::Normal,
+            relates_to: version_subtag.clone(),
+        });
     }
 
     // --- User ---

@@ -772,7 +772,7 @@ pub enum FileAction {
 }
 
 /// Plugin output for the passed object
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct DBPluginOutput {
     // Adds a tag to DB
     pub tag: Vec<TagObject>,

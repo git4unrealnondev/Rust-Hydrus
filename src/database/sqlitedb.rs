@@ -12,6 +12,7 @@ use rusqlite::types::Null;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::ops::Deref;
+use std::path;
 use std::time::Duration;
 
 const DEFAULT_DURATION_BACKOFF: Duration = Duration::from_millis(100);
@@ -1027,8 +1028,11 @@ HAVING COUNT(r.fileid) {dir} ?;"
     }
 
     /// Adds a job to sql
-    pub(in crate::database) fn jobs_add_sql(&self, data: &sharedtypes::DbJobsObj) {
-        let tn = self.write_conn.lock();
+    pub(in crate::database) fn jobs_add_sql(
+        &self,
+        tn: &Transaction,
+        data: &sharedtypes::DbJobsObj,
+    ) {
         let inp = "INSERT OR REPLACE INTO Jobs VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
         {
             wait_until_sqlite_ok!(tn.execute(
@@ -1185,7 +1189,11 @@ HAVING COUNT(r.fileid) {dir} ?;"
     }
 
     /// Adds job into db
-    pub fn jobs_add_new(&self, dbjobsobj: sharedtypes::DbJobsObj) -> u64 {
+    pub fn jobs_add_new_internal(
+        &self,
+        tn: &Transaction,
+        dbjobsobj: sharedtypes::DbJobsObj,
+    ) -> u64 {
         let mut dbjobsobj = dbjobsobj.clone();
         let id = match dbjobsobj.id {
             None => self.jobs_get_max(),
@@ -1204,7 +1212,7 @@ HAVING COUNT(r.fileid) {dir} ?;"
 
         dbjobsobj.id = Some(id);
 
-        self.jobs_update_db(dbjobsobj);
+        self.jobs_update_db_internal(&tn, dbjobsobj);
 
         id
     }
@@ -1393,16 +1401,38 @@ HAVING COUNT(r.fileid) {dir} ?;"
 
     ///
     /// Gets a string from the ID of the storage location
+    /// TODO next release I need to remove this check as the path will be automatically managed
     ///
     pub(in crate::database) fn storage_get_string(&self, id: &u64) -> Option<String> {
         let tn = self.pool.get().unwrap();
-        wait_until_sqlite_ok!(tn.query_row(
+        let out = wait_until_sqlite_ok!(tn.query_row(
             "SELECT location from FileStorageLocations where id = ?",
             params![id],
             |row| row.get(0),
         ))
         .optional()
-        .unwrap_or_default()
+        .unwrap_or_default();
+
+        // Converts relative filepath to absolute
+        if let Some(ref out) = out {
+            if std::path::Path::new(out).is_relative() {
+                return Some(
+                    std::fs::canonicalize(out)
+                        .unwrap()
+                        .to_string_lossy()
+                        .to_string(),
+                );
+            }
+        }
+
+        out
+    }
+
+    ///
+    /// Updates a location where an id is x
+    ///
+    pub(in crate::database) fn storage_update(&self, tn: &Transaction, id: &u64, location: &String) {
+        tn.execute("UPDATE FileStorageLocations SET location = ? WHERE id = ?", params![location, id]).unwrap();
     }
 
     ///
@@ -1413,6 +1443,25 @@ HAVING COUNT(r.fileid) {dir} ?;"
         tn: &Transaction,
         location: &String,
     ) -> u64 {
+        // Gets the absolute path of the file location
+        let location = if path::Path::new(location).is_relative() {
+            std::fs::canonicalize(location)
+                .unwrap()
+                .to_string_lossy()
+                .to_string()
+        } else {
+            location.to_string()
+        };
+
+        // Early exit if we already have a file location
+        if let Ok(Some(out)) = wait_until_sqlite_ok!(tn.query_row(
+            "SELECT id from FileStorageLocations where location = ?",
+            params![location],
+            |row| row.get(0),
+        )) {
+            return out;
+        }
+
         {
             let mut prep = tn
                 .prepare("INSERT OR REPLACE INTO FileStorageLocations (location) VALUES (?)")
@@ -1844,6 +1893,22 @@ RETURNING id;
         out_file_id
     }
 
+    ///
+    /// Updates the file storage location from where it should be in the db to where it is
+    ///
+    pub(in crate::database) fn file_update_storage_location(
+        &self,
+        tn: &Transaction,
+        file_id: &u64,
+        storage_id: &u64,
+    ) {
+        tn.execute(
+            "UPDATE File SET storage_id = ? WHERE id = ?",
+            params![storage_id, file_id],
+        )
+        .unwrap();
+    }
+
     /*
         pub (in crate::database) fn get_namespace_property(&self, tn: &Transaction, name: String) -> Option<sharedtypes::NamespaceProperty> {
     wait_until_sqlite_ok!(tn.query_row(
@@ -1972,15 +2037,23 @@ RETURNING id;
         &self,
         tn: &Transaction,
         file: &u64,
-        tag: &u64,
+        tag_id: &u64,
     ) {
+        let greq = self.is_tag_count_greq_rel_limit(tn, tag_id);
+        match greq {
+            GreqOrEq::EqualTo => {
+                self.migrate_relationship_popular_tagid(tn, tag_id, true);
+            }
+            _ => {}
+        }
+
         if let Some(ref roaring) = self.relationship_roaring_storage {
-            roaring.write().relationship_roaring_add(tn, *file, *tag);
+            roaring.write().relationship_roaring_add(tn, *file, *tag_id);
         }
 
         let sql = "INSERT OR IGNORE INTO Relationship VALUES(?, ?)";
 
-        tn.execute(sql, params![file, tag]).unwrap();
+        tn.execute(sql, params![file, tag_id]).unwrap();
     }
 
     /// Migrates all tags with id into the popular table if true
@@ -2007,6 +2080,9 @@ RETURNING id;
             //  tn.execute(sql, params![id]).unwrap();
             let sql = "DELETE FROM Tags_Popular_fts WHERE rowid = ?";
             tn.execute(sql, params![id]).unwrap();
+        }
+        if let Some(ref roaring) = self.relationship_roaring_storage {
+            roaring.write().reload_local_roaring_cache();
         }
 
         self.create_trigger_manage_relationship_count_v1(tn);
@@ -2217,8 +2293,11 @@ WHERE count BETWEEN ? AND ?",
     }
 
     /// Updates job by id
-    pub(in crate::database) fn jobs_update_by_id(&self, data: &sharedtypes::DbJobsObj) {
-        let tn = self.write_conn.lock();
+    pub(in crate::database) fn jobs_update_by_id(
+        &self,
+        tn: &Transaction,
+        data: &sharedtypes::DbJobsObj,
+    ) {
         let inp = "UPDATE Jobs SET id=?, time=?, reptime=?, Manager=?, priority=?,cachetime=?,cachechecktype=?, site=?, param=?, SystemData=?, UserData=? WHERE id = ?";
         let _ = tn.execute(
             inp,

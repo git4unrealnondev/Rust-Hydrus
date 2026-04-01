@@ -10,6 +10,7 @@ use crate::sharedtypes;
 use remove_empty_subdirs::remove_empty_subdirs;
 pub use rusqlite::types::ToSql;
 pub use rusqlite::{Connection, Result, Transaction, params, types::Null};
+use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::path::Path;
@@ -260,26 +261,6 @@ impl Main {
         let tn = write_conn.transaction().unwrap();
         self.migrate_relationship_file_tag_internal(&tn, file_id, old_tag_id, new_tag_id);
         tn.commit().unwrap();
-    }
-
-    /// Updates the database for inmemdb and sql
-    pub fn jobs_update_db(&self, jobs_obj: sharedtypes::DbJobsObj) {
-        match self._cache {
-            /*CacheType::Bare => {
-                if self.jobs_get_id_sql( &jobs_obj.id.unwrap()).is_none() {
-                    self.jobs_add_sql( &jobs_obj)
-                } else {
-                    self.jobs_update_by_id( &jobs_obj);
-                }
-            }*/
-            _ => {
-                if self._inmemdb.write().jobref_new(jobs_obj.clone()) {
-                    self.jobs_update_by_id(&jobs_obj);
-                } else {
-                    self.jobs_add_sql(&jobs_obj)
-                }
-            }
-        }
     }
 
     /// Removes a parent selectivly
@@ -727,61 +708,126 @@ impl Main {
 
     /// Gets the location of a file in the file system
     pub fn get_file(&self, file_id: &u64) -> Option<String> {
-        let file = self.file_get_id(file_id);
-        if let Some(file_obj) = file {
-            // Checks that the file with existing info exists
-            let file = match file_obj {
-                sharedtypes::DbFileStorage::Exist(file) => file,
-                _ => return None,
-            };
+        // Early match
+        let file = match self.file_get_id(file_id)? {
+            sharedtypes::DbFileStorage::Exist(file) => file,
+            _ => return None,
+        };
 
-            let location = self.storage_get_string(&file.storage_id).unwrap();
+        if let Some(ref ext) = self.extension_get_string(&file.ext_id) {
+            /*   for base in [
+                self.storage_get_string(&file.storage_id)?,
+                self.location_get(),
+            ].iter() {*/
+            for base in self.storage_get_likely(file_id).iter() {
+                let path = Path::new(&helpers::getfinpath(base, &file.hash, false))
+                    .join(&file.hash)
+                    .with_extension(ext);
 
-            let sup = [location, self.location_get()];
-            for each in sup {
-                // Cleans the file path if it contains a '/' in it
-                let loc = if each.ends_with('/') | each.ends_with('\\') {
-                    each[0..each.len() - 1].to_string()
-                } else {
-                    each.to_string()
-                };
-                let folderloc = helpers::getfinpath(&loc, &file.hash, false);
-
-                let out;
-                if cfg!(unix) {
-                    out = format!("{}/{}", folderloc, file.hash);
-                } else if cfg!(windows) {
-                    out = format!("{}\\{}", folderloc, file.hash);
-                } else {
-                    logging::error_log("UNSUPPORTED OS FOR GETFILE CALLING.".to_string());
-                    return None;
+                if std::fs::metadata(&path).is_ok() {
+                    return Some(path.to_string_lossy().to_string());
                 }
 
-                // No idea why this is faster? Metadata maybe
-                if let Ok(filepath) = std::fs::canonicalize(&out) {
-                    return Some(filepath.to_string_lossy().to_string());
-                }
+                let path_noext = path.with_extension("");
 
-                // New revision of the downloader adds the extension to the file downloaded.
-                // This will rename the file if it uses the old file ext
-                if let Some(ref ext_str) = self.extension_get_string(&file.ext_id)
-                    && Path::new(&out).with_extension(ext_str).exists()
-                {
-                    return Some(
-                        std::fs::canonicalize(
-                            Path::new(&out)
-                                .with_extension(ext_str)
-                                .to_string_lossy()
-                                .to_string(),
-                        )
-                        .unwrap()
-                        .to_string_lossy()
-                        .to_string(),
-                    );
+                if std::fs::metadata(&path_noext).is_ok() {
+                    let _ = std::fs::rename(&path_noext, &path);
+                    return Some(path.to_string_lossy().to_string());
                 }
             }
         }
+
         None
+    }
+
+    /*pub fn get_file(&self, file_id: &u64) -> Option<String> {
+        let file = match self.file_get_id(file_id)? {
+            sharedtypes::DbFileStorage::Exist(file) => file,
+            _ => return None,
+        };
+
+        let ext = self.extension_get_string(&file.ext_id);
+
+        for base in [
+            self.storage_get_string(&file.storage_id)?,
+            self.location_get(),
+        ] {
+            let base = base.trim_end_matches(&['/', '\\'][..]);
+
+            let path = Path::new(&helpers::getfinpath(base, &file.hash, false))
+                .join(&file.hash);
+
+            let old_exists = std::fs::metadata(&path).is_ok();
+
+                dbg!(&old_exists, &path);
+
+            if let Some(ref ext) = ext {
+                let with_ext = path.with_extension(ext);
+                let new_exists = std::fs::metadata(&with_ext).is_ok();
+
+                // Rename only if extension doesn't exist
+                    if old_exists && !new_exists {
+                    let _ = std::fs::rename(&path, &with_ext);
+                        dbg!(&with_ext);
+                    return Some(with_ext.to_string_lossy().into());
+                }
+
+                if new_exists {
+                    return Some(with_ext.to_string_lossy().into());
+                }
+            }
+
+            if old_exists {
+                return Some(path.to_string_lossy().into());
+            }
+        }
+
+        None
+    }   */
+
+    pub fn jobs_update_db(&self, jobs_obj: sharedtypes::DbJobsObj) {
+        let mut write_conn = self.write_conn.lock();
+        let tn = write_conn.transaction().unwrap();
+        self.jobs_update_db_internal(&tn, jobs_obj);
+        tn.commit().unwrap();
+    }
+    pub fn jobs_add_new(&self, jobs_obj: sharedtypes::DbJobsObj) -> u64 {
+        let mut write_conn = self.write_conn.lock();
+        let tn = write_conn.transaction().unwrap();
+        let out = self.jobs_add_new_internal(&tn, jobs_obj);
+        tn.commit().unwrap();
+
+        out
+    }
+
+    pub fn jobs_add(
+        &self,
+        id: Option<u64>,
+        time: u64,
+        reptime: u64,
+        priority: u64,
+        cachetime: Option<u64>,
+        cachechecktype: sharedtypes::JobCacheType,
+        site: String,
+        param: Vec<sharedtypes::ScraperParam>,
+        system_data: BTreeMap<String, String>,
+        user_data: BTreeMap<String, String>,
+        jobmanager: sharedtypes::DbJobsManager,
+    ) -> u64 {
+        self.jobs_add_new(sharedtypes::DbJobsObj {
+            id,
+            time,
+            reptime,
+            priority,
+            cachetime,
+            cachechecktype,
+            site,
+            param,
+            jobmanager,
+            isrunning: false,
+            system_data,
+            user_data,
+        })
     }
 
     ///
@@ -800,6 +846,28 @@ impl Main {
             _ => self._inmemdb.read().jobref_get_isrunning(),
         }
     }
+
+    ///
+    /// Returns the most likely locations for a file to be at
+    ///
+    pub fn storage_get_likely(&self, file_id: &u64) -> Vec<String> {
+        let mut out = Vec::new();
+        if let Some(file) = self.file_get_id(file_id)
+            && let sharedtypes::DbFileStorage::Exist(file) = file
+            && let Some(storage_loc) = self.storage_get_string(&file.storage_id)
+        {
+            out.push(storage_loc);
+        }
+
+        // Gets default location for file storage
+        out.push(self.location_get());
+
+        // Gets all other locations currently in db
+        out.extend(self.storage_get_all());
+
+        out
+    }
+
     ///
     /// Returns all locations currently inside of the db.
     ///

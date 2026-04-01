@@ -120,7 +120,7 @@ fn generate_client_code(api_file: &str) -> io::Result<String> {
     // Combine client code with generated functions
     let client_code = quote! {
     use std::collections::HashMap;
-            use std::collections::HashSet;use std::path::PathBuf;
+            use std::collections::HashSet;use std::path::PathBuf;use std::collections::BTreeMap;
             use crate::sharedtypes;
 
             #[derive(Debug)]

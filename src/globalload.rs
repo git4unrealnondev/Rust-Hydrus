@@ -101,7 +101,7 @@ pub struct GlobalLoad {
             >,
         >,
     >,
-    jobmanager: Arc<RwLock<Jobs>>,
+    pub jobmanager: Arc<RwLock<Jobs>>,
 }
 
 ///
@@ -345,7 +345,7 @@ impl GlobalLoad {
                         {
                             let mut jm = jobmanager.write();
                             for job in jobs_to_add {
-                                jm.jobs_add_nolock(scraper.clone(), job);
+                                jm.jobs_add(scraper.clone(), job);
                             }
                         }
 
@@ -544,11 +544,18 @@ impl GlobalLoad {
         }
     }
 
-    fn run_regex(&self, name: &String, namespace: &sharedtypes::GenericNamespaceObj) {
+    fn run_regex(
+        &self,
+        name: &String,
+        namespace: &sharedtypes::GenericNamespaceObj,
+    ) -> Vec<(
+        Vec<sharedtypes::DBPluginOutputEnum>,
+        sharedtypes::GlobalPluginScraper,
+    )> {
         let mut storagemap = Vec::new();
         let tag_nsid = match self.db.namespace_get(&namespace.name) {
             Some(id) => id,
-            None => return,
+            None => return vec![],
         };
         {
             let reg_store = self.return_regex_storage();
@@ -625,7 +632,7 @@ impl GlobalLoad {
                 }
             }
             if let Some(liba) = liba {
-                self.c_regex_match(
+                return self.c_regex_match(
                     name,
                     namespace,
                     regex,
@@ -635,6 +642,7 @@ impl GlobalLoad {
                 );
             }
         }
+        vec![]
     }
 
     ///
@@ -644,15 +652,21 @@ impl GlobalLoad {
         &self,
 
         tag: &sharedtypes::TagObject, //tag: &String,tag_nsid: &u64,
-    ) {
+    ) -> Vec<(
+        Vec<sharedtypes::DBPluginOutputEnum>,
+        sharedtypes::GlobalPluginScraper,
+    )> {
+        let mut out = Vec::new();
         // Designed to run regex on any tag that comes in. I'll leave the filtering to the plugins
-        self.run_regex(&tag.tag, &tag.namespace);
+        out.extend(self.run_regex(&tag.tag, &tag.namespace));
         if let Some(relate) = &tag.relates_to {
-            self.run_regex(&relate.tag, &relate.namespace);
+            out.extend(self.run_regex(&relate.tag, &relate.namespace));
             if let Some(limitto) = &relate.limit_to {
-                self.run_regex(&limitto.tag, &limitto.namespace);
+                out.extend(self.run_regex(&limitto.tag, &limitto.namespace));
             }
         }
+
+        out
     }
 
     ///
@@ -667,7 +681,7 @@ impl GlobalLoad {
         plugin_callback: &Option<sharedtypes::SearchType>,
         liba: &libloading::Library,
         scraper: &GlobalPluginScraper,
-    ) {
+    ) -> Vec<(Vec<sharedtypes::DBPluginOutputEnum>, GlobalPluginScraper)> {
         let output;
         unsafe {
             let plugindatafunc: libloading::Symbol<
@@ -684,10 +698,10 @@ impl GlobalLoad {
                         "Could not find function on_regex_match for plugin: {}",
                         scraper.name
                     ));
-                    return;
+                    return vec![];
                 }
             };
-            liba.get::<libloading::Symbol<
+            /*   liba.get::<libloading::Symbol<
                 unsafe extern "C" fn(
                     &str,
                     &sharedtypes::GenericNamespaceObj,
@@ -695,10 +709,12 @@ impl GlobalLoad {
                     &Option<sharedtypes::SearchType>,
                 ) -> Vec<sharedtypes::DBPluginOutputEnum>,
             >>(b"on_regex_match")
-                .unwrap();
+                .unwrap();*/
             output = plugindatafunc(tag, tag_namespace, regex_match, plugin_callback);
         };
-        self.parse_plugin_output_local(output, scraper);
+
+        vec![(output, scraper.clone())]
+        //self.parse_plugin_output_local(output, scraper);
         // parse_plugin_output_andmain(output, db, scraper, jobmanager, &self)
     }
 
@@ -757,9 +773,7 @@ impl GlobalLoad {
                         }
 
                         for job in names.jobs {
-                            self.jobmanager
-                                .write()
-                                .jobs_add_nolock(scraper.clone(), job);
+                            self.jobmanager.write().jobs_add(scraper.clone(), job);
                             //db.jobs_add_new(job);
                         }
 
