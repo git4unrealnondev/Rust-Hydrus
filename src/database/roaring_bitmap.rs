@@ -52,6 +52,8 @@ impl RelationshipStorage {
         self.tag_id.clear();
 
         self.load_relationship_cache(self.internal_cache.clone());
+        self.file_id.shrink_to_fit();
+        self.tag_id.shrink_to_fit();
     }
 
     ///
@@ -156,6 +158,8 @@ impl RelationshipStorage {
         if let Some(tagid) = current_tagid {
             self.relationship_cache_add_tagid_sql(tn, &tagid, &bitmap);
         }
+        self.file_id.shrink_to_fit();
+        self.tag_id.shrink_to_fit();
 
         Ok(())
 
