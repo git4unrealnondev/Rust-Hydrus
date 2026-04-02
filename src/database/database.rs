@@ -289,6 +289,8 @@ PRAGMA journal_mode = WAL;
         main.transaction_flush();
         main
     }
+
+
     /// Adds file into Memdb instance.
     pub(in crate::database) fn file_add_db(
         &self,

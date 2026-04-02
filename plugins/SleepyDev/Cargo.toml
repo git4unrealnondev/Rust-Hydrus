@@ -10,7 +10,8 @@ edition = "2021"
 pipe = { version = "0.4.0", features = ["bidirectional"] }
 serde = { version = "1.0.192", features = ["serde_derive"] }
 clap = { version = "4.5.17", features = ["derive"] }
-bincode = { version = "2.0.1", features = ["serde","alloc"] }
+bitcode = { version = "0.6.9", features = ["arrayvec", "derive", "serde"] }
+redact = { git = "https://github.com/git4unrealnondev/redact",  features = ["serde", "bitcode"] }
 
 [lib]
 crate-type = ["dylib"]
@@ -24,3 +25,7 @@ lto=true
 codegenunits=1
 strip = true
 panic = "abort"
+
+[features]
+default = ["serde"]
+serde = []
