@@ -212,56 +212,6 @@ impl GlobalLoad {
             }
             self.parse_plugin_output(output, db.clone(), libscraper.get(cnt).unwrap(), jobmanager);
         }
-
-        /*for (cnt, lib_path) in libpath.iter().enumerate() {
-            let lib;
-            unsafe {
-                match libloading::Library::new(lib_path) {
-                    Ok(good_lib) => lib = good_lib,
-                    Err(_) => {
-                        logging::error_log(format!(
-                            "Cannot load library at path: {}",
-                            lib_path.to_string_lossy()
-                        ));
-                        continue;
-                    }
-                }
-            }
-            let output;
-            unsafe {
-                let plugindatafunc: libloading::Symbol<
-                    unsafe extern "C" fn(
-                        &[u8],
-                        &String,
-                        &String,
-                        &sharedtypes::ClientAPIInfo,
-                    )
-                        -> Vec<sharedtypes::DBPluginOutputEnum>,
-                    //unsafe extern "C" fn(Cursor<Bytes>, &String, &String, database::Main),
-                > = match lib.get(b"on_download") {
-                    Ok(lib) => lib,
-                    Err(_) => {
-                        logging::info_log(format!(
-                            "Could not find on_download for plugin: {}",
-                            lib_path.to_string_lossy()
-                        ));
-                        continue;
-                    }
-                };
-                // If the api isnt set then just return and dont call anything
-                if let Some(ref api_info) = *api {
-                    output = plugindatafunc(cursorpass, hash, ext, &api_info);
-                } else {
-                    return;
-                }
-            }
-
-            let jobmanager;
-            {
-                jobmanager = self.jobmanager.clone();
-            }
-            self.parse_plugin_output(output, db.clone(), libscraper.get(cnt).unwrap(), jobmanager);
-        }*/
     }
 
     ///

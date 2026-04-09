@@ -62,7 +62,9 @@ pub fn get_global_info() -> Vec<sharedtypes::GlobalPluginScraper> {
                     },
                     sharedtypes::TargetModifiers {
                         target: sharedtypes::ModifierTarget::Media,
-                        modifier: sharedtypes::ScraperModifiers::Timeout(10),
+                        modifier: sharedtypes::ScraperModifiers::Timeout(Some(
+                            std::time::Duration::new(10, 0),
+                        )),
                     },
                 ],
             },
@@ -322,6 +324,7 @@ pub fn parser(
         }
 
         for files in json["results"].members() {
+            dbg!(&files);
             let mut tag_list = Vec::new();
 
             // Sets up userid for username searching
@@ -380,7 +383,16 @@ pub fn parser(
                     relates_to: None,
                 });
             }
-            if files["imageUrl"].is_string() {
+
+            let file_source = if files["imageUrl"].is_string() {
+                files["imageUrl"].clone()
+            } else if files["videoUrl"].is_string() {
+                files["videoUrl"].clone()
+            } else {
+                continue;
+            };
+
+            if file_source.is_string() {
                 // Scrapes the username off a post if we need to
                 if let Some(user_id) = user_id {
                     add_username_search(
@@ -393,9 +405,7 @@ pub fn parser(
 
                 let mut file = HashSet::new();
                 file.insert(sharedtypes::FileObject {
-                    source: Some(sharedtypes::FileSource::Url(vec![
-                        files["imageUrl"].to_string(),
-                    ])),
+                    source: Some(sharedtypes::FileSource::Url(vec![file_source.to_string()])),
                     hash: sharedtypes::HashesSupported::None,
                     tag_list: vec![sharedtypes::FileTagAction {
                         tags: tag_list,

@@ -12,6 +12,7 @@ use anyhow::Context;
 use crate::RwLock;
 use interprocess::local_socket::{GenericNamespaced, ListenerOptions, prelude::*};
 use std::collections::HashSet;
+use std::net::TcpListener;
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
@@ -284,21 +285,27 @@ another process and try again.",
         // Gets the API URL that we should be using
         let mut api_url = db.get_api_url();
 
+        let routes = main_db.clone().get_filters().recover(handle_rejection);
         handles.push(std::thread::spawn(move || {
-            use tokio::net::TcpListener;
-            'errloop: loop {
-                match runtime.block_on(TcpListener::bind(api_url.url)) {
-                    Ok(l) => {
-                        break 'errloop;
-                    }
+            let main_db = Arc::new(main_db); // your shared state
+
+            // Bind (async) and find a working port
+            let mut api_url = db.get_api_url().url;
+            use tokio::net::TcpListener as TokioTcpListener;
+
+            let listener = loop {
+                match runtime.block_on(TokioTcpListener::bind(api_url)) {
+                    Ok(l) => break l,
                     Err(e) => {
                         logging::error_log(&format!("Failed to bind server: {}", e));
-                        api_url.url.set_port(api_url.url.port() + 1);
+                        api_url.set_port(api_url.port() + 1);
                     }
-                };
-            }
-
-            runtime.block_on(warp::serve(routes_with_fallback.clone()).run(api_url.url));
+                }
+            };
+            logging::info_log(&format!("Starting API server on {}", api_url));
+            // Run warp server on the existing listener
+            runtime.block_on(warp::serve(routes_with_fallback).incoming(listener).run());
+            //  runtime.block_on(warp::serve(routes_with_fallback.clone()).incoming(TcpListener::ne)  .run(api_url.url));
             /*loop {
             logging::info_log(&format!("Starting API server on: {}", api_url.url));
 

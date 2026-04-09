@@ -4,6 +4,7 @@ use crate::download;
 use crate::download::hash_bytes;
 use crate::download::process_bytes;
 use crate::globalload::GlobalLoad;
+use crate::helpers::memory_manage;
 use crate::logging;
 use crate::logging::info_log;
 use crate::sharedtypes;
@@ -127,9 +128,12 @@ struct Worker {
 /// reason to do this over doing this with default drop behaviour is the logging.
 impl Drop for Worker {
     fn drop(&mut self) {
+        use libc;
         if let Some(thread) = self.thread.take() {
             futures::executor::block_on(async { thread.join().unwrap() });
             info_log(format!("Shutting Down Worker from Worker: {}", self.id));
+
+            memory_manage();
         }
     }
 }

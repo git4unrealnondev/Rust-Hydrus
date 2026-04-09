@@ -1,4 +1,6 @@
 use crate::logging::error_log;
+use cfg_if::cfg_if;
+
 /// Returns the location as a string that will store the string
 pub fn getfinpath(location: &str, hash: &String, create_dir: bool) -> String {
     // Gets and makes folderpath.
@@ -34,4 +36,20 @@ pub fn check_url(input: &String) -> bool {
     }
 
     false
+}
+
+///
+/// Clears memory if called
+///
+pub fn memory_manage() {
+    cfg_if! {
+        if #[cfg(target_env = "gnu")] {
+            unsafe {
+        libc::malloc_trim(0);
+    }
+               } else {
+            // Fallback for non-glibc (musl, Windows, macOS)
+            pub fn free_unused_memory() {}
+        }
+    }
 }

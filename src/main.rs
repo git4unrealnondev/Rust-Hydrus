@@ -39,6 +39,8 @@ pub mod types;
 
 use database::database::Main;
 
+use crate::helpers::memory_manage;
+
 // pub mod scr { pub mod cli; pub mod database; pub mod download; pub mod file; pub
 // pub mod jobs; pub mod logging; pub mod plugins; pub mod scraper; pub mod
 // sharedtypes; pub pub mod tasks; pub mod threading; pub mod time; }
@@ -86,6 +88,7 @@ fn db_file_sanity(dbloc: &str) {
 
 /// Main function.
 fn main() {
+    memory_manage();
     // Create a background thread which checks for deadlocks every 10s
     thread::spawn(move || {
         loop {

@@ -1348,21 +1348,19 @@ HAVING COUNT(r.fileid) {dir} ?;"
         tag_id: &u64,
     ) -> Option<sharedtypes::DbTagNNS> {
         let tn = self.pool.get().unwrap();
+
         wait_until_sqlite_ok!(tn.query_row(
-            "SELECT name, namespace from Tags where id = ?",
+            "SELECT name, namespace FROM Tags WHERE id = ?",
             params![tag_id],
-            |row| match (row.get(0), row.get(1)) {
-                (Ok(Some(name)), Ok(Some(namespace_id))) => Ok(Some(sharedtypes::DbTagNNS {
-                    name,
-                    namespace: namespace_id,
-                })),
-                _ => Ok(None),
+            |row| {
+                Ok(sharedtypes::DbTagNNS {
+                    name: row.get(0)?,
+                    namespace: row.get(1)?,
+                })
             },
         ))
-        .optional()
-        .unwrap()?
+        .ok()
     }
-
     ///
     /// Gets a list of tag ids
     ///
