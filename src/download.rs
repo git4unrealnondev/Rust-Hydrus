@@ -599,7 +599,7 @@ pub fn dlfile_new(
             file,
             Some(source_url),
         );
-        logging::info_log(format!("Finished processing bytes"));
+        //logging::info_log(format!("Finished processing bytes"));
         return FileReturnStatus::File((hash, file_ext, file_id.unwrap()));
     }
 
@@ -629,7 +629,7 @@ pub fn process_bytes(
         }
     }
 
-    logging::info_log("Finished enclave_determine_processing".to_string());
+    //logging::info_log("Finished enclave_determine_processing".to_string());
     // Flushes to disk before we run the plugins on_download hook.
 
     // If the plugin manager is None then don't do anything plugin wise. Useful for if

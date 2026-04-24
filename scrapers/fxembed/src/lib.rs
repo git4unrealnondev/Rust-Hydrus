@@ -61,7 +61,7 @@ const SOURCE_REPLACEMENTS_TWTR: [&str; 5] = [
 ];
 const SOURCE_REPLACEMENTS_BSKY: [&str; 2] = ["fxbsky.app", "bskyx.app"];
 
-const DEBUG: bool = false;
+const DEBUG: bool = true;
 
 ///
 /// Returns the info needed to scrape an fxembed system

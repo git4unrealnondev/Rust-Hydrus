@@ -230,7 +230,7 @@ impl RelationshipStorage {
             }
         }
 
-        logging::info_log("Finished storing tag_id maps for roaring");
+        //logging::info_log("Finished storing tag_id maps for roaring");
         if let InternalCacheType::Popular(_) = self.internal_cache {
             return;
         }

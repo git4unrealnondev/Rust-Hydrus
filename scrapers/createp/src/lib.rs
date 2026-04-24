@@ -324,7 +324,6 @@ pub fn parser(
         }
 
         for files in json["results"].members() {
-            dbg!(&files);
             let mut tag_list = Vec::new();
 
             // Sets up userid for username searching

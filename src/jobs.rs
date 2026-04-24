@@ -363,7 +363,48 @@ impl Jobs {
     ) {
         for (key, login, login_needed, help_text, overwrite_db_entry) in scraper.login_type.iter() {
             match login {
-                sharedtypes::LoginType::Api(_name, _api_key) => {
+                sharedtypes::LoginType::Api(name, api_key) => {
+                    let api_string = format!("{}_api", name);
+                    let mut should_process_login = false;
+                    match self.db.settings_get_name(&api_string) {
+                        Some(api) => match api.param {
+                            Some(api) => {
+                                job.param.push(sharedtypes::ScraperParam::Login(
+                                    sharedtypes::LoginType::Api(name.clone(), Some(api)),
+                                ));
+                            }
+                            None => {
+                                should_process_login =
+                                    sharedtypes::LoginNeed::Required == *login_needed;
+                            }
+                        },
+                        None => {
+                            should_process_login =
+                                sharedtypes::LoginNeed::Required == *login_needed;
+                        }
+                    }
+
+                    if should_process_login {
+                        if let Some(help) = help_text {
+                            logging::info_log(help);
+                        }
+
+                        logging::info_log("API Login Goes Here:");
+                        let mut input = String::new();
+                        std::io::stdin()
+                            .read_line(&mut input)
+                            .expect("Failed to read line");
+                        self.db.setting_add(
+                            api_string.clone(),
+                            Some("API for site.".into()),
+                            None,
+                            Some(input.trim().into()),
+                        );
+                        job.param.push(sharedtypes::ScraperParam::Login(
+                            sharedtypes::LoginType::Api(name.clone(), Some(input.trim().into())),
+                        ));
+                    }
+
                     todo!();
                 }
                 sharedtypes::LoginType::ApiNamespaced(name, api_namespace, api_body) => {

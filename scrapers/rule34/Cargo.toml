@@ -1,0 +1,33 @@
+[package]
+name = "rule34"
+version = "0.1.0"
+edition = "2024"
+
+[profile.release]
+opt-level = "z"
+lto=true
+codegenunits=1
+strip = true
+debug=false
+
+[lib]
+doc=true
+name = "rule34"
+path = "src/lib.rs"
+crate-type = ["dylib"]
+
+
+[dependencies]
+redact = { git = "https://github.com/git4unrealnondev/redact",  features = ["serde", "bitcode"] }
+bitcode = { version = "0.6.9", features = ["arrayvec", "derive", "serde"] }
+url = "2.5.8"
+serde_json = "1.0.149"
+interprocess = "2.4.0"
+serde = { version = "1.0.192", features = ["derive"] }
+html-escape = "0.2.13"
+json = "0.12.4"
+
+[features]
+clap= []
+serde=[]
+default = ["serde"]

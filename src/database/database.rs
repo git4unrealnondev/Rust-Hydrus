@@ -280,6 +280,10 @@ PRAGMA journal_mode = WAL;
             let mut write_conn = main.write_conn.lock();
             let tn = write_conn.transaction().unwrap();
             main.migrate_relationships_based_on_count(&tn);
+
+            // Sets up the files location if not exists
+            main.enclave_create_default_file_download(&tn, main.location_get());
+
             tn.commit().unwrap();
         }
 

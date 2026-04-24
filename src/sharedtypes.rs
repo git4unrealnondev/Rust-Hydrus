@@ -280,6 +280,8 @@ pub struct GlobalPluginScraper {
     pub name: String,
     /// Verison of the item
     pub version: u64,
+    /// Which should run at what priority. Higher priority means it should run first
+    pub priority: u64,
     /// Weather this item should handle the file download
     pub should_handle_file_download: bool,
     /// Weather this item needs to handle text scraping
@@ -303,6 +305,7 @@ pub fn return_default_globalpluginparser() -> GlobalPluginScraper {
     GlobalPluginScraper {
         name: "".to_string(),
         version: 0,
+        priority: 0,
         should_handle_file_download: false,
         should_handle_text_scraping: false,
         should_send_files_on_scrape: false,
