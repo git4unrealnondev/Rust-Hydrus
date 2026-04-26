@@ -149,7 +149,7 @@ fn find_sub_dirs_and_files(
     let mut sys = System::new_all();
 
     //parent.children.iter().for_each(|child| {
-    'loop: for child in parent.children.iter() {
+    for child in parent.children.iter() {
         if let Some(node) = parent_node.get_node_by_handle(child) {
             match node.kind() {
                 mega::NodeKind::File => {
@@ -211,7 +211,7 @@ fn find_sub_dirs_and_files(
                                 break;
                             }
 
-                           if download_file(
+                            download_file(
                                 client,
                                 file_arc.clone(),
                                 tag_arc.clone(),
@@ -219,9 +219,7 @@ fn find_sub_dirs_and_files(
                                 node,
                                 &fpath,
                                 mod_time.clone(),
-                            ) {
-                                break 'loop;
-                            }
+                            );
                             client::log(format!("MEGA - Downloaded: {}", &fpath));
                             /*out.lock().unwrap().push(MegaDirOrFile::File(MegaFile {
                                 file_path: fpath,
