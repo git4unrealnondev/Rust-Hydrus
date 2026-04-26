@@ -37,7 +37,12 @@ pub fn get_global_info() -> Vec<sharedtypes::GlobalPluginScraper> {
     let tag_vec = (
         Some(sharedtypes::SearchType::Regex(REGEX_COLLECTIONS.into())),
         vec![],
-        vec!["source_url".to_string(), "Mega Scraper".into(), "Mega_Source".into(), "Mega_Timestamp_Url".into()],
+        vec![
+            "source_url".to_string(),
+            "Mega Scraper".into(),
+            "Mega_Source".into(),
+            "Mega_Timestamp_Url".into(),
+        ],
     );
 
     let callbackvec = vec![
@@ -119,7 +124,6 @@ fn get_last_modification_time(nodes: &Nodes) -> Option<DateTime<Utc>> {
         }
     }
 
-
     out
 }
 
@@ -145,7 +149,7 @@ fn find_sub_dirs_and_files(
     let mut sys = System::new_all();
 
     //parent.children.iter().for_each(|child| {
-    for child in parent.children.iter() {
+    'loop: for child in parent.children.iter() {
         if let Some(node) = parent_node.get_node_by_handle(child) {
             match node.kind() {
                 mega::NodeKind::File => {
@@ -207,7 +211,7 @@ fn find_sub_dirs_and_files(
                                 break;
                             }
 
-                            download_file(
+                           if download_file(
                                 client,
                                 file_arc.clone(),
                                 tag_arc.clone(),
@@ -215,7 +219,9 @@ fn find_sub_dirs_and_files(
                                 node,
                                 &fpath,
                                 mod_time.clone(),
-                            );
+                            ) {
+                                break 'loop;
+                            }
                             client::log(format!("MEGA - Downloaded: {}", &fpath));
                             /*out.lock().unwrap().push(MegaDirOrFile::File(MegaFile {
                                 file_path: fpath,
@@ -550,33 +556,30 @@ fn download_file(
     _mod_time: sharedtypes::Tag,
 ) {
     // Ghetto way to pre-filter if we've already downloaded a file
-        let tag_list = vec![sharedtypes::FileTagAction {
-            operation: sharedtypes::TagOperation::Add,
-            tags: vec![sharedtypes::TagObject {
-                tag: node.handle().into(),
-                tag_type: sharedtypes::TagType::Normal,
-                relates_to: None,
-                namespace: sharedtypes::GenericNamespaceObj {
-                    name: "Mega_Handle".into(),
-                    description: Some(
-                        "A individual handle that links a file to a dir in mega".into(),
-                    ),
-                },
-            }],
-        }];
+    let tag_list = vec![sharedtypes::FileTagAction {
+        operation: sharedtypes::TagOperation::Add,
+        tags: vec![sharedtypes::TagObject {
+            tag: node.handle().into(),
+            tag_type: sharedtypes::TagType::Normal,
+            relates_to: None,
+            namespace: sharedtypes::GenericNamespaceObj {
+                name: "Mega_Handle".into(),
+                description: Some("A individual handle that links a file to a dir in mega".into()),
+            },
+        }],
+    }];
 
-        let mut err_num = 0;
+    let mut err_num = 0;
 
-            let mut temp = Vec::new();
-            'errloop: loop {
-                match task::block_on(client.download_node(node, &mut temp)) {
-                    Ok(_) => {
-                        file_list.lock().unwrap().insert(sharedtypes::FileObject {
-                            source: Some(sharedtypes::FileSource::Bytes(temp)),
-                            hash: sharedtypes::HashesSupported::None,
-                            tag_list,
-                            skip_if:
-                                vec![sharedtypes::SkipIf::FileTagRelationship(sharedtypes::Tag {
+    let mut temp = Vec::new();
+    'errloop: loop {
+        match task::block_on(client.download_node(node, &mut temp)) {
+            Ok(_) => {
+                file_list.lock().unwrap().insert(sharedtypes::FileObject {
+                    source: Some(sharedtypes::FileSource::Bytes(temp)),
+                    hash: sharedtypes::HashesSupported::None,
+                    tag_list,
+                    skip_if: vec![sharedtypes::SkipIf::FileTagRelationship(sharedtypes::Tag {
                         tag: node.handle().into(),
                         namespace: sharedtypes::GenericNamespaceObj {
                             name: "Mega_Handle".into(),
@@ -586,19 +589,19 @@ fn download_file(
                         },
                     })],
 
-                            ..Default::default()
-                        });
-                        break;
-                    }
-                    Err(err) => {
-                        err_num += 1;
-                        dbg!("Got ERROR", err);
-                        if err_num == 3 {
-                            break 'errloop;
-                        }
-                    }
-                };
+                    ..Default::default()
+                });
+                break;
             }
+            Err(err) => {
+                err_num += 1;
+                dbg!("Got ERROR", err);
+                if err_num == 3 {
+                    break 'errloop;
+                }
+            }
+        };
+    }
 }
 
 #[derive(Debug, Clone)]

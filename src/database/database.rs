@@ -585,10 +585,10 @@ PRAGMA journal_mode = WAL;
                                 // a) Add new tags from parser that aren't already in file
                                 for &tag_id in parser_tags {
                                     if !file_tags.contains(&tag_id) {
-                                        logging::log(format!(
+                                      /*  logging::log(format!(
                                             "Adding tag_id {} to file_id {} per scraper",
                                             tag_id, file_id
-                                        ));
+                                        ));*/
                                         self.add_relationship_sql(tn, &file_id, &tag_id);
                                         file_tags.push(tag_id); // Update in-memory vector
                                     }
@@ -602,10 +602,10 @@ PRAGMA journal_mode = WAL;
                                     .collect();
 
                                 for tag_id in to_remove {
-                                    logging::log(format!(
+                                  /*  logging::log(format!(
                                         "Removing tag_id {} from file_id {} per scraper",
                                         tag_id, file_id
-                                    ));
+                                    ));*/
                                     self.delete_relationship_sql(tn, &file_id, &tag_id);
                                     file_tags.retain(|&id| id != tag_id); // Update in-memory vector
                                 }
@@ -614,10 +614,10 @@ PRAGMA journal_mode = WAL;
                             None => {
                                 // Namespace doesn't exist for this file, just add all parser tags
                                 for &tag_id in parser_tags {
-                                    logging::log(format!(
+                                  /*  logging::log(format!(
                                         "Adding tag_id {} to file_id {} per scraper",
                                         tag_id, file_id
-                                    ));
+                                    ));*/
                                     self.add_relationship_sql(tn, &file_id, &tag_id);
                                 }
                             }

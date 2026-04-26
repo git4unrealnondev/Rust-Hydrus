@@ -61,7 +61,9 @@ pub fn url_dump(
             sharedtypes::ScraperParam::Normal(search_term) => {
                 search_params.push(search_term.clone());
             }
-            sharedtypes::ScraperParam::Url(url) => {}
+            sharedtypes::ScraperParam::Url(_url) => {
+                //TODO need to support parsing urls here
+            }
             sharedtypes::ScraperParam::Login(login) => {
                 if let sharedtypes::LoginType::Login(_, Some(logininfo)) = login {
                     url_params.push(("api_key", logininfo.username.expose_secret().clone()));
@@ -72,7 +74,6 @@ pub fn url_dump(
         }
     }
 
-    dbg!(&scraperdata);
     let mut user_data = scraperdata.job.user_data.clone();
 
     // Always return a JSON object
@@ -88,8 +89,8 @@ pub fn url_dump(
         // Querting by index??
         url_params.push(("q", "index".to_string()));
 
-        // Sets limit as 250
-        let limit = 250;
+        // Sets limit as 100
+        let limit = 100;
         url_params.push(("limit", limit.to_string()));
         user_data.insert("limit".into(), limit.to_string());
 
@@ -106,8 +107,8 @@ pub fn url_dump(
         // Sets the page ID if it exists
         if let Some(pid) = user_data.get("pid") {
             let mut pid: u64 = pid.parse().unwrap();
-            pid += 1;
             url_params.push(("pid", pid.to_string()));
+            pid += 1;
             user_data.insert("pid".into(), pid.to_string());
         } else {
             url_params.push(("pid", "0".to_string()));
@@ -161,78 +162,75 @@ pub fn parser(
     let mut files = HashSet::new();
 
     if let Ok(json) = json::parse(html_input) {
-        if let Some(limit) = scraperdata.job.user_data.get("limit") {
-            if let Some(pid) = scraperdata.job.user_data.get("pid") {
-                let limit: usize = limit.parse().unwrap();
-                let mut pid: usize = pid.parse().unwrap();
-                dbg!(&limit, json.members().len());
-                if json.members().len() == limit {
-                    let mut jobs = HashSet::new();
+        if let Some(limit) = scraperdata.job.user_data.get("limit")
+            && let Some(pid) = scraperdata.job.user_data.get("pid")
+        {
+            let limit: usize = limit.parse().unwrap();
+            let pid: usize = pid.parse().unwrap();
+            if json.members().len() == limit {
+                let mut jobs = HashSet::new();
 
-                    if let Some(base_url) = scraperdata.job.user_data.get("base_url") {
-                        let mut url = url::Url::parse(base_url).unwrap();
+                if let Some(base_url) = scraperdata.job.user_data.get("base_url") {
+                    let mut url = url::Url::parse(base_url).unwrap();
 
-                        let mut pid_updated = false;
+                    let mut pid_updated = false;
 
-                        {
-                            // collect existing params, replacing pid when found
-                            let params: Vec<(String, String)> = url
-                                .query_pairs()
-                                .map(|(k, v)| {
-                                    let k = k.into_owned();
-                                    let v = if k == "pid" {
-                                        pid_updated = true;
-                                        let temp_pid = pid + 1;
-                                        user_data.insert("pid".into(), temp_pid.to_string());
-                                        pid.to_string()
-                                    } else {
-                                        v.into_owned()
-                                    };
-                                    (k, v)
-                                })
-                                .collect();
+                    {
+                        // collect existing params, replacing pid when found
+                        let params: Vec<(String, String)> = url
+                            .query_pairs()
+                            .map(|(k, v)| {
+                                let k = k.into_owned();
+                                let v = if k == "pid" {
+                                    pid_updated = true;
+                                    let pid_updated = pid + 1;
+                                    user_data.insert("pid".into(), pid_updated.to_string());
+                                    pid.to_string()
+                                } else {
+                                    v.into_owned()
+                                };
+                                (k, v)
+                            })
+                            .collect();
 
-                            let mut qp = url.query_pairs_mut();
-                            qp.clear();
-                            for (k, v) in params {
-                                qp.append_pair(&k, &v);
-                            }
+                        let mut qp = url.query_pairs_mut();
+                        qp.clear();
+                        for (k, v) in params {
+                            qp.append_pair(&k, &v);
                         }
+                    }
 
-                        // if pid wasn't present, optionally add it
-                        if !pid_updated {
-                            url.query_pairs_mut().append_pair("pid", &pid.to_string());
-                                        let temp_pid = pid + 1;
-                            user_data.insert("pid".into(), temp_pid.to_string());
-                        }
+                    // if pid wasn't present, optionally add it
+                    if !pid_updated {
+                        url.query_pairs_mut().append_pair("pid", &pid.to_string());
+                        let temp_pid = pid + 1;
+                        user_data.insert("pid".into(), temp_pid.to_string());
+                    }
 
-                        let final_url = url.to_string();
+                    let final_url = url.to_string();
 
-                        user_data.insert("base_url".to_string(), final_url.clone());
+                    user_data.insert("base_url".to_string(), final_url.clone());
 
-                        dbg!(&final_url, &user_data);
-
-                        jobs.insert(sharedtypes::ScraperDataReturn {
-                            job: sharedtypes::DbJobsObj {
-                                site: SITE_NAME.into(),
-                                param: vec![sharedtypes::ScraperParam::Url(final_url)],
-                                jobmanager: sharedtypes::DbJobsManager {
-                                    jobtype: sharedtypes::DbJobType::Scraper,
-                                    ..Default::default()
-                                },
-                                user_data,
+                    jobs.insert(sharedtypes::ScraperDataReturn {
+                        job: sharedtypes::DbJobsObj {
+                            site: SITE_NAME.into(),
+                            param: vec![sharedtypes::ScraperParam::Url(final_url)],
+                            jobmanager: sharedtypes::DbJobsManager {
+                                jobtype: sharedtypes::DbJobType::Scraper,
                                 ..Default::default()
                             },
-                            ..Default::default()
-                        });
-                    }
-                    out.push(sharedtypes::ScraperReturn::Data(
-                        sharedtypes::ScraperObject {
-                            jobs,
+                            user_data,
                             ..Default::default()
                         },
-                    ));
+                        ..Default::default()
+                    });
                 }
+                out.push(sharedtypes::ScraperReturn::Data(
+                    sharedtypes::ScraperObject {
+                        jobs,
+                        ..Default::default()
+                    },
+                ));
             }
         }
 
@@ -246,7 +244,24 @@ pub fn parser(
             };
 
             // Gets the post id from post
-            if let Some(post) = post["id"].as_u64() {
+            if let Some(post_id) = post["id"].as_u64() {
+                let relates_to = match post["parent_id"].as_u64() {
+                    Some(parent_id) => {
+                        if parent_id == 0 {
+                            None
+                        } else {
+                            Some(sharedtypes::SubTag {
+                                namespace: sharedtypes::GenericNamespaceObj {
+                                    name: "Rule34.xxx_Parent_Id".into(),
+                                    description: Some("A post's parent from rule34.xxx".into()),
+                                },
+                                tag: parent_id.to_string(),
+                                ..Default::default()
+                            })
+                        }
+                    }
+                    None => None,
+                };
                 tag_list.push(sharedtypes::FileTagAction {
                     operation: sharedtypes::TagOperation::Set,
                     tags: vec![sharedtypes::TagObject {
@@ -254,7 +269,8 @@ pub fn parser(
                             name: "Rule34.xxx_Post_Id".into(),
                             description: Some("A post's id from rule34.xxx".into()),
                         },
-                        tag: post.to_string(),
+                        tag: post_id.to_string(),
+                        relates_to,
                         ..Default::default()
                     }],
                 });
@@ -313,17 +329,17 @@ pub fn parser(
 
             // Gets all tags from the post
             for tag_info in post["tag_info"].members() {
-                if let Some(tag) = optstr_to_cleaned(tag_info["tag"].as_str()) {
-                    if let Some(name) = optstr_to_cleaned(tag_info["type"].as_str()) {
-                        tags.push(sharedtypes::TagObject {
-                            namespace: sharedtypes::GenericNamespaceObj {
-                                name: format!("Rule34.xxx_{}", name),
-                                description: Some(format!("A {} tag type from rule34.xxx", name)),
-                            },
-                            tag,
-                            ..Default::default()
-                        });
-                    }
+                if let Some(tag) = optstr_to_cleaned(tag_info["tag"].as_str())
+                    && let Some(name) = optstr_to_cleaned(tag_info["type"].as_str())
+                {
+                    tags.push(sharedtypes::TagObject {
+                        namespace: sharedtypes::GenericNamespaceObj {
+                            name: format!("Rule34.xxx_{}", name),
+                            description: Some(format!("A {} tag type from rule34.xxx", name)),
+                        },
+                        tag,
+                        ..Default::default()
+                    });
                 }
             }
 
