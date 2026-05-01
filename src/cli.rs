@@ -770,6 +770,9 @@ pub fn main(data: Main) {
                         data.load_table(&sharedtypes::LoadDBTable::Relationship);
                         data.delete_namespace_id(&ns_id);
                     }
+                    cli_structs::Database::RecacheRoaring => {
+                        data.recache_roaring();
+                    }
                 }
             }
             cli_structs::TasksStruct::Csv(_csvstruct) => {}

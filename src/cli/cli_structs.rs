@@ -124,6 +124,8 @@ pub enum Database {
     CheckSourceUrls(sharedtypes::CheckSourceUrlsEnum),
     /// Adds extensions to files in db.
     AddExtensions,
+    /// Recaches the in-memory db.
+    RecacheRoaring,
 }
 /// Removes a namespace, tags & relationships from db.
 #[derive(Debug, Subcommand)]

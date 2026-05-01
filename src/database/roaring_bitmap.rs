@@ -161,6 +161,7 @@ impl RelationshipStorage {
         self.file_id.shrink_to_fit();
         self.tag_id.shrink_to_fit();
 
+        logging::info_log("Finished recaching roaring table".to_string());
         Ok(())
 
         /*

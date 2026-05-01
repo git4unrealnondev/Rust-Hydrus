@@ -585,7 +585,7 @@ PRAGMA journal_mode = WAL;
                                 // a) Add new tags from parser that aren't already in file
                                 for &tag_id in parser_tags {
                                     if !file_tags.contains(&tag_id) {
-                                      /*  logging::log(format!(
+                                        /*  logging::log(format!(
                                             "Adding tag_id {} to file_id {} per scraper",
                                             tag_id, file_id
                                         ));*/
@@ -602,7 +602,7 @@ PRAGMA journal_mode = WAL;
                                     .collect();
 
                                 for tag_id in to_remove {
-                                  /*  logging::log(format!(
+                                    /*  logging::log(format!(
                                         "Removing tag_id {} from file_id {} per scraper",
                                         tag_id, file_id
                                     ));*/
@@ -614,7 +614,7 @@ PRAGMA journal_mode = WAL;
                             None => {
                                 // Namespace doesn't exist for this file, just add all parser tags
                                 for &tag_id in parser_tags {
-                                  /*  logging::log(format!(
+                                    /*  logging::log(format!(
                                         "Adding tag_id {} to file_id {} per scraper",
                                         tag_id, file_id
                                     ));*/
@@ -2314,6 +2314,22 @@ PRAGMA journal_mode = WAL;
 
         // Adds setting into memdbb
         self.setting_add_internal_db(name, pretty, num, param);
+    }
+
+    /// Recaches the roaring table
+    /// NOTE this locks the db
+    pub fn recache_roaring(&self) {
+        let mut wruite_conn = self.write_conn.lock();
+        let tn = wruite_conn.transaction().unwrap();
+
+        if let Some(ref roaring) = self.relationship_roaring_storage {
+            roaring.write().recache_roaring(&tn).unwrap();
+        }
+
+        tn.execute("DROP TABLE IF EXISTS Relationship_Popular", [])
+            .unwrap();
+
+        tn.commit().unwrap();
     }
 }
 
