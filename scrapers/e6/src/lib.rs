@@ -760,7 +760,8 @@ fn parse_pools(
                 tag_type: sharedtypes::TagType::Normal,
             });
         }
-        files.insert(sharedtypes::FileObject {
+        files.insert(sharedtypes::FileObject::V1(
+            sharedtypes::FileObjectV1{
             hash: sharedtypes::HashesSupported::None,
             tag_list: vec![sharedtypes::FileTagAction {
                 operation: sharedtypes::TagOperation::Add,
@@ -768,7 +769,12 @@ fn parse_pools(
             }],
             skip_if: Vec::new(),
             ..Default::default()
-        });
+        }
+        ).into()
+
+
+
+            );
     }
 
     vec![sharedtypes::ScraperReturn::Data(
@@ -993,7 +999,7 @@ pub fn parser(
                 gen_source_from_md5_ext(&md5, &ext, &site)
             }
         };
-        let file: sharedtypes::FileObject = sharedtypes::FileObject {
+        let file: sharedtypes::FileObject = sharedtypes::FileObject::V1( sharedtypes::FileObjectV1 {
             source: Some(sharedtypes::FileSource::Url(vec![url])),
             hash: sharedtypes::HashesSupported::Md5(js["posts"][inc]["file"]["md5"].to_string()),
             tag_list: vec![sharedtypes::FileTagAction {
@@ -1001,8 +1007,8 @@ pub fn parser(
                 tags: tags_list,
             }],
             ..Default::default()
-        };
-        files.insert(file);
+        });
+        files.insert(file.into());
     }
 
     let mut out = vec![sharedtypes::ScraperReturn::Data(

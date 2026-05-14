@@ -1505,6 +1505,49 @@ HAVING COUNT(r.fileid) {dir} ?;"
         }
     }
 
+    pub(super) fn tag_add_no_id_bulk_sql(
+        &self,
+        tn: &Transaction,
+        tags: &[(&str, u64)],
+    ) -> Vec<u64> {
+        if tags.is_empty() {
+            return Vec::new();
+        }
+
+        // 1. Build the base query
+        // Each row needs two placeholders "(?, ?)"
+        let mut sql = String::from("INSERT INTO Tags(name, namespace) VALUES ");
+        let placeholders: Vec<_> = (0..tags.len()).map(|_| "(?, ?)").collect();
+        sql.push_str(&placeholders.join(", "));
+
+        // 2. Add the conflict logic and RETURNING clause
+        sql.push_str(
+            r#"
+ON CONFLICT(name, namespace) DO UPDATE SET name=excluded.name
+RETURNING id;
+"#,
+        );
+
+        // 3. Flatten the tags into a slice of trait objects for rusqlite
+        let mut params = Vec::with_capacity(tags.len() * 2);
+        for (name, ns) in tags {
+            params.push(name as &dyn rusqlite::ToSql);
+            params.push(ns as &dyn rusqlite::ToSql);
+        }
+
+        dbg!(sql);
+        vec![]
+        // 4. Execute and collect the IDs
+        /* let mut stmt = tn.prepare(&sql).unwrap();
+        let id_iter = stmt
+            .query_map(rusqlite::params_from_iter(params), |row| {
+                row.get::<_, u64>(0)
+            })
+            .unwrap();
+
+        id_iter.map(|id| id.unwrap()).collect()*/
+    }
+
     /// Adds tags into sql database
     pub(super) fn tag_add_no_id_sql(&self, tn: &Transaction, tag: &str, namespace: u64) -> u64 {
         let sql = r#"
@@ -1665,7 +1708,7 @@ RETURNING id;
             Err(_) => None,
         }
     }
-
+/*
     pub(in crate::database) fn file_tag_relationship(
         &self,
         tn: &Transaction,
@@ -1717,7 +1760,7 @@ RETURNING id;
                 rel_stmt.execute(params![fid, tag_id]).unwrap();
             }
         }
-    }
+    }*/
 
     ///
     /// Convience function to search by extension strings

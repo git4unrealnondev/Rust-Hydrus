@@ -199,7 +199,7 @@ impl Worker {
             let mut should_remove_original_job;
                     let jobid = job.id.unwrap();
                     should_remove_original_job = true;
-                    let mut currentjob = job.clone();
+                    let currentjob = job.clone();
 
 
                     // Makes recursion possible
@@ -270,7 +270,7 @@ impl Worker {
                                         "Worker: {} JobId: {} -- Telling system to keep job due to previous error.",
                                         id, jobid
                                     ));
-                                    jobstorage.write().jobs_remove_job(&scraper, &job);
+                                    jobstorage.write().jobs_remove_job(&scraper, job);
                                     should_remove_original_job = false;
                                 }
                             }
@@ -417,7 +417,7 @@ impl Worker {
                                             let scraper = scraper.clone();
                                             pool.execute(move || {
                                                 main_file_loop(
-                                                    &mut file,
+                                                    &mut file.into(),
                                                     db,
                                                     ratelimiter_obj,
                                                     globalload,
@@ -464,7 +464,7 @@ impl Worker {
                                     sharedtypes::ScraperReturn::RetryLater(time) => {
                                         let mut data = job.clone();
                                         data.time = crate::time_func::time_secs();
-                                        data.reptime = time.as_secs() as u64;
+                                        data.reptime = time.as_secs() ;
                                         database.jobs_update_db(data);
                                         should_remove_original_job = false;
                                     }
@@ -544,18 +544,18 @@ pub fn parse_tags_old(
 fn download_add_to_db(
     ratelimiter_obj: Arc<RwLock<Ratelimiter>>,
     source: &String,
-    location: String,
+    _location: String,
     globalload: GlobalLoad,
     client: Arc<RwLock<Client>>,
     database: Main,
-    file: &mut sharedtypes::FileObject,
+    file: &mut sharedtypes::FileObjectMain,
     worker_id: &u64,
     job_id: &u64,
     scraper: &sharedtypes::GlobalPluginScraper,
 ) -> Option<u64> {
     // Early exit for if the file is a dead url
     {
-        if database.check_dead_url(&source) {
+        if database.check_dead_url(source) {
             logging::info_log(format!(
                 "Worker: {worker_id} JobID: {job_id} -- Skipping {} because it's a dead link.",
                 source
@@ -583,7 +583,7 @@ fn download_add_to_db(
     }
 
     match blopt {
-        download::FileReturnStatus::File((hash, file_ext, file_id)) => {
+        download::FileReturnStatus::File((_hash, _file_ext, file_id)) => {
             //let fileid;
 
             /* {
@@ -700,7 +700,7 @@ fn parse_skipif(
 
 /// Main file checking loop manages the downloads
 pub fn main_file_loop(
-    file: &mut sharedtypes::FileObject,
+    file: &mut sharedtypes::FileObjectMain,
     database: Main,
     ratelimiter_obj: Arc<RwLock<Ratelimiter>>,
     globalload: GlobalLoad,
@@ -822,10 +822,12 @@ pub fn main_file_loop(
                     None,
                 );
                 fileid = database.file_get_hash(&sha512.0);
+                database.add_tags_to_fileid(fileid, &file.tag_list);
+
             }
         },
         None => return,
     }
 
-    database.add_tags_to_fileid(fileid, &file.tag_list);
+   // database.add_tags_to_fileid(fileid, &file.tag_list);
 }

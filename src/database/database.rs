@@ -21,7 +21,6 @@ pub use rusqlite::{Connection, Result, Transaction, params, types::Null};
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::collections::HashSet;
-use std::fs::Metadata;
 use std::net::SocketAddr;
 use std::panic;
 use std::path;
@@ -202,7 +201,7 @@ PRAGMA cache_size = -1000000;
                 first_time_load_flag = false;
                 let memdb = Arc::new(RwLock::new(NewinMemDB::new()));
                 let db_uuid = uuid::Uuid::new_v4();
-                let memdb_uri = format!("file:memdb_{}?mode=memory&cache=shared", db_uuid);
+                let memdb_uri = format!("file:memdb_{}?mode=memory", db_uuid);
 
                 let manager = SqliteConnectionManager::file(&memdb_uri).with_init(|conn| {
                     conn.execute_batch(
@@ -549,7 +548,7 @@ PRAGMA journal_mode = WAL;
                         if let Some(tag_id) = self.tag_add_tagobject_internal(tn, tag) {
                             namespace_tags
                                 .entry(tag.namespace.name.clone())
-                                .or_insert_with(Vec::new)
+                                .or_default()
                                 .push(tag_id);
                         }
                     }
@@ -561,7 +560,7 @@ PRAGMA journal_mode = WAL;
                             if let Some(namespace) = self.namespace_get_string(&tag_obj.namespace) {
                                 namespace_file_tags
                                     .entry(namespace.name.clone())
-                                    .or_insert_with(Vec::new)
+                                    .or_default()
                                     .push(tag_id);
                             }
                         }
@@ -1209,10 +1208,21 @@ PRAGMA journal_mode = WAL;
         name: &String,
         description: &Option<String>,
     ) -> u64 {
+        if let Some(id) = self._inmemdb.read().namespace_get_id(name) {
+            return *id;
+        }
+
         if let Some(id) = self.namespace_get(name) {
             return id;
         }
-        self.namespace_add_sql(tn, name, description, None)
+
+
+        let out = self.namespace_add_sql(tn, name, description, None);
+
+
+        self._inmemdb.write().namespace_put(sharedtypes::DbNamespaceObj { id: out, name: name.clone(), description: description.clone() });
+
+        out
     }
 
     /// Creates a table name: The table name key: List of Collumn lables. dtype: List

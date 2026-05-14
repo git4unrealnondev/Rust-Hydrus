@@ -1,5 +1,4 @@
 use crate::Main;
-use crate::globalload;
 use crate::globalload::GlobalLoad;
 use crate::logging::error_log;
 
@@ -12,7 +11,6 @@ use file_format::FileFormat;
 use log::{error, info};
 use reqwest::blocking::Client;
 use reqwest::blocking::ClientBuilder;
-use reqwest::cookie;
 use reqwest::header::HeaderMap;
 use reqwest::header::HeaderName;
 use reqwest::header::HeaderValue;
@@ -417,7 +415,7 @@ pub enum FileReturnStatus {
 pub fn dlfile_new(
     client: Arc<RwLock<Client>>,
     db: Main,
-    file: &mut sharedtypes::FileObject,
+    file: &mut sharedtypes::FileObjectMain,
     globalload: Option<GlobalLoad>,
     ratelimiter_obj: &Arc<RwLock<Ratelimiter>>,
     source_url: &String,
@@ -439,7 +437,7 @@ pub fn dlfile_new(
         if let Some(ref globalload) = globalload
             && let Some(scraper) = scraper
         {
-            match globalload.download_from(file, scraper) {
+            match globalload.download_from(file.clone(), scraper) {
                 None => {
                     logging::log(format!("Could not pull info for file {:?}", &file));
                 }
@@ -616,7 +614,7 @@ pub fn process_bytes(
     hash: &String,
     file_ext: &String,
     db: Main,
-    file: &mut sharedtypes::FileObject,
+    file: &mut sharedtypes::FileObjectMain,
     source_url: Option<&String>,
 ) -> Option<u64> {
     let mut out = None;
@@ -640,6 +638,8 @@ pub fn process_bytes(
         }
     }
 
+db.add_tags_to_fileid(out, &file.tag_list);
+
     out
 }
 
@@ -662,7 +662,7 @@ pub fn hash_file(
 ///
 pub fn write_to_disk(
     location: std::path::PathBuf,
-    //file: &sharedtypes::FileObject,
+    //file: &sharedtypes::FileObjectMain,
     bytes: &Bytes,
     sha512hash: &String,
 ) {

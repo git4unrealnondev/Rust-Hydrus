@@ -6,6 +6,7 @@ pub mod inmemdbnew;
 pub mod public_calls;
 pub mod roaring_bitmap;
 pub mod sqlitedb;
+pub mod tagfunctions;
 pub mod updatehandler;
 
 pub use public_calls::*;

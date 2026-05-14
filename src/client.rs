@@ -29,7 +29,7 @@ pub fn search_db_files(
 ///
 /// Adds file into db downloads if needed. Blocks execution until done
 ///
-pub fn add_file(file: sharedtypes::FileObject, ratelimit: (u64, Duration)) -> bool {
+pub fn add_file(file: sharedtypes::FileObjectMain, ratelimit: (u64, Duration)) -> bool {
     init_data_request(&types::SupportedRequests::Database(
         types::SupportedDBRequests::PutFile((file, ratelimit)),
     ))
@@ -39,7 +39,7 @@ pub fn add_file(file: sharedtypes::FileObject, ratelimit: (u64, Duration)) -> bo
 /// Adds file into db downloads if needed. Does not block execution until done.
 /// Technically will block but only if theirs 1000 downloads going at once
 ///
-pub fn add_file_nonblocking(file: sharedtypes::FileObject, ratelimit: (u64, Duration)) -> bool {
+pub fn add_file_nonblocking(file: sharedtypes::FileObjectMain, ratelimit: (u64, Duration)) -> bool {
     init_data_request(&types::SupportedRequests::Database(
         types::SupportedDBRequests::PutFileNoBlock((file, ratelimit)),
     ))

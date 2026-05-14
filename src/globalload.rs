@@ -162,55 +162,47 @@ impl GlobalLoad {
     /// Hopefully a thread-safe way to call plugins per thread avoiding a lock.
     ///
     pub fn plugin_on_download(&self, db: Main, cursorpass: &[u8], hash: &String, ext: &String) {
-        let (libpath, libscraper);
+        for scraper in self
+            .get_scrapers_from_callback(&sharedtypes::GlobalCallbacks::Download)
+            .iter()
         {
-            (libpath, libscraper) = (
-                self.get_lib_path_from_callback(&sharedtypes::GlobalCallbacks::Download),
-                self.get_scrapers_from_callback(&sharedtypes::GlobalCallbacks::Download),
-            );
-        }
-
-        let api = db.api_info.read();
-        for (cnt, lib) in self
-            .get_library_from_callback(&sharedtypes::GlobalCallbacks::Download)
-            .into_iter()
-            .enumerate()
-        {
-            let output;
-            let lib = lib.read();
-            unsafe {
-                let plugindatafunc: libloading::Symbol<
-                    unsafe extern "C" fn(
-                        &[u8],
-                        &String,
-                        &String,
-                        &sharedtypes::ClientAPIInfo,
-                    )
-                        -> Vec<sharedtypes::DBPluginOutputEnum>,
-                    //unsafe extern "C" fn(Cursor<Bytes>, &String, &String, database::Main),
-                > = match lib.get(b"on_download") {
-                    Ok(lib) => lib,
-                    Err(_) => {
-                        logging::info_log(format!(
-                            "Could not find on_download for plugin: {}",
-                            libpath.get(cnt).unwrap().to_string_lossy()
-                        ));
-                        continue;
+            if let Some(lib) = self.library_get(scraper) {
+                let output;
+                let lib = lib.read();
+                unsafe {
+                    let plugindatafunc: libloading::Symbol<
+                        unsafe extern "C" fn(
+                            &[u8],
+                            &String,
+                            &String,
+                            &sharedtypes::ClientAPIInfo,
+                        )
+                            -> Vec<sharedtypes::DBPluginOutputEnum>,
+                        //unsafe extern "C" fn(Cursor<Bytes>, &String, &String, database::Main),
+                    > = match lib.get(b"on_download") {
+                        Ok(lib) => lib,
+                        Err(_) => {
+                            logging::info_log(format!(
+                                "Could not find on_download for plugin: {}",
+                                scraper.name
+                            ));
+                            continue;
+                        }
+                    };
+                    // If the api isnt set then just return and dont call anything
+                    if let Some(ref api_info) = *db.api_info.read() {
+                        output = plugindatafunc(cursorpass, hash, ext, api_info);
+                    } else {
+                        return;
                     }
-                };
-                // If the api isnt set then just return and dont call anything
-                if let Some(ref api_info) = *api {
-                    output = plugindatafunc(cursorpass, hash, ext, &api_info);
-                } else {
-                    return;
                 }
-            }
 
-            let jobmanager;
-            {
-                jobmanager = self.jobmanager.clone();
+                let jobmanager;
+                {
+                    jobmanager = self.jobmanager.clone();
+                }
+                self.parse_plugin_output(output, db.clone(), scraper, jobmanager);
             }
-            self.parse_plugin_output(output, db.clone(), libscraper.get(cnt).unwrap(), jobmanager);
         }
     }
 
@@ -365,12 +357,10 @@ impl GlobalLoad {
     ///
     pub fn url_dump(
         &self,
-        params: &Vec<sharedtypes::ScraperParam>,
+        params: &[sharedtypes::ScraperParam],
         scraperdata: &sharedtypes::ScraperDataReturn,
         scraper: &sharedtypes::GlobalPluginScraper,
     ) -> Result<Vec<sharedtypes::ScraperDataReturn>, libloading::Error> {
-        let mut out = Vec::new();
-
         if let Some(lib) = self.library_get(scraper) {
             let lib = lib.read();
             let temp: libloading::Symbol<
@@ -379,11 +369,10 @@ impl GlobalLoad {
                     &sharedtypes::ScraperDataReturn,
                 ) -> Vec<sharedtypes::ScraperDataReturn>,
             > = unsafe { lib.get(b"url_dump\0")? };
-            for item in unsafe { temp(params, scraperdata) } {
-                out.push(item);
-            }
+
+            return Ok(unsafe { temp(params, scraperdata) });
         }
-        Ok(out)
+        Err(libloading::Error::FreeLibraryUnknown)
     }
 
     ///
@@ -391,7 +380,7 @@ impl GlobalLoad {
     ///
     pub fn download_from(
         &self,
-        file: &sharedtypes::FileObject,
+        file: sharedtypes::FileObjectMain,
         scraper: &sharedtypes::GlobalPluginScraper,
     ) -> Option<Vec<u8>> {
         if let Some(lib) = self.library_get(scraper) {
@@ -399,7 +388,7 @@ impl GlobalLoad {
             let temp: libloading::Symbol<
                 unsafe extern "C" fn(&sharedtypes::FileObject) -> Option<Vec<u8>>,
             > = unsafe { lib.get(b"download_from\0").unwrap() };
-            return unsafe { temp(file) };
+            return unsafe { temp(&file.into()) };
         }
         None
     }
@@ -441,56 +430,34 @@ impl GlobalLoad {
     }
 
     pub fn callback_on_import(&self, bytes: &bytes::Bytes, hash: &String) {
-        let (libpath, libscraper);
-        {
-            (libpath, libscraper) = (
-                self.get_lib_path_from_callback(&sharedtypes::GlobalCallbacks::Import),
-                self.get_scrapers_from_callback(&sharedtypes::GlobalCallbacks::Import),
-            );
-        }
+        let scrapers = self.get_scrapers_from_callback(&sharedtypes::GlobalCallbacks::Import);
 
-        for (cnt, lib_path) in libpath.iter().enumerate() {
-            let lib;
-            unsafe {
-                match libloading::Library::new(lib_path) {
-                    Ok(good_lib) => lib = good_lib,
-                    Err(_) => {
-                        logging::error_log(format!(
-                            "Cannot load library at path: {}",
-                            lib_path.to_string_lossy()
-                        ));
-                        continue;
-                    }
+        for scraper in scrapers.iter() {
+            if let Some(lib) = self.library_get(scraper) {
+                let output;
+                unsafe {
+                    let lib = lib.read();
+                    let plugindatafunc: libloading::Symbol<
+                        unsafe extern "C" fn(
+                            &[u8],
+                            &String,
+                        )
+                            -> Vec<sharedtypes::DBPluginOutputEnum>,
+                    > = match lib.get(b"on_import") {
+                        Ok(lib) => lib,
+                        Err(_) => {
+                            logging::info_log(format!(
+                                "Could not find on_import for plugin: {}",
+                                scraper.name
+                            ));
+                            continue;
+                        }
+                    };
+                    output = plugindatafunc(bytes, hash);
                 }
-            }
-            let output;
-            unsafe {
-                let plugindatafunc: libloading::Symbol<
-                    unsafe extern "C" fn(&[u8], &String) -> Vec<sharedtypes::DBPluginOutputEnum>,
-                    //unsafe extern "C" fn(Cursor<Bytes>, &String, &String, database::Main),
-                > = match lib.get(b"on_import") {
-                    Ok(lib) => lib,
-                    Err(_) => {
-                        logging::info_log(format!(
-                            "Could not find on_download for plugin: {}",
-                            lib_path.to_string_lossy()
-                        ));
-                        continue;
-                    }
-                };
-                //db.
-                output = plugindatafunc(bytes, hash);
-            }
 
-            self.parse_plugin_output_local(output, libscraper.get(cnt).unwrap());
-            /*parse_plugin_output(
-                output,
-                db.clone(),
-                libscraper.get(cnt).unwrap(),
-                jobmanager,
-                manager_arc.clone(),
-            );*/
-            let _ = lib.close();
+                self.parse_plugin_output_local(output, scraper);
+            }
         }
     }
 
@@ -705,12 +672,15 @@ impl GlobalLoad {
                                 self.db.file_add(file);
                             }
                         }
-                        for tag in names.tag {
-                            if tag.tag_type != sharedtypes::TagType::NormalNoRegex {
-                                self.plugin_on_tag(&tag);
-                            }
-                            {
-                                self.db.tag_add_tagobject(&tag);
+                        {
+                            // let mut tags = Vec::new();
+                            for tag in names.tag {
+                                if tag.tag_type != sharedtypes::TagType::NormalNoRegex {
+                                    self.plugin_on_tag(&tag);
+                                }
+                                {
+                                    self.db.tag_add_tagobject(&tag);
+                                }
                             }
                         }
                         for settings in names.setting {

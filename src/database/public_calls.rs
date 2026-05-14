@@ -1276,7 +1276,7 @@ impl Main {
         }
 
         let mut write_conn = self.write_conn.lock();
-        let mut tn = write_conn.transaction().unwrap();
+        let tn = write_conn.transaction().unwrap();
         self.namespace_add_sql(&tn, &ns.name, &ns.description, Some(ns.id));
         let out = self.namespace_get_id_sql(&tn, &ns.name).unwrap();
         tn.commit().unwrap();

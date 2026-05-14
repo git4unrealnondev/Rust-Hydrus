@@ -150,7 +150,7 @@ pub fn parse_file(
             let fileid;
             {
                 database.enclave_run_process(
-                    &mut sharedtypes::FileObject {
+                    &mut sharedtypes::FileObjectMain {
                         source: None,
                         hash: sharedtypes::HashesSupported::Sha512(sha512hash.clone()),
                         tag_list: tag_list.clone(),
@@ -196,7 +196,7 @@ pub fn parse_file(
                 let subfileid;
                 {
                     database.enclave_run_process(
-                        &mut sharedtypes::FileObject {
+                        &mut sharedtypes::FileObjectMain {
                             source: None,
                             hash: sharedtypes::HashesSupported::Sha512(sub_sha512hash.clone()),
                             tag_list: tags.clone(),
@@ -271,7 +271,7 @@ pub fn parse_sidecar(file_location: &Path, sidecar_location: &Path, database: Ma
                     return;
                 }
                 database.enclave_run_process(
-                    &mut sharedtypes::FileObject {
+                    &mut sharedtypes::FileObjectMain {
                         hash: sharedtypes::HashesSupported::Sha512(sha512hash.clone()),
                         tag_list,
                         skip_if: vec![sharedtypes::SkipIf::FileHash(sha512hash.clone())],

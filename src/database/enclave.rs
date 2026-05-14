@@ -25,7 +25,7 @@ impl Main {
     pub fn enclave_run_process(
         &self,
 
-        file: &mut sharedtypes::FileObject,
+        file: &mut sharedtypes::FileObjectMain,
         bytes: &Bytes,
         sha512hash: &String,
         source_url: Option<&String>,
@@ -42,7 +42,7 @@ impl Main {
     ///
     fn enclave_run_logic(
         &self,
-        file: &mut sharedtypes::FileObject,
+        file: &mut sharedtypes::FileObjectMain,
         bytes: &Bytes,
         sha512hash: &String,
         source_url: Option<&String>,
@@ -107,7 +107,7 @@ impl Main {
     ///
     pub fn enclave_determine_processing(
         &self,
-        file: &mut sharedtypes::FileObject,
+        file: &mut sharedtypes::FileObjectMain,
         bytes: &Bytes,
         sha512hash: &String,
         source_url: Option<&String>,
@@ -137,7 +137,7 @@ impl Main {
     fn enclave_run_action(
         &self,
         action: &sharedtypes::EnclaveAction,
-        file: &mut sharedtypes::FileObject,
+        file: &mut sharedtypes::FileObjectMain,
         bytes: &Bytes,
         sha512hash: &String,
         source_url: Option<&String>,
@@ -214,7 +214,7 @@ impl Main {
         source_url_ns_id: u64,
         enclave_id: &u64,
         download_location: &String,
-        file: &mut sharedtypes::FileObject,
+        file: &mut sharedtypes::FileObjectMain,
     ) -> u64 {
         let fileid;
         let download_loc = std::path::Path::new(&download_location)
@@ -257,7 +257,7 @@ impl Main {
         &self,
 
         condition_id: &u64,
-        file: &sharedtypes::FileObject,
+        file: &sharedtypes::FileObjectMain,
         bytes: &Bytes,
     ) -> (bool, Option<sharedtypes::EnclaveAction>) {
         if let Some((action, condition)) = self.enclave_condition_get_data(condition_id) {

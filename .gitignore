@@ -33,6 +33,7 @@ File*
 # already existing elements were commented out
 **.db-wal
 **.db-shm
+**.gz
 #/target
 /Cargo.lock
 scrapers/e6scraper/target

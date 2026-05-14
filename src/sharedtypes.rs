@@ -797,9 +797,10 @@ pub enum FileSource {
 }
 
 /// Represents one file
+/// Version 1
 #[derive(Debug, Eq, Hash, PartialEq, bitcode::Encode, bitcode::Decode, Clone, Default)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub struct FileObject {
+pub struct FileObjectV1 {
     pub file_info: Option<DbFileObj>,
     pub source: Option<FileSource>,
     // Hash of file
@@ -807,6 +808,59 @@ pub struct FileObject {
     pub tag_list: Vec<FileTagAction>,
     // Skips downloading the file if a tag matches this.
     pub skip_if: Vec<SkipIf>,
+}
+
+/// Represents one file
+/// Current version of FileObject
+#[derive(Debug, Eq, Hash, PartialEq, bitcode::Encode, bitcode::Decode, Clone, Default)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub struct FileObjectMain {
+    pub file_info: Option<DbFileObj>,
+    pub source: Option<FileSource>,
+    // Hash of file
+    pub hash: HashesSupported,
+    pub tag_list: Vec<FileTagAction>,
+    // Skips downloading the file if a tag matches this.
+    pub skip_if: Vec<SkipIf>,
+}
+
+#[derive(Debug, Eq, Hash, PartialEq, bitcode::Encode, bitcode::Decode, Clone)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[non_exhaustive]
+pub enum FileObject {
+    V1(FileObjectV1),
+}
+
+impl From<FileObject> for FileObjectMain {
+    fn from(v: FileObject) -> Self {
+        match v {
+            FileObject::V1(inner) => inner.into(),
+        }
+    }
+}
+
+impl From<FileObjectV1> for FileObjectMain {
+    fn from(v: FileObjectV1) -> Self {
+        Self {
+            file_info: v.file_info,
+            source: v.source,
+            hash: v.hash,
+            tag_list: v.tag_list,
+            skip_if: v.skip_if,
+        }
+    }
+}
+
+impl From<FileObjectMain> for FileObject {
+    fn from(v: FileObjectMain) -> Self {
+        FileObject::V1(FileObjectV1 {
+            file_info: v.file_info,
+            source: v.source,
+            hash: v.hash,
+            tag_list: v.tag_list,
+            skip_if: v.skip_if,
+        })
+    }
 }
 
 #[derive(Debug, Eq, Hash, PartialEq, bitcode::Encode, bitcode::Decode, Clone, Default)]

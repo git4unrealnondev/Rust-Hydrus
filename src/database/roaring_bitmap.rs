@@ -25,7 +25,7 @@ pub enum InternalCacheType {
     Popular(u64),
 }
 
-pub struct RelationshipStorage {
+pub(in crate::database) struct RelationshipStorage {
     file_id: IntMap<u64, RoaringBitmap>,
     tag_id: IntMap<u64, RoaringBitmap>,
     internal_cache: InternalCacheType,
@@ -163,31 +163,6 @@ impl RelationshipStorage {
 
         logging::info_log("Finished recaching roaring table".to_string());
         Ok(())
-
-        /*
-        // Loads int sqlite
-        let mut temp = tn
-            .prepare("INSERT INTO RelationshipRoaringFileid(fileid, tagid_bitmap) VALUES (?, ?) ")
-            .unwrap();
-        for fileid in self.file_id.keys() {
-            if let Some(bitmap) = self.file_id.get(fileid) {
-                let mut bytes: Vec<u8> = Vec::new();
-                bitmap.serialize_into(&mut bytes).unwrap();
-
-                temp.execute(params![fileid, bytes]).unwrap();
-            }
-        }
-        let mut temp = tn
-            .prepare("INSERT INTO RelationshipRoaringTagid(Tagid, fileid_bitmap) VALUES (?, ?) ")
-            .unwrap();
-        for fileid in self.tag_id.keys() {
-            if let Some(bitmap) = self.tag_id.get(fileid) {
-                let mut bytes: Vec<u8> = Vec::new();
-                bitmap.serialize_into(&mut bytes).unwrap();
-
-                temp.execute(params![fileid, bytes]).unwrap();
-            }
-        }*/
     }
 
     /// Loads entire relationships into db
@@ -283,6 +258,42 @@ impl RelationshipStorage {
                 .relationship_cache_tagid_get(&self.db.read().get_database_connection(), tag_id)
                 .is_some(),
         }
+    }
+
+    ///
+    /// Returns a list of all file_id's associated with a tag
+    ///
+    pub fn relationship_search_fileid_roaring<C>(&self, tn: &C, tag_id: &u64) -> Vec<u64>
+    where
+        C: Deref<Target = Connection>,
+    {
+        let mut out = Vec::new();
+
+        if let Some(bitmap) = self.relationship_cache_tagid_get(tn, tag_id) {
+            for fileid in bitmap {
+                out.push(fileid.into());
+            }
+        }
+
+        out
+    }
+
+    ///
+    /// Returns the tagids associated with a fileid
+    ///
+    pub fn relationship_search_tagid_roaring<C>(&self, tn: &C, file_id: &u64) -> Vec<u64>
+    where
+        C: Deref<Target = Connection>,
+    {
+        let mut out = Vec::new();
+
+        if let Some(tags) = self.relationship_cache_fileid_get(tn, file_id) {
+            for tag in tags {
+                out.push(tag.into());
+            }
+        }
+
+        out
     }
 
     fn relationship_cache_tagid_get<C>(&self, tn: &C, tag_id: &u64) -> Option<RoaringBitmap>
@@ -506,71 +517,6 @@ impl RelationshipStorage {
             }
         }
     }
-    /*fn internal_search_item(
-        &self,
-        tag_id_list: &[u64],
-        searchtype: sharedtypes::DbSearchTypeEnum,
-    ) -> Vec<u64> {
-        if tag_id_list.is_empty() {
-            return Vec::new();
-        }
-
-        // Collect all bitmaps that exist for the given tag IDs
-        let bitmaps: Vec<RoaringBitmap> = tag_id_list
-            .iter()
-            .filter_map(|tag| {
-                self.relationship_cache_tagid_get(&self.db.read().get_database_connection(), tag)
-            })
-            .collect();
-
-        if bitmaps.is_empty() {
-            return Vec::new();
-        }
-
-        match searchtype {
-            sharedtypes::DbSearchTypeEnum::And => {
-                let mut sorted_bitmaps = bitmaps;
-                sorted_bitmaps.sort_by_key(|b| b.len());
-
-                let mut result = sorted_bitmaps[0];
-                for bitmap in &sorted_bitmaps[1..] {
-                    result &= bitmap;
-                }
-
-                result.iter().map(|v| v.into()).collect()
-            }
-            sharedtypes::DbSearchTypeEnum::Or => {
-                // OR search: union all bitmaps
-                let mut union_bitmap = RoaringBitmap::new();
-                for bitmap in bitmaps {
-                    union_bitmap |= bitmap;
-                }
-
-                let mut out = Vec::new();
-                for item in union_bitmap.iter() {
-                    out.push(item.into());
-                }
-                out
-            }
-        }
-    }*/
-
-    ///
-    /// Returns the tagids associated with a fileid
-    ///
-    pub fn relationship_search_tagid_roaring(&self, file_id: &u64) -> Vec<u64> {
-        let mut out = Vec::new();
-
-        if let Some(tags) =
-            self.relationship_cache_fileid_get(&self.db.read().get_database_connection(), file_id)
-        {
-            for tag in tags {
-                out.push(tag.into());
-            }
-        }
-
-        out
-    }
 }
 
 pub struct SearchQuery<'a> {
@@ -578,7 +524,7 @@ pub struct SearchQuery<'a> {
     offset: Option<u64>,
     limit: Option<u64>,
     and_search: Option<(sharedtypes::DbSearchTypeEnum, &'a [u64])>,
-    or_search: Option<(sharedtypes::DbSearchTypeEnum, Vec<u64>)>,
+    or_search: Option<(sharedtypes::DbSearchTypeEnum, &'a [u64])>,
     sort: bool,
 }
 
@@ -613,7 +559,7 @@ impl<'a> SearchQuery<'a> {
         self
     }
     pub fn or_search(mut self, tag_ids: &'a [u64]) -> Self {
-        self.and_search = Some((sharedtypes::DbSearchTypeEnum::Or, tag_ids));
+        self.or_search = Some((sharedtypes::DbSearchTypeEnum::Or, tag_ids));
 
         self
     }
