@@ -5,9 +5,7 @@ use std::time::Duration;
 //use ahash::HashSet;
 //use ahash::HashSet;
 
-#[path = "../../../src/sharedtypes.rs"]
-mod sharedtypes;
-
+use sharedtypes;
 mod boards;
 
 #[macro_export]

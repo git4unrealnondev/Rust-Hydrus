@@ -1,38 +1,32 @@
 [package]
-name = "chanscraper"
+name = "catbox_scraper"
 version = "0.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
-[profile.release]
-opt-level = "z"
-lto=true
-codegenunits=1
-strip = true
-debug=false
-
 [lib]
 doc=true
-name = "chanscraper"
+name = "catbox_scraper"
 path = "src/lib.rs"
-crate-type = ["dylib"]
+crate-type = ["cdylib"]
 
 [dependencies]
-base64 = "0.22.1"
-clap = { version = "4.5.16", features = ["derive"] }
-hex = "0.4.3"
-json = "0.12.4"
-rand = "0.8.5"
+anyhow = "1.0.86"
+interprocess = "2.2.1"
+regex = "1.11.1"
+scraper = "0.23.1"
 serde = { version = "1.0.192", features = ["derive"] }
-strum = "0.25.0"
-strum_macros = "0.25.1"
-sharedtypes = { workspace = true }
 bitcode = { version = "0.6.9", features = ["arrayvec", "derive", "serde"] }
 redact = { git = "https://github.com/git4unrealnondev/redact",  features = ["serde", "bitcode"] }
+sharedtypes = { workspace = true }
+
+
 
 [features]
-default = ["serde"]
+default = ["exe_build", "serde"]
+exe_build = ["regex"]
+# Enables sending and recieving regex
+regex = []
 serde = []
-clap=[]
 

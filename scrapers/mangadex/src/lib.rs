@@ -1,6 +1,6 @@
 use url::{Url, form_urlencoded};
 use std::collections::HashMap;
-use serde::de::{Deserializer, Error};
+use serde::de::Deserializer;
 #[derive(Debug)]
 pub struct MangaDexAPI {
     base_url: Url,

@@ -1,7 +1,0 @@
-[workspace]
-resolver = "2"
-members = ["*"] # This automatically includes all subfolders inside plugins/
-
-[workspace.dependencies]
-# Plugins can still reference your shared types seamlessly!
-sharedtypes = { path = "../libs/sharedtypes" }

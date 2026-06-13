@@ -117,8 +117,11 @@ harness = false
 [workspace]
 resolver = "2"
 members = ["generators/packager", "libs/sharedtypes",
-    
+   "./plugins/*", 
+   "./scrapers/*", 
 ]
+# Add this line right below members:
+exclude = ["plugins/target"]
 
 [workspace.dependencies]
 sharedtypes = { path = "./libs/sharedtypes" }

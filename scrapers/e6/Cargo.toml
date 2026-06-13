@@ -20,15 +20,13 @@ path = "src/lib.rs"
 crate-type = ["cdylib"]
 
 [dependencies]
-#anyhow = "1.0.86"
 chrono = { version = "0.4.31", default-features = false, features = ["clock"] }
 interprocess = "2.2.1"
 json = "0.12.4"
 serde = { version = "1.0.192", features = ["derive"] }
-#serde_bytes = "0.11.15"
-#smart-default = "0.7.1"
 bitcode = { version = "0.6.9", features = ["arrayvec", "derive", "serde"] }
 redact = { git = "https://github.com/git4unrealnondev/redact",  features = ["serde", "bitcode"] }
+sharedtypes = { workspace = true }
 
 [features]
 default = ["serde"]

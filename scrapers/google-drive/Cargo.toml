@@ -27,3 +27,4 @@ strum = "0.25.0"
 strum_macros = "0.25.1"
 bincode = { version = "2.0.1", features = ["serde","alloc"] }
 regex = "1.11.1"
+sharedtypes = { workspace = true }

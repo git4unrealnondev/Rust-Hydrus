@@ -8,9 +8,8 @@ use std::time::Duration;
 
 #[path = "../../../src/client.rs"]
 mod client;
-#[path = "../../../src/sharedtypes.rs"]
-mod sharedtypes;
 
+use sharedtypes;
 use crate::sharedtypes::DEFAULT_PRIORITY;
 #[macro_export]
 macro_rules! vec_of_strings {
