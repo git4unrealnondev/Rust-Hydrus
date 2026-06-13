@@ -90,16 +90,15 @@ fn db_file_sanity(dbloc: &str) {
 fn main() -> io::Result<()> {
     memory_manage();
 
-    let mut terminal = ratatui::init();
+    //let mut terminal = ratatui::init();
 
-    let mut app = App::new();
+    //let mut app = App::new();
 
-    let app_result = app.run(&mut terminal);
+    //let app_result = app.run(&mut terminal);
 
-    ratatui::restore();
-    app_result
+    //ratatui::restore();
+    //app_result
 
-    /*
         // Create a background thread which checks for deadlocks every 10s
         thread::spawn(move || {
             loop {
@@ -260,5 +259,5 @@ fn main() -> io::Result<()> {
         std::thread::sleep(mills_fifty);
         logging::info_log("UNLOADING".to_string());
         log::logger().flush();
-    */
+    Ok(())
 }
