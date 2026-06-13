@@ -1,6 +1,6 @@
-use std::{fs, path};
 use std::path::Path;
 use std::process::Command;
+use std::{fs, path};
 
 fn main() {
     // Define our source and destination paths relative to the workspace root
@@ -9,7 +9,9 @@ fn main() {
 
     // 1. Ensure the target/release directory actually exists
     if !target_release_dir.exists() {
-        eprintln!("Error: 'target/release' folder not found. Did you run 'cargo build --release' first?");
+        eprintln!(
+            "Error: 'target/release' folder not found. Did you run 'cargo build --release' first?"
+        );
         std::process::exit(1);
     }
 
@@ -19,17 +21,25 @@ fn main() {
         fs::create_dir_all(packages_dir).expect("Failed to create packages directory");
     }
 
-    println!("Scanning for plugin libraries in {}...", target_release_dir.display());
+    println!(
+        "Scanning for plugin libraries in {}...",
+        target_release_dir.display()
+    );
 
     // 3. Read the target/release directory
-    let entries = fs::read_dir(target_release_dir).expect("Failed to read target/release directory");
+    let entries =
+        fs::read_dir(target_release_dir).expect("Failed to read target/release directory");
     let mut packed_count = 0;
 
     for entry in entries.flatten() {
         let path = entry.path();
 
         // Check if the file is a dynamic library (ends with .so)
-        if path.is_file() && path.extension().map_or(false, |ext| ext == "so" || ext == "dll") {
+        if path.is_file()
+            && path
+                .extension()
+                .map_or(false, |ext| ext == "so" || ext == "dll")
+        {
             if let Some(file_name) = path.file_name() {
                 let dest_path = packages_dir.join(file_name);
 
@@ -46,16 +56,26 @@ fn main() {
 
                 match status {
                     Ok(s) if s.success() => {
-                        println!("  -> Successfully stripped and moved to {}", dest_path.display());
+                        println!(
+                            "  -> Successfully stripped and moved to {}",
+                            dest_path.display()
+                        );
                         packed_count += 1;
                     }
                     _ => {
-                        eprintln!("  -> Warning: Failed to strip {:?}. Is the 'strip' tool installed?", file_name);
+                        eprintln!(
+                            "  -> Warning: Failed to strip {:?}. Is the 'strip' tool installed?",
+                            file_name
+                        );
                     }
                 }
             }
         }
     }
 
-    println!("\n Done! Successfully packaged {} plugins into '{}/*'.", packed_count, packages_dir.display());
+    println!(
+        "\n Done! Successfully packaged {} plugins into '{}/*'.",
+        packed_count,
+        packages_dir.display()
+    );
 }

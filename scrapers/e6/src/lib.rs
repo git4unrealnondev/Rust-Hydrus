@@ -9,8 +9,8 @@ use std::time::Duration;
 #[path = "../../../src/client.rs"]
 mod client;
 
-use sharedtypes;
 use crate::sharedtypes::DEFAULT_PRIORITY;
+use sharedtypes;
 #[macro_export]
 macro_rules! vec_of_strings {
     ($($x:expr),*) => (vec![$($x.to_string()),*]);
@@ -758,21 +758,18 @@ fn parse_pools(
                 tag_type: sharedtypes::TagType::Normal,
             });
         }
-        files.insert(sharedtypes::FileObject::V1(
-            sharedtypes::FileObjectV1{
-            hash: sharedtypes::HashesSupported::None,
-            tag_list: vec![sharedtypes::FileTagAction {
-                operation: sharedtypes::TagOperation::Add,
-                tags: tags_list,
-            }],
-            skip_if: Vec::new(),
-            ..Default::default()
-        }
-        ).into()
-
-
-
-            );
+        files.insert(
+            sharedtypes::FileObject::V1(sharedtypes::FileObjectV1 {
+                hash: sharedtypes::HashesSupported::None,
+                tag_list: vec![sharedtypes::FileTagAction {
+                    operation: sharedtypes::TagOperation::Add,
+                    tags: tags_list,
+                }],
+                skip_if: Vec::new(),
+                ..Default::default()
+            })
+            .into(),
+        );
     }
 
     vec![sharedtypes::ScraperReturn::Data(
@@ -997,15 +994,18 @@ pub fn parser(
                 gen_source_from_md5_ext(&md5, &ext, &site)
             }
         };
-        let file: sharedtypes::FileObject = sharedtypes::FileObject::V1( sharedtypes::FileObjectV1 {
-            source: Some(sharedtypes::FileSource::Url(vec![url])),
-            hash: sharedtypes::HashesSupported::Md5(js["posts"][inc]["file"]["md5"].to_string()),
-            tag_list: vec![sharedtypes::FileTagAction {
-                operation: sharedtypes::TagOperation::Set,
-                tags: tags_list,
-            }],
-            ..Default::default()
-        });
+        let file: sharedtypes::FileObject =
+            sharedtypes::FileObject::V1(sharedtypes::FileObjectV1 {
+                source: Some(sharedtypes::FileSource::Url(vec![url])),
+                hash: sharedtypes::HashesSupported::Md5(
+                    js["posts"][inc]["file"]["md5"].to_string(),
+                ),
+                tag_list: vec![sharedtypes::FileTagAction {
+                    operation: sharedtypes::TagOperation::Set,
+                    tags: tags_list,
+                }],
+                ..Default::default()
+            });
         files.insert(file.into());
     }
 
@@ -1470,8 +1470,7 @@ pub fn on_start(site_struct: &sharedtypes::GlobalPluginScraper) {
                     if client::relationship_get_fileid(tagid).is_empty()
                         && client::parents_get(sharedtypes::ParentsType::Tag, tagid).is_empty()
                         && client::parents_get(sharedtypes::ParentsType::Rel, tagid).is_empty()
-                        && client::parents_get(sharedtypes::ParentsType::LimitTo, tagid)
-                            .is_empty()
+                        && client::parents_get(sharedtypes::ParentsType::LimitTo, tagid).is_empty()
                     {
                         client::log(format!("E6-Scraper - Tag {} is empty removing", tagid));
                         client::tag_remove(tagid);

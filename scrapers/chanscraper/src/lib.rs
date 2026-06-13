@@ -103,36 +103,36 @@ pub fn overall_ordering(
             );
         }
         if name == "return_styling" {
-    out.insert(
-        "return_styling".to_string(),
-        vec![sharedtypes::CallbackCustomDataReturning::VString(vec![
-            "INPUTS".to_string(),
-            "STYLING".to_string(),
-            "bg-white p-4 mb-6 shadow rounded border border-gray-300".to_string(),
-            "STYLING_END".to_string(),
-            ]),
+            out.insert(
+                "return_styling".to_string(),
+                vec![
                     sharedtypes::CallbackCustomDataReturning::VString(vec![
-            "Thread Id Post #".to_string(),
-            "STYLING".to_string(),
-            "text-xl font-bold text-blue-900 mb-4".to_string(),
-            "STYLING_END".to_string(),
-            
-            ]),
+                        "INPUTS".to_string(),
+                        "STYLING".to_string(),
+                        "bg-white p-4 mb-6 shadow rounded border border-gray-300".to_string(),
+                        "STYLING_END".to_string(),
+                    ]),
                     sharedtypes::CallbackCustomDataReturning::VString(vec![
-            "tag_id".to_string(),
-            "STYLING".to_string(),
-            "border-l-4 border-green-500 pl-2".to_string(),
-            "STYLING_END".to_string(),
-            
-            ]),
+                        "Thread Id Post #".to_string(),
+                        "STYLING".to_string(),
+                        "text-xl font-bold text-blue-900 mb-4".to_string(),
+                        "STYLING_END".to_string(),
+                    ]),
                     sharedtypes::CallbackCustomDataReturning::VString(vec![
-            "relate_tag_id".to_string(),
-            "STYLING".to_string(),
-            "border-l-4 border-red-500 pl-2".to_string(),
-            "STYLING_END".to_string(),
-        ])],
-    );
-}
+                        "tag_id".to_string(),
+                        "STYLING".to_string(),
+                        "border-l-4 border-green-500 pl-2".to_string(),
+                        "STYLING_END".to_string(),
+                    ]),
+                    sharedtypes::CallbackCustomDataReturning::VString(vec![
+                        "relate_tag_id".to_string(),
+                        "STYLING".to_string(),
+                        "border-l-4 border-red-500 pl-2".to_string(),
+                        "STYLING_END".to_string(),
+                    ]),
+                ],
+            );
+        }
 
         if name == "return_actions" {
             out.insert(
@@ -154,12 +154,11 @@ pub fn overall_ordering(
                     ]),
                     sharedtypes::CallbackCustomDataReturning::VString(vec![
                         "Thread Id Post Data".to_string(), // Action ID
-                        "TagSearch".to_string(),        // On Action
+                        "TagSearch".to_string(),           // On Action
                         "Thread Id Search".to_string(),    // Id to Reference
-                        "TagGet".to_string(),    // Do Action
-                        "tag".to_string(), // only get the tag human readable
+                        "TagGet".to_string(),              // Do Action
+                        "tag".to_string(),                 // only get the tag human readable
                     ]),
-
                 ],
             );
         }
