@@ -7,7 +7,7 @@ use crate::globalload::GlobalLoad;
 use crate::helpers::memory_manage;
 use crate::logging;
 use crate::logging::info_log;
-use crate::sharedtypes;
+use sharedtypes;
 
 use async_std::task;
 use file_format::FileFormat;
@@ -247,6 +247,7 @@ impl Worker {
 
                             match globalload.url_dump(&job.param, &scraper_data_return_default, &scraper) {
                                 Ok(temp) => {
+                                    dbg!(&temp);
                                     for scraper_data_return in temp {
                                         for param in scraper_data_return.job.param.iter() {
                                             if let sharedtypes::ScraperParam::Url(_) | sharedtypes::ScraperParam::UrlPost(_) = param {
@@ -408,7 +409,7 @@ impl Worker {
                                         database.tag_add_tagobject_multiple(&out_st.tags);
 
                                         // Parses files from urls
-                                        for mut file in out_st.files.clone() {
+                                        for file in out_st.files.clone() {
                                             let ratelimiter_obj = ratelimiter_main.clone();
                                             let globalload = globalload.clone();
                                             let db = database.clone();
@@ -509,34 +510,6 @@ enum SkipResult {
     // Download that sucket
     Download,
 }
-
-/*/// Parses tags and adds the tags into the database.
-pub fn parse_tags_old(
-    database: Main,
-    tag: &sharedtypes::TagObject,
-    file_id: Option<u64>,
-    worker_id: &u64,
-    job_id: &u64,
-    manager: GlobalLoad,
-) -> BTreeSet<sharedtypes::ScraperDataReturn> {
-    let mut url_return: BTreeSet<sharedtypes::ScraperDataReturn> = BTreeSet::new();
-    match &tag.tag_type {
-        sharedtypes::TagType::Normal | sharedtypes::TagType::NormalNoRegex => {
-            if tag.tag_type != sharedtypes::TagType::NormalNoRegex {
-                // Runs regex mostly
-                manager.plugin_on_tag(tag);
-            }
-
-            database.add_tags_to_fileid(tn, file_id, vec![tag]);
-
-            url_return
-        }
-                sharedtypes::TagType::Special => {
-            // Do nothing will handle this later lol.
-            url_return
-        }
-    }
-}*/
 
 ///
 /// Downloads a file into the db if needed
@@ -823,11 +796,10 @@ pub fn main_file_loop(
                 );
                 fileid = database.file_get_hash(&sha512.0);
                 database.add_tags_to_fileid(fileid, &file.tag_list);
-
             }
         },
         None => return,
     }
 
-   // database.add_tags_to_fileid(fileid, &file.tag_list);
+    // database.add_tags_to_fileid(fileid, &file.tag_list);
 }

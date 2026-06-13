@@ -27,4 +27,12 @@ rand = "0.8.5"
 serde = { version = "1.0.192", features = ["derive"] }
 strum = "0.25.0"
 strum_macros = "0.25.1"
-bincode = { version = "2.0.1", features = ["serde","alloc"] }
+
+bitcode = { version = "0.6.9", features = ["arrayvec", "derive", "serde"] }
+redact = { git = "https://github.com/git4unrealnondev/redact",  features = ["serde", "bitcode"] }
+
+[features]
+default = ["serde"]
+serde = []
+clap=[]
+

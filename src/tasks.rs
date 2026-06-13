@@ -1,7 +1,6 @@
 #![allow(dead_code)]
 #![allow(unused_variables)]
 use super::download;
-use super::sharedtypes;
 use crate::Main;
 use crate::helpers;
 use crate::logging;
@@ -10,6 +9,7 @@ use file_format::FileFormat;
 use log::{error, info};
 use rusqlite::Transaction;
 use serde::Deserialize;
+use sharedtypes;
 use std::fs;
 use std::path::Path;
 

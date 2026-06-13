@@ -3,7 +3,7 @@
 
 use log::{error, warn};
 use parking_lot::{Mutex, RwLock};
-use std::{sync::Arc, thread, time};
+use std::{io, sync::Arc, thread, time};
 
 pub const VERS: u64 = 12;
 pub const DEFAULT_LOC_PLUGIN: &str = "plugins";
@@ -23,7 +23,6 @@ pub mod logging;
 pub mod reimport;
 //#[path = "./scr/scraper.rs"]
 //pub mod scraper;
-pub mod sharedtypes;
 pub mod tasks;
 pub mod threading;
 pub mod time_func;
@@ -36,10 +35,11 @@ pub mod helpers;
 pub mod os;
 pub mod server;
 pub mod types;
+pub mod ui;
 
 use database::database::Main;
 
-use crate::helpers::memory_manage;
+use crate::{helpers::memory_manage, ui::ui::App};
 
 // pub mod scr { pub mod cli; pub mod database; pub mod download; pub mod file; pub
 // pub mod jobs; pub mod logging; pub mod plugins; pub mod scraper; pub mod
@@ -87,166 +87,178 @@ fn db_file_sanity(dbloc: &str) {
 }
 
 /// Main function.
-fn main() {
+fn main() -> io::Result<()> {
     memory_manage();
-    // Create a background thread which checks for deadlocks every 10s
-    thread::spawn(move || {
-        loop {
-            thread::sleep(std::time::Duration::from_secs(1));
-            let deadlocks = parking_lot::deadlock::check_deadlock();
-            if deadlocks.is_empty() {
-                continue;
-            }
 
-            println!("{} deadlocks detected", deadlocks.len());
-            for (i, threads) in deadlocks.iter().enumerate() {
-                println!("Deadlock #{}", i);
-                for t in threads {
-                    println!("Thread Id {:#?}", t.thread_id());
-                    println!("{:#?}", t.backtrace());
+    let mut terminal = ratatui::init();
+
+    let mut app = App::new();
+
+    let app_result = app.run(&mut terminal);
+
+    ratatui::restore();
+    app_result
+
+    /*
+        // Create a background thread which checks for deadlocks every 10s
+        thread::spawn(move || {
+            loop {
+                thread::sleep(std::time::Duration::from_secs(1));
+                let deadlocks = parking_lot::deadlock::check_deadlock();
+                if deadlocks.is_empty() {
+                    continue;
+                }
+
+                println!("{} deadlocks detected", deadlocks.len());
+                for (i, threads) in deadlocks.iter().enumerate() {
+                    println!("Deadlock #{}", i);
+                    for t in threads {
+                        println!("Thread Id {:#?}", t.thread_id());
+                        println!("{:#?}", t.backtrace());
+                    }
                 }
             }
-        }
-    });
+        });
 
-    let dbloc = "main.db";
-    {
-        let logloc = "log.txt";
-
-        // Makes Logging work
-        logging::main(&logloc.to_string());
-    }
-    os::check_os_compatibility();
-
-    // Inits Database.
-    let mut database = makedb(dbloc);
-
-    let jobmanager = Arc::new(RwLock::new(jobs::Jobs::new(database.clone())));
-
-    let mut globalload = globalload::GlobalLoad::new(database.clone(), jobmanager.clone());
-    {
-        database.load_table(&sharedtypes::LoadDBTable::Settings);
-        database.load_table(&sharedtypes::LoadDBTable::Jobs);
-
-        //let mut globalload_data =
-        //    plugins::globalload_data::new(plugin_loc.to_string(), database.clone(), jobmanager.clone());
-
-        // Adds plugin and scraper callback capability from inside the db
-        // Things like callbacks and the like
-        database.setup_globalload(globalload.clone());
-
-        globalload.setup_ipc(globalload.clone(), database.clone(), jobmanager.clone());
-
-        // Putting this down here after plugin manager because that's when the IPC server
-        // starts and we can then inside of the scraper start calling IPC functions
-
-        let mut upgradeversvec = Vec::new();
-
-        // Upgrades the DB by geting version differences.
-        // Waits for the entire DB to be upgraded before running scraper upgrades.
-        'upgradeloop: loop {
-            let repeat;
-            {
-                repeat = database.check_version();
-            }
-            if !repeat {
-                upgradeversvec.push(database.db_vers_get());
-            } else {
-                break 'upgradeloop;
-            }
-        }
-
-        // Actually upgrades the DB from scraper calls
-        for db_version in upgradeversvec.iter() {
-            globalload.run_upgrade_logic(db_version);
-        }
-
-        // Processes any CLI input here
-        //cli::main(database.clone(), globalload);
-        cli::main(database.clone());
-    }
-    {
-        globalload.reload_regex();
-        // Calls the on_start func for the plugins
-        globalload.pluginscraper_on_start();
-    }
-
-    // A way to get around a mutex lock but it works lol
-    let one_sec = time::Duration::from_millis(1000);
-    loop {
-        if !globalload.plugin_on_start_should_wait() {
-            break;
-        } else {
-            thread::sleep(one_sec);
-        }
-    }
-
-    {
-        let sites = globalload.return_all_sites();
-        //let globalload_sites = ;
-        // Checks if we need to load any jobs
-        jobmanager.write().jobs_load(sites);
-    }
-
-    // One flush after all the on_start unless needed
-    //
-
-    // Creates a threadhandler that manages callable threads.
-    let mut threadhandler = threading::Threads::new();
-
-    //let mut conn = database.read().get_database_connection();
-    //let tn = conn.transaction().unwrap();
-    // just determines if we have any loaded jobs
-    jobmanager.read().jobs_run_new();
-
-    {
-        for scraper in jobmanager.read().job_scrapers_get() {
-            threadhandler.startwork(
-                jobmanager.clone(),
-                database.clone(),
-                scraper.clone(),
-                globalload.clone(),
-            );
-        }
-    }
-
-    // Anything below here will run automagically. Jobs run in OS threads Waits until
-    // all threads have closed.
-    loop {
-        let brk;
-        threadhandler.check_threads();
+        let dbloc = "main.db";
         {
-            globalload.clone().thread_finish_closed();
-            brk = globalload.return_thread();
+            let logloc = "log.txt";
+
+            // Makes Logging work
+            logging::main(&logloc.to_string());
+        }
+        os::check_os_compatibility();
+
+        // Inits Database.
+        let mut database = makedb(dbloc);
+
+        let jobmanager = Arc::new(RwLock::new(jobs::Jobs::new(database.clone())));
+
+        let mut globalload = globalload::GlobalLoad::new(database.clone(), jobmanager.clone());
+        {
+            database.load_table(&sharedtypes::LoadDBTable::Settings);
+            database.load_table(&sharedtypes::LoadDBTable::Jobs);
+
+            //let mut globalload_data =
+            //    plugins::globalload_data::new(plugin_loc.to_string(), database.clone(), jobmanager.clone());
+
+            // Adds plugin and scraper callback capability from inside the db
+            // Things like callbacks and the like
+            database.setup_globalload(globalload.clone());
+
+            globalload.setup_ipc(globalload.clone(), database.clone(), jobmanager.clone());
+
+            // Putting this down here after plugin manager because that's when the IPC server
+            // starts and we can then inside of the scraper start calling IPC functions
+
+            let mut upgradeversvec = Vec::new();
+
+            // Upgrades the DB by geting version differences.
+            // Waits for the entire DB to be upgraded before running scraper upgrades.
+            'upgradeloop: loop {
+                let repeat;
+                {
+                    repeat = database.check_version();
+                }
+                if !repeat {
+                    upgradeversvec.push(database.db_vers_get());
+                } else {
+                    break 'upgradeloop;
+                }
+            }
+
+            // Actually upgrades the DB from scraper calls
+            for db_version in upgradeversvec.iter() {
+                globalload.run_upgrade_logic(db_version);
+            }
+
+            // Processes any CLI input here
+            //cli::main(database.clone(), globalload);
+            cli::main(database.clone());
+        }
+        {
+            globalload.reload_regex();
+            // Calls the on_start func for the plugins
+            globalload.pluginscraper_on_start();
+        }
+
+        // A way to get around a mutex lock but it works lol
+        let one_sec = time::Duration::from_millis(1000);
+        loop {
+            if !globalload.plugin_on_start_should_wait() {
+                break;
+            } else {
+                thread::sleep(one_sec);
+            }
         }
 
         {
             let sites = globalload.return_all_sites();
+            //let globalload_sites = ;
+            // Checks if we need to load any jobs
             jobmanager.write().jobs_load(sites);
         }
 
-        for scraper in jobmanager.read().job_scrapers_get() {
-            // let scraper_library = scraper_manager._library.get(&scraper).unwrap();
-            threadhandler.startwork(
-                jobmanager.clone(),
-                database.clone(),
-                scraper.clone(),
-                globalload.clone(),
-            );
+        // One flush after all the on_start unless needed
+        //
+
+        // Creates a threadhandler that manages callable threads.
+        let mut threadhandler = threading::Threads::new();
+
+        //let mut conn = database.read().get_database_connection();
+        //let tn = conn.transaction().unwrap();
+        // just determines if we have any loaded jobs
+        jobmanager.read().jobs_run_new();
+
+        {
+            for scraper in jobmanager.read().job_scrapers_get() {
+                threadhandler.startwork(
+                    jobmanager.clone(),
+                    database.clone(),
+                    scraper.clone(),
+                    globalload.clone(),
+                );
+            }
         }
-        thread::sleep(one_sec);
 
-        if brk && threadhandler.check_empty() {
-            break;
+        // Anything below here will run automagically. Jobs run in OS threads Waits until
+        // all threads have closed.
+        loop {
+            let brk;
+            threadhandler.check_threads();
+            {
+                globalload.clone().thread_finish_closed();
+                brk = globalload.return_thread();
+            }
+
+            {
+                let sites = globalload.return_all_sites();
+                jobmanager.write().jobs_load(sites);
+            }
+
+            for scraper in jobmanager.read().job_scrapers_get() {
+                // let scraper_library = scraper_manager._library.get(&scraper).unwrap();
+                threadhandler.startwork(
+                    jobmanager.clone(),
+                    database.clone(),
+                    scraper.clone(),
+                    globalload.clone(),
+                );
+            }
+            thread::sleep(one_sec);
+
+            if brk && threadhandler.check_empty() {
+                break;
+            }
         }
-    }
 
-    // This wait is done for allowing any thread to "complete" Shouldn't be nessisary
-    // but hey. :D
-    //database.transaction_flush(tn);
+        // This wait is done for allowing any thread to "complete" Shouldn't be nessisary
+        // but hey. :D
+        //database.transaction_flush(tn);
 
-    let mills_fifty = time::Duration::from_millis(50);
-    std::thread::sleep(mills_fifty);
-    logging::info_log("UNLOADING".to_string());
-    log::logger().flush();
+        let mills_fifty = time::Duration::from_millis(50);
+        std::thread::sleep(mills_fifty);
+        logging::info_log("UNLOADING".to_string());
+        log::logger().flush();
+    */
 }

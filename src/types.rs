@@ -1,9 +1,9 @@
 #![allow(dead_code)]
 #![allow(unused_variables)]
 
-use crate::sharedtypes;
 use interprocess::local_socket::prelude::LocalSocketStream;
 use serde::{Deserialize, Serialize};
+use sharedtypes;
 use std::collections::HashSet;
 use std::io::BufReader;
 use std::io::Read;
@@ -91,7 +91,7 @@ pub enum SupportedDBRequests {
     FilterNamespaceById((HashSet<u64>, u64)),
     PluginCallback(String, u64, sharedtypes::CallbackInfoInput),
     ReloadLoadedPlugins(),
-    ParentsGet((ParentsType, u64)),
+    ParentsGet((sharedtypes::ParentsType, u64)),
     ParentsDelete(sharedtypes::DbParentsObj),
     ParentsPut(sharedtypes::DbParentsObj),
     PutJob(sharedtypes::DbJobsObj),
@@ -108,14 +108,6 @@ pub enum SupportedDBRequests {
     GetRelationshipFileidWhereNamespace((u64, u64, sharedtypes::GreqLeqOrEq)),
     GetRelationshipTagidWhereNamespace((u64, u64, sharedtypes::GreqLeqOrEq)),
     GetFileIdsWhereExtensionIs(sharedtypes::FileExtensionType),
-}
-
-/// A descriptor for the parents and the type of data that we're sending
-#[derive(Debug, Serialize, Deserialize, bitcode::Encode, bitcode::Decode)]
-pub enum ParentsType {
-    Tag,
-    Rel,
-    LimitTo,
 }
 
 /// Actions for Database

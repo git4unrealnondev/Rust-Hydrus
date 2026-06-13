@@ -23,34 +23,40 @@ impl RustHydrusApiClient {
     /// Gets a scraper folder. If it doesn't exist then please create it in db
     pub fn loaded_scraper_folder(&self) -> Result<PathBuf, ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "loaded_scraper_folder");
-        let res = ureq::get(url)
+        let response_bytes = ureq::get(url)
+            .header("accept", "application/bitcode")
             .call()?
-            .body_mut()
-            .with_config()
-            .limit(u64::MAX)
-            .read_json::<PathBuf>()?;
+            .into_body()
+            .read_to_vec()?;
+        let res: PathBuf = bitcode::deserialize(&response_bytes)
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
         Ok(res)
     }
     /// Gets a plugin folder. If it doesn't exist then please create it in db
     pub fn loaded_plugin_folder(&self) -> Result<PathBuf, ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "loaded_plugin_folder");
-        let res = ureq::get(url)
+        let response_bytes = ureq::get(url)
+            .header("accept", "application/bitcode")
             .call()?
-            .body_mut()
-            .with_config()
-            .limit(u64::MAX)
-            .read_json::<PathBuf>()?;
+            .into_body()
+            .read_to_vec()?;
+        let res: PathBuf = bitcode::deserialize(&response_bytes)
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
         Ok(res)
     }
     /// Deletes a namespace by id
     pub fn delete_namespace_id(&self, nsid: &u64) -> Result<(), ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "delete_namespace_id");
-        let res = ureq::post(url)
-            .send_json(&(nsid))?
-            .body_mut()
-            .with_config()
-            .limit(u64::MAX)
-            .read_json::<()>()?;
+        let payload = bitcode::serialize(&(nsid))
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
+        let response_bytes = ureq::post(url)
+            .header("content-type", "application/bitcode")
+            .header("accept", "application/bitcode")
+            .send(payload)?
+            .into_body()
+            .read_to_vec()?;
+        let res: () = bitcode::deserialize(&response_bytes)
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
         Ok(res)
     }
     ///
@@ -61,12 +67,16 @@ impl RustHydrusApiClient {
         let url = format!(
             "{}/{}/{}", self.base_url, "main", "check_default_source_urls"
         );
-        let res = ureq::post(url)
-            .send_json(&(action))?
-            .body_mut()
-            .with_config()
-            .limit(u64::MAX)
-            .read_json::<()>()?;
+        let payload = bitcode::serialize(&(action))
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
+        let response_bytes = ureq::post(url)
+            .header("content-type", "application/bitcode")
+            .header("accept", "application/bitcode")
+            .send(payload)?
+            .into_body()
+            .read_to_vec()?;
+        let res: () = bitcode::deserialize(&response_bytes)
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
         Ok(res)
     }
     /// Checks relationships with table for any dead tagids
@@ -74,23 +84,28 @@ impl RustHydrusApiClient {
         let url = format!(
             "{}/{}/{}", self.base_url, "main", "check_relationship_tag_relations"
         );
-        let res = ureq::get(url)
+        let response_bytes = ureq::get(url)
+            .header("accept", "application/bitcode")
             .call()?
-            .body_mut()
-            .with_config()
-            .limit(u64::MAX)
-            .read_json::<()>()?;
+            .into_body()
+            .read_to_vec()?;
+        let res: () = bitcode::deserialize(&response_bytes)
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
         Ok(res)
     }
     /// Removes a job from the database by id. Removes from both memdb and sql.
     pub fn del_from_jobs_byid(&self, id: Option<u64>) -> Result<(), ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "del_from_jobs_byid");
-        let res = ureq::post(url)
-            .send_json(&(id))?
-            .body_mut()
-            .with_config()
-            .limit(u64::MAX)
-            .read_json::<()>()?;
+        let payload = bitcode::serialize(&(id))
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
+        let response_bytes = ureq::post(url)
+            .header("content-type", "application/bitcode")
+            .header("accept", "application/bitcode")
+            .send(payload)?
+            .into_body()
+            .read_to_vec()?;
+        let res: () = bitcode::deserialize(&response_bytes)
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
         Ok(res)
     }
     ///
@@ -99,23 +114,31 @@ impl RustHydrusApiClient {
         file: sharedtypes::DbFileStorage,
     ) -> Result<u64, ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "file_add");
-        let res = ureq::post(url)
-            .send_json(&(file))?
-            .body_mut()
-            .with_config()
-            .limit(u64::MAX)
-            .read_json::<u64>()?;
+        let payload = bitcode::serialize(&(file))
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
+        let response_bytes = ureq::post(url)
+            .header("content-type", "application/bitcode")
+            .header("accept", "application/bitcode")
+            .send(payload)?
+            .into_body()
+            .read_to_vec()?;
+        let res: u64 = bitcode::deserialize(&response_bytes)
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
         Ok(res)
     }
     ///
     pub fn storage_put(&self, location: &String) -> Result<u64, ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "storage_put");
-        let res = ureq::post(url)
-            .send_json(&(location))?
-            .body_mut()
-            .with_config()
-            .limit(u64::MAX)
-            .read_json::<u64>()?;
+        let payload = bitcode::serialize(&(location))
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
+        let response_bytes = ureq::post(url)
+            .header("content-type", "application/bitcode")
+            .header("accept", "application/bitcode")
+            .send(payload)?
+            .into_body()
+            .read_to_vec()?;
+        let res: u64 = bitcode::deserialize(&response_bytes)
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
         Ok(res)
     }
     /// Adds tags to fileid  commits to db
@@ -125,23 +148,31 @@ impl RustHydrusApiClient {
         tag_actions: &Vec<sharedtypes::FileTagAction>,
     ) -> Result<(), ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "add_tags_to_fileid");
-        let res = ureq::post(url)
-            .send_json(&(file_id, tag_actions))?
-            .body_mut()
-            .with_config()
-            .limit(u64::MAX)
-            .read_json::<()>()?;
+        let payload = bitcode::serialize(&(file_id, tag_actions))
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
+        let response_bytes = ureq::post(url)
+            .header("content-type", "application/bitcode")
+            .header("accept", "application/bitcode")
+            .send(payload)?
+            .into_body()
+            .read_to_vec()?;
+        let res: () = bitcode::deserialize(&response_bytes)
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
         Ok(res)
     }
     ///
     pub fn delete_tag(&self, tag: &u64) -> Result<(), ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "delete_tag");
-        let res = ureq::post(url)
-            .send_json(&(tag))?
-            .body_mut()
-            .with_config()
-            .limit(u64::MAX)
-            .read_json::<()>()?;
+        let payload = bitcode::serialize(&(tag))
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
+        let response_bytes = ureq::post(url)
+            .header("content-type", "application/bitcode")
+            .header("accept", "application/bitcode")
+            .send(payload)?
+            .into_body()
+            .read_to_vec()?;
+        let res: () = bitcode::deserialize(&response_bytes)
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
         Ok(res)
     }
     ///
@@ -150,34 +181,48 @@ impl RustHydrusApiClient {
         tagid: &u64,
     ) -> Result<HashSet<sharedtypes::DbParentsObj>, ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "parents_tagid_remove");
-        let res = ureq::post(url)
-            .send_json(&(tagid))?
-            .body_mut()
-            .with_config()
-            .limit(u64::MAX)
-            .read_json::<HashSet<sharedtypes::DbParentsObj>>()?;
+        let payload = bitcode::serialize(&(tagid))
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
+        let response_bytes = ureq::post(url)
+            .header("content-type", "application/bitcode")
+            .header("accept", "application/bitcode")
+            .send(payload)?
+            .into_body()
+            .read_to_vec()?;
+        let res: HashSet<sharedtypes::DbParentsObj> = bitcode::deserialize(
+                &response_bytes,
+            )
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
         Ok(res)
     }
     /// Adds relationship into db
     pub fn add_relationship(&self, file: &u64, tag: &u64) -> Result<(), ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "add_relationship");
-        let res = ureq::post(url)
-            .send_json(&(file, tag))?
-            .body_mut()
-            .with_config()
-            .limit(u64::MAX)
-            .read_json::<()>()?;
+        let payload = bitcode::serialize(&(file, tag))
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
+        let response_bytes = ureq::post(url)
+            .header("content-type", "application/bitcode")
+            .header("accept", "application/bitcode")
+            .send(payload)?
+            .into_body()
+            .read_to_vec()?;
+        let res: () = bitcode::deserialize(&response_bytes)
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
         Ok(res)
     }
     ///
     pub fn delete_relationship(&self, file: &u64, tag: &u64) -> Result<(), ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "delete_relationship");
-        let res = ureq::post(url)
-            .send_json(&(file, tag))?
-            .body_mut()
-            .with_config()
-            .limit(u64::MAX)
-            .read_json::<()>()?;
+        let payload = bitcode::serialize(&(file, tag))
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
+        let response_bytes = ureq::post(url)
+            .header("content-type", "application/bitcode")
+            .header("accept", "application/bitcode")
+            .send(payload)?
+            .into_body()
+            .read_to_vec()?;
+        let res: () = bitcode::deserialize(&response_bytes)
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
         Ok(res)
     }
     /// Checks if a relationship exists in the db
@@ -189,12 +234,16 @@ impl RustHydrusApiClient {
         let url = format!(
             "{}/{}/{}", self.base_url, "main", "check_relationship_exists"
         );
-        let res = ureq::post(url)
-            .send_json(&(file_id, tag_id))?
-            .body_mut()
-            .with_config()
-            .limit(u64::MAX)
-            .read_json::<bool>()?;
+        let payload = bitcode::serialize(&(file_id, tag_id))
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
+        let response_bytes = ureq::post(url)
+            .header("content-type", "application/bitcode")
+            .header("accept", "application/bitcode")
+            .send(payload)?
+            .into_body()
+            .read_to_vec()?;
+        let res: bool = bitcode::deserialize(&response_bytes)
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
         Ok(res)
     }
     /// Adds the tag to the db. commits on finish
@@ -203,12 +252,16 @@ impl RustHydrusApiClient {
         tag: &sharedtypes::TagObject,
     ) -> Result<Option<u64>, ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "tag_add_tagobject");
-        let res = ureq::post(url)
-            .send_json(&(tag))?
-            .body_mut()
-            .with_config()
-            .limit(u64::MAX)
-            .read_json::<Option<u64>>()?;
+        let payload = bitcode::serialize(&(tag))
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
+        let response_bytes = ureq::post(url)
+            .header("content-type", "application/bitcode")
+            .header("accept", "application/bitcode")
+            .send(payload)?
+            .into_body()
+            .read_to_vec()?;
+        let res: Option<u64> = bitcode::deserialize(&response_bytes)
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
         Ok(res)
     }
     /// Adds multiple tags to the db. commits on finish
@@ -219,34 +272,40 @@ impl RustHydrusApiClient {
         let url = format!(
             "{}/{}/{}", self.base_url, "main", "tag_add_tagobject_multiple"
         );
-        let res = ureq::post(url)
-            .send_json(&(tag_list))?
-            .body_mut()
-            .with_config()
-            .limit(u64::MAX)
-            .read_json::<()>()?;
+        let payload = bitcode::serialize(&(tag_list))
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
+        let response_bytes = ureq::post(url)
+            .header("content-type", "application/bitcode")
+            .header("accept", "application/bitcode")
+            .send(payload)?
+            .into_body()
+            .read_to_vec()?;
+        let res: () = bitcode::deserialize(&response_bytes)
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
         Ok(res)
     }
     /// condesnes everything in db
     pub fn condense_db_all(&self) -> Result<(), ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "condense_db_all");
-        let res = ureq::get(url)
+        let response_bytes = ureq::get(url)
+            .header("accept", "application/bitcode")
             .call()?
-            .body_mut()
-            .with_config()
-            .limit(u64::MAX)
-            .read_json::<()>()?;
+            .into_body()
+            .read_to_vec()?;
+        let res: () = bitcode::deserialize(&response_bytes)
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
         Ok(res)
     }
     /// Sets a relationship between a fileid old and new tagid
     pub fn condense_tags(&self) -> Result<(), ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "condense_tags");
-        let res = ureq::get(url)
+        let response_bytes = ureq::get(url)
+            .header("accept", "application/bitcode")
             .call()?
-            .body_mut()
-            .with_config()
-            .limit(u64::MAX)
-            .read_json::<()>()?;
+            .into_body()
+            .read_to_vec()?;
+        let res: () = bitcode::deserialize(&response_bytes)
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
         Ok(res)
     }
     /// Sets a relationship between a fileid old and new tagid
@@ -256,12 +315,16 @@ impl RustHydrusApiClient {
         new_tag_id: &u64,
     ) -> Result<(), ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "migrate_tag");
-        let res = ureq::post(url)
-            .send_json(&(old_tag_id, new_tag_id))?
-            .body_mut()
-            .with_config()
-            .limit(u64::MAX)
-            .read_json::<()>()?;
+        let payload = bitcode::serialize(&(old_tag_id, new_tag_id))
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
+        let response_bytes = ureq::post(url)
+            .header("content-type", "application/bitcode")
+            .header("accept", "application/bitcode")
+            .send(payload)?
+            .into_body()
+            .read_to_vec()?;
+        let res: () = bitcode::deserialize(&response_bytes)
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
         Ok(res)
     }
     /// Sets a relationship between a fileid old and new tagid
@@ -274,12 +337,16 @@ impl RustHydrusApiClient {
         let url = format!(
             "{}/{}/{}", self.base_url, "main", "migrate_relationship_file_tag"
         );
-        let res = ureq::post(url)
-            .send_json(&(file_id, old_tag_id, new_tag_id))?
-            .body_mut()
-            .with_config()
-            .limit(u64::MAX)
-            .read_json::<()>()?;
+        let payload = bitcode::serialize(&(file_id, old_tag_id, new_tag_id))
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
+        let response_bytes = ureq::post(url)
+            .header("content-type", "application/bitcode")
+            .header("accept", "application/bitcode")
+            .send(payload)?
+            .into_body()
+            .read_to_vec()?;
+        let res: () = bitcode::deserialize(&response_bytes)
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
         Ok(res)
     }
     /// Removes a parent selectivly
@@ -288,12 +355,16 @@ impl RustHydrusApiClient {
         parentobj: &sharedtypes::DbParentsObj,
     ) -> Result<(), ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "parents_selective_remove");
-        let res = ureq::post(url)
-            .send_json(&(parentobj))?
-            .body_mut()
-            .with_config()
-            .limit(u64::MAX)
-            .read_json::<()>()?;
+        let payload = bitcode::serialize(&(parentobj))
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
+        let response_bytes = ureq::post(url)
+            .header("content-type", "application/bitcode")
+            .header("accept", "application/bitcode")
+            .send(payload)?
+            .into_body()
+            .read_to_vec()?;
+        let res: () = bitcode::deserialize(&response_bytes)
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
         Ok(res)
     }
     /// Adds a parent into the db
@@ -302,12 +373,16 @@ impl RustHydrusApiClient {
         par: sharedtypes::DbParentsObj,
     ) -> Result<u64, ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "parents_add");
-        let res = ureq::post(url)
-            .send_json(&(par))?
-            .body_mut()
-            .with_config()
-            .limit(u64::MAX)
-            .read_json::<u64>()?;
+        let payload = bitcode::serialize(&(par))
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
+        let response_bytes = ureq::post(url)
+            .header("content-type", "application/bitcode")
+            .header("accept", "application/bitcode")
+            .send(payload)?
+            .into_body()
+            .read_to_vec()?;
+        let res: u64 = bitcode::deserialize(&response_bytes)
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
         Ok(res)
     }
     /// Adds tag into db
@@ -318,12 +393,16 @@ impl RustHydrusApiClient {
         id: Option<u64>,
     ) -> Result<u64, ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "tag_add");
-        let res = ureq::post(url)
-            .send_json(&(tags, namespace, id))?
-            .body_mut()
-            .with_config()
-            .limit(u64::MAX)
-            .read_json::<u64>()?;
+        let payload = bitcode::serialize(&(tags, namespace, id))
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
+        let response_bytes = ureq::post(url)
+            .header("content-type", "application/bitcode")
+            .header("accept", "application/bitcode")
+            .send(payload)?
+            .into_body()
+            .read_to_vec()?;
+        let res: u64 = bitcode::deserialize(&response_bytes)
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
         Ok(res)
     }
     /// Checks if table is loaded in mem and if not then loads it.
@@ -332,12 +411,16 @@ impl RustHydrusApiClient {
         table: &sharedtypes::LoadDBTable,
     ) -> Result<(), ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "load_table");
-        let res = ureq::post(url)
-            .send_json(&(table))?
-            .body_mut()
-            .with_config()
-            .limit(u64::MAX)
-            .read_json::<()>()?;
+        let payload = bitcode::serialize(&(table))
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
+        let response_bytes = ureq::post(url)
+            .header("content-type", "application/bitcode")
+            .header("accept", "application/bitcode")
+            .send(payload)?
+            .into_body()
+            .read_to_vec()?;
+        let res: () = bitcode::deserialize(&response_bytes)
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
         Ok(res)
     }
     ///
@@ -349,23 +432,31 @@ impl RustHydrusApiClient {
         param: Option<String>,
     ) -> Result<(), ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "setting_add");
-        let res = ureq::post(url)
-            .send_json(&(name, pretty, num, param))?
-            .body_mut()
-            .with_config()
-            .limit(u64::MAX)
-            .read_json::<()>()?;
+        let payload = bitcode::serialize(&(name, pretty, num, param))
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
+        let response_bytes = ureq::post(url)
+            .header("content-type", "application/bitcode")
+            .header("accept", "application/bitcode")
+            .send(payload)?
+            .into_body()
+            .read_to_vec()?;
+        let res: () = bitcode::deserialize(&response_bytes)
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
         Ok(res)
     }
     /// Adds a dead url into the db
     pub fn add_dead_url(&self, url_string: &String) -> Result<(), ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "add_dead_url");
-        let res = ureq::post(url)
-            .send_json(&(url_string))?
-            .body_mut()
-            .with_config()
-            .limit(u64::MAX)
-            .read_json::<()>()?;
+        let payload = bitcode::serialize(&(url_string))
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
+        let response_bytes = ureq::post(url)
+            .header("content-type", "application/bitcode")
+            .header("accept", "application/bitcode")
+            .send(payload)?
+            .into_body()
+            .read_to_vec()?;
+        let res: () = bitcode::deserialize(&response_bytes)
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
         Ok(res)
     }
     /** Searches the database using FTS5 allows getting a list of tags and their count based on a
@@ -378,12 +469,18 @@ impl RustHydrusApiClient {
         fts_or_count: sharedtypes::TagPartialSearchType,
     ) -> Result<Vec<(sharedtypes::Tag, u64, u64)>, ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "search_tags");
-        let res = ureq::post(url)
-            .send_json(&(search_string, limit_to, fts_or_count))?
-            .body_mut()
-            .with_config()
-            .limit(u64::MAX)
-            .read_json::<Vec<(sharedtypes::Tag, u64, u64)>>()?;
+        let payload = bitcode::serialize(&(search_string, limit_to, fts_or_count))
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
+        let response_bytes = ureq::post(url)
+            .header("content-type", "application/bitcode")
+            .header("accept", "application/bitcode")
+            .send(payload)?
+            .into_body()
+            .read_to_vec()?;
+        let res: Vec<(sharedtypes::Tag, u64, u64)> = bitcode::deserialize(
+                &response_bytes,
+            )
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
         Ok(res)
     }
     /** Searches the database using FTS5 allows getting a list of tagids and their count based on a
@@ -396,45 +493,52 @@ impl RustHydrusApiClient {
         fts_or_count: sharedtypes::TagPartialSearchType,
     ) -> Result<Vec<(u64, u64)>, ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "search_tags_ids");
-        let res = ureq::post(url)
-            .send_json(&(search_string, limit_to, fts_or_count))?
-            .body_mut()
-            .with_config()
-            .limit(u64::MAX)
-            .read_json::<Vec<(u64, u64)>>()?;
+        let payload = bitcode::serialize(&(search_string, limit_to, fts_or_count))
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
+        let response_bytes = ureq::post(url)
+            .header("content-type", "application/bitcode")
+            .header("accept", "application/bitcode")
+            .send(payload)?
+            .into_body()
+            .read_to_vec()?;
+        let res: Vec<(u64, u64)> = bitcode::deserialize(&response_bytes)
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
         Ok(res)
     }
     /// A test function to return 1
     pub fn test(&self) -> Result<u32, ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "test");
-        let res = ureq::get(url)
+        let response_bytes = ureq::get(url)
+            .header("accept", "application/bitcode")
             .call()?
-            .body_mut()
-            .with_config()
-            .limit(u64::MAX)
-            .read_json::<u32>()?;
+            .into_body()
+            .read_to_vec()?;
+        let res: u32 = bitcode::deserialize(&response_bytes)
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
         Ok(res)
     }
     /// Returns the db version number
     pub fn db_vers_get(&self) -> Result<u64, ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "db_vers_get");
-        let res = ureq::get(url)
+        let response_bytes = ureq::get(url)
+            .header("accept", "application/bitcode")
             .call()?
-            .body_mut()
-            .with_config()
-            .limit(u64::MAX)
-            .read_json::<u64>()?;
+            .into_body()
+            .read_to_vec()?;
+        let res: u64 = bitcode::deserialize(&response_bytes)
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
         Ok(res)
     }
     /// Returns a list of loaded tag ids
     pub fn tags_get_list_id(&self) -> Result<HashSet<u64>, ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "tags_get_list_id");
-        let res = ureq::get(url)
+        let response_bytes = ureq::get(url)
+            .header("accept", "application/bitcode")
             .call()?
-            .body_mut()
-            .with_config()
-            .limit(u64::MAX)
-            .read_json::<HashSet<u64>>()?;
+            .into_body()
+            .read_to_vec()?;
+        let res: HashSet<u64> = bitcode::deserialize(&response_bytes)
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
         Ok(res)
     }
     /// returns file id's based on relationships with a tag
@@ -443,12 +547,16 @@ impl RustHydrusApiClient {
         tag: &u64,
     ) -> Result<HashSet<u64>, ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "relationship_get_fileid");
-        let res = ureq::post(url)
-            .send_json(&(tag))?
-            .body_mut()
-            .with_config()
-            .limit(u64::MAX)
-            .read_json::<HashSet<u64>>()?;
+        let payload = bitcode::serialize(&(tag))
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
+        let response_bytes = ureq::post(url)
+            .header("content-type", "application/bitcode")
+            .header("accept", "application/bitcode")
+            .send(payload)?
+            .into_body()
+            .read_to_vec()?;
+        let res: HashSet<u64> = bitcode::deserialize(&response_bytes)
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
         Ok(res)
     }
     /// Gets one fileid from one tagid
@@ -459,12 +567,16 @@ impl RustHydrusApiClient {
         let url = format!(
             "{}/{}/{}", self.base_url, "main", "relationship_get_one_fileid"
         );
-        let res = ureq::post(url)
-            .send_json(&(tag))?
-            .body_mut()
-            .with_config()
-            .limit(u64::MAX)
-            .read_json::<Option<u64>>()?;
+        let payload = bitcode::serialize(&(tag))
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
+        let response_bytes = ureq::post(url)
+            .header("content-type", "application/bitcode")
+            .header("accept", "application/bitcode")
+            .send(payload)?
+            .into_body()
+            .read_to_vec()?;
+        let res: Option<u64> = bitcode::deserialize(&response_bytes)
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
         Ok(res)
     }
     /// Returns tagid's based on relationship with a fileid.
@@ -473,12 +585,16 @@ impl RustHydrusApiClient {
         file_id: &u64,
     ) -> Result<HashSet<u64>, ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "relationship_get_tagid");
-        let res = ureq::post(url)
-            .send_json(&(file_id))?
-            .body_mut()
-            .with_config()
-            .limit(u64::MAX)
-            .read_json::<HashSet<u64>>()?;
+        let payload = bitcode::serialize(&(file_id))
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
+        let response_bytes = ureq::post(url)
+            .header("content-type", "application/bitcode")
+            .header("accept", "application/bitcode")
+            .send(payload)?
+            .into_body()
+            .read_to_vec()?;
+        let res: HashSet<u64> = bitcode::deserialize(&response_bytes)
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
         Ok(res)
     }
     ///
@@ -487,34 +603,42 @@ impl RustHydrusApiClient {
         name: &String,
     ) -> Result<Option<sharedtypes::DbSettingObj>, ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "settings_get_name");
-        let res = ureq::post(url)
-            .send_json(&(name))?
-            .body_mut()
-            .with_config()
-            .limit(u64::MAX)
-            .read_json::<Option<sharedtypes::DbSettingObj>>()?;
+        let payload = bitcode::serialize(&(name))
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
+        let response_bytes = ureq::post(url)
+            .header("content-type", "application/bitcode")
+            .header("accept", "application/bitcode")
+            .send(payload)?
+            .into_body()
+            .read_to_vec()?;
+        let res: Option<sharedtypes::DbSettingObj> = bitcode::deserialize(
+                &response_bytes,
+            )
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
         Ok(res)
     }
     /// Correct any weird paths existing inside of the db.
     pub fn check_db_paths(&self) -> Result<(), ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "check_db_paths");
-        let res = ureq::get(url)
+        let response_bytes = ureq::get(url)
+            .header("accept", "application/bitcode")
             .call()?
-            .body_mut()
-            .with_config()
-            .limit(u64::MAX)
-            .read_json::<()>()?;
+            .into_body()
+            .read_to_vec()?;
+        let res: () = bitcode::deserialize(&response_bytes)
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
         Ok(res)
     }
     /// Backs up the DB file.
     pub fn backup_db(&self) -> Result<(), ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "backup_db");
-        let res = ureq::get(url)
+        let response_bytes = ureq::get(url)
+            .header("accept", "application/bitcode")
             .call()?
-            .body_mut()
-            .with_config()
-            .limit(u64::MAX)
-            .read_json::<()>()?;
+            .into_body()
+            .read_to_vec()?;
+        let res: () = bitcode::deserialize(&response_bytes)
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
         Ok(res)
     }
     /** Returns a files bytes if the file exists. Note if called from intcom then this
@@ -524,23 +648,31 @@ impl RustHydrusApiClient {
  bytes in manually in seperate thread. that way minimal locking happens.*/
     pub fn get_file_bytes(&self, file_id: &u64) -> Result<Option<Vec<u8>>, ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "get_file_bytes");
-        let res = ureq::post(url)
-            .send_json(&(file_id))?
-            .body_mut()
-            .with_config()
-            .limit(u64::MAX)
-            .read_json::<Option<Vec<u8>>>()?;
+        let payload = bitcode::serialize(&(file_id))
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
+        let response_bytes = ureq::post(url)
+            .header("content-type", "application/bitcode")
+            .header("accept", "application/bitcode")
+            .send(payload)?
+            .into_body()
+            .read_to_vec()?;
+        let res: Option<Vec<u8>> = bitcode::deserialize(&response_bytes)
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
         Ok(res)
     }
     /// Gets the location of a file in the file system
     pub fn get_file(&self, file_id: &u64) -> Result<Option<String>, ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "get_file");
-        let res = ureq::post(url)
-            .send_json(&(file_id))?
-            .body_mut()
-            .with_config()
-            .limit(u64::MAX)
-            .read_json::<Option<String>>()?;
+        let payload = bitcode::serialize(&(file_id))
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
+        let response_bytes = ureq::post(url)
+            .header("content-type", "application/bitcode")
+            .header("accept", "application/bitcode")
+            .send(payload)?
+            .into_body()
+            .read_to_vec()?;
+        let res: Option<String> = bitcode::deserialize(&response_bytes)
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
         Ok(res)
     }
     ///
@@ -549,12 +681,16 @@ impl RustHydrusApiClient {
         jobs_obj: sharedtypes::DbJobsObj,
     ) -> Result<(), ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "jobs_update_db");
-        let res = ureq::post(url)
-            .send_json(&(jobs_obj))?
-            .body_mut()
-            .with_config()
-            .limit(u64::MAX)
-            .read_json::<()>()?;
+        let payload = bitcode::serialize(&(jobs_obj))
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
+        let response_bytes = ureq::post(url)
+            .header("content-type", "application/bitcode")
+            .header("accept", "application/bitcode")
+            .send(payload)?
+            .into_body()
+            .read_to_vec()?;
+        let res: () = bitcode::deserialize(&response_bytes)
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
         Ok(res)
     }
     ///
@@ -563,12 +699,16 @@ impl RustHydrusApiClient {
         jobs_obj: sharedtypes::DbJobsObj,
     ) -> Result<u64, ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "jobs_add_new");
-        let res = ureq::post(url)
-            .send_json(&(jobs_obj))?
-            .body_mut()
-            .with_config()
-            .limit(u64::MAX)
-            .read_json::<u64>()?;
+        let payload = bitcode::serialize(&(jobs_obj))
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
+        let response_bytes = ureq::post(url)
+            .header("content-type", "application/bitcode")
+            .header("accept", "application/bitcode")
+            .send(payload)?
+            .into_body()
+            .read_to_vec()?;
+        let res: u64 = bitcode::deserialize(&response_bytes)
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
         Ok(res)
     }
     ///
@@ -587,8 +727,7 @@ impl RustHydrusApiClient {
         jobmanager: sharedtypes::DbJobsManager,
     ) -> Result<u64, ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "jobs_add");
-        let res = ureq::post(url)
-            .send_json(
+        let payload = bitcode::serialize(
                 &(
                     id,
                     time,
@@ -602,22 +741,31 @@ impl RustHydrusApiClient {
                     user_data,
                     jobmanager,
                 ),
-            )?
-            .body_mut()
-            .with_config()
-            .limit(u64::MAX)
-            .read_json::<u64>()?;
+            )
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
+        let response_bytes = ureq::post(url)
+            .header("content-type", "application/bitcode")
+            .header("accept", "application/bitcode")
+            .send(payload)?
+            .into_body()
+            .read_to_vec()?;
+        let res: u64 = bitcode::deserialize(&response_bytes)
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
         Ok(res)
     }
     ///Checks if a url is dead
     pub fn check_dead_url(&self, url_to_check: &String) -> Result<bool, ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "check_dead_url");
-        let res = ureq::post(url)
-            .send_json(&(url_to_check))?
-            .body_mut()
-            .with_config()
-            .limit(u64::MAX)
-            .read_json::<bool>()?;
+        let payload = bitcode::serialize(&(url_to_check))
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
+        let response_bytes = ureq::post(url)
+            .header("content-type", "application/bitcode")
+            .header("accept", "application/bitcode")
+            .send(payload)?
+            .into_body()
+            .read_to_vec()?;
+        let res: bool = bitcode::deserialize(&response_bytes)
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
         Ok(res)
     }
     /// Gets all running jobs in the db
@@ -625,34 +773,40 @@ impl RustHydrusApiClient {
         &self,
     ) -> Result<HashSet<sharedtypes::DbJobsObj>, ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "jobs_get_isrunning");
-        let res = ureq::get(url)
+        let response_bytes = ureq::get(url)
+            .header("accept", "application/bitcode")
             .call()?
-            .body_mut()
-            .with_config()
-            .limit(u64::MAX)
-            .read_json::<HashSet<sharedtypes::DbJobsObj>>()?;
+            .into_body()
+            .read_to_vec()?;
+        let res: HashSet<sharedtypes::DbJobsObj> = bitcode::deserialize(&response_bytes)
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
         Ok(res)
     }
     /// Returns the most likely locations for a file to be at
     pub fn storage_get_likely(&self, file_id: &u64) -> Result<Vec<String>, ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "storage_get_likely");
-        let res = ureq::post(url)
-            .send_json(&(file_id))?
-            .body_mut()
-            .with_config()
-            .limit(u64::MAX)
-            .read_json::<Vec<String>>()?;
+        let payload = bitcode::serialize(&(file_id))
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
+        let response_bytes = ureq::post(url)
+            .header("content-type", "application/bitcode")
+            .header("accept", "application/bitcode")
+            .send(payload)?
+            .into_body()
+            .read_to_vec()?;
+        let res: Vec<String> = bitcode::deserialize(&response_bytes)
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
         Ok(res)
     }
     /// Returns all locations currently inside of the db.
     pub fn storage_get_all(&self) -> Result<Vec<String>, ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "storage_get_all");
-        let res = ureq::get(url)
+        let response_bytes = ureq::get(url)
+            .header("accept", "application/bitcode")
             .call()?
-            .body_mut()
-            .with_config()
-            .limit(u64::MAX)
-            .read_json::<Vec<String>>()?;
+            .into_body()
+            .read_to_vec()?;
+        let res: Vec<String> = bitcode::deserialize(&response_bytes)
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
         Ok(res)
     }
     /** Handles the searching of the DB dynamically. Returns the file id's associated
@@ -668,12 +822,16 @@ impl RustHydrusApiClient {
         limit: Option<u64>,
     ) -> Result<Option<Vec<u64>>, ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "search_db_files");
-        let res = ureq::post(url)
-            .send_json(&(search, limit))?
-            .body_mut()
-            .with_config()
-            .limit(u64::MAX)
-            .read_json::<Option<Vec<u64>>>()?;
+        let payload = bitcode::serialize(&(search, limit))
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
+        let response_bytes = ureq::post(url)
+            .header("content-type", "application/bitcode")
+            .header("accept", "application/bitcode")
+            .send(payload)?
+            .into_body()
+            .read_to_vec()?;
+        let res: Option<Vec<u64>> = bitcode::deserialize(&response_bytes)
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
         Ok(res)
     }
     /// Gets all jobs loaded in the db
@@ -681,12 +839,15 @@ impl RustHydrusApiClient {
         &self,
     ) -> Result<HashMap<u64, sharedtypes::DbJobsObj>, ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "jobs_get_all");
-        let res = ureq::get(url)
+        let response_bytes = ureq::get(url)
+            .header("accept", "application/bitcode")
             .call()?
-            .body_mut()
-            .with_config()
-            .limit(u64::MAX)
-            .read_json::<HashMap<u64, sharedtypes::DbJobsObj>>()?;
+            .into_body()
+            .read_to_vec()?;
+        let res: HashMap<u64, sharedtypes::DbJobsObj> = bitcode::deserialize(
+                &response_bytes,
+            )
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
         Ok(res)
     }
     /// Pull job by id TODO NEEDS TO ADD IN PROPER POLLING FROM DB.
@@ -695,12 +856,16 @@ impl RustHydrusApiClient {
         id: &u64,
     ) -> Result<Option<sharedtypes::DbJobsObj>, ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "jobs_get");
-        let res = ureq::post(url)
-            .send_json(&(id))?
-            .body_mut()
-            .with_config()
-            .limit(u64::MAX)
-            .read_json::<Option<sharedtypes::DbJobsObj>>()?;
+        let payload = bitcode::serialize(&(id))
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
+        let response_bytes = ureq::post(url)
+            .header("content-type", "application/bitcode")
+            .header("accept", "application/bitcode")
+            .send(payload)?
+            .into_body()
+            .read_to_vec()?;
+        let res: Option<sharedtypes::DbJobsObj> = bitcode::deserialize(&response_bytes)
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
         Ok(res)
     }
     /// Gets a tag by id
@@ -709,34 +874,40 @@ impl RustHydrusApiClient {
         uid: &u64,
     ) -> Result<Option<sharedtypes::DbTagNNS>, ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "tag_id_get");
-        let res = ureq::post(url)
-            .send_json(&(uid))?
-            .body_mut()
-            .with_config()
-            .limit(u64::MAX)
-            .read_json::<Option<sharedtypes::DbTagNNS>>()?;
+        let payload = bitcode::serialize(&(uid))
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
+        let response_bytes = ureq::post(url)
+            .header("content-type", "application/bitcode")
+            .header("accept", "application/bitcode")
+            .send(payload)?
+            .into_body()
+            .read_to_vec()?;
+        let res: Option<sharedtypes::DbTagNNS> = bitcode::deserialize(&response_bytes)
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
         Ok(res)
     }
     /// Vacuums database. cleans everything.
     pub fn vacuum(&self) -> Result<(), ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "vacuum");
-        let res = ureq::get(url)
+        let response_bytes = ureq::get(url)
+            .header("accept", "application/bitcode")
             .call()?
-            .body_mut()
-            .with_config()
-            .limit(u64::MAX)
-            .read_json::<()>()?;
+            .into_body()
+            .read_to_vec()?;
+        let res: () = bitcode::deserialize(&response_bytes)
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
         Ok(res)
     }
     /// Analyzes the sqlite database. Shouldn't need this but will be nice for indexes
     pub fn analyze(&self) -> Result<(), ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "analyze");
-        let res = ureq::get(url)
+        let response_bytes = ureq::get(url)
+            .header("accept", "application/bitcode")
             .call()?
-            .body_mut()
-            .with_config()
-            .limit(u64::MAX)
-            .read_json::<()>()?;
+            .into_body()
+            .read_to_vec()?;
+        let res: () = bitcode::deserialize(&response_bytes)
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
         Ok(res)
     }
     /// Convience function to get a list of files that are images
@@ -744,12 +915,13 @@ impl RustHydrusApiClient {
         let url = format!(
             "{}/{}/{}", self.base_url, "main", "extensions_images_get_fileid"
         );
-        let res = ureq::get(url)
+        let response_bytes = ureq::get(url)
+            .header("accept", "application/bitcode")
             .call()?
-            .body_mut()
-            .with_config()
-            .limit(u64::MAX)
-            .read_json::<HashSet<u64>>()?;
+            .into_body()
+            .read_to_vec()?;
+        let res: HashSet<u64> = bitcode::deserialize(&response_bytes)
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
         Ok(res)
     }
     /// Convience function to get a list of files that are videos
@@ -757,12 +929,13 @@ impl RustHydrusApiClient {
         let url = format!(
             "{}/{}/{}", self.base_url, "main", "extensions_videos_get_fileid"
         );
-        let res = ureq::get(url)
+        let response_bytes = ureq::get(url)
+            .header("accept", "application/bitcode")
             .call()?
-            .body_mut()
-            .with_config()
-            .limit(u64::MAX)
-            .read_json::<HashSet<u64>>()?;
+            .into_body()
+            .read_to_vec()?;
+        let res: HashSet<u64> = bitcode::deserialize(&response_bytes)
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
         Ok(res)
     }
     /// Gets an ID if a extension string exists
@@ -771,23 +944,31 @@ impl RustHydrusApiClient {
         ext_id: &u64,
     ) -> Result<Option<String>, ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "extension_get_string");
-        let res = ureq::post(url)
-            .send_json(&(ext_id))?
-            .body_mut()
-            .with_config()
-            .limit(u64::MAX)
-            .read_json::<Option<String>>()?;
+        let payload = bitcode::serialize(&(ext_id))
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
+        let response_bytes = ureq::post(url)
+            .header("content-type", "application/bitcode")
+            .header("accept", "application/bitcode")
+            .send(payload)?
+            .into_body()
+            .read_to_vec()?;
+        let res: Option<String> = bitcode::deserialize(&response_bytes)
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
         Ok(res)
     }
     /// Gets a fileid from a hash
     pub fn file_get_hash(&self, hash: &String) -> Result<Option<u64>, ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "file_get_hash");
-        let res = ureq::post(url)
-            .send_json(&(hash))?
-            .body_mut()
-            .with_config()
-            .limit(u64::MAX)
-            .read_json::<Option<u64>>()?;
+        let payload = bitcode::serialize(&(hash))
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
+        let response_bytes = ureq::post(url)
+            .header("content-type", "application/bitcode")
+            .header("accept", "application/bitcode")
+            .send(payload)?
+            .into_body()
+            .read_to_vec()?;
+        let res: Option<u64> = bitcode::deserialize(&response_bytes)
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
         Ok(res)
     }
     /// Gets a file from storage from its id
@@ -796,23 +977,30 @@ impl RustHydrusApiClient {
         file_id: &u64,
     ) -> Result<Option<sharedtypes::DbFileStorage>, ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "file_get_id");
-        let res = ureq::post(url)
-            .send_json(&(file_id))?
-            .body_mut()
-            .with_config()
-            .limit(u64::MAX)
-            .read_json::<Option<sharedtypes::DbFileStorage>>()?;
+        let payload = bitcode::serialize(&(file_id))
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
+        let response_bytes = ureq::post(url)
+            .header("content-type", "application/bitcode")
+            .header("accept", "application/bitcode")
+            .send(payload)?
+            .into_body()
+            .read_to_vec()?;
+        let res: Option<sharedtypes::DbFileStorage> = bitcode::deserialize(
+                &response_bytes,
+            )
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
         Ok(res)
     }
     /// Returns all file id's loaded in db
     pub fn file_get_list_id(&self) -> Result<HashSet<u64>, ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "file_get_list_id");
-        let res = ureq::get(url)
+        let response_bytes = ureq::get(url)
+            .header("accept", "application/bitcode")
             .call()?
-            .body_mut()
-            .with_config()
-            .limit(u64::MAX)
-            .read_json::<HashSet<u64>>()?;
+            .into_body()
+            .read_to_vec()?;
+        let res: HashSet<u64> = bitcode::deserialize(&response_bytes)
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
         Ok(res)
     }
     ///
@@ -820,12 +1008,15 @@ impl RustHydrusApiClient {
         &self,
     ) -> Result<HashMap<u64, sharedtypes::DbFileStorage>, ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "file_get_list_all");
-        let res = ureq::get(url)
+        let response_bytes = ureq::get(url)
+            .header("accept", "application/bitcode")
             .call()?
-            .body_mut()
-            .with_config()
-            .limit(u64::MAX)
-            .read_json::<HashMap<u64, sharedtypes::DbFileStorage>>()?;
+            .into_body()
+            .read_to_vec()?;
+        let res: HashMap<u64, sharedtypes::DbFileStorage> = bitcode::deserialize(
+                &response_bytes,
+            )
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
         Ok(res)
     }
     /// Gets a tagid from a unique tag and namespace combo
@@ -835,12 +1026,16 @@ impl RustHydrusApiClient {
         namespace: u64,
     ) -> Result<Option<u64>, ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "tag_get_name");
-        let res = ureq::post(url)
-            .send_json(&(tag, namespace))?
-            .body_mut()
-            .with_config()
-            .limit(u64::MAX)
-            .read_json::<Option<u64>>()?;
+        let payload = bitcode::serialize(&(tag, namespace))
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
+        let response_bytes = ureq::post(url)
+            .header("content-type", "application/bitcode")
+            .header("accept", "application/bitcode")
+            .send(payload)?
+            .into_body()
+            .read_to_vec()?;
+        let res: Option<u64> = bitcode::deserialize(&response_bytes)
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
         Ok(res)
     }
     /// Gets a tagid from a tagobject
@@ -849,23 +1044,31 @@ impl RustHydrusApiClient {
         tagobj: &sharedtypes::DbTagNNS,
     ) -> Result<Option<u64>, ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "tag_get_name_tagobject");
-        let res = ureq::post(url)
-            .send_json(&(tagobj))?
-            .body_mut()
-            .with_config()
-            .limit(u64::MAX)
-            .read_json::<Option<u64>>()?;
+        let payload = bitcode::serialize(&(tagobj))
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
+        let response_bytes = ureq::post(url)
+            .header("content-type", "application/bitcode")
+            .header("accept", "application/bitcode")
+            .send(payload)?
+            .into_body()
+            .read_to_vec()?;
+        let res: Option<u64> = bitcode::deserialize(&response_bytes)
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
         Ok(res)
     }
     /// db get namespace wrapper
     pub fn namespace_get(&self, namespace: &String) -> Result<Option<u64>, ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "namespace_get");
-        let res = ureq::post(url)
-            .send_json(&(namespace))?
-            .body_mut()
-            .with_config()
-            .limit(u64::MAX)
-            .read_json::<Option<u64>>()?;
+        let payload = bitcode::serialize(&(namespace))
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
+        let response_bytes = ureq::post(url)
+            .header("content-type", "application/bitcode")
+            .header("accept", "application/bitcode")
+            .send(payload)?
+            .into_body()
+            .read_to_vec()?;
+        let res: Option<u64> = bitcode::deserialize(&response_bytes)
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
         Ok(res)
     }
     /// Returns namespace as a string from an ID returns None if it doesn't exist.
@@ -874,23 +1077,33 @@ impl RustHydrusApiClient {
         ns_id: &u64,
     ) -> Result<Option<sharedtypes::DbNamespaceObj>, ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "namespace_get_string");
-        let res = ureq::post(url)
-            .send_json(&(ns_id))?
-            .body_mut()
-            .with_config()
-            .limit(u64::MAX)
-            .read_json::<Option<sharedtypes::DbNamespaceObj>>()?;
+        let payload = bitcode::serialize(&(ns_id))
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
+        let response_bytes = ureq::post(url)
+            .header("content-type", "application/bitcode")
+            .header("accept", "application/bitcode")
+            .send(payload)?
+            .into_body()
+            .read_to_vec()?;
+        let res: Option<sharedtypes::DbNamespaceObj> = bitcode::deserialize(
+                &response_bytes,
+            )
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
         Ok(res)
     }
     /// Gets all tag's assocated a singular namespace
     pub fn namespace_get_tagids(&self, id: &u64) -> Result<HashSet<u64>, ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "namespace_get_tagids");
-        let res = ureq::post(url)
-            .send_json(&(id))?
-            .body_mut()
-            .with_config()
-            .limit(u64::MAX)
-            .read_json::<HashSet<u64>>()?;
+        let payload = bitcode::serialize(&(id))
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
+        let response_bytes = ureq::post(url)
+            .header("content-type", "application/bitcode")
+            .header("accept", "application/bitcode")
+            .send(payload)?
+            .into_body()
+            .read_to_vec()?;
+        let res: HashSet<u64> = bitcode::deserialize(&response_bytes)
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
         Ok(res)
     }
     /// Returns the tags object for each namesapce  for the fileid
@@ -902,12 +1115,16 @@ impl RustHydrusApiClient {
         let url = format!(
             "{}/{}/{}", self.base_url, "main", "namespace_get_tags_from_fileid"
         );
-        let res = ureq::post(url)
-            .send_json(&(ns_id, file_id))?
-            .body_mut()
-            .with_config()
-            .limit(u64::MAX)
-            .read_json::<Vec<sharedtypes::DbTagNNS>>()?;
+        let payload = bitcode::serialize(&(ns_id, file_id))
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
+        let response_bytes = ureq::post(url)
+            .header("content-type", "application/bitcode")
+            .header("accept", "application/bitcode")
+            .send(payload)?
+            .into_body()
+            .read_to_vec()?;
+        let res: Vec<sharedtypes::DbTagNNS> = bitcode::deserialize(&response_bytes)
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
         Ok(res)
     }
     /// Gets all tagids that are in a namespace from a fileid
@@ -919,12 +1136,16 @@ impl RustHydrusApiClient {
         let url = format!(
             "{}/{}/{}", self.base_url, "main", "namespace_get_tagids_from_fileid"
         );
-        let res = ureq::post(url)
-            .send_json(&(ns_id, file_id))?
-            .body_mut()
-            .with_config()
-            .limit(u64::MAX)
-            .read_json::<Vec<u64>>()?;
+        let payload = bitcode::serialize(&(ns_id, file_id))
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
+        let response_bytes = ureq::post(url)
+            .header("content-type", "application/bitcode")
+            .header("accept", "application/bitcode")
+            .send(payload)?
+            .into_body()
+            .read_to_vec()?;
+        let res: Vec<u64> = bitcode::deserialize(&response_bytes)
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
         Ok(res)
     }
     /// Checks if a tag exists in a namespace
@@ -934,23 +1155,28 @@ impl RustHydrusApiClient {
         tag_id: &u64,
     ) -> Result<bool, ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "namespace_contains_id");
-        let res = ureq::post(url)
-            .send_json(&(namespace_id, tag_id))?
-            .body_mut()
-            .with_config()
-            .limit(u64::MAX)
-            .read_json::<bool>()?;
+        let payload = bitcode::serialize(&(namespace_id, tag_id))
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
+        let response_bytes = ureq::post(url)
+            .header("content-type", "application/bitcode")
+            .header("accept", "application/bitcode")
+            .send(payload)?
+            .into_body()
+            .read_to_vec()?;
+        let res: bool = bitcode::deserialize(&response_bytes)
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
         Ok(res)
     }
     /// Retuns namespace id's
     pub fn namespace_keys(&self) -> Result<Vec<u64>, ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "namespace_keys");
-        let res = ureq::get(url)
+        let response_bytes = ureq::get(url)
+            .header("accept", "application/bitcode")
             .call()?
-            .body_mut()
-            .with_config()
-            .limit(u64::MAX)
-            .read_json::<Vec<u64>>()?;
+            .into_body()
+            .read_to_vec()?;
+        let res: Vec<u64> = bitcode::deserialize(&response_bytes)
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
         Ok(res)
     }
     /// Gets a parent id if they exist
@@ -959,56 +1185,70 @@ impl RustHydrusApiClient {
         parent: &sharedtypes::DbParentsObj,
     ) -> Result<Option<u64>, ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "parents_get");
-        let res = ureq::post(url)
-            .send_json(&(parent))?
-            .body_mut()
-            .with_config()
-            .limit(u64::MAX)
-            .read_json::<Option<u64>>()?;
+        let payload = bitcode::serialize(&(parent))
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
+        let response_bytes = ureq::post(url)
+            .header("content-type", "application/bitcode")
+            .header("accept", "application/bitcode")
+            .send(payload)?
+            .into_body()
+            .read_to_vec()?;
+        let res: Option<u64> = bitcode::deserialize(&response_bytes)
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
         Ok(res)
     }
     /// Relates the list of relationships assoicated with tag
     pub fn parents_rel_get(&self, relid: &u64) -> Result<HashSet<u64>, ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "parents_rel_get");
-        let res = ureq::post(url)
-            .send_json(&(relid))?
-            .body_mut()
-            .with_config()
-            .limit(u64::MAX)
-            .read_json::<HashSet<u64>>()?;
+        let payload = bitcode::serialize(&(relid))
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
+        let response_bytes = ureq::post(url)
+            .header("content-type", "application/bitcode")
+            .header("accept", "application/bitcode")
+            .send(payload)?
+            .into_body()
+            .read_to_vec()?;
+        let res: HashSet<u64> = bitcode::deserialize(&response_bytes)
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
         Ok(res)
     }
     /// Relates the list of tags assoicated with relations
     pub fn parents_tag_get(&self, tagid: &u64) -> Result<HashSet<u64>, ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "parents_tag_get");
-        let res = ureq::post(url)
-            .send_json(&(tagid))?
-            .body_mut()
-            .with_config()
-            .limit(u64::MAX)
-            .read_json::<HashSet<u64>>()?;
+        let payload = bitcode::serialize(&(tagid))
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
+        let response_bytes = ureq::post(url)
+            .header("content-type", "application/bitcode")
+            .header("accept", "application/bitcode")
+            .send(payload)?
+            .into_body()
+            .read_to_vec()?;
+        let res: HashSet<u64> = bitcode::deserialize(&response_bytes)
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
         Ok(res)
     }
     /// Returns the location of the file storage path. Helper function
     pub fn location_get(&self) -> Result<String, ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "location_get");
-        let res = ureq::get(url)
+        let response_bytes = ureq::get(url)
+            .header("accept", "application/bitcode")
             .call()?
-            .body_mut()
-            .with_config()
-            .limit(u64::MAX)
-            .read_json::<String>()?;
+            .into_body()
+            .read_to_vec()?;
+        let res: String = bitcode::deserialize(&response_bytes)
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
         Ok(res)
     }
     /// commits an exclusive write transaction
     pub fn transaction_flush(&self) -> Result<(), ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "transaction_flush");
-        let res = ureq::get(url)
+        let response_bytes = ureq::get(url)
+            .header("accept", "application/bitcode")
             .call()?
-            .body_mut()
-            .with_config()
-            .limit(u64::MAX)
-            .read_json::<()>()?;
+            .into_body()
+            .read_to_vec()?;
+        let res: () = bitcode::deserialize(&response_bytes)
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
         Ok(res)
     }
     ///
@@ -1018,12 +1258,16 @@ impl RustHydrusApiClient {
         description: &Option<String>,
     ) -> Result<u64, ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "namespace_add");
-        let res = ureq::post(url)
-            .send_json(&(name, description))?
-            .body_mut()
-            .with_config()
-            .limit(u64::MAX)
-            .read_json::<u64>()?;
+        let payload = bitcode::serialize(&(name, description))
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
+        let response_bytes = ureq::post(url)
+            .header("content-type", "application/bitcode")
+            .header("accept", "application/bitcode")
+            .send(payload)?
+            .into_body()
+            .read_to_vec()?;
+        let res: u64 = bitcode::deserialize(&response_bytes)
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
         Ok(res)
     }
     /// Adds a ns into the db if the id already exists
@@ -1032,12 +1276,16 @@ impl RustHydrusApiClient {
         ns: sharedtypes::DbNamespaceObj,
     ) -> Result<u64, ureq::Error> {
         let url = format!("{}/{}/{}", self.base_url, "main", "namespace_add_id_exists");
-        let res = ureq::post(url)
-            .send_json(&(ns))?
-            .body_mut()
-            .with_config()
-            .limit(u64::MAX)
-            .read_json::<u64>()?;
+        let payload = bitcode::serialize(&(ns))
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
+        let response_bytes = ureq::post(url)
+            .header("content-type", "application/bitcode")
+            .header("accept", "application/bitcode")
+            .send(payload)?
+            .into_body()
+            .read_to_vec()?;
+        let res: u64 = bitcode::deserialize(&response_bytes)
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
         Ok(res)
     }
     /// Gets a default namespace id if it doesn't exist
@@ -1045,12 +1293,13 @@ impl RustHydrusApiClient {
         let url = format!(
             "{}/{}/{}", self.base_url, "main", "create_default_source_url_ns_id"
         );
-        let res = ureq::get(url)
+        let response_bytes = ureq::get(url)
+            .header("accept", "application/bitcode")
             .call()?
-            .body_mut()
-            .with_config()
-            .limit(u64::MAX)
-            .read_json::<u64>()?;
+            .into_body()
+            .read_to_vec()?;
+        let res: u64 = bitcode::deserialize(&response_bytes)
+            .map_err(|e| ureq::Error::Other(Box::new(e)))?;
         Ok(res)
     }
 }

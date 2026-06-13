@@ -3,16 +3,14 @@ use crate::database::database::Transaction;
 use crate::download;
 use crate::file::folder_make;
 use crate::logging;
-use crate::sharedtypes;
 use crate::vec_of_strings;
 use bytes::Bytes;
 use chrono::Utc;
 use core::panic;
 use file_format::FileFormat;
-use r2d2::PooledConnection;
-use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::OptionalExtension;
 use rusqlite::params;
+use sharedtypes;
 
 const DEFAULT_PRIORITY_DOWNLOAD: u64 = 10;
 const DEFAULT_PRIORITY_PUT: u64 = 5;

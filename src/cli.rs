@@ -1,25 +1,18 @@
 extern crate clap;
 
 use crate::cli::cli_structs::CheckFilesEnum;
-use rayon::prelude::*;
 use std::collections::HashSet;
 use std::collections::{BTreeMap, HashMap};
 use std::fs::rename;
 use std::path::{self, Path};
-use strfmt::Format;
 use url::Url;
 use walkdir::WalkDir;
 // use std::str::pattern::Searcher;
 use crate::Main;
-use crate::Mutex;
-use crate::download;
 use crate::file::find_sidecar;
-use crate::sharedtypes::{DEFAULT_CACHECHECK, DEFAULT_CACHETIME, DEFAULT_PRIORITY};
-use crate::{
-    database, logging, pause,
-    sharedtypes::{self},
-};
+use crate::{database, logging, pause};
 use clap::Parser;
+use sharedtypes::{DEFAULT_CACHECHECK, DEFAULT_CACHETIME, DEFAULT_PRIORITY, *};
 use std::sync::Arc;
 
 mod cli_structs;

@@ -1,0 +1,22 @@
+[package]
+name = "sharedtypes"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+clap = { version = "4.5.19", features = ["derive", "color", "cargo"] }
+serde = {version = "1.0.171", features = ["derive"], default-features = false }
+regex = {version="1.11.1", features=["std"]}
+redact = { git = "https://github.com/git4unrealnondev/redact", features = ["serde", "bitcode"] }
+bitcode = { version = "0.6.9", features = ["arrayvec", "derive", "serde"] }
+strum_macros = "0.27.1"
+strum = { default-features = false, version = "0.27.1" }
+
+
+[features]
+default = ["exe_build"]
+exe_build = ["regex", "clap", "serde"]
+# Enables sending and recieving regex
+regex = []
+clap = []
+serde = []

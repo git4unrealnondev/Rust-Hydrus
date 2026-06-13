@@ -1,5 +1,5 @@
 use crate::database::database::Main;
-use crate::sharedtypes;
+use sharedtypes;
 use std::collections::HashMap;
 
 impl Main {

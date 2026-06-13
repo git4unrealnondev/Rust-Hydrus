@@ -12,19 +12,13 @@ serde = { version = "1.0.192", features = ["serde_derive"] }
 clap = { version = "4.5.17", features = ["derive"] }
 bitcode = { version = "0.6.9", features = ["arrayvec", "derive", "serde"] }
 redact = { git = "https://github.com/git4unrealnondev/redact",  features = ["serde", "bitcode"] }
+sharedtypes = { workspace = true }
 
 [lib]
-crate-type = ["dylib"]
+crate-type = ["cdylib"]
 
 [build]
 rustflags = ["-C", "prefer-dynamic", "-C", "rpath"]
-
-[profile.release]
-opt-level = "z"
-lto=true
-codegenunits=1
-strip = true
-panic = "abort"
 
 [features]
 default = ["serde"]

@@ -6,11 +6,11 @@ edition = "2024"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-reqwest = { version = "0.12.22", features = ["cookies", "gzip", "brotli", "native-tls", "deflate", "default", "zstd", "blocking"] }
+reqwest = { version = "0.12.22", features = ["cookies", "gzip",  "native-tls", "deflate", "default", "blocking"] }
 url = "2.3.1"
 ratelimit = "0.10.0"
 async-std = { version = "1", features = ["attributes", "tokio1"] }
-rusqlite = { version = "^0.37.0", features = ["modern_sqlite", "bundled", "column_decltype", "unlock_notify", "trace", "load_extension"] }
+rusqlite = { version = "^0.37.0", features = ["modern_sqlite", "column_decltype", "unlock_notify", "trace", "load_extension"] }
 fast_log = {version="1.7.6", features=["lz4"]}
 bytes = { default-features = false, version = "1.4.0" }
 sha2 = { version = "0.10.6"}
@@ -45,7 +45,7 @@ zip = {version="8.2.0", features = ["chrono"]}
 reqwest-websocket = "0.5.0"
 remove_empty_subdirs = "0.1.1"
 r2d2 = "0.8.10"
-r2d2_sqlite = { version = "0.31.0", features = ["bundled"] }
+r2d2_sqlite = { version = "0.31.0", features = [] }
 lazy_static = "1.5.0"
 ipc-channel-mux = "0.0.1"
 crossbeam-channel = "0.5.15"
@@ -61,12 +61,26 @@ redact = { git = "https://github.com/git4unrealnondev/redact", features = ["serd
 bitcode = { version = "0.6.9", features = ["arrayvec", "derive", "serde"] }
 libc = "0.2.184"
 cfg-if = "1.0.4"
+ratatui = "0.29.0"
+crossterm = "*"
+ratatui-garnish = "0.1.0"
+sharedtypes = { path = "./libs/sharedtypes" }
 
 [dev-dependencies]
 
 
 [profile.dev]
 opt-level = 2
+split-debuginfo = "unpacked" 
+
+# Override heavy macro/generic dependencies to compile with optimizations even in dev mode.
+# This makes your initial build slightly slower, but subsequent incremental builds are MUCH faster
+# because these crates don't change and their macros are pre-optimized.
+[profile.dev.package]
+clap = { opt-level = 3 }
+serde = { opt-level = 3 }
+syn = { opt-level = 3 }
+quote = { opt-level = 3 }
 
 [features]
 default = ["exe_build"]
@@ -79,7 +93,7 @@ serde = []
 [profile.release]
 opt-level = 3
 lto=true
-codegenunits=1
+codegen-units=1
 strip = true
 panic = "abort"
 debug = false
@@ -100,3 +114,11 @@ strip = false
 name = "inmemdb"
 harness = false
 
+[workspace]
+resolver = "2"
+members = ["generators/packager", "libs/sharedtypes",
+    
+]
+
+[workspace.dependencies]
+sharedtypes = { path = "./libs/sharedtypes" }

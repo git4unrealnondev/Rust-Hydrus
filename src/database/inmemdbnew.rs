@@ -1,7 +1,7 @@
 use crate::logging;
-use crate::sharedtypes;
-use crate::sharedtypes::DbJobsObj;
 use fnv::{FnvHashMap, FnvHashSet};
+use sharedtypes;
+use sharedtypes::DbJobsObj;
 use std::collections::{HashMap, HashSet};
 
 pub enum TagRelateConjoin {

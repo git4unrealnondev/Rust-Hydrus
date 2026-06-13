@@ -1,16 +1,11 @@
 use std::time::Duration;
 
-#[path = "../../../src/sharedtypes.rs"]
-mod sharedtypes;
-
 #[macro_export]
 macro_rules! vec_of_strings {
     ($($x:expr),*) => (vec![$($x.to_string()),*]);
 }
 
 static PLUGIN_NAME: &str = "File Downloader";
-static PLUGIN_DESCRIPTION: &str =
-    "Tries to download files directly if this plugin can recognize a url.";
 
 pub const REGEX_COLLECTIONS: &str = r"(http(s)?://www.|((www.|http(s)?://)))[a-zA-Z0-9-].[a-zA-Z0-9-_.]*/[a-zA-Z0-9/_%-]+\.[a-zA-Z0-9/_%\.?=&-]+";
 
@@ -74,21 +69,28 @@ pub fn on_regex_match(
         },
     };
 
-    let file = sharedtypes::FileObject {
-        source: Some(sharedtypes::FileSource::Url(regex_match.to_string())),
+    let tag_list = vec![sharedtypes::FileTagAction {
+        tags: vec![taginfo],
+        ..Default::default()
+    }];
+
+    let _file = sharedtypes::FileObjectV1 {
+        source: Some(sharedtypes::FileSource::Url(vec![regex_match.to_string()])),
         hash: sharedtypes::HashesSupported::None,
-        tag_list: vec![taginfo],
+        tag_list,
         skip_if: vec![sharedtypes::SkipIf::FileTagRelationship(earlyexistag)],
+        ..Default::default()
     };
-    let ratelimit = (1, Duration::from_secs(1));
+    let _ratelimit = (1, Duration::from_secs(1));
 
-    let mut default_job = sharedtypes::return_default_jobsobj();
-
-    default_job.site = "direct download".to_string();
-    default_job.param = vec![sharedtypes::ScraperParam::Url(regex_match.into())];
-    default_job.jobmanager = sharedtypes::DbJobsManager {
-        jobtype: sharedtypes::DbJobType::FileUrl,
-        recreation: None,
+    let job = sharedtypes::DbJobsObj {
+        site: "direct download".to_string(),
+        param: vec![sharedtypes::ScraperParam::Url(regex_match.into())],
+        jobmanager: sharedtypes::DbJobsManager {
+            jobtype: sharedtypes::DbJobType::FileUrl,
+            recreation: None,
+        },
+        ..Default::default()
     };
 
     out.push(sharedtypes::DBPluginOutputEnum::Add(vec![
@@ -96,27 +98,10 @@ pub fn on_regex_match(
             tag: vec![],
             setting: vec![],
             relationship: vec![],
-            jobs: vec![default_job],
+            jobs: vec![job],
             file: vec![],
         },
     ]));
 
-    /*client::job_add(
-        None,
-        0,
-        0,
-        "direct download".to_string(),
-        regex_match.to_string(),
-        true,
-        sharedtypes::CommitType::StopOnNothing,
-        sharedtypes::DbJobType::FileUrl,
-        BTreeMap::new(),
-        BTreeMap::new(),
-        sharedtypes::DbJobsManager {
-            jobtype: sharedtypes::DbJobType::FileUrl,
-            recreation: None,
-        },
-    );*/
     out
-    //client::add_file_nonblocking(file, ratelimit);
 }

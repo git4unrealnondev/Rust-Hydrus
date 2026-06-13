@@ -1,12 +1,11 @@
 #![allow(unused_variables)]
 #![allow(dead_code)]
 
-use crate::sharedtypes::DbFileStorage;
-use crate::sharedtypes::{self};
 use interprocess::local_socket::GenericNamespaced;
 use interprocess::local_socket::ToNsName;
 use interprocess::local_socket::prelude::LocalSocketStream;
 use interprocess::local_socket::traits::Stream;
+use sharedtypes;
 use std::collections::{HashMap, HashSet};
 use std::io::BufReader;
 use std::time::Duration;
@@ -61,7 +60,7 @@ pub fn get_file(fileid: u64) -> Option<String> {
 ///
 /// Gets the dbfilestorage refence for everything
 ///
-pub fn get_file_raw(fileid: u64) -> Option<DbFileStorage> {
+pub fn get_file_raw(fileid: u64) -> Option<sharedtypes::DbFileStorage> {
     init_data_request(&types::SupportedRequests::Database(
         types::SupportedDBRequests::GetFileRaw(fileid),
     ))
@@ -268,7 +267,10 @@ pub fn namespace_get_tagids(id: u64) -> HashSet<u64> {
 ///
 /// It's basically a 2 way pointer like the Relations table limit_to limits the
 /// exposure of
-pub fn parents_get(parenttype: types::ParentsType, id: u64) -> HashSet<sharedtypes::DbParentsObj> {
+pub fn parents_get(
+    parenttype: sharedtypes::ParentsType,
+    id: u64,
+) -> HashSet<sharedtypes::DbParentsObj> {
     init_data_request(&types::SupportedRequests::Database(
         types::SupportedDBRequests::ParentsGet((parenttype, id)),
     ))
@@ -404,7 +406,7 @@ pub fn external_plugin_call(
     func_name: String,
     vers: u64,
     input: sharedtypes::CallbackInfoInput,
-) -> HashMap<String, sharedtypes::CallbackCustomDataReturning> {
+) -> HashMap<String, Vec<sharedtypes::CallbackCustomDataReturning>> {
     init_data_request(&types::SupportedRequests::Database(
         types::SupportedDBRequests::PluginCallback(func_name, vers, input),
     ))

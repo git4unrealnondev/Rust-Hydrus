@@ -1,7 +1,6 @@
 use crate::Arc;
 use crate::RwLock;
 use crate::logging;
-use crate::sharedtypes;
 use nohash::IntMap;
 use roaring::bitmap::RoaringBitmap;
 use rusqlite::Error;
@@ -9,6 +8,7 @@ use rusqlite::OptionalExtension;
 use rusqlite::Transaction;
 use rusqlite::params;
 use rusqlite::params_from_iter;
+use sharedtypes;
 use std::io::Cursor;
 
 use crate::Connection;

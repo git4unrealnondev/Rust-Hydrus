@@ -1,11 +1,8 @@
 use crate::Main;
 use crate::RwLock;
-use crate::{
-    jobs::Jobs,
-    logging, server,
-    sharedtypes::{self, GlobalPluginScraper},
-};
+use crate::{jobs::Jobs, logging, server};
 use libloading::Library;
+use sharedtypes::{self, GlobalPluginScraper};
 use std::sync::Arc;
 use std::{collections::HashMap, path::Path, thread};
 use std::{path::PathBuf, thread::JoinHandle};
@@ -883,7 +880,7 @@ impl GlobalLoad {
         func_name: &str,
         vers: &u64,
         input_data: &sharedtypes::CallbackInfoInput,
-    ) -> HashMap<String, sharedtypes::CallbackCustomDataReturning> {
+    ) -> HashMap<String, Vec<sharedtypes::CallbackCustomDataReturning>> {
         if let Some(callback_list) = self.callback_storage.read().get(func_name) {
             for (callback, global_plugin) in callback_list {
                 if *vers == callback.vers {
@@ -896,7 +893,7 @@ impl GlobalLoad {
                                     &sharedtypes::CallbackInfoInput,
                                 ) -> HashMap<
                                     String,
-                                    sharedtypes::CallbackCustomDataReturning,
+                                    Vec<sharedtypes::CallbackCustomDataReturning>,
                                 >,
                             > = plugin_lib.get(func_name.as_bytes()).unwrap();
                             plugininfo = plugindatafunc(input_data);

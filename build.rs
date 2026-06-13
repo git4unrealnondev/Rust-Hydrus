@@ -6,8 +6,8 @@ use std::path::Path;
 use syn::Visibility;
 use syn::parse_file;
 use syn::{ImplItem, ItemImpl};
+
 fn generate_client_code(api_file: &str) -> io::Result<String> {
-    // Read the file content and handle errors
     let content = read_to_string(api_file).map_err(|e| {
         eprintln!("Error reading file '{}': {}", api_file, e);
         e
@@ -28,7 +28,6 @@ fn generate_client_code(api_file: &str) -> io::Result<String> {
 
     let mut client_functions = vec![];
 
-    // Generate client methods for each function in impl blocks
     for item in syntax_tree.items.iter() {
         if let syn::Item::Impl(ItemImpl {
             attrs,
@@ -37,9 +36,8 @@ fn generate_client_code(api_file: &str) -> io::Result<String> {
             ..
         }) = item
         {
-            // Check if the impl block has the `web_api` macro
             if !has_web_api_macro(attrs) {
-                continue; // Skip this impl block if `web_api` is not present
+                continue;
             }
 
             let struct_name_str = &self_ty.to_token_stream().to_string();
@@ -47,7 +45,6 @@ fn generate_client_code(api_file: &str) -> io::Result<String> {
 
             for item in items {
                 if let ImplItem::Fn(fn_item) = item {
-                    // Only generate docs if we are public
                     if fn_item.vis == Visibility::Inherited {
                         continue;
                     }
@@ -67,7 +64,6 @@ fn generate_client_code(api_file: &str) -> io::Result<String> {
                     let mut arg_names = vec![];
                     let mut arg_types = vec![];
 
-                    // Extract argument names and types
                     for input in &fn_item.sig.inputs {
                         if let syn::FnArg::Typed(pat_type) = input {
                             arg_names.push(&pat_type.pat);
@@ -75,7 +71,6 @@ fn generate_client_code(api_file: &str) -> io::Result<String> {
                         }
                     }
 
-                    // Handle return types
                     let ret_type = match &fn_item.sig.output {
                         syn::ReturnType::Default => quote! { () },
                         syn::ReturnType::Type(_, ty) => quote! { #ty },
@@ -83,29 +78,45 @@ fn generate_client_code(api_file: &str) -> io::Result<String> {
 
                     let doc_string = documentation.join("\n\n");
 
-                    // Generate client function with arguments
+                    // Generate client functions with properly boxed ureq::Error::Other variants
                     let client_fn = if has_args {
                         quote! {
                             #[doc = #doc_string]
                             pub fn #fn_name(&self, #(#arg_names: #arg_types),*) -> Result<#ret_type, ureq::Error> {
                                 let url = format!("{}/{}/{}", self.base_url, #base_path, #route_name);
-                                let res = ureq::post(url)
-                                    .send_json(&(#(#arg_names),*))?
-                                    .body_mut().with_config().limit(u64::MAX)
-                                    .read_json::<#ret_type>()?;
+
+                                // Serialize arguments into a tuple using bitcode
+                                let payload = bitcode::serialize(&(#(#arg_names),*))
+                                    .map_err(|e| ureq::Error::Other(Box::new(e)))?;
+
+                                let response_bytes = ureq::post(url)
+                                    .header("content-type", "application/bitcode")
+                                    .header("accept", "application/bitcode")
+                                    .send(payload)?
+                                    .into_body()
+                                    .read_to_vec()?;
+
+                                let res: #ret_type = bitcode::deserialize(&response_bytes)
+                                    .map_err(|e| ureq::Error::Other(Box::new(e)))?;
+
                                 Ok(res)
                             }
                         }
                     } else {
-                        // Generate client function without arguments
                         quote! {
                             #[doc = #doc_string]
                             pub fn #fn_name(&self) -> Result<#ret_type, ureq::Error> {
                                 let url = format!("{}/{}/{}", self.base_url, #base_path, #route_name);
-                                let res = ureq::get(url)
+
+                                let response_bytes = ureq::get(url)
+                                    .header("accept", "application/bitcode")
                                     .call()?
-                                    .body_mut().with_config().limit(u64::MAX)
-                                    .read_json::<#ret_type>()?;
+                                    .into_body()
+                                    .read_to_vec()?;
+
+                                let res: #ret_type = bitcode::deserialize(&response_bytes)
+                                    .map_err(|e| ureq::Error::Other(Box::new(e)))?;
+
                                 Ok(res)
                             }
                         }
@@ -117,32 +128,33 @@ fn generate_client_code(api_file: &str) -> io::Result<String> {
         }
     }
 
-    // Combine client code with generated functions
     let client_code = quote! {
-    use std::collections::HashMap;
-            use std::collections::HashSet;use std::path::PathBuf;use std::collections::BTreeMap;
-            use crate::sharedtypes;
+        use std::collections::HashMap;
+        use std::collections::HashSet;
+        use std::path::PathBuf;
+        use std::collections::BTreeMap;
+        use crate::sharedtypes;
 
-            #[derive(Debug)]
-            pub struct RustHydrusApiClient {
-                pub base_url: String,
+        #[derive(Debug)]
+        pub struct RustHydrusApiClient {
+            pub base_url: String,
+        }
+
+        #[allow(dead_code)]
+        impl RustHydrusApiClient {
+            pub fn new<S: Into<String>>(base_url: S) -> Self {
+                let base_url_str = base_url.into();
+                let base_url_temp = if !base_url_str.starts_with("http") {
+                    format!("http://{}", base_url_str)
+                } else {
+                    base_url_str
+                };
+                RustHydrusApiClient { base_url: base_url_temp }
             }
 
-            #[allow(dead_code)]
-            impl RustHydrusApiClient {
-                pub fn new<S: Into<String>>(base_url: S) -> Self {
-                    let base_url_str = base_url.into();
-                    let base_url_temp = if !base_url_str.starts_with("http") {
-                        format!("http://{}", base_url_str)
-                    } else {
-                        base_url_str
-                    };
-                    RustHydrusApiClient { base_url: base_url_temp }
-                }
-
-                #(#client_functions)*
-            }
-        };
+            #(#client_functions)*
+        }
+    };
 
     let syntax_tree = parse_file(&client_code.to_string()).expect("Unable to parse generated code");
     let formatted_code = prettyplease::unparse(&syntax_tree);
@@ -151,7 +163,6 @@ fn generate_client_code(api_file: &str) -> io::Result<String> {
 
 fn has_web_api_macro(attrs: &[syn::Attribute]) -> bool {
     for attr in attrs {
-        // Check if the attribute path is "web_api"
         if attr.path().is_ident("web_api") {
             return true;
         }
@@ -162,21 +173,18 @@ fn has_web_api_macro(attrs: &[syn::Attribute]) -> bool {
 fn write_client_file_if_changed(client_code: &str) -> io::Result<()> {
     let client_path = Path::new("generated/client_api.rs");
 
-    // Check if file exists
     if client_path.exists() {
         let existing_code = fs::read_to_string(client_path)?;
         if existing_code == client_code {
             println!("cargo:warning=Client file unchanged, skipping write");
-            return Ok(()); // Nothing changed, skip writing
+            return Ok(());
         }
     }
 
-    // Create parent directory if missing
     if let Some(parent) = client_path.parent() {
         fs::create_dir_all(parent)?;
     }
 
-    // Write new code
     let mut file = fs::File::create(client_path)?;
     file.write_all(client_code.as_bytes())?;
     println!("cargo:warning=Client file updated");
@@ -184,22 +192,9 @@ fn write_client_file_if_changed(client_code: &str) -> io::Result<()> {
 }
 
 fn main() {
-    {
-        let file_path = "./src/database/public_calls.rs";
-        dbg!(&file_path);
-        if let Ok(ref code) = generate_client_code(file_path) {
-            let _ = write_client_file_if_changed(code);
-        }
+    let file_path = "./src/database/public_calls.rs";
+    dbg!(&file_path);
+    if let Ok(ref code) = generate_client_code(file_path) {
+        let _ = write_client_file_if_changed(code);
     }
-
-    /*let plugins_path = "./Plugins";
-    let onesec = Duration::from_secs(100);
-    let pp = Path::new("soup.txt");
-    let mut file = fs::File::create(pp).unwrap();
-    for entry in walkdir::WalkDir::new(plugins_path) {
-        file.write(&format!("{:?}", entry.unwrap()).into_bytes())
-            .unwrap();
-        println!("a");
-    }
-    file.flush();*/
 }

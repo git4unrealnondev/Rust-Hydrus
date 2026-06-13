@@ -3,7 +3,6 @@ use crate::globalload::GlobalLoad;
 use crate::logging::error_log;
 
 // extern crate urlparse;
-use super::sharedtypes;
 use crate::logging;
 use bytes::Bytes;
 use core::time;
@@ -17,6 +16,7 @@ use reqwest::header::HeaderValue;
 use sha2::Digest as sha2Digest;
 use sha2::Sha256;
 use sha2::Sha512;
+use sharedtypes;
 use std::error::Error;
 use std::io::BufReader;
 use std::io::Cursor;
@@ -153,9 +153,9 @@ pub fn client_create(
             .cookie_store(false)
             .user_agent(&useragent)
             .gzip(true)
-            .brotli(true)
+            //            .brotli(true)
             .deflate(true)
-            .zstd(true)
+            //        .zstd(true)
             .connect_timeout(time::Duration::from_secs(15))
             .timeout(time::Duration::from_secs(120));
 
@@ -638,7 +638,7 @@ pub fn process_bytes(
         }
     }
 
-db.add_tags_to_fileid(out, &file.tag_list);
+    db.add_tags_to_fileid(out, &file.tag_list);
 
     out
 }

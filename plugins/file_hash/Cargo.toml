@@ -29,27 +29,16 @@ image = {version="0.25.9"}
 regex = "1.11.1"
 bitcode = { version = "0.6.9", features = ["arrayvec", "derive", "serde"] }
 redact = { git = "https://github.com/git4unrealnondev/redact",  features = ["serde", "bitcode"] }
+sharedtypes = { workspace = true }
+
 [features]
 default = ["serde"]
 serde = []
 clap=[]
 
 [lib]
-crate-type = ["dylib"]
+crate-type = ["cdylib"]
 
 [build]
 rustflags = ["-C", "prefer-dynamic", "-C", "rpath"]
-
-[profile.release]
-opt-level = "z"
-lto=true
-codegenunits=1
-strip = true
-debug = false
-panic = "abort"
-
-[profile.release-with-debug]
-inherits = "release"
-debug = true
-strip = false
 

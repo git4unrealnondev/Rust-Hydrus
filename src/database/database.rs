@@ -8,9 +8,6 @@ use crate::helpers::check_url;
 use crate::logging;
 use crate::roaring_bitmap::InternalCacheType;
 use crate::roaring_bitmap::RelationshipStorage;
-use crate::sharedtypes;
-use crate::sharedtypes::DEFAULT_CACHECHECK;
-use crate::sharedtypes::ScraperParam;
 use eta::{Eta, TimeAcc};
 use log::{error, info};
 use r2d2::Pool;
@@ -18,6 +15,9 @@ use r2d2::PooledConnection;
 use r2d2_sqlite::SqliteConnectionManager;
 use rayon::prelude::*;
 pub use rusqlite::{Connection, Result, Transaction, params, types::Null};
+use sharedtypes;
+use sharedtypes::DEFAULT_CACHECHECK;
+use sharedtypes::ScraperParam;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -163,7 +163,7 @@ PRAGMA cache_size = -1000000;
                     )?;
 
                     // Enable SQL tracing
-                    //conn.trace(Some(|sql| {logging::info_log(format!("[SQL TRACE] {}", sql));}));
+                    // conn.trace(Some(|sql| {logging::info_log(format!("[SQL TRACE] {}", sql));}));
 
                     Ok(())
                 });
@@ -1216,11 +1216,15 @@ PRAGMA journal_mode = WAL;
             return id;
         }
 
-
         let out = self.namespace_add_sql(tn, name, description, None);
 
-
-        self._inmemdb.write().namespace_put(sharedtypes::DbNamespaceObj { id: out, name: name.clone(), description: description.clone() });
+        self._inmemdb
+            .write()
+            .namespace_put(sharedtypes::DbNamespaceObj {
+                id: out,
+                name: name.clone(),
+                description: description.clone(),
+            });
 
         out
     }

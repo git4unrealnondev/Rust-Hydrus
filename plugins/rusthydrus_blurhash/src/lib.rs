@@ -20,8 +20,8 @@ static PLUGIN_DESCRIPTION: &str = "Introduces Blurhash imaging support.";
 
 #[path = "../../../src/client.rs"]
 mod client;
-#[path = "../../../src/sharedtypes.rs"]
-mod sharedtypes;
+
+use sharedtypes;
 
 #[no_mangle]
 pub fn get_global_info() -> Vec<sharedtypes::GlobalPluginScraper> {

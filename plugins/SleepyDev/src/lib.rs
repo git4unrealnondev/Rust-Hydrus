@@ -1,8 +1,6 @@
-#[path = "../../../src/sharedtypes.rs"]
-mod sharedtypes;
+use sharedtypes;
 
 static PLUGIN_NAME: &str = "SleepyDev";
-static PLUGIN_DESCRIPTION: &str = "Just makes the plugin manager wait. Dev use only lol";
 
 #[no_mangle]
 pub fn get_global_info() -> Vec<sharedtypes::GlobalPluginScraper> {

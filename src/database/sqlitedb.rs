@@ -1,14 +1,14 @@
 use crate::database::database::{CacheType, Main};
 use crate::error;
 use crate::logging;
-use crate::sharedtypes;
-use crate::sharedtypes::DbParentsObj;
 use rusqlite::Connection;
 use rusqlite::OptionalExtension;
 use rusqlite::ToSql;
 use rusqlite::Transaction;
 use rusqlite::params;
 use rusqlite::types::Null;
+use sharedtypes;
+use sharedtypes::DbParentsObj;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::ops::Deref;
@@ -1708,7 +1708,7 @@ RETURNING id;
             Err(_) => None,
         }
     }
-/*
+    /*
     pub(in crate::database) fn file_tag_relationship(
         &self,
         tn: &Transaction,

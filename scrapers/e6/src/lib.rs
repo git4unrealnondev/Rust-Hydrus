@@ -475,7 +475,6 @@ pub fn url_dump(
             },
             ..Default::default()
         });
-        //ret.push((a, scraperdata.clone()));
     }
     ret
 }
@@ -1132,7 +1131,7 @@ pub fn db_upgrade_call_3(site: &Site) {
             dbg!(tid);
             let mut vec_poolpos = Vec::new();
             let mut hashset_fileid = HashSet::new();
-            for each in client::parents_get(crate::client::types::ParentsType::Tag, *tid) {
+            for each in client::parents_get(sharedtypes::ParentsType::Tag, *tid) {
                 if let Some(tag_nns) = client::tag_get_id(each.tag_id) {
                     // Removes the spare poolid tag as a position that I added for some
                     // reason. lol
@@ -1152,12 +1151,12 @@ pub fn db_upgrade_call_3(site: &Site) {
 
             /*for position in vec_poolpos.iter() {
                 /*if let Some(tag_id) =
-                    client::parents_get(crate::client::types::ParentsType::Rel, *position)
+                    client::parents_get(crate::sharedtypes::ParentsType::Rel, *position)
                 {
                 }*/
             }*/
             for fid in hashset_fileid.iter() {
-                let mut tag_id = client::parents_get(crate::client::types::ParentsType::Rel, *fid);
+                let mut tag_id = client::parents_get(sharedtypes::ParentsType::Rel, *fid);
 
                 // Removes the parents and children from tag_ids
                 for tid_iter in tag_id.clone().iter() {
@@ -1470,9 +1469,9 @@ pub fn on_start(site_struct: &sharedtypes::GlobalPluginScraper) {
                 client::load_table(sharedtypes::LoadDBTable::All);
                 for tagid in client::namespace_get_tagids(nsid) {
                     if client::relationship_get_fileid(tagid).is_empty()
-                        && client::parents_get(client::types::ParentsType::Tag, tagid).is_empty()
-                        && client::parents_get(client::types::ParentsType::Rel, tagid).is_empty()
-                        && client::parents_get(client::types::ParentsType::LimitTo, tagid)
+                        && client::parents_get(sharedtypes::ParentsType::Tag, tagid).is_empty()
+                        && client::parents_get(sharedtypes::ParentsType::Rel, tagid).is_empty()
+                        && client::parents_get(sharedtypes::ParentsType::LimitTo, tagid)
                             .is_empty()
                     {
                         client::log(format!("E6-Scraper - Tag {} is empty removing", tagid));

@@ -1,11 +1,11 @@
 use crate::database::database::Main;
 use crate::logging;
-use crate::sharedtypes;
-use crate::sharedtypes::{DEFAULT_CACHECHECK, DEFAULT_CACHETIME, DEFAULT_PRIORITY};
 use crate::vec_of_strings;
 use chrono::Utc;
 use eta::{Eta, TimeAcc};
 use rusqlite::params;
+use sharedtypes;
+use sharedtypes::{DEFAULT_CACHECHECK, DEFAULT_CACHETIME, DEFAULT_PRIORITY};
 use std::collections::BTreeMap;
 
 impl Main {

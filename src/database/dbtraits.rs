@@ -1,4 +1,4 @@
-use crate::sharedtypes;
+use sharedtypes;
 use std::collections::{HashMap, HashSet};
 
 pub trait DBTraits {

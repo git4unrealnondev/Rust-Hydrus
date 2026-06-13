@@ -5,25 +5,22 @@ use crate::download;
 use crate::globalload::GlobalLoad;
 use crate::jobs::Jobs;
 use crate::logging;
-use crate::sharedtypes;
 use crate::threading;
 use anyhow::Context;
 
+use crate::Mutex;
 use crate::RwLock;
+use crate::types;
 use interprocess::local_socket::{GenericNamespaced, ListenerOptions, prelude::*};
+use sharedtypes;
 use std::collections::HashSet;
-use std::net::TcpListener;
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
-
-use crate::Mutex;
 use std::{
     io::{self, BufReader, prelude::*},
     sync::mpsc::Sender,
 };
-
-use crate::types;
 
 pub fn main(notify: Sender<()>) -> anyhow::Result<()> {
     // Define a function that checks for errors in incoming connections. We'll use
@@ -537,9 +534,9 @@ pub fn dbactions_to_function(
         types::SupportedDBRequests::ParentsGet((parentswitch, id)) => {
             let unwrappy = database;
             let out = match parentswitch {
-                types::ParentsType::Tag => &unwrappy.parents_tagid_tag_get(&id),
-                types::ParentsType::Rel => &unwrappy.parents_relate_tag_get(&id),
-                types::ParentsType::LimitTo => &unwrappy.parents_limitto_tag_get(&id),
+                sharedtypes::ParentsType::Tag => &unwrappy.parents_tagid_tag_get(&id),
+                sharedtypes::ParentsType::Rel => &unwrappy.parents_relate_tag_get(&id),
+                sharedtypes::ParentsType::LimitTo => &unwrappy.parents_limitto_tag_get(&id),
             };
 
             data_size_to_b(out)
