@@ -3,9 +3,6 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::time::Duration;
 
-//use ahash::HashSet;
-//use ahash::HashSet;
-
 #[path = "../../../src/client.rs"]
 mod client;
 
@@ -385,7 +382,7 @@ pub fn get_global_info() -> Vec<sharedtypes::GlobalPluginScraper> {
             ratelimit: (1, Duration::from_secs(1)),
             sites: vec_of_strings!("e6", "e621", "e621.net"),
             priority: DEFAULT_PRIORITY,
-            num_threads: None,
+            num_threads: Some(4),
             modifiers: vec![],
         },
     ));
