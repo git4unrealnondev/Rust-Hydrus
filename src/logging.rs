@@ -39,7 +39,6 @@ pub fn panic_log<T: Display>(error: T) {
 
 /// Dumps error to log and doesn't panic.
 pub fn error_log<T: Display>(error: T) {
-    println!("{}", error);
     error!("{}", error);
 }
 
@@ -52,7 +51,7 @@ pub fn error_log_silent<T: Display>(error: T) {
 /// Dumps info to log and prints it.
 pub fn info_log<T: Display>(info: T) {
     info!("{}", info);
-    println!("{}", info);
+    //println!("{}", info);
 }
 
 /// Dumps info to log and DOES NOT prints it.

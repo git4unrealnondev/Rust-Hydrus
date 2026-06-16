@@ -1003,19 +1003,19 @@ pub fn parser(
                 }],
                 ..Default::default()
             });
-        files.insert(file.into());
+        files.insert(file);
     }
 
-    let mut out = vec![sharedtypes::ScraperReturn::Data(
+    let out = vec![sharedtypes::ScraperReturn::Data(
         sharedtypes::ScraperObject {
             files,
             jobs,
             ..Default::default()
         },
     )];
-    if js["posts"].len() <= 74 {
-        out.push(sharedtypes::ScraperReturn::Nothing)
-    }
+    //if js["posts"].len() <= 74 {
+    //    out.push(sharedtypes::ScraperReturn::Nothing)
+    //}
 
     out
 }

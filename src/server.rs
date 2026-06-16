@@ -405,9 +405,12 @@ fn data_size_to_b<T: bitcode::Encode + ?Sized>(data_object: &T) -> Vec<u8> {
 pub fn dbactions_to_function(
     dbaction: types::SupportedDBRequests,
     database: Main,
-    globalload: GlobalLoad,
+    mut globalload: GlobalLoad,
     jobmanager: Arc<RwLock<Jobs>>,
 ) -> Vec<u8> {
+    let (uisender, uireciever) = tokio::sync::mpsc::unbounded_channel();
+    let uisender = Arc::new(uisender);
+
     match dbaction {
         types::SupportedDBRequests::GetFileIdsWhereExtensionIs(file_extension_type) => {
             let file_ids = match file_extension_type {
@@ -475,6 +478,13 @@ pub fn dbactions_to_function(
                     &global_pluginscraper,
                     &0,
                     &0,
+                    uisender,
+                    &crate::ui::ui::FileStorage {
+                        internal_id: 0,
+                        status: crate::ui::ui::FilesStatus::Waiting,
+                        hash: sharedtypes::HashesSupported::None,
+                    },
+                    Arc::new(RwLock::new(vec![])),
                 );
             });
 
@@ -499,6 +509,13 @@ pub fn dbactions_to_function(
                 &global_pluginscraper,
                 &0,
                 &0,
+                uisender,
+                &crate::ui::ui::FileStorage {
+                    internal_id: 0,
+                    status: crate::ui::ui::FilesStatus::Waiting,
+                    hash: sharedtypes::HashesSupported::None,
+                },
+                Arc::new(RwLock::new(vec![])),
             );
 
             data_size_to_b(&true)

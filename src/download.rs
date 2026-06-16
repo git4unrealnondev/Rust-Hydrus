@@ -31,6 +31,7 @@ use ratelimit::Ratelimiter;
 use std::fs::File;
 
 use crate::RwLock;
+use crate::ui::ui::*;
 use std::sync::Arc;
 use std::thread;
 
@@ -422,10 +423,12 @@ pub fn dlfile_new(
     workerid: &u64,
     jobid: &u64,
     scraper: Option<&sharedtypes::GlobalPluginScraper>,
+    file_ui: FileStorage,
+    file_ui_list: Arc<RwLock<Vec<FileStorage>>>,
+    uisender: Arc<tokio::sync::mpsc::UnboundedSender<UIScraper>>,
 ) -> FileReturnStatus {
     let mut boolloop = true;
     let mut hash = String::new();
-    //let mut bytes: bytes::Bytes = Bytes::from(&b""[..]);
     let mut bytes: Option<bytes::Bytes> = None;
 
     let should_scraper_download = match scraper {
@@ -446,16 +449,15 @@ pub fn dlfile_new(
                 }
             }
         }
-        //return FileReturnStatus::TryLater;
     } else {
         let mut cnt = 0;
         while boolloop {
             let mut hasher = Sha512::new();
-            loop {
+            let mut response = loop {
                 if cnt >= 3 {
                     return FileReturnStatus::TryLater;
                 }
-                let fileurlmatch = match &file.source {
+                let _fileurlmatch = match &file.source {
                     None => {
                         panic!(
                             "Tried to call dlfilenew when their was no file :C info: {:?}",
@@ -472,87 +474,117 @@ pub fn dlfile_new(
                 let url = url.unwrap();
                 ratelimiter_wait(ratelimiter_obj);
                 logging::info_log(format!("Downloading: {}", &source_url));
-                let mut futureresult = {
+
+                let futureresult = {
                     let client = client.read();
                     client.get(url.as_ref()).send()
                 };
-                loop {
-                    if cnt >= 3 {
-                        return FileReturnStatus::TryLater;
-                    }
-                    match &futureresult {
-                        Ok(result) => {
-                            if let Err(err) = result.error_for_status_ref() {
-                                if let Some(status) = err.status() {
-                                    if status.is_server_error() {
-                                        logging::error_log(&format!(
-                                            "Worker: {workerid} JobID: {jobid} -- Repeating job due to server err {:?} url: {}",
-                                            err,
-                                            &url.to_string()
-                                        ));
-                                        let time_dur = Duration::from_secs(10);
-                                        thread::sleep(time_dur);
-                                        futureresult = {
-                                            let client = client.read();
-                                            client.get(url.as_ref()).send()
-                                        };
 
-                                        cnt += 1;
-
-                                        continue;
-                                    }
-                                    if status.is_client_error() {
-                                        logging::error_log(&format!(
-                                            "Worker: {workerid} JobID: {jobid} -- Stopping file download due to: {:?}",
-                                            err
-                                        ));
-                                        return FileReturnStatus::DeadUrl(source_url.clone());
-                                    }
+                match futureresult {
+                    Ok(res) => {
+                        if let Err(err) = res.error_for_status_ref() {
+                            if let Some(status) = err.status() {
+                                if status.is_server_error() {
+                                    logging::error_log(&format!(
+                                        "Worker: {workerid} JobID: {jobid} -- Repeating job due to server err {:?} url: {}",
+                                        err,
+                                        &url.to_string()
+                                    ));
+                                    thread::sleep(Duration::from_secs(10));
+                                    cnt += 1;
+                                    continue;
+                                }
+                                if status.is_client_error() {
+                                    logging::error_log(&format!(
+                                        "Worker: {workerid} JobID: {jobid} -- Stopping file download due to: {:?}",
+                                        err
+                                    ));
+                                    return FileReturnStatus::DeadUrl(source_url.clone());
                                 }
                             }
-                            break;
                         }
-                        Err(_) => {
-                            error!("Worker: {workerid} JobID: {jobid} -- Repeating: {}", &url);
-                            dbg!("Worker: {workerid} JobID: {jobid} -- Repeating: {}", &url);
-                            let time_dur = Duration::from_secs(10);
-                            thread::sleep(time_dur);
-                            futureresult = {
-                                let client = client.read();
-                                client.get(url.as_ref()).send()
-                            };
-                            cnt += 1;
-                        }
-                    }
-                }
-
-                // Downloads file into byte memory buffer
-                let byte = futureresult.unwrap().bytes();
-                // Error handling for dling a file. Waits 10 secs to retry
-                match byte {
-                    Ok(out) => {
-                        bytes = Some(out);
-
-                        break;
+                        break res;
                     }
                     Err(_) => {
-                        error!(
-                            "Worker: {workerid} JobID: {jobid} -- Repeating: {} , Due to: {:?}",
-                            &url,
-                            &byte.as_ref().err()
-                        );
-                        dbg!(
-                            "Worker: {workerid} JobID: {jobid} -- Repeating: {} , Due to: {:?}",
-                            &url,
-                            &byte.as_ref().err()
-                        );
-                        let time_dur = Duration::from_secs(10);
-                        thread::sleep(time_dur);
+                        error!("Worker: {workerid} JobID: {jobid} -- Repeating: {}", &url);
+                        thread::sleep(Duration::from_secs(10));
+                        cnt += 1;
                     }
                 }
-                cnt += 1;
+            };
+
+            // === INCREMENTAL PROGRESS LOGIC ===
+            // === CHUNK PROGRESS REWRITE ===
+            let total_size = response.content_length().unwrap_or(0);
+            let mut downloaded: u64 = 0;
+            let mut buffer = [0; 4096];
+            let mut collected_bytes = bytes::BytesMut::with_capacity(if total_size > 0 {
+                total_size as usize
+            } else {
+                1024
+            });
+
+            // Track the actual raw percentage or raw MBs without flattening it to an int too early
+            let mut last_reported_progress: f64 = -1.0;
+            let mut download_success = true;
+
+            loop {
+                match response.read(&mut buffer) {
+                    Ok(0) => break, // EOF reached cleanly
+                    Ok(bytes_read) => {
+                        collected_bytes.extend_from_slice(&buffer[..bytes_read]);
+                        downloaded += bytes_read as u64;
+
+                        // 1. Calculate progress as a precise float
+                        let current_progress = if total_size > 0 {
+                            (downloaded as f64 / total_size as f64) * 100.0
+                        } else {
+                            // Fallback: Total MB downloaded so far
+                            (downloaded as f64) / (1024.0 * 1024.0)
+                        };
+
+                        // 2. Adjust threshold: update if progress changes by 0.1% (or 0.1 MB)
+                        // to ensure smooth tracking even for smaller files
+                        if (current_progress - last_reported_progress).abs() >= 0.1 {
+                            // 3. Round only for UI display purposes if desired, or send the raw float
+                            let display_progress = current_progress;
+
+                            {
+                                let mut list_guard = file_ui_list.write();
+                                if let Some(target_file) = list_guard
+                                    .iter_mut()
+                                    .find(|f| f.internal_id == file_ui.internal_id)
+                                {
+                                    target_file.status = FilesStatus::Downloading(display_progress);
+                                }
+                            }
+
+                            let _ = uisender.send(UIScraper {
+                                worker: *workerid,
+                                name: scraper.map_or(String::new(), |s| s.name.clone()),
+                                status: ScraperStatus::Running,
+                                files: file_ui_list.read().clone(),
+                            });
+
+                            last_reported_progress = current_progress;
+                        }
+                    }
+                    Err(e) => {
+                        error!(
+                            "Worker: {workerid} JobID: {jobid} -- Stream broken midway: {:?}",
+                            e
+                        );
+                        download_success = false;
+                        break;
+                    }
+                }
             }
 
+            if !download_success {
+                continue;
+            }
+
+            bytes = Some(collected_bytes.freeze());
             hasher.update(bytes.as_ref().unwrap().as_ref());
 
             // Final Hash
@@ -560,21 +592,16 @@ pub fn dlfile_new(
             match &file.hash {
                 sharedtypes::HashesSupported::None => {
                     boolloop = false;
-                    // panic!("DlFileNew: Cannot parse hash info : {:?}", &file);
                 }
                 _ => {
-                    // Check and compare  to what the scraper wants
                     let status = hash_bytes(bytes.as_ref().unwrap(), &file.hash);
 
-                    // Logging
                     if !status.1 {
                         error!(
                             "Worker: {workerid} JobID: {jobid} -- Parser file: {:?} FAILED HASHCHECK: {} {}",
                             &file.hash, status.0, status.1
                         );
                         cnt += 1;
-                    } else {
-                        // dbg!("Parser returned: {} Got: {}", &file.hash, status.0);
                     }
                     if cnt >= 3 {
                         return FileReturnStatus::TryLater;
@@ -586,6 +613,17 @@ pub fn dlfile_new(
     }
     logging::info_log(format!("Downloaded hash: {}", &hash));
 
+    // After downloading out of loop, safely change UI status to Processing rules
+    {
+        let mut list_guard = file_ui_list.write();
+        if let Some(target_file) = list_guard
+            .iter_mut()
+            .find(|f| f.internal_id == file_ui.internal_id)
+        {
+            target_file.status = FilesStatus::Processing(0.0);
+        }
+    }
+
     if let Some(ref bytes) = bytes {
         let file_ext = FileFormat::from_bytes(bytes).extension().to_string();
         let file_id = process_bytes(
@@ -596,12 +634,25 @@ pub fn dlfile_new(
             db,
             file,
             Some(source_url),
+            uisender,
+            &file_ui,
+            file_ui_list.clone(),
         );
-        //logging::info_log(format!("Finished processing bytes"));
+
+        // Final state change: File is completed!
+        {
+            let mut list_guard = file_ui_list.write();
+            if let Some(target_file) = list_guard
+                .iter_mut()
+                .find(|f| f.internal_id == file_ui.internal_id)
+            {
+                target_file.status = FilesStatus::Done;
+            }
+        }
+
         return FileReturnStatus::File((hash, file_ext, file_id.unwrap()));
     }
 
-    // If we don't donwload anything the default to try again later
     FileReturnStatus::TryLater
 }
 
@@ -616,7 +667,20 @@ pub fn process_bytes(
     db: Main,
     file: &mut sharedtypes::FileObjectMain,
     source_url: Option<&String>,
+    uisender: Arc<tokio::sync::mpsc::UnboundedSender<UIScraper>>,
+    file_ui: &FileStorage,
+    file_ui_list: Arc<RwLock<Vec<FileStorage>>>,
 ) -> Option<u64> {
+    {
+        let mut list_guard = file_ui_list.write();
+        if let Some(target) = list_guard
+            .iter_mut()
+            .find(|f| f.internal_id == file_ui.internal_id)
+        {
+            target.status = FilesStatus::Processing(0.0);
+        }
+    }
+
     let mut out = None;
     // NOTE run the download / file actions first then run the plugin_on_download second.
     // That way if theirs any data that needs to get processed then we can do it while theirs a
@@ -639,7 +703,15 @@ pub fn process_bytes(
     }
 
     db.add_tags_to_fileid(out, &file.tag_list);
-
+    {
+        let mut list_guard = file_ui_list.write();
+        if let Some(target) = list_guard
+            .iter_mut()
+            .find(|f| f.internal_id == file_ui.internal_id)
+        {
+            target.status = FilesStatus::Processing(100.0);
+        }
+    }
     out
 }
 

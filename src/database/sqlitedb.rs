@@ -606,13 +606,11 @@ ALTER TABLE Tags ADD COLUMN count INTEGER NOT NULL DEFAULT 0;
         .unwrap();
         tn.execute(
             "UPDATE Tags
-SET count = sub.cnt
-FROM (
-    SELECT tagid, COUNT(*) AS cnt
-    FROM Relationship
-    GROUP BY tagid
-) AS sub
-WHERE Tags.id = sub.tagid;",
+SET count = (
+    SELECT COUNT(*) 
+    FROM Relationship 
+    WHERE Relationship.tagid = Tags.id
+);",
             [],
         )
         .unwrap();
@@ -672,13 +670,11 @@ END;",
 
         tn.execute(
             "UPDATE Tags
-SET count = sub.cnt
-FROM (
-    SELECT tagid, COUNT(*) AS cnt
-    FROM Relationship
-    GROUP BY tagid
-) AS sub
-WHERE Tags.id = sub.tagid;",
+SET count = (
+    SELECT COUNT(*) 
+    FROM Relationship 
+    WHERE Relationship.tagid = Tags.id
+);",
             [],
         )
         .unwrap();
@@ -861,7 +857,7 @@ HAVING COUNT(r.fileid) {dir} ?;"
         }
     }
 
-    ///
+  /*  ///
     /// Gets all jobs from the sql tables
     ///
     pub(in crate::database) fn jobs_get_all_sql(&self) -> HashMap<u64, sharedtypes::DbJobsObj> {
@@ -876,6 +872,54 @@ HAVING COUNT(r.fileid) {dir} ?;"
         }
 
         out
+    }*/
+
+    ///
+    /// Better way to get all jobs from db in a more direct way
+    ///
+    pub(in crate::database) fn jobs_get_all_sql(&self, tn: &Transaction) -> HashMap<u64, sharedtypes::DbJobsObj> {
+
+        let mut stmt = tn
+            .prepare("SELECT * FROM Jobs")
+            .unwrap();
+      let temp =  wait_until_sqlite_ok!(stmt.query_map( params![], |row| {
+            let id = row.get(0).unwrap();
+            let time = row.get(1).unwrap();
+            let reptime = row.get(2).unwrap();
+            let priority = row.get(3).unwrap_or(sharedtypes::DEFAULT_PRIORITY);
+            let cachetime = row.get(4).unwrap_or_default();
+            let cachechecktype: String = row.get(5).unwrap();
+            let manager: String = row.get(6).unwrap();
+            let man = serde_json::from_str(&manager).unwrap();
+            let site = row.get(7).unwrap();
+            let param: String = row.get(8).unwrap();
+            let system_data_string: String = row.get(9).unwrap();
+            let user_data_string: String = row.get(10).unwrap();
+            let system_data = serde_json::from_str(&system_data_string).unwrap();
+            let user_data = serde_json::from_str(&user_data_string).unwrap();
+            Ok(sharedtypes::DbJobsObj {
+                id,
+                time,
+                reptime,
+                priority,
+                cachetime,
+                cachechecktype: serde_json::from_str(&cachechecktype).unwrap(),
+                site,
+                param: serde_json::from_str(&param).unwrap(),
+                jobmanager: man,
+                isrunning: false,
+                user_data,
+                system_data,
+            })
+        }))
+        .unwrap();
+
+let mut out = HashMap::new();
+for item in temp.flatten() {
+    out.insert(item.id.unwrap(), item);
+}
+out
+
     }
 
     ///
@@ -1200,7 +1244,7 @@ HAVING COUNT(r.fileid) {dir} ?;"
             Some(id) => id,
         };
 
-        for each in self.jobs_get_all() {
+        for each in self.jobs_get_all_sql(tn) {
             if dbjobsobj.time == each.1.time
                 && dbjobsobj.reptime == each.1.reptime
                 && dbjobsobj.site == each.1.site
@@ -1212,7 +1256,7 @@ HAVING COUNT(r.fileid) {dir} ?;"
 
         dbjobsobj.id = Some(id);
 
-        self.jobs_update_db_internal(&tn, dbjobsobj);
+        self.jobs_update_db_internal(tn, dbjobsobj);
 
         id
     }
