@@ -590,9 +590,7 @@ pub fn parser(
                                         let file = sharedtypes::FileObjectV1 {
                                             tag_list,
                                             skip_if: skip,
-                                            source: Some(sharedtypes::FileSource::Url(vec![
-                                                source_url,
-                                            ])),
+                                            source: Some(sharedtypes::FileSource::Url(source_url)),
                                             hash: attachment.attachment_hash,
                                             ..Default::default()
                                         };
