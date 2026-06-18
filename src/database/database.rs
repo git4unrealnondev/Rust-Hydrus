@@ -474,8 +474,8 @@ PRAGMA journal_mode = WAL;
                         let mut temp_vec: Vec<(Option<u64>, Option<u64>)> = Vec::new();
                         {
                             for relations in names.relationship {
-                                let file_id = self.file_get_hash(&&relations.file_hash);
-                                let namespace_id = self.namespace_get(&&relations.tag_namespace);
+                                let file_id = self.file_get_hash_internal(tn, &relations.file_hash);
+                                let namespace_id = self.namespace_get(&relations.tag_namespace);
                                 let tag_id = self.tag_get_name(
                                     relations.tag_name.clone(),
                                     namespace_id.unwrap(),

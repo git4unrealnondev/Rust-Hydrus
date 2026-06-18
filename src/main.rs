@@ -2,13 +2,16 @@
 #![allow(dead_code)]
 
 use log::{error, warn};
+//use tokio::sync::{RwLock, Mutex};
 use parking_lot::{Mutex, RwLock};
 use std::{
+    collections::HashSet,
     io,
     sync::Arc,
     thread::{self, Thread},
-    time,
+    time::{self, Duration},
 };
+use tokio::time::Interval;
 
 pub const VERS: u64 = 12;
 pub const DEFAULT_LOC_NAME: &str = "main.db";
@@ -30,8 +33,9 @@ pub mod logging;
 pub mod reimport;
 //#[path = "./scr/scraper.rs"]
 //pub mod scraper;
+pub mod downloadlogic;
 pub mod tasks;
-pub mod threading;
+//pub mod threading;
 pub mod time_func;
 
 // Needed for the plugin coms system.
@@ -46,7 +50,7 @@ pub mod ui;
 
 use database::database::Main;
 
-use crate::{helpers::memory_manage, ui::ui::App};
+use crate::{downloadlogic::DownloadManager, helpers::memory_manage, ui::ui::App};
 
 /// This code is trash. lmao. Has threading and plugins soon tm Will probably work
 /// :D
@@ -181,7 +185,15 @@ async fn main() -> io::Result<()> {
     //
 
     // Creates a threadhandler that manages callable threads.
-    let mut threadhandler = threading::Threads::new(Arc::new(uisender.clone()));
+    //let mut threadhandler = threading::Threads::new(Arc::new(uisender.clone()));
+    let tokio_handle = tokio::runtime::Handle::current();
+    let mut threadhandler = Arc::new(Mutex::new(DownloadManager::new(
+        uisender.into(),
+        database,
+        globalload.clone(),
+        jobmanager.clone(),
+        tokio_handle,
+    )));
 
     //let mut conn = database.read().get_database_connection();
     //let tn = conn.transaction().unwrap();
@@ -190,19 +202,54 @@ async fn main() -> io::Result<()> {
 
     {
         for scraper in jobmanager.read().job_scrapers_get() {
-            threadhandler.startwork(
-                jobmanager.clone(),
-                database.clone(),
-                scraper.clone(),
-                globalload.clone(),
-            );
+            threadhandler.lock().add_work(scraper.clone());
         }
     }
 
-    let thread_handle = thread::spawn(move || {
+    /* let thread_handle = thread::spawn(move || {
+
+        loop {
+
+            thread::sleep(one_sec);
+
+        }
+
+       /* loop {
+            let brk;
+            logging::info_log("a");
+           let th = threadhandler.check_scrapers();
+            {
+            logging::info_log("b");
+                globalload.clone().thread_finish_closed();
+            logging::info_log("c");
+                brk = globalload.return_thread();
+            }
+
+            {
+              //  let sites = globalload.return_all_sites();
+              //  jobmanager.write().jobs_load(sites);
+            }
+
+            logging::info_log("d");
+            for scraper in jobmanager.read().job_scrapers_get() {
+               //  let scraper_library = scraper_manager._library.get(&scraper).unwrap();
+                 threadhandler.add_work(scraper.clone());
+            }
+            thread::sleep(one_sec);
+            logging::info_log("yeet");
+            //tokio::time::sleep(one_sec);
+
+            if brk && th {
+                return;
+            }
+        }*/
+    });
+      */
+
+    /*let thread_handle = thread::spawn(move || {
         loop {
             let brk;
-            threadhandler.check_threads();
+            threadhandler.check_scrapers();
             {
                 globalload.clone().thread_finish_closed();
                 brk = globalload.return_thread();
@@ -215,24 +262,58 @@ async fn main() -> io::Result<()> {
 
             for scraper in jobmanager.read().job_scrapers_get() {
                 // let scraper_library = scraper_manager._library.get(&scraper).unwrap();
-                threadhandler.startwork(
-                    jobmanager.clone(),
-                    database.clone(),
-                    scraper.clone(),
-                    globalload.clone(),
-                );
+                threadhandler.add_work(scraper.clone());
             }
             thread::sleep(one_sec);
+            //tokio::time::sleep(one_sec);
 
-            if brk && threadhandler.check_empty() {
+            if brk && threadhandler.check_scrapers() {
                 break;
+            }
+        }
+    });*/
+    let jobmanager_loop = jobmanager.clone();
+    let threadhandler_loop = threadhandler.clone();
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(1));
+
+        loop {
+            interval.tick().await;
+
+            // 1. Get the scrapers, making sure we extract OWNED values, not references
+            let scrapers: Vec<_> = {
+                let jm = jobmanager_loop.read();
+                // Ensure .clone() here creates owned Scraper items, not references to them
+                jm.job_scrapers_get()
+                    .iter()
+                    .map(|scraper| (*scraper).clone()) // Explicitly clone the underlying value
+                    .collect()
+            };
+
+            // 2. Loop through and spawn each job concurrently
+            for scraper in scrapers {
+                let handler = threadhandler_loop.clone();
+
+                // 1. Lock the manager just long enough to register the new worker state
+                let maybe_worker = {
+                    let mut handler_guard = handler.lock();
+                    handler_guard.add_work(scraper.clone())
+                }; // The guard drops right here! The manager is free for other threads.
+
+                // 2. If it's a new scraper, spin up its long-running execution in parallel
+                if let Some(worker) = maybe_worker {
+                    tokio::spawn(async move {
+                        let scraper_arc = Arc::new(worker);
+                        scraper_arc.start_scraper().await;
+                    });
+                }
             }
         }
     });
 
     let app_result = app.run(&mut terminal).await;
 
-    thread_handle.join().unwrap();
+    //thread_handle.join().unwrap();
     ratatui::restore();
     app_result
     /*

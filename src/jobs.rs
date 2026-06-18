@@ -35,6 +35,24 @@ impl Jobs {
         }
     }
 
+    ///
+    /// Sets a job to be running
+    ///
+    pub fn job_set_is_running(
+        &mut self,
+        scraper: &sharedtypes::GlobalPluginScraper,
+        job: &sharedtypes::DbJobsObj,
+    ) {
+        if let Some(jobs) = self.site_job.get_mut(scraper) {
+            if let Some(mut site_job) = jobs.take(job) {
+                if site_job.id == job.id {
+                    site_job.isrunning = true;
+                }
+                jobs.insert(site_job);
+            }
+        }
+    }
+
     pub fn debug(&self) {
         dbg!(&self.site_job, &self.previously_seen);
     }
@@ -243,6 +261,40 @@ impl Jobs {
                         }
                     }
                 }
+            }
+        }
+    }
+
+    ///
+    /// New function to properly update a job
+    ///
+    pub fn jobs_update(
+        &mut self,
+        data: sharedtypes::DbJobsObj,
+        scraper: &sharedtypes::GlobalPluginScraper,
+    ) {
+        if let Some(job_list) = self.site_job.get_mut(scraper) {
+            let mut database_updated = false;
+
+            // .retain drops elements when the closure returns false
+            job_list.retain(|job| {
+                if job.id == data.id {
+                    if job != &data {
+                        // Update database
+                        self.db.jobs_update_db(data.clone());
+                        database_updated = true;
+                    }
+                    // Return false to remove the OLD job object from the set
+                    false
+                } else {
+                    // Return true to keep all other unrelated jobs untouched
+                    true
+                }
+            });
+
+            // If we removed the old version, insert the new up-to-date data now
+            if database_updated {
+                job_list.insert(data);
             }
         }
     }

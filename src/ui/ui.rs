@@ -11,18 +11,11 @@ use sharedtypes::HashesSupported;
 
 use crate::ui::components::*;
 
-use ratatui_garnish::{
-    GarnishableWidget,
-    Padding, // 2. Kept the Garnish padding explicitly
-    border::RoundedDashedBorder,
-    garnishes,
-    title::{Above, Title},
-};
 use std::collections::HashMap;
 use std::io;
 pub struct App {
     exit: bool,
-    receiver: tokio::sync::mpsc::UnboundedReceiver<UIScraper>,
+    receiver: tokio::sync::mpsc::UnboundedReceiver<UIEvent>,
     pub screen: Vec<AppScreen>,
     pub scrapers: HashMap<u64, UIScraper>,
 }
@@ -59,15 +52,32 @@ pub struct FileStorage {
 }
 
 #[derive(Debug, Clone)]
+pub enum UIEvent {
+    /// Sent by the main worker when a scraper state shifts
+    ScraperStatusChanged {
+        worker_id: u64,
+        name: String,
+        status: ScraperStatus,
+    },
+    /// Sent by individual background download tasks to safely update status without overwriting anything else
+    FileStatusChanged {
+        worker_id: u64,
+        job_id: u64,
+        file_id: u64,
+        status: FilesStatus,
+    },
+}
+
+#[derive(Debug, Clone)]
 pub struct UIScraper {
     pub worker: u64,
     pub name: String,
     pub status: ScraperStatus,
-    pub files: Vec<FileStorage>,
+    pub files: HashMap<u64, Vec<FileStorage>>,
 }
 
 impl App {
-    pub fn new(receiver: tokio::sync::mpsc::UnboundedReceiver<UIScraper>) -> Self {
+    pub fn new(receiver: tokio::sync::mpsc::UnboundedReceiver<UIEvent>) -> Self {
         App {
             receiver,
             exit: false,
@@ -80,37 +90,84 @@ impl App {
         let mut reader = crossterm::event::EventStream::new();
 
         while !self.exit {
+            // 1. DRAIN ALL PENDING EVENTS IN THE CHANNEL BUFFER IMMEDIATELY
+            // This processes bursts of messages instantly without intermediate redraws
+            while let Ok(event) = self.receiver.try_recv() {
+                self.handle_ui_event_internal(event);
+            }
+
+            // 2. PAINT THE CURRENT STATE ONCE PER LOOP ROUND
             terminal.draw(|frame| self.draw(frame))?;
 
+            // 3. CLEANLY BLOCK AND WAIT FOR THE NEXT NEW EVENT OR KEY PRESS
             tokio::select! {
                 res = self.receiver.recv() => {
-                match res {
-                    Some(event) => {
-                        self.scrapers.insert(event.worker, event);
+                    if let Some(event) = res {
+                        self.handle_ui_event_internal(event);
+                    } else {
+                        // Optional: Senders dropped, handle if needed
                     }
-                    None => {
-                        // Optional: All senders are dead/dropped, but we keep the loop alive
-                        // so the user can still read the UI and press 'q' to quit.
+                }
+                Some(Ok(crossterm_event)) = reader.next() => {
+                    match crossterm_event {
+                        crossterm::event::Event::Key(key_event) => {
+                            self.handle_key_event(key_event)?;
+                        }
+                        crossterm::event::Event::Resize(_, _) => {
+                            // The loop will automatically clear and redraw on next pass
+                        }
+                        _ => {}
                     }
                 }
             }
-
-            // FIX 2: Intercept ALL crossterm events, then match inside the block
-            Some(Ok(crossterm_event)) = reader.next() => {
-                match crossterm_event {
-                    crossterm::event::Event::Key(key_event) => {
-                        self.handle_key_event(key_event)?;
-                    }
-                    crossterm::event::Event::Resize(_, _) => {
-                        // On a resize event, we don't need to do anything!
-                        // The loop will automatically clear and re-execute
-                        // `terminal.draw()` at the top on the next iteration.
-                    }
-                    _ => {}
-                }
-            }            }
         }
         Ok(())
+    }
+
+    // Helper method to keep your event matching clean and reusable
+    fn handle_ui_event_internal(&mut self, event: UIEvent) {
+        match event {
+            UIEvent::ScraperStatusChanged {
+                worker_id,
+                name,
+                status,
+            } => {
+                let scraper = self.scrapers.entry(worker_id).or_insert_with(|| UIScraper {
+                    worker: worker_id,
+                    name: name.clone(),
+                    status: status.clone(),
+                    files: HashMap::new(),
+                });
+                scraper.name = name;
+                scraper.status = status;
+            }
+            UIEvent::FileStatusChanged {
+                worker_id,
+                job_id,
+                file_id,
+                status,
+            } => {
+                // FIX: Ensure the scraper entry exists first instead of dropping the event!
+                let scraper = self.scrapers.entry(worker_id).or_insert_with(|| UIScraper {
+                    worker: worker_id,
+                    name: "Initializing...".to_string(), // Will be updated by ScraperStatusChanged
+                    status: ScraperStatus::Running,
+                    files: HashMap::new(),
+                });
+
+                let file_vec = scraper.files.entry(job_id).or_insert_with(Vec::new);
+
+                if let Some(file) = file_vec.iter_mut().find(|f| f.internal_id == file_id) {
+                    file.status = status;
+                } else {
+                    file_vec.push(FileStorage {
+                        internal_id: file_id,
+                        status,
+                        hash: sharedtypes::HashesSupported::None,
+                    });
+                }
+            }
+        }
     }
 
     fn draw(&self, frame: &mut Frame) {

@@ -993,7 +993,7 @@ pub fn parser(
         };
         let file: sharedtypes::FileObject =
             sharedtypes::FileObject::V1(sharedtypes::FileObjectV1 {
-                source: Some(sharedtypes::FileSource::Url(vec![url])),
+                source: Some(sharedtypes::FileSource::Url(url)),
                 hash: sharedtypes::HashesSupported::Md5(
                     js["posts"][inc]["file"]["md5"].to_string(),
                 ),

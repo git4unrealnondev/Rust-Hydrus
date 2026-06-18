@@ -792,7 +792,7 @@ pub struct DBPluginOutput {
 #[derive(Debug, Eq, Hash, PartialEq, bitcode::Encode, bitcode::Decode, Clone)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum FileSource {
-    Url(Vec<String>),
+    Url(String),
     Bytes(Vec<u8>),
 }
 

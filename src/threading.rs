@@ -15,7 +15,7 @@ use file_format::FileFormat;
 use ratelimit::Ratelimiter;
 use rayon::iter::IntoParallelRefMutIterator;
 use rayon::iter::ParallelIterator;
-use reqwest::blocking::Client;
+use reqwest::Client;
 use rusty_pool::ThreadPool;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -132,28 +132,18 @@ impl Drop for Worker {
             info_log(format!("Shutting Down Worker from Worker: {}", self.id));
 
             // Sets up a default UI for the old scraper
-            self.uisender.send(UIScraper {
+            /*    let _ = self.uisender.send(UIScraper {
                 worker: self.id,
                 name: self.scraper.name.clone(),
                 status: ScraperStatus::Completed,
                 files: vec![],
-            });
+            });*/
 
             memory_manage();
         }
     }
 }
-///
-/// Creates a relelimiter object
-pub fn create_ratelimiter(
-    input: (u64, Duration),
-    worker_id: &u64,
-    job_id: &u64,
-) -> Arc<RwLock<Ratelimiter>> {
-    Arc::new(RwLock::new(download::ratelimiter_create(
-        worker_id, job_id, input.0, input.1,
-    )))
-}
+
 
 impl Worker {
     fn new(
@@ -186,12 +176,12 @@ impl Worker {
         let ui_scraper = uisender.clone();
 
         // Sets up a default UI for the new scraper
-        uisender.send(UIScraper {
+        /*   uisender.send(UIScraper {
             worker: id,
             name: scraper_orig.name.clone(),
             status: ScraperStatus::Idle,
             files: vec![],
-        });
+        });*/
 
         let uiscraper = uisender.clone();
         let thread = thread::spawn(move || {
@@ -330,8 +320,8 @@ impl Worker {
                     };
 
                     // Changes state to running with no files
-uisender.send(UIScraper { worker: id, name: scraper.name.clone() ,status: ScraperStatus::Running, files: vec![] });
-                    'urlloop: for (scraperparam, scraperdata) in urlload {
+//uisender.send(UIScraper { worker: id, name: scraper.name.clone() ,status: ScraperStatus::Running, files: vec![] });
+            /*        'urlloop: for (scraperparam, scraperdata) in urlload {
                         'errloop: loop {
                             let resp;
                             let out_sts;
@@ -447,7 +437,7 @@ uisender.send(UIScraper { worker: id, name: scraper.name.clone() ,status: Scrape
                                         let mut  filestorage:Arc<RwLock<Vec<FileStorage>>> =Arc::new( RwLock::new( files.clone().into_iter().map(|f| f.1).collect()));
 
                                         // Adds files to scraper in UI
-                                        uiscraper.send(UIScraper { worker: id, name: scraper.name.clone() ,status: ScraperStatus::Running, files: (*filestorage.read().clone()).to_vec()  });
+                           //             uiscraper.send(UIScraper { worker: id, name: scraper.name.clone() ,status: ScraperStatus::Running, files: (*filestorage.read().clone()).to_vec()  });
 
                                         // Parses files from urls
                                         let ui_scraper = uisender.clone();
@@ -524,7 +514,7 @@ uisender.send(UIScraper { worker: id, name: scraper.name.clone() ,status: Scrape
                                 }
                             }
                         }
-                    }
+                    }*/
                     {
                         if should_remove_original_job {
                             jobstorage
@@ -561,86 +551,7 @@ enum SkipResult {
     Download,
 }
 
-///
-/// Downloads a file into the db if needed
-///
-fn download_add_to_db(
-    ratelimiter_obj: Arc<RwLock<Ratelimiter>>,
-    source: &String,
-    _location: String,
-    globalload: GlobalLoad,
-    client: Arc<RwLock<Client>>,
-    database: Main,
-    file: &mut sharedtypes::FileObjectMain,
-    worker_id: &u64,
-    job_id: &u64,
-    scraper: &sharedtypes::GlobalPluginScraper,
-    file_ui: FileStorage,
-    file_ui_list: Arc<RwLock<Vec<FileStorage>>>,
-    uisender: Arc<tokio::sync::mpsc::UnboundedSender<UIScraper>>,
-) -> Option<u64> {
-    // Early exit for if the file is a dead url
-    {
-        if database.check_dead_url(source) {
-            logging::info_log(format!(
-                "Worker: {worker_id} JobID: {job_id} -- Skipping {} because it's a dead link.",
-                source
-            ));
-            return None;
-        }
-    }
 
-    let blopt;
-    {
-        //let mut_client = &mut client.write();
-
-        // Download file doesn't exist. URL doesn't exist in DB Will download
-        blopt = download::dlfile_new(
-            client,
-            database.clone(),
-            file,
-            Some(globalload),
-            &ratelimiter_obj,
-            &source,
-            worker_id,
-            job_id,
-            Some(scraper),
-            file_ui,
-            file_ui_list.clone(),
-            uisender,
-        );
-    }
-
-    match blopt {
-        download::FileReturnStatus::File((_hash, _file_ext, file_id)) => {
-            //let fileid;
-
-            /* {
-                        let ext_id = database.extension_put_string(&file_ext);
-
-                        let storage_id = database.storage_put(&location);
-
-                        let file = sharedtypes::DbFileStorage::NoIdExist(sharedtypes::DbFileObjNoId {
-                            hash,
-                            ext_id,
-                            storage_id,
-                        });
-                        fileid = database.file_add(file);
-                        let source_url_ns_id = database.create_default_source_url_ns_id();
-                        let tagid = database.tag_add(source, source_url_ns_id, None);
-                        database.relationship_add(fileid, tagid);
-                    }
-            */
-            return Some(file_id);
-        }
-        download::FileReturnStatus::DeadUrl(dead_url) => {
-            database.add_dead_url(&dead_url);
-        }
-        _ => {}
-    }
-
-    None
-}
 /*
 /// Simple code to add jobs from a tag object
 fn parse_jobs(
@@ -663,231 +574,6 @@ fn parse_jobs(
     //}
 }
 */
-/// Parses weather we should skip downloading the file
-/// Returns a Some(u64) if the fileid exists
-fn parse_skipif(
-    skip_condition: &sharedtypes::SkipIf,
-    file_url_source: &String,
-    database: Main,
-    worker_id: &u64,
-    job_id: &u64,
-) -> Option<u64> {
-    match skip_condition {
-        sharedtypes::SkipIf::NoFilesDownloaded => {}
-        sharedtypes::SkipIf::FileHash(sha512hash) => {
-            return database.file_get_hash(sha512hash);
-        }
-        sharedtypes::SkipIf::FileNamespaceNumber((unique_tag, namespace_filter, filter_number)) => {
-            let mut cnt = 0;
-            let fids;
-            if let Some(nidf) = &database.namespace_get(&namespace_filter.name)
-                && let Some(nid) = database.namespace_get(&unique_tag.namespace.name)
-                && let Some(tid) = &database.tag_get_name(unique_tag.tag.clone(), nid)
-            {
-                fids = database.relationship_get_fileid(tid);
-                if fids.len() == 1 {
-                    let fid = fids.iter().next().unwrap();
-                    for tidtofilter in database.relationship_get_tagid(fid).iter() {
-                        if database.namespace_contains_id(nidf, tidtofilter) {
-                            //if database.namespace_contains_id(nidf, tidtofilter) {
-                            cnt += 1;
-                        }
-                    }
-                }
-            } else {
-                return None;
-            }
-            if cnt > *filter_number {
-                info_log(format!(
-                    "Not downloading because unique namespace is greater then limit number. {}",
-                    unique_tag.tag
-                ));
-            } else {
-                info_log(
-                    "Downloading due to unique namespace not existing or number less then limit number.".to_string(),
-                );
-                let vec: Vec<u64> = fids.iter().cloned().collect();
-                return Some(vec[0]);
-            }
-        }
-        sharedtypes::SkipIf::FileTagRelationship(tag) => {
-            if let Some(nsid) = database.namespace_get(&tag.namespace.name)
-                && database.tag_get_name(tag.tag.to_string(), nsid).is_some()
-            {
-                info_log(format!(
-                    "Worker: {worker_id} JobId: {job_id} -- Skipping file: {} Due to skip tag {} already existing in Tags Table.",
-                    file_url_source, tag.tag
-                ));
-                if let Some(tid) = database.tag_get_name(tag.tag.to_string(), nsid) {
-                    return database.relationship_get_one_fileid(&tid);
-                }
-            }
-        }
-    }
-    None
-}
 
-/// Main file checking loop manages the downloads
-pub fn main_file_loop(
-    file: &mut sharedtypes::FileObjectMain,
-    database: Main,
-    ratelimiter_obj: Arc<RwLock<Ratelimiter>>,
-    globalload: GlobalLoad,
-    client: Arc<RwLock<Client>>,
-    jobstorage: Arc<RwLock<crate::jobs::Jobs>>,
-    scraper: &sharedtypes::GlobalPluginScraper,
-    worker_id: &u64,
-    job_id: &u64,
-    uisender: Arc<tokio::sync::mpsc::UnboundedSender<UIScraper>>,
-    file_ui: &FileStorage,
-    file_ui_list: Arc<RwLock<Vec<FileStorage>>>,
-) {
-    let mut fileid = None;
-    let source_url_id = database.create_default_source_url_ns_id();
 
-    match file.source.clone() {
-        Some(source) => match source {
-            sharedtypes::FileSource::Url(source_url_list) => {
-                if source_url_list.is_empty() {
-                    return;
-                }
 
-                'source_list: for source_url in source_url_list {
-                    if fileid.is_some() {
-                        continue;
-                    }
-
-                    for file_tag in file.skip_if.iter() {
-                        if let Some(file_id) =
-                            parse_skipif(file_tag, &source_url, database.clone(), worker_id, job_id)
-                        {
-                            database.add_tags_to_fileid(Some(file_id), &file.tag_list);
-                            return;
-                        }
-                    }
-
-                    let location = database.location_get();
-                    let url_tag = database.tag_get_name(source_url.clone(), source_url_id);
-
-                    // === FIX: Clone our shared list handle for safely escaping the iteration block ===
-                    let loop_ui_list_clone = Arc::clone(&file_ui_list);
-
-                    fileid = match url_tag {
-                        None => {
-                            // Update UI State to Downloading using idiomatic .find() execution
-                            {
-                                let mut list_guard = loop_ui_list_clone.write();
-                                if let Some(target) =
-                                    list_guard.iter_mut().find(|f| **f == *file_ui)
-                                {
-                                    target.status = FilesStatus::Downloading(0.0);
-                                }
-                            }
-
-                            let current_snapshot = loop_ui_list_clone.read().to_vec();
-                            let _ = uisender.send(UIScraper {
-                                worker: *worker_id,
-                                name: scraper.name.clone(),
-                                status: ScraperStatus::Running,
-                                files: current_snapshot,
-                            });
-
-                            match download_add_to_db(
-                                ratelimiter_obj.clone(),
-                                &source_url,
-                                location,
-                                globalload.clone(),
-                                client.clone(),
-                                database.clone(),
-                                file,
-                                worker_id,
-                                job_id,
-                                scraper,
-                                file_ui.clone(),
-                                loop_ui_list_clone, // Safely forward the iteration local handle
-                                uisender.clone(),
-                            ) {
-                                None => continue 'source_list,
-                                Some(out) => Some(out),
-                            }
-                        }
-                        Some(url_id) => {
-                            // Update UI State to Done
-                            {
-                                let mut list_guard = loop_ui_list_clone.write();
-                                if let Some(target) =
-                                    list_guard.iter_mut().find(|f| **f == *file_ui)
-                                {
-                                    target.status = FilesStatus::Done;
-                                }
-                            }
-
-                            let current_snapshot = loop_ui_list_clone.read().to_vec();
-                            let _ = uisender.send(UIScraper {
-                                worker: *worker_id,
-                                name: scraper.name.clone(),
-                                status: ScraperStatus::Running,
-                                files: current_snapshot,
-                            });
-
-                            let file_id = database.relationship_get_one_fileid(&url_id);
-
-                            match file_id {
-                                Some(f_id) => {
-                                    info_log(format!(
-                                        "Worker: {worker_id} JobId: {job_id} -- Skipping file: {} Due to already existing in Tags Table.",
-                                        &source_url
-                                    ));
-                                    Some(f_id)
-                                }
-                                None => {
-                                    match download_add_to_db(
-                                        ratelimiter_obj.clone(),
-                                        &source_url,
-                                        location,
-                                        globalload.clone(),
-                                        client.clone(),
-                                        database.clone(),
-                                        file,
-                                        worker_id,
-                                        job_id,
-                                        scraper,
-                                        file_ui.clone(),
-                                        loop_ui_list_clone, // Safely forward the iteration local handle
-                                        uisender.clone(),
-                                    ) {
-                                        None => continue 'source_list,
-                                        Some(id) => Some(id),
-                                    }
-                                }
-                            }
-                        }
-                    };
-                    break 'source_list;
-                }
-            }
-            sharedtypes::FileSource::Bytes(bytes) => {
-                let bytes = &bytes::Bytes::from(bytes);
-                let file_ext = FileFormat::from_bytes(bytes).extension().to_string();
-                let sha512 = hash_bytes(bytes, &sharedtypes::HashesSupported::Sha512("".into()));
-
-                process_bytes(
-                    bytes,
-                    Some(globalload.clone()),
-                    &sha512.0,
-                    &file_ext,
-                    database.clone(),
-                    file,
-                    None,
-                    uisender.clone(),
-                    file_ui,
-                    file_ui_list.clone(),
-                );
-
-                fileid = database.file_get_hash(&sha512.0);
-                database.add_tags_to_fileid(fileid, &file.tag_list);
-            }
-        },
-        None => return,
-    }
-}

@@ -857,7 +857,7 @@ HAVING COUNT(r.fileid) {dir} ?;"
         }
     }
 
-  /*  ///
+    /*  ///
     /// Gets all jobs from the sql tables
     ///
     pub(in crate::database) fn jobs_get_all_sql(&self) -> HashMap<u64, sharedtypes::DbJobsObj> {
@@ -877,12 +877,12 @@ HAVING COUNT(r.fileid) {dir} ?;"
     ///
     /// Better way to get all jobs from db in a more direct way
     ///
-    pub(in crate::database) fn jobs_get_all_sql(&self, tn: &Transaction) -> HashMap<u64, sharedtypes::DbJobsObj> {
-
-        let mut stmt = tn
-            .prepare("SELECT * FROM Jobs")
-            .unwrap();
-      let temp =  wait_until_sqlite_ok!(stmt.query_map( params![], |row| {
+    pub(in crate::database) fn jobs_get_all_sql(
+        &self,
+        tn: &Transaction,
+    ) -> HashMap<u64, sharedtypes::DbJobsObj> {
+        let mut stmt = tn.prepare("SELECT * FROM Jobs").unwrap();
+        let temp = wait_until_sqlite_ok!(stmt.query_map(params![], |row| {
             let id = row.get(0).unwrap();
             let time = row.get(1).unwrap();
             let reptime = row.get(2).unwrap();
@@ -914,12 +914,11 @@ HAVING COUNT(r.fileid) {dir} ?;"
         }))
         .unwrap();
 
-let mut out = HashMap::new();
-for item in temp.flatten() {
-    out.insert(item.id.unwrap(), item);
-}
-out
-
+        let mut out = HashMap::new();
+        for item in temp.flatten() {
+            out.insert(item.id.unwrap(), item);
+        }
+        out
     }
 
     ///

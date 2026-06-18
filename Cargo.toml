@@ -65,6 +65,7 @@ ratatui = "0.29.0"
 crossterm = {version="*", features=["event-stream"]}
 ratatui-garnish = "0.1.0"
 sharedtypes = { path = "./libs/sharedtypes" }
+futures-util = "0.3.32"
 
 [dev-dependencies]
 

@@ -1,15 +1,16 @@
 use crate::Main;
-use crate::globalload::GlobalLoad;
+use crate::downloadlogic::LocalStorage;
 use crate::logging::error_log;
 
 // extern crate urlparse;
 use crate::logging;
+use crate::logging::info_log;
 use bytes::Bytes;
 use core::time;
 use file_format::FileFormat;
 use log::{error, info};
-use reqwest::blocking::Client;
-use reqwest::blocking::ClientBuilder;
+use reqwest::Client;
+use reqwest::ClientBuilder;
 use reqwest::header::HeaderMap;
 use reqwest::header::HeaderName;
 use reqwest::header::HeaderValue;
@@ -87,12 +88,11 @@ pub fn get_modifiers(
 ///
 /// Waits a bit for process control
 ///
-pub fn ratelimiter_wait(ratelimit_object: &Arc<RwLock<Ratelimiter>>) {
+pub fn ratelimiter_wait(ratelimit_object: &Arc<Ratelimiter>) {
     loop {
         let limit;
         {
-            let hold = ratelimit_object.read();
-            limit = hold.try_wait();
+            limit = ratelimit_object.try_wait();
         }
         match limit {
             Ok(_) => break,
@@ -128,7 +128,7 @@ fn process_modifiers(
                 client = client.user_agent(useragent);
             }
             sharedtypes::ScraperModifiers::Timeout(timeout) => {
-                client = client.timeout(timeout);
+                client = client.timeout(timeout.unwrap_or(Duration::from_secs(0)));
             }
         }
     }
@@ -149,7 +149,8 @@ pub fn client_create(
 
     loop {
         // The client that does the downloading
-        let mut client = reqwest::blocking::ClientBuilder::new()
+        let mut client = reqwest::ClientBuilder::new()
+            .pool_max_idle_per_host(100)
             //.cookie_provider(jar.into())
             .cookie_store(false)
             .user_agent(&useragent)
@@ -178,10 +179,11 @@ pub fn client_create(
 pub async fn dltext_new(
     url_string: &String,
     post_data: Option<String>,
-    client: Arc<RwLock<Client>>,
-    ratelimiter_obj: &Arc<RwLock<Ratelimiter>>,
+    client: Arc<Client>,
+    ratelimiter_obj: &Arc<Ratelimiter>,
     worker_id: &u64,
-) -> Result<(String, String), Box<dyn Error>> {
+    job_id: &u64,
+) -> Result<(String, String), Box<dyn Error + Send + Sync>> {
     // let mut ret: Vec<AHashMap<String, AHashMap<String, Vec`<String>`>>> =
     // Vec::new(); let ex = Executor::new(); let url =
     // Url::parse("http://www.google.com").unwrap();
@@ -202,20 +204,15 @@ pub async fn dltext_new(
         // .unwrap()
         ratelimiter_wait(ratelimiter_obj);
         logging::info_log(format!(
-            "Worker: {} -- Spawned web reach to: {}",
-            worker_id, &url_string
+            "Worker: {} JobId: {} -- Spawned web reach to: {}",
+            worker_id, job_id, &url_string
         ));
 
         let futureresult = match post_data {
-            None => client.read().get(url).header("Accept", "text/css").send(),
-            Some(ref post_data_string) => client
-                .read()
-                .post(url)
-                .body(post_data_string.clone())
-                .header("Origin", "https://furry34.com")
-                .header("Content-Type", "application/json")
-                .send(),
-        };
+            None => client.get(url).header("Accept", "text/css").send(),
+            Some(ref post_data_string) => client.post(url).body(post_data_string.clone()).send(),
+        }
+        .await;
 
         // let test = reqwest::get(url).await.unwrap().text(); let futurez =
         // futures::executor::block_on(futureresult); dbg!(&futureresult);
@@ -238,8 +235,8 @@ pub async fn dltext_new(
                         let time_secs = 5;
                         std::thread::sleep(std::time::Duration::from_secs(time_secs));
                         logging::error_log(format!(
-                            "Worker: {} -- While processing job {:?} was unable to download text. Had err {:?} sleeping for {} seconds.",
-                            &worker_id, &url_string, err, time_secs
+                            "Worker: {} JobId: {} -- While processing job {:?} was unable to download text. Had err {:?} sleeping for {} seconds.",
+                            &worker_id, &job_id, &url_string, err, time_secs
                         ));
 
                         continue;
@@ -247,7 +244,7 @@ pub async fn dltext_new(
                     return Err(Box::new(err));
                 } else {
                     let res_url = res.url().to_string();
-                    match res.text() {
+                    match res.text().await {
                         Ok(text) => {
                             return Ok((text, res_url));
                         }
@@ -263,8 +260,8 @@ pub async fn dltext_new(
                     let time_secs = 5;
                     std::thread::sleep(std::time::Duration::from_secs(time_secs));
                     logging::error_log(format!(
-                        "Worker: {} -- While processing job {:?} was unable to download text. Had err {:?} sleeping for {} seconds.",
-                        &worker_id, &url_string, err, time_secs
+                        "Worker: {} JobId: {} -- While processing job {:?} was unable to download text. Had err {:?} sleeping for {} seconds.",
+                        &worker_id, &job_id, &url_string, err, time_secs
                     ));
 
                     cnt += 1;
@@ -412,47 +409,42 @@ pub enum FileReturnStatus {
     TryLater,
 }
 
-/// Downloads file to position
-pub fn dlfile_new(
-    client: Arc<RwLock<Client>>,
-    db: Main,
+/// Downloads file to position asynchronously
+pub async fn dlfile_new(
+    client: Arc<reqwest::Client>,
     file: &mut sharedtypes::FileObjectMain,
-    globalload: Option<GlobalLoad>,
-    ratelimiter_obj: &Arc<RwLock<Ratelimiter>>,
     source_url: &String,
     workerid: &u64,
     jobid: &u64,
     scraper: Option<&sharedtypes::GlobalPluginScraper>,
-    file_ui: FileStorage,
-    file_ui_list: Arc<RwLock<Vec<FileStorage>>>,
-    uisender: Arc<tokio::sync::mpsc::UnboundedSender<UIScraper>>,
+    ctx: Arc<LocalStorage>,
+    ratelimiter_obj: &Arc<Ratelimiter>,
+    file_storage: Option<FileStorage>,
 ) -> FileReturnStatus {
     let mut boolloop = true;
     let mut hash = String::new();
     let mut bytes: Option<bytes::Bytes> = None;
-
+    let throttle_duration = tokio::time::Duration::from_millis(200); // 5 times a second max per file
+    let mut last_ui_update = tokio::time::Instant::now();
     let should_scraper_download = match scraper {
         Some(scraper) => scraper.should_handle_file_download,
         None => false,
     };
 
-    if should_scraper_download {
-        if let Some(ref globalload) = globalload
-            && let Some(scraper) = scraper
-        {
-            match globalload.download_from(file.clone(), scraper) {
-                None => {
-                    logging::log(format!("Could not pull info for file {:?}", &file));
-                }
-                Some(filebytes) => {
-                    bytes = Some(Bytes::from(filebytes));
-                }
+    if should_scraper_download && let Some(scraper) = scraper {
+        match ctx.globalload.download_from(file.clone(), scraper) {
+            None => {
+                logging::log(format!("Could not pull info for file {:?}", &file));
+            }
+            Some(filebytes) => {
+                bytes = Some(Bytes::from(filebytes));
             }
         }
     } else {
         let mut cnt = 0;
         while boolloop {
             let mut hasher = Sha512::new();
+
             let mut response = loop {
                 if cnt >= 3 {
                     return FileReturnStatus::TryLater;
@@ -460,7 +452,7 @@ pub fn dlfile_new(
                 let _fileurlmatch = match &file.source {
                     None => {
                         panic!(
-                            "Tried to call dlfilenew when their was no file :C info: {:?}",
+                            "Tried to call dlfilenew when there was no file :C info: {:?}",
                             file
                         );
                     }
@@ -472,15 +464,26 @@ pub fn dlfile_new(
                     return FileReturnStatus::DeadUrl(source_url.to_string());
                 }
                 let url = url.unwrap();
-                ratelimiter_wait(ratelimiter_obj);
+
+                // FIX: Offload synchronous ratelimiter to a blocking thread pool safely
+                let limiter = Arc::clone(ratelimiter_obj);
+                tokio::task::spawn_blocking(move || {
+                    ratelimiter_wait(&limiter);
+                })
+                .await
+                .unwrap();
+
                 logging::info_log(format!("Downloading: {}", &source_url));
 
-                let futureresult = {
-                    let client = client.read();
-                    client.get(url.as_ref()).send()
-                };
+                // Assuming post_data logic exists based on your compiler error snippet
+                let response_result = { client.get(url.as_ref()).send().await };
 
-                match futureresult {
+                // FIX: Check errors against our evaluated result variable
+                if cnt >= 3 && response_result.is_err() {
+                    return FileReturnStatus::TryLater;
+                }
+
+                match response_result {
                     Ok(res) => {
                         if let Err(err) = res.error_for_status_ref() {
                             if let Some(status) = err.status() {
@@ -490,7 +493,7 @@ pub fn dlfile_new(
                                         err,
                                         &url.to_string()
                                     ));
-                                    thread::sleep(Duration::from_secs(10));
+                                    tokio::time::sleep(Duration::from_secs(10)).await;
                                     cnt += 1;
                                     continue;
                                 }
@@ -507,76 +510,59 @@ pub fn dlfile_new(
                     }
                     Err(_) => {
                         error!("Worker: {workerid} JobID: {jobid} -- Repeating: {}", &url);
-                        thread::sleep(Duration::from_secs(10));
+                        tokio::time::sleep(Duration::from_secs(10)).await;
                         cnt += 1;
                     }
                 }
             };
 
-            // === INCREMENTAL PROGRESS LOGIC ===
-            // === CHUNK PROGRESS REWRITE ===
+            // === ASYNC CHUNK PROGRESS REWRITE ===
             let total_size = response.content_length().unwrap_or(0);
             let mut downloaded: u64 = 0;
-            let mut buffer = [0; 4096];
             let mut collected_bytes = bytes::BytesMut::with_capacity(if total_size > 0 {
                 total_size as usize
             } else {
                 1024
             });
 
-            // Track the actual raw percentage or raw MBs without flattening it to an int too early
             let mut last_reported_progress: f64 = -1.0;
             let mut download_success = true;
 
-            loop {
-                match response.read(&mut buffer) {
-                    Ok(0) => break, // EOF reached cleanly
-                    Ok(bytes_read) => {
-                        collected_bytes.extend_from_slice(&buffer[..bytes_read]);
-                        downloaded += bytes_read as u64;
+            // FIX: Uses Reqwest's built-in async stream loops directly, removing type inference bugs
+            while let Ok(Some(chunk)) = response.chunk().await {
+                let bytes_read = chunk.len();
+                collected_bytes.extend_from_slice(&chunk);
+                downloaded += bytes_read as u64;
 
-                        // 1. Calculate progress as a precise float
-                        let current_progress = if total_size > 0 {
-                            (downloaded as f64 / total_size as f64) * 100.0
-                        } else {
-                            // Fallback: Total MB downloaded so far
-                            (downloaded as f64) / (1024.0 * 1024.0)
-                        };
+                let current_progress = if total_size > 0 {
+                    (downloaded as f64 / total_size as f64) * 100.0
+                } else {
+                    (downloaded as f64) / (1024.0 * 1024.0)
+                };
 
-                        // 2. Adjust threshold: update if progress changes by 0.1% (or 0.1 MB)
-                        // to ensure smooth tracking even for smaller files
-                        if (current_progress - last_reported_progress).abs() >= 0.1 {
-                            // 3. Round only for UI display purposes if desired, or send the raw float
-                            let display_progress = current_progress;
+                if (current_progress - last_reported_progress).abs() >= 0.1 {
 
-                            {
-                                let mut list_guard = file_ui_list.write();
-                                if let Some(target_file) = list_guard
-                                    .iter_mut()
-                                    .find(|f| f.internal_id == file_ui.internal_id)
-                                {
-                                    target_file.status = FilesStatus::Downloading(display_progress);
-                                }
-                            }
-
-                            let _ = uisender.send(UIScraper {
-                                worker: *workerid,
-                                name: scraper.map_or(String::new(), |s| s.name.clone()),
-                                status: ScraperStatus::Running,
-                                files: file_ui_list.read().clone(),
-                            });
-
-                            last_reported_progress = current_progress;
+                    if let Some(mut file_storage) = file_storage.clone() {
+                        let now = tokio::time::Instant::now();
+                        if now.duration_since(last_ui_update) >= throttle_duration
+                            || current_progress >= 100.0
+                        {
+                            file_storage.status = FilesStatus::Downloading(current_progress);
+                            ctx.update_file(workerid, jobid, &file_storage);
+                            last_ui_update = now;
                         }
                     }
-                    Err(e) => {
-                        error!(
-                            "Worker: {workerid} JobID: {jobid} -- Stream broken midway: {:?}",
-                            e
-                        );
-                        download_success = false;
-                        break;
-                    }
+                    /*  {
+                        let mut list_guard = file_ui_list.write();
+                        if let Some(target_file) = list_guard
+                            .iter_mut()
+                            .find(|f| f.internal_id == file_ui.internal_id)
+                        {
+                            target_file.status = FilesStatus::Downloading(display_progress);
+                        }
+                    }*/
+
+                    last_reported_progress = current_progress;
                 }
             }
 
@@ -613,8 +599,13 @@ pub fn dlfile_new(
     }
     logging::info_log(format!("Downloaded hash: {}", &hash));
 
-    // After downloading out of loop, safely change UI status to Processing rules
-    {
+    if let Some(ref mut file_storage) = file_storage.clone() {
+        file_storage.status = FilesStatus::Processing(0.0);
+
+        ctx.update_file(workerid, jobid, &file_storage)
+    }
+
+    /*  {
         let mut list_guard = file_ui_list.write();
         if let Some(target_file) = list_guard
             .iter_mut()
@@ -622,25 +613,18 @@ pub fn dlfile_new(
         {
             target_file.status = FilesStatus::Processing(0.0);
         }
-    }
+    }*/
 
     if let Some(ref bytes) = bytes {
         let file_ext = FileFormat::from_bytes(bytes).extension().to_string();
-        let file_id = process_bytes(
-            bytes,
-            globalload,
-            &hash,
-            &file_ext,
-            db,
-            file,
-            Some(source_url),
-            uisender,
-            &file_ui,
-            file_ui_list.clone(),
-        );
 
-        // Final state change: File is completed!
-        {
+        let file_id = process_bytes(bytes, &hash, &file_ext, file, Some(source_url), ctx.clone());
+
+        if let Some(mut file_storage) = file_storage.clone() {
+            file_storage.status = FilesStatus::Done;
+                ctx.update_file(workerid, jobid, &file_storage);
+        }
+        /* {
             let mut list_guard = file_ui_list.write();
             if let Some(target_file) = list_guard
                 .iter_mut()
@@ -648,7 +632,7 @@ pub fn dlfile_new(
             {
                 target_file.status = FilesStatus::Done;
             }
-        }
+        }*/
 
         return FileReturnStatus::File((hash, file_ext, file_id.unwrap()));
     }
@@ -661,17 +645,13 @@ pub fn dlfile_new(
 ///
 pub fn process_bytes(
     bytes: &Bytes,
-    globalload: Option<GlobalLoad>,
     hash: &String,
     file_ext: &String,
-    db: Main,
     file: &mut sharedtypes::FileObjectMain,
     source_url: Option<&String>,
-    uisender: Arc<tokio::sync::mpsc::UnboundedSender<UIScraper>>,
-    file_ui: &FileStorage,
-    file_ui_list: Arc<RwLock<Vec<FileStorage>>>,
+    ctx: Arc<LocalStorage>,
 ) -> Option<u64> {
-    {
+    /* {
         let mut list_guard = file_ui_list.write();
         if let Some(target) = list_guard
             .iter_mut()
@@ -679,14 +659,17 @@ pub fn process_bytes(
         {
             target.status = FilesStatus::Processing(0.0);
         }
-    }
+    }*/
 
     let mut out = None;
     // NOTE run the download / file actions first then run the plugin_on_download second.
     // That way if theirs any data that needs to get processed then we can do it while theirs a
     // valid file hash inside of the db
     {
-        if let Some(file_id) = db.enclave_determine_processing(file, bytes, hash, source_url) {
+        if let Some(file_id) = ctx
+            .db
+            .enclave_determine_processing(file, bytes, hash, source_url)
+        {
             out = Some(file_id);
         }
     }
@@ -697,13 +680,12 @@ pub fn process_bytes(
     // If the plugin manager is None then don't do anything plugin wise. Useful for if
     // doing something that we CANNOT allow plugins to run.
     {
-        if let Some(globalload) = globalload {
-            globalload.plugin_on_download(db.clone(), bytes, hash, file_ext);
-        }
+        ctx.globalload
+            .plugin_on_download(ctx.db.clone(), bytes, hash, file_ext);
     }
 
-    db.add_tags_to_fileid(out, &file.tag_list);
-    {
+    ctx.db.add_tags_to_fileid(out, &file.tag_list);
+    /* {
         let mut list_guard = file_ui_list.write();
         if let Some(target) = list_guard
             .iter_mut()
@@ -711,7 +693,7 @@ pub fn process_bytes(
         {
             target.status = FilesStatus::Processing(100.0);
         }
-    }
+    }*/
     out
 }
 
@@ -792,4 +774,263 @@ pub fn write_to_disk(
 
         thread::sleep(Duration::from_secs(1));
     }
+}
+///
+/// Creates a relelimiter object
+pub fn create_ratelimiter(
+    input: (u64, Duration),
+    worker_id: &u64,
+    job_id: &u64,
+) -> Arc<Ratelimiter> {
+    Arc::new(ratelimiter_create(worker_id, job_id, input.0, input.1))
+}
+
+/// Parses weather we should skip downloading the file
+/// Returns a Some(u64) if the fileid exists
+pub fn parse_skipif(
+    skip_condition: &sharedtypes::SkipIf,
+    file_url_source: &String,
+    database: Main,
+    worker_id: &u64,
+    job_id: &u64,
+    ctx: &Arc<LocalStorage>,
+) -> Option<u64> {
+    match skip_condition {
+        sharedtypes::SkipIf::NoFilesDownloaded => {}
+        sharedtypes::SkipIf::FileHash(sha512hash) => {
+            return ctx.db.file_get_hash(sha512hash);
+        }
+        sharedtypes::SkipIf::FileNamespaceNumber((unique_tag, namespace_filter, filter_number)) => {
+            let mut cnt = 0;
+            let fids;
+            if let Some(nidf) = &ctx.db.namespace_get(&namespace_filter.name)
+                && let Some(nid) = ctx.db.namespace_get(&unique_tag.namespace.name)
+                && let Some(tid) = &ctx.db.tag_get_name(unique_tag.tag.clone(), nid)
+            {
+                fids = ctx.db.relationship_get_fileid(tid);
+                if fids.len() == 1 {
+                    let fid = fids.iter().next().unwrap();
+                    for tidtofilter in ctx.db.relationship_get_tagid(fid).iter() {
+                        if ctx.db.namespace_contains_id(nidf, tidtofilter) {
+                            //if ctx.db.namespace_contains_id(nidf, tidtofilter) {
+                            cnt += 1;
+                        }
+                    }
+                }
+            } else {
+                return None;
+            }
+            if cnt > *filter_number {
+                info_log(format!(
+                    "Not downloading because unique namespace is greater then limit number. {}",
+                    unique_tag.tag
+                ));
+            } else {
+                info_log(
+                    "Downloading due to unique namespace not existing or number less then limit number.".to_string(),
+                );
+                let vec: Vec<u64> = fids.iter().cloned().collect();
+                return Some(vec[0]);
+            }
+        }
+        sharedtypes::SkipIf::FileTagRelationship(tag) => {
+            if let Some(nsid) = ctx.db.namespace_get(&tag.namespace.name)
+                && ctx.db.tag_get_name(tag.tag.to_string(), nsid).is_some()
+            {
+                info_log(format!(
+                    "Worker: {worker_id} JobId: {job_id} -- Skipping file: {} Due to skip tag {} already existing in Tags Table.",
+                    file_url_source, tag.tag
+                ));
+                if let Some(tid) = ctx.db.tag_get_name(tag.tag.to_string(), nsid) {
+                    return ctx.db.relationship_get_one_fileid(&tid);
+                }
+            }
+        }
+    }
+    None
+}
+
+/// Main file checking loop manages the downloads
+pub async fn main_file_loop(
+    file: &mut sharedtypes::FileObjectMain,
+    client: Arc<Client>,
+    scraper: &sharedtypes::GlobalPluginScraper,
+    worker_id: &u64,
+    job_id: &u64,
+    ctx: Arc<LocalStorage>,
+    ratelimiter_obj: &Arc<Ratelimiter>,
+    file_storage: Option<FileStorage>,
+) {
+    let mut fileid = None;
+    //let task_id = file_storage.internal_id; // Unique identifier for tracking logs
+
+    let source_url_id = ctx.db.create_default_source_url_ns_id();
+
+    match file.source.clone() {
+        Some(source) => match source {
+            sharedtypes::FileSource::Url(source_url) => {
+                let skipif_start = std::time::Instant::now();
+                for file_tag in file.skip_if.iter() {
+                    if let Some(file_id) = parse_skipif(
+                        file_tag,
+                        &source_url,
+                        ctx.db.clone(),
+                        worker_id,
+                        job_id,
+                        &ctx.clone(),
+                    ) {
+                        if let Some(file_storage) = file_storage {
+                            let mut file_storage = file_storage.clone();
+                            file_storage.status = FilesStatus::Done;
+                            ctx.update_file(worker_id, job_id, &file_storage);
+                        }
+                        ctx.db.add_tags_to_fileid(Some(file_id), &file.tag_list);
+                        return;
+                    }
+                }
+                let location = ctx.db.location_get();
+                let url_tag = ctx.db.tag_get_name(source_url.clone(), source_url_id);
+                //
+                // === FIX: Clone our shared list handle for safely escaping the iteration block ===
+                //let loop_ui_list_clone = Arc::clone(&file_ui_list);
+
+                fileid = match url_tag {
+                    None => {
+                        match download_add_to_db(
+                            &source_url,
+                            location,
+                            client,
+                            file,
+                            worker_id,
+                            job_id,
+                            scraper,
+                            ctx,
+                            ratelimiter_obj,
+                            file_storage,
+                        )
+                        .await
+                        {
+                            None => {
+                                return;
+                            }
+                            Some(out) => Some(out),
+                        }
+                    }
+                    Some(url_id) => {
+                        let file_id = ctx.db.relationship_get_one_fileid(&url_id);
+
+                        match file_id {
+                            Some(f_id) => {
+                                // Updates UI to show that the file is already finished
+                                if let Some(mut file_storage) = file_storage.clone() {
+                                    file_storage.status = FilesStatus::Done;
+                                    ctx.update_file(worker_id, job_id, &file_storage);
+                                }
+                                info_log(format!(
+                                    "Worker: {worker_id} JobId: {job_id} -- Skipping file: {} Due to already existing in Tags Table.",
+                                    &source_url
+                                ));
+                                Some(f_id)
+                            }
+                            None => {
+                                match download_add_to_db(
+                                    &source_url,
+                                    location,
+                                    client,
+                                    file,
+                                    worker_id,
+                                    job_id,
+                                    scraper,
+                                    ctx,
+                                    &ratelimiter_obj.clone(),
+                                    file_storage,
+                                )
+                                .await
+                                {
+                                    None => return,
+                                    Some(id) => Some(id),
+                                }
+                            }
+                        }
+                    }
+                };
+            }
+            sharedtypes::FileSource::Bytes(bytes) => {
+                let bytes = &bytes::Bytes::from(bytes);
+                let file_ext = FileFormat::from_bytes(bytes).extension().to_string();
+                let sha512 = hash_bytes(bytes, &sharedtypes::HashesSupported::Sha512("".into()));
+
+                process_bytes(bytes, &sha512.0, &file_ext, file, None, ctx.clone());
+
+                fileid = ctx.db.file_get_hash(&sha512.0);
+                ctx.db.add_tags_to_fileid(fileid, &file.tag_list);
+            }
+        },
+        None => {
+            // Has a file but no source???
+            if let Some(mut file_storage) = file_storage.clone() {
+                file_storage.status = FilesStatus::Done;
+                ctx.update_file(worker_id, job_id, &file_storage);
+            }
+            return;
+        }
+    }
+}
+
+///
+/// Downloads a file into the db if needed
+///
+async fn download_add_to_db(
+    source: &String,
+    _location: String,
+    client: Arc<Client>,
+    file: &mut sharedtypes::FileObjectMain,
+    worker_id: &u64,
+    job_id: &u64,
+    scraper: &sharedtypes::GlobalPluginScraper,
+    ctx: Arc<LocalStorage>,
+    ratelimiter_obj: &Arc<Ratelimiter>,
+    file_storage: Option<FileStorage>,
+) -> Option<u64> {
+    // Early exit for if the file is a dead url
+    {
+        if ctx.db.check_dead_url(source) {
+            logging::info_log(format!(
+                "Worker: {worker_id} JobID: {job_id} -- Skipping {} because it's a dead link.",
+                source
+            ));
+            return None;
+        }
+    }
+
+    let blopt;
+    {
+        //let mut_client = &mut client.write();
+
+        // Download file doesn't exist. URL doesn't exist in DB Will download
+        blopt = dlfile_new(
+            client,
+            file,
+            &source,
+            worker_id,
+            job_id,
+            Some(scraper),
+            ctx.clone(),
+            &ratelimiter_obj,
+            file_storage,
+        )
+        .await;
+    }
+
+    match blopt {
+        FileReturnStatus::File((_hash, _file_ext, file_id)) => {
+            return Some(file_id);
+        }
+        FileReturnStatus::DeadUrl(dead_url) => {
+            ctx.db.add_dead_url(&dead_url);
+        }
+        _ => {}
+    }
+
+    None
 }

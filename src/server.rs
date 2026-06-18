@@ -5,7 +5,6 @@ use crate::download;
 use crate::globalload::GlobalLoad;
 use crate::jobs::Jobs;
 use crate::logging;
-use crate::threading;
 use anyhow::Context;
 
 use crate::Mutex;
@@ -408,9 +407,6 @@ pub fn dbactions_to_function(
     mut globalload: GlobalLoad,
     jobmanager: Arc<RwLock<Jobs>>,
 ) -> Vec<u8> {
-    let (uisender, uireciever) = tokio::sync::mpsc::unbounded_channel();
-    let uisender = Arc::new(uisender);
-
     match dbaction {
         types::SupportedDBRequests::GetFileIdsWhereExtensionIs(file_extension_type) => {
             let file_ids = match file_extension_type {
@@ -460,15 +456,15 @@ pub fn dbactions_to_function(
             data_size_to_b(&true)
         }
         types::SupportedDBRequests::PutFileNoBlock((mut file, ratelimit)) => {
-            let mut global_pluginscraper = sharedtypes::return_default_globalpluginparser();
+            /*  let mut global_pluginscraper = sharedtypes::return_default_globalpluginparser();
             global_pluginscraper.name = "InternalFileAdd".to_string();
-            let ratelimiter_obj = threading::create_ratelimiter(ratelimit, &0, &0);
+            let ratelimiter_obj = download::create_ratelimiter(ratelimit, &0, &0);
             let manageeplugin = globalload.clone();
             let client = Arc::new(RwLock::new(download::client_create(vec![], false)));
             let jobstorage = jobmanager.clone();
             let database = database.clone();
             let thread = thread::spawn(move || {
-                threading::main_file_loop(
+                download::main_file_loop(
                     &mut file,
                     database,
                     ratelimiter_obj,
@@ -486,20 +482,20 @@ pub fn dbactions_to_function(
                     },
                     Arc::new(RwLock::new(vec![])),
                 );
-            });
+            });*/
 
             data_size_to_b(&true)
         }
 
         types::SupportedDBRequests::PutFile((mut file, ratelimit)) => {
-            let mut global_pluginscraper = sharedtypes::return_default_globalpluginparser();
+            /*  let mut global_pluginscraper = sharedtypes::return_default_globalpluginparser();
             global_pluginscraper.name = "InternalFileAdd".to_string();
 
-            let ratelimiter_obj = threading::create_ratelimiter(ratelimit, &0, &0);
+            let ratelimiter_obj = download::create_ratelimiter(ratelimit, &0, &0);
             let manageeplugin = globalload.clone();
             let client = Arc::new(RwLock::new(download::client_create(vec![], false)));
             let jobstorage = jobmanager.clone();
-            threading::main_file_loop(
+            download::main_file_loop(
                 &mut file,
                 database.clone(),
                 ratelimiter_obj,
@@ -516,7 +512,7 @@ pub fn dbactions_to_function(
                     hash: sharedtypes::HashesSupported::None,
                 },
                 Arc::new(RwLock::new(vec![])),
-            );
+            );*/
 
             data_size_to_b(&true)
         }
