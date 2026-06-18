@@ -99,12 +99,6 @@ fn db_file_sanity(dbloc: &str) {
 async fn main() -> io::Result<()> {
     memory_manage();
 
-    let mut terminal = ratatui::init();
-
-    let (uisender, uireciever) = tokio::sync::mpsc::unbounded_channel();
-
-    let mut app = App::new(uireciever);
-
     {
         // Makes Logging work
         logging::main(&DEFAULT_LOC_LOGNAME.to_string());
@@ -158,6 +152,13 @@ async fn main() -> io::Result<()> {
         //cli::main(database.clone(), globalload);
         cli::main(database.clone());
     }
+
+    let mut terminal = ratatui::init();
+
+    let (uisender, uireciever) = tokio::sync::mpsc::unbounded_channel();
+
+    let mut app = App::new(uireciever);
+
     {
         globalload.reload_regex();
         // Calls the on_start func for the plugins

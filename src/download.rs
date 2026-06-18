@@ -541,7 +541,6 @@ pub async fn dlfile_new(
                 };
 
                 if (current_progress - last_reported_progress).abs() >= 0.1 {
-
                     if let Some(mut file_storage) = file_storage.clone() {
                         let now = tokio::time::Instant::now();
                         if now.duration_since(last_ui_update) >= throttle_duration
@@ -622,7 +621,7 @@ pub async fn dlfile_new(
 
         if let Some(mut file_storage) = file_storage.clone() {
             file_storage.status = FilesStatus::Done;
-                ctx.update_file(workerid, jobid, &file_storage);
+            ctx.update_file(workerid, jobid, &file_storage);
         }
         /* {
             let mut list_guard = file_ui_list.write();
