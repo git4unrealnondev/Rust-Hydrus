@@ -75,7 +75,7 @@ pub fn on_regex_match(
     }];
 
     let _file = sharedtypes::FileObjectV1 {
-        source: Some(sharedtypes::FileSource::Url(vec![regex_match.to_string()])),
+        source: Some(sharedtypes::FileSource::Url(regex_match.to_string())),
         hash: sharedtypes::HashesSupported::None,
         tag_list,
         skip_if: vec![sharedtypes::SkipIf::FileTagRelationship(earlyexistag)],
