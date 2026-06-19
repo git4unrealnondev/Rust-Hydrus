@@ -719,7 +719,11 @@ PRAGMA journal_mode = WAL;
 
             if let Some(ref cache) = cache {
                 let cachemode = match cache.as_str() {
-                    "Bare" => Some(CacheType::Bare),
+                    "Bare" => {
+                        self.relationship_roaring_storage = None;
+
+                        Some(CacheType::Bare)
+                    }
                     "InMemdb" => Some(CacheType::InMemdb),
                     "RelationshipRoaringFull" => {
                         Some(CacheType::RelationshipRoaring(InternalCacheType::Full))

@@ -30,9 +30,6 @@ pub enum VideoSpacing {
 mod client;
 use sharedtypes;
 
-#[path = "../../../generated/client_api.rs"]
-mod client_api;
-
 use std::sync::atomic::AtomicUsize;
 use std::{
     collections::HashMap,
@@ -202,8 +199,6 @@ pub fn on_start() {
     use rayon::iter::IntoParallelRefIterator;
     use rayon::iter::ParallelIterator;
 
-    let api = client_api::RustHydrusApiClient::new("127.0.0.1:3030");
-
     let should_run = match client::settings_get_name(format!("{}-shouldrun", PLUGIN_NAME)) {
         None => {
             client::setting_add(
@@ -262,26 +257,24 @@ pub fn on_start() {
     // Gets namespace id if it doesn't exist then recreate
     let utable;
     {
-        utable = match api.namespace_get(&PLUGIN_NAME.to_string()).unwrap() {
-            None => api
-                .namespace_add(
-                    &PLUGIN_NAME.to_string(),
-                    &Some(PLUGIN_DESCRIPTION.to_string()),
-                )
-                .unwrap(),
+        utable = match client::namespace_get(PLUGIN_NAME.to_string()) {
+            None => client::namespace_put(
+                PLUGIN_NAME.to_string(),
+                Some(PLUGIN_DESCRIPTION.to_string()),
+            ),
             Some(id) => id,
         }
     }
 
     // Gets the tags inside a namespace
-    let nids = api.namespace_get_tagids(&utable).unwrap();
+    let nids = client::namespace_get_tagids(utable);
 
     // Removes the fileids that already have thumbnails
     for each in nids.iter() {
         if should_run == "Clear" {
-            api.delete_tag(each).unwrap();
+            client::tag_remove(*each);
         } else {
-            for file_id in api.relationship_get_fileid(each).unwrap().iter() {
+            for file_id in client::relationship_get_fileid(*each).iter() {
                 file_ids.remove(file_id);
             }
         }
@@ -300,7 +293,9 @@ pub fn on_start() {
             file_ids.par_iter().for_each(|fid| {
                 let _ = std::panic::catch_unwind(|| {
                     if let Some(thumb_hash) = process_fid(fid, &location, &utable) {
-                        api.add_tags_to_fileid(
+                        client::relationship_file_tag_add(*fid, thumb_hash, utable, None);
+                        /*
+                        client::add_tags_to_fileid(
                             Some(*fid),
                             &vec![sharedtypes::FileTagAction {
                                 operation: sharedtypes::TagOperation::Set,
@@ -314,7 +309,7 @@ pub fn on_start() {
                                     relates_to: None,
                                 }],
                             }],
-                        );
+                        );*/
                         //let _ = api.relationship_file_tag_add(*fid, thumb_hash, utable, None);
                     }
                 });
@@ -322,7 +317,7 @@ pub fn on_start() {
         });
     }
     client::log_no_print(format!("{} - generation done", PLUGIN_NAME));
-    api.setting_add(
+    client::setting_add(
         format!("{}-shouldrun", PLUGIN_NAME),
         format!(
             "From plugin {} - {} Determines if we should run",
@@ -332,7 +327,7 @@ pub fn on_start() {
         None,
         Some("False".to_string()),
     );
-    api.transaction_flush();
+    client::transaction_flush();
 }
 
 fn process_fid(fid: &u64, location: &PathBuf, _utable: &u64) -> Option<String> {
@@ -608,14 +603,14 @@ fn make_animated_img(
     }
 }
 
-fn setup_thumbnail_default(api: &client_api::RustHydrusApiClient) -> PathBuf {
-    let storage = api.location_get().unwrap();
+fn setup_thumbnail_default() -> PathBuf {
+    let storage = client::location_get();
     let path = Path::new(&storage);
     let finpath = std::fs::canonicalize(path.join(LOCATION_THUMBNAILS))
         .unwrap()
         .to_string_lossy()
         .to_string();
-    api.setting_add(
+    client::setting_add(
         format!("{}-location", PLUGIN_NAME),
         format!("From plugin {} {}", PLUGIN_NAME, PLUGIN_DESCRIPTION).into(),
         None,
@@ -628,16 +623,16 @@ fn setup_thumbnail_default(api: &client_api::RustHydrusApiClient) -> PathBuf {
 ///
 /// Gets the location to put thumbnails in
 ///
-fn thumbnail_location_get(api: &client_api::RustHydrusApiClient) -> PathBuf {
-    match api.settings_get_name(&format!("{}-location", PLUGIN_NAME)) {
-        Ok(Some(setting)) => {
+fn thumbnail_location_get() -> PathBuf {
+    match client::settings_get_name(format!("{}-location", PLUGIN_NAME)) {
+        Some(setting) => {
             let locpath = match setting.param {
                 Some(loc) => Path::new(&loc).to_path_buf(),
-                None => setup_thumbnail_default(api),
+                None => setup_thumbnail_default(),
             };
             locpath
         }
-        _ => setup_thumbnail_default(api),
+        _ => setup_thumbnail_default(),
     }
 }
 
@@ -741,8 +736,7 @@ pub fn on_download(
     let mut output = Vec::new();
     match generate_thumbnail_u8(byte_c.to_vec()) {
         Ok(thumb) => {
-            let api = client_api::RustHydrusApiClient::new(api_info.url.to_string());
-            let thumbpath = thumbnail_location_get(&api);
+            let thumbpath = thumbnail_location_get();
             let (thumb_path, thumb_hash) = make_thumbnail_path(&thumbpath, &thumb);
             let thpath = thumb_path.join(thumb_hash.clone());
             let pa = thpath.to_string_lossy().to_string();
