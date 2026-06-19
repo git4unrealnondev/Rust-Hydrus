@@ -9,6 +9,7 @@ use ratatui::{
 };
 use sharedtypes::HashesSupported;
 
+use crate::logging;
 use crate::ui::components::*;
 
 use std::collections::HashMap;
@@ -65,6 +66,10 @@ pub enum UIEvent {
         job_id: u64,
         file_id: u64,
         status: FilesStatus,
+    },
+    ClearJob {
+        worker_id: u64,
+        job_id: u64,
     },
 }
 
@@ -127,6 +132,18 @@ impl App {
     // Helper method to keep your event matching clean and reusable
     fn handle_ui_event_internal(&mut self, event: UIEvent) {
         match event {
+            UIEvent::ClearJob { worker_id, job_id } => {
+                if let Some(scraper) = self.scrapers.get_mut(&worker_id) {
+                    // This instantly deletes the Vec<FileStorage> from the UI state!
+                    scraper.files.remove(&job_id);
+
+                    /*logging::info_log(format!(
+                        "UI_CLEANUP: Worker {} removed completed Job {}",
+                        worker_id, job_id
+                    ));*/
+                }
+            }
+
             UIEvent::ScraperStatusChanged {
                 worker_id,
                 name,

@@ -185,11 +185,15 @@ impl GlobalLoad {
                         }
                     };
                     // If the api isnt set then just return and dont call anything
-                    if let Some(ref api_info) = *db.api_info.read() {
-                        output = plugindatafunc(cursorpass, hash, ext, api_info);
-                    } else {
-                        return;
-                    }
+                    output = {
+                        // Limit the scope of the read guard
+                        let api_info_guard = db.api_info.read();
+                        if let Some(ref api_info) = *api_info_guard {
+                            plugindatafunc(cursorpass, hash, ext, api_info)
+                        } else {
+                            return;
+                        } // `api_info_guard` is dropped here automatically!
+                    };
                 }
 
                 let jobmanager;

@@ -86,7 +86,7 @@ impl<'a> Widget for ScraperRender<'a> {
             .constraints([Constraint::Length(3), Constraint::Min(0)])
             .split(area);
 
-        logging::info_log(format!("UIRENDERING: {:?}", self.scraper));
+        //logging::info_log(format!("UIRENDERING: {:?}", self.scraper));
 
         // Header panel summary card
         let summary_text = format!(
@@ -97,33 +97,37 @@ impl<'a> Widget for ScraperRender<'a> {
             .block(Block::default().borders(Borders::ALL).fg(Color::Cyan))
             .render(chunks[0], buf);
 
-        // List out all the sub-file extraction workloads inside it
+        let mut sorted_files: Vec<(&u64, &Vec<FileStorage>)> = self.scraper.files.iter().collect();
+
+        sorted_files.sort_by_key(|&(job_id, _)| job_id);
+
         let mut list_items = Vec::new();
-        for (idx, file) in self.scraper.files.iter().enumerate() {
-            for (idy, file_scrap) in file.1.iter().enumerate() {
+
+        for (job_id, file_vec) in sorted_files {
+            for file_scrap in file_vec.iter() {
                 let line = match file_scrap.status {
                     FilesStatus::Waiting => ListItem::new(format!(
-                        "  [{}] [{}] ⏳ File queued for processing...",
-                        file.0, file_scrap.internal_id
+                        "   [{}] [{}] ⏳ File queued for processing...",
+                        file_scrap.internal_id, job_id
                     )),
                     FilesStatus::Downloading(progress) => ListItem::new(format!(
-                        "  [{} {}] 📥 Downloading stream contents: {:.1}%",
-                        file.0, file_scrap.internal_id, progress
+                        "   [{} {}] 📥 Downloading stream contents: {:.1}%",
+                        file_scrap.internal_id, job_id, progress
                     ))
                     .fg(Color::Yellow),
                     FilesStatus::Processing(progress) => ListItem::new(format!(
-                        "  [{} {}] ⚙️ Evaluating extraction rules: {:.1}%",
-                        file.0, file_scrap.internal_id, progress
+                        "   [{} {}] ⚙️ Evaluating extraction rules: {:.1}%",
+                        file_scrap.internal_id, job_id, progress
                     ))
                     .fg(Color::LightBlue),
                     FilesStatus::Done => ListItem::new(format!(
-                        "  [{} {}] ✅ Processing execution completed successfully.",
-                        file.0, file_scrap.internal_id
+                        "   [{} {}] ✅ Processing execution completed successfully.",
+                        file_scrap.internal_id, job_id
                     ))
                     .fg(Color::Green),
                     FilesStatus::Stopped(ref stopped) => ListItem::new(format!(
-                        "  [{} {}: {}] X Stopped execution completed successfully",
-                        file.0, file_scrap.internal_id, stopped
+                        "   [{} {}: {}] X Stopped execution completed successfully",
+                        file_scrap.internal_id, job_id, stopped
                     ))
                     .fg(Color::Red),
                 };

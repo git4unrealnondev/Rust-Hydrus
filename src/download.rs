@@ -200,9 +200,12 @@ pub async fn dltext_new(
             }
         };
 
-        // let futureresult = futures::executor::block_on(ratelimit_object.ready())
-        // .unwrap()
-        ratelimiter_wait(ratelimiter_obj);
+        // Async code needs this to not block
+        let limiter = Arc::clone(&ratelimiter_obj);
+        tokio::task::spawn_blocking(move || {
+            ratelimiter_wait(&limiter);
+        })
+        .await;
         logging::info_log(format!(
             "Worker: {} JobId: {} -- Spawned web reach to: {}",
             worker_id, job_id, &url_string
@@ -600,38 +603,41 @@ pub async fn dlfile_new(
 
     if let Some(ref mut file_storage) = file_storage.clone() {
         file_storage.status = FilesStatus::Processing(0.0);
-
         ctx.update_file(workerid, jobid, &file_storage)
     }
 
-    /*  {
-        let mut list_guard = file_ui_list.write();
-        if let Some(target_file) = list_guard
-            .iter_mut()
-            .find(|f| f.internal_id == file_ui.internal_id)
-        {
-            target_file.status = FilesStatus::Processing(0.0);
-        }
-    }*/
+    if let Some(bytes_data) = bytes {
+        let file_ext = FileFormat::from_bytes(&bytes_data).extension().to_string();
 
-    if let Some(ref bytes) = bytes {
-        let file_ext = FileFormat::from_bytes(bytes).extension().to_string();
+        // 1. Prepare owned data to move into the thread pool
+        let bytes_clone = bytes_data.clone();
+        let hash_clone = hash.clone();
+        let ext_clone = file_ext.clone();
+        let mut file_clone = file.clone(); // Assuming FileObjectMain implements Clone
+        let source_url_clone = Some(source_url.clone());
+        let ctx_clone = ctx.clone();
 
-        let file_id = process_bytes(bytes, &hash, &file_ext, file, Some(source_url), ctx.clone());
+        // 2. Offload the entire blocking operation to spawn_blocking
+        let file_id = tokio::task::spawn_blocking(move || {
+            process_bytes(
+                &bytes_clone,
+                &hash_clone,
+                &ext_clone,
+                &mut file_clone,
+                source_url_clone.as_ref(),
+                ctx_clone,
+            )
+        })
+        .await
+        .unwrap();
+
+        // 3. Sync back the modified file metadata if your engine needs it
+        //*file = file_clone;
 
         if let Some(mut file_storage) = file_storage.clone() {
             file_storage.status = FilesStatus::Done;
             ctx.update_file(workerid, jobid, &file_storage);
         }
-        /* {
-            let mut list_guard = file_ui_list.write();
-            if let Some(target_file) = list_guard
-                .iter_mut()
-                .find(|f| f.internal_id == file_ui.internal_id)
-            {
-                target_file.status = FilesStatus::Done;
-            }
-        }*/
 
         return FileReturnStatus::File((hash, file_ext, file_id.unwrap()));
     }
