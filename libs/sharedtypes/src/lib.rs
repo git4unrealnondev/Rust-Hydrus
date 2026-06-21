@@ -468,7 +468,7 @@ pub enum ScraperFlags {
 
 /// What the scraper passes between loaded 3rd party scrapers and the internal
 /// scrpaer.
-#[derive(Debug, PartialEq, Default)]
+#[derive(Debug, PartialEq, Default, Clone)]
 pub struct ScraperObject {
     pub files: HashSet<FileObject>,
     pub tags: HashSet<TagObject>,

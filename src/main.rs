@@ -50,7 +50,9 @@ pub mod ui;
 
 use database::database::Main;
 
-use crate::{downloadlogic::DownloadManager, helpers::memory_manage, ui::ui::App};
+use crate::{
+    downloadlogic::DownloadManager, helpers::memory_manage, server::PluginIpcInteract, ui::ui::App,
+};
 
 /// This code is trash. lmao. Has threading and plugins soon tm Will probably work
 /// :D
@@ -97,7 +99,30 @@ fn db_file_sanity(dbloc: &str) {
 /// Main function.
 #[tokio::main]
 async fn main() -> io::Result<()> {
+    //console_subscriber::init();
     memory_manage();
+
+    #[cfg(debug_assertions)]
+    thread::spawn(move || {
+        loop {
+            use parking_lot::deadlock;
+
+            thread::sleep(Duration::from_secs(1));
+            let deadlocks = deadlock::check_deadlock();
+            if deadlocks.is_empty() {
+                continue;
+            }
+
+            logging::info_log("=== 🚨 DEADLOCK DETECTED 🚨 ===");
+            for (i, threads) in deadlocks.iter().enumerate() {
+                logging::info_log(format!("Deadlock #{}:", i));
+                for t in threads {
+                    logging::info_log(format!("  Thread ID: {:?}", t.thread_id()));
+                    logging::info_log(format!("  Backtrace:\n{:?}", t.backtrace()));
+                }
+            }
+        }
+    });
 
     {
         // Makes Logging work
@@ -108,7 +133,10 @@ async fn main() -> io::Result<()> {
     // Inits Database.
     let mut database = makedb(DEFAULT_LOC_NAME);
 
-    let jobmanager = Arc::new(RwLock::new(jobs::Jobs::new(database.clone())));
+    let jobmanager = jobs::Jobs::new(database.clone());
+
+    // Needed to do big processing like thumbnails and stuff
+    let heavy_processing_pool = Arc::new(rayon::ThreadPoolBuilder::new().build().unwrap());
 
     let mut globalload = globalload::GlobalLoad::new(database.clone(), jobmanager.clone());
     {
@@ -122,7 +150,21 @@ async fn main() -> io::Result<()> {
         // Things like callbacks and the like
         database.setup_globalload(globalload.clone());
 
-        globalload.setup_ipc(globalload.clone(), database.clone(), jobmanager.clone());
+        let mut ipc_interact = PluginIpcInteract::new(
+            database.clone(),
+            globalload.clone(),
+            jobmanager.clone(),
+            heavy_processing_pool.clone(),
+        );
+
+        // Spawn the entire asynchronous router/listener pool in the background
+        // without locking up execution flow or using OS thread hacks
+        let database_for_ipc = database.clone();
+        tokio::spawn(async move {
+            if let Err(e) = ipc_interact.spawn_listener(database_for_ipc).await {
+                eprintln!("Critical breakdown in IPC listener framework loop: {}", e);
+            }
+        });
 
         // Putting this down here after plugin manager because that's when the IPC server
         // starts and we can then inside of the scraper start calling IPC functions
@@ -176,10 +218,13 @@ async fn main() -> io::Result<()> {
     }
 
     {
-        let sites = globalload.return_all_sites();
-        //let globalload_sites = ;
+        let sites = globalload.return_all_sites().clone();
         // Checks if we need to load any jobs
-        jobmanager.write().jobs_load(sites);
+        let jm = jobmanager.clone();
+        tokio::task::spawn_blocking(move || {
+            jm.jobs_load(sites);
+        })
+        .await;
     }
 
     // One flush after all the on_start unless needed
@@ -194,85 +239,20 @@ async fn main() -> io::Result<()> {
         globalload.clone(),
         jobmanager.clone(),
         tokio_handle,
+        heavy_processing_pool,
     )));
 
     //let mut conn = database.read().get_database_connection();
     //let tn = conn.transaction().unwrap();
     // just determines if we have any loaded jobs
-    jobmanager.read().jobs_run_new();
+    jobmanager.jobs_run_new();
 
     {
-        for scraper in jobmanager.read().job_scrapers_get() {
+        for scraper in jobmanager.job_scrapers_get() {
             threadhandler.lock().add_work(scraper.clone());
         }
     }
 
-    /* let thread_handle = thread::spawn(move || {
-
-        loop {
-
-            thread::sleep(one_sec);
-
-        }
-
-       /* loop {
-            let brk;
-            logging::info_log("a");
-           let th = threadhandler.check_scrapers();
-            {
-            logging::info_log("b");
-                globalload.clone().thread_finish_closed();
-            logging::info_log("c");
-                brk = globalload.return_thread();
-            }
-
-            {
-              //  let sites = globalload.return_all_sites();
-              //  jobmanager.write().jobs_load(sites);
-            }
-
-            logging::info_log("d");
-            for scraper in jobmanager.read().job_scrapers_get() {
-               //  let scraper_library = scraper_manager._library.get(&scraper).unwrap();
-                 threadhandler.add_work(scraper.clone());
-            }
-            thread::sleep(one_sec);
-            logging::info_log("yeet");
-            //tokio::time::sleep(one_sec);
-
-            if brk && th {
-                return;
-            }
-        }*/
-    });
-      */
-
-    /*let thread_handle = thread::spawn(move || {
-        loop {
-            let brk;
-            threadhandler.check_scrapers();
-            {
-                globalload.clone().thread_finish_closed();
-                brk = globalload.return_thread();
-            }
-
-            {
-                let sites = globalload.return_all_sites();
-                jobmanager.write().jobs_load(sites);
-            }
-
-            for scraper in jobmanager.read().job_scrapers_get() {
-                // let scraper_library = scraper_manager._library.get(&scraper).unwrap();
-                threadhandler.add_work(scraper.clone());
-            }
-            thread::sleep(one_sec);
-            //tokio::time::sleep(one_sec);
-
-            if brk && threadhandler.check_scrapers() {
-                break;
-            }
-        }
-    });*/
     let jobmanager_loop = jobmanager.clone();
     let threadhandler_loop = threadhandler.clone();
     tokio::spawn(async move {
@@ -283,9 +263,9 @@ async fn main() -> io::Result<()> {
 
             // 1. Get the scrapers, making sure we extract OWNED values, not references
             let scrapers: Vec<_> = {
-                let jm = jobmanager_loop.read();
                 // Ensure .clone() here creates owned Scraper items, not references to them
-                jm.job_scrapers_get()
+                jobmanager_loop
+                    .job_scrapers_get()
                     .iter()
                     .map(|scraper| (*scraper).clone()) // Explicitly clone the underlying value
                     .collect()
@@ -303,10 +283,8 @@ async fn main() -> io::Result<()> {
 
                 // 2. If it's a new scraper, spin up its long-running execution in parallel
                 if let Some(worker) = maybe_worker {
-                    tokio::spawn(async move {
-                        let scraper_arc = Arc::new(worker);
-                        scraper_arc.start_scraper().await;
-                    });
+                    let scraper_arc = Arc::new(worker);
+                    scraper_arc.start_scraper().await;
                 }
             }
         }

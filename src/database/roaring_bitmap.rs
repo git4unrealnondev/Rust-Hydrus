@@ -1,5 +1,4 @@
 use crate::Arc;
-use crate::RwLock;
 use crate::logging;
 use nohash::IntMap;
 use roaring::bitmap::RoaringBitmap;
@@ -14,6 +13,9 @@ use std::io::Cursor;
 use crate::Connection;
 use crate::database::database::Main;
 use std::ops::Deref;
+
+use parking_lot::RwLock;
+
 /// Gets the cache type
 #[derive(Clone, Debug)]
 pub enum InternalCacheType {

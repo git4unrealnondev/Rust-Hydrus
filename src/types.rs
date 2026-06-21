@@ -8,7 +8,6 @@ use std::collections::HashSet;
 use std::io::BufReader;
 use std::io::Read;
 use std::io::Write;
-
 pub const SOCKET_NAME: &str = "RustHydrus.sock";
 
 #[derive(Debug, Serialize, Deserialize, bitcode::Encode, bitcode::Decode)]
@@ -155,8 +154,7 @@ pub enum SupportedRequests {
     Database(SupportedDBRequests),
     PluginCross(SupportedPluginRequests),
 }
-
-/// Writes all data into buffer.
+//// Writes all data into buffer.
 pub fn send<T: Sized + bitcode::Encode>(inp: &T, conn: &mut BufReader<LocalSocketStream>) {
     let byte_buf = bitcode::encode(inp);
     let size = &byte_buf.len();

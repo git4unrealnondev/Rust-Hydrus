@@ -424,19 +424,9 @@ fn init_data_request<T: bitcode::Encode + for<'de> bitcode::Decode<'de>>(
     loop {
         // Wait indefinitely for this to get a connection. shit way of doing it will
         // likely add a wait or something this will likely block the CPU or something.
-        let worker_id;
-        loop {
-            let temp_conn = LocalSocketStream::connect(name.clone());
-            if let Ok(con_ok) = temp_conn {
-                let mut buf_reader = BufReader::new(con_ok);
-                if let Ok(id) = types::recieve::<u64>(&mut buf_reader) {
-                    worker_id = id;
-                    break;
-                }
-            }
-        }
+
         if let Ok(conn_out) = LocalSocketStream::connect(
-            format!("{}_{}", types::SOCKET_NAME, worker_id)
+            format!("{}", types::SOCKET_NAME)
                 .to_ns_name::<GenericNamespaced>()
                 .unwrap(),
         ) {

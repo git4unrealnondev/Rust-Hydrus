@@ -286,7 +286,7 @@ pub fn on_start() {
         PLUGIN_NAME,
         file_ids.len()
     ));
-    let pool = ThreadPoolBuilder::new().build().unwrap();
+    let pool = ThreadPoolBuilder::new().num_threads(5).build().unwrap();
 
     if let Some(location) = setup_thumbnail_location() {
         pool.install(|| {
@@ -294,23 +294,6 @@ pub fn on_start() {
                 let _ = std::panic::catch_unwind(|| {
                     if let Some(thumb_hash) = process_fid(fid, &location, &utable) {
                         client::relationship_file_tag_add(*fid, thumb_hash, utable, None);
-                        /*
-                        client::add_tags_to_fileid(
-                            Some(*fid),
-                            &vec![sharedtypes::FileTagAction {
-                                operation: sharedtypes::TagOperation::Set,
-                                tags: vec![sharedtypes::TagObject {
-                                    namespace: sharedtypes::GenericNamespaceObj {
-                                        name: PLUGIN_NAME.to_string(),
-                                        description: Some(PLUGIN_DESCRIPTION.to_string()),
-                                    },
-                                    tag: thumb_hash,
-                                    tag_type: sharedtypes::TagType::Normal,
-                                    relates_to: None,
-                                }],
-                            }],
-                        );*/
-                        //let _ = api.relationship_file_tag_add(*fid, thumb_hash, utable, None);
                     }
                 });
             });

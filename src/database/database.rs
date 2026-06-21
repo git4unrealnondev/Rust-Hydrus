@@ -1,6 +1,4 @@
 #![forbid(unsafe_code)]
-use crate::Mutex;
-use crate::RwLock;
 use crate::database::inmemdbnew::NewinMemDB;
 use crate::file;
 use crate::globalload::GlobalLoad;
@@ -10,6 +8,7 @@ use crate::roaring_bitmap::InternalCacheType;
 use crate::roaring_bitmap::RelationshipStorage;
 use eta::{Eta, TimeAcc};
 use log::{error, info};
+use parking_lot::{Mutex, RwLock};
 use r2d2::Pool;
 use r2d2::PooledConnection;
 use r2d2_sqlite::SqliteConnectionManager;
@@ -115,7 +114,7 @@ impl Main {
                 first_time_load_flag = Path::new(&file_path).exists();
                 let memdb = Arc::new(RwLock::new(NewinMemDB::new()));
                 let manager = SqliteConnectionManager::memory();
-                let pool = r2d2::Builder::new().max_size(10).build(manager).unwrap();
+                let pool = r2d2::Builder::new().max_size(8).build(manager).unwrap();
                 let write_conn = Arc::new(Mutex::new({
                     let mut pool = pool.get().unwrap();
                     pool.execute_batch(
@@ -169,7 +168,7 @@ PRAGMA cache_size = -1000000;
                 });
                 let pool = r2d2::Builder::new()
                     .idle_timeout(Some(Duration::from_secs(5)))
-                    .max_size(200)
+                    .max_size(8)
                     .build(manager)
                     .unwrap();
                 let write_conn = Arc::new(Mutex::new(pool.get().unwrap()));
@@ -218,7 +217,7 @@ PRAGMA journal_mode = WAL;
                     Ok(())
                 });
 
-                let pool = r2d2::Builder::new().max_size(100).build(manager).unwrap();
+                let pool = r2d2::Builder::new().max_size(8).build(manager).unwrap();
 
                 // Grab a "write" connection for operations that need exclusive access
                 let write_conn = Arc::new(Mutex::new(pool.get().unwrap()));
@@ -463,7 +462,7 @@ PRAGMA journal_mode = WAL;
 
                         if let Some(ref globalload) = self.globalload {
                             for job in names.jobs {
-                                globalload.jobmanager.write().jobs_add_internal(
+                                globalload.jobmanager.jobs_add_internal(
                                     Some(tn),
                                     scraper.clone(),
                                     job,

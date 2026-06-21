@@ -1,5 +1,4 @@
 use crate::Main;
-use crate::RwLock;
 use crate::logging::info_log;
 use crate::{jobs::Jobs, logging, server};
 use libloading::Library;
@@ -7,6 +6,8 @@ use sharedtypes::{self, GlobalPluginScraper};
 use std::sync::Arc;
 use std::{collections::HashMap, path::Path, thread};
 use std::{path::PathBuf, thread::JoinHandle};
+
+use parking_lot::RwLock;
 ///
 /// Runs the on_start callback
 ///
@@ -85,7 +86,6 @@ pub struct GlobalLoad {
     library_lib: HashMap<sharedtypes::GlobalPluginScraper, Arc<libloading::Library>>,
     default_load: Arc<RwLock<LoadableType>>,
     thread: Arc<RwLock<HashMap<sharedtypes::GlobalPluginScraper, JoinHandle<()>>>>,
-    ipc_server: Arc<RwLock<Option<JoinHandle<()>>>>,
     regex_storage: Arc<
         RwLock<
             HashMap<
@@ -98,7 +98,7 @@ pub struct GlobalLoad {
             >,
         >,
     >,
-    pub jobmanager: Arc<RwLock<Jobs>>,
+    pub jobmanager: Arc<Jobs>,
 }
 
 ///
@@ -110,7 +110,7 @@ enum LoadableType {
 }
 
 impl GlobalLoad {
-    pub fn new(db: Main, jobs: Arc<RwLock<Jobs>>) -> Self {
+    pub fn new(db: Main, jobs: Arc<Jobs>) -> Self {
         logging::log("Starting IPC Server.".to_string());
 
         GlobalLoad {
@@ -123,7 +123,6 @@ impl GlobalLoad {
             library_lib: HashMap::new(),
             default_load: Arc::new(RwLock::new(LoadableType::Release)),
             thread: Arc::new(RwLock::new(HashMap::new())),
-            ipc_server: Arc::new(RwLock::new(None)),
             regex_storage: Arc::new(RwLock::new(HashMap::new())),
             jobmanager: jobs,
         }
@@ -200,7 +199,7 @@ impl GlobalLoad {
                 {
                     jobmanager = self.jobmanager.clone();
                 }
-                self.parse_plugin_output(output, db.clone(), scraper, jobmanager);
+                self.parse_plugin_output(output, db.clone(), scraper);
             }
         }
     }
@@ -213,7 +212,6 @@ impl GlobalLoad {
         plugin_data: Vec<sharedtypes::DBPluginOutputEnum>,
         db: Main,
         scraper: &GlobalPluginScraper,
-        jobmanager: Arc<RwLock<Jobs>>,
     ) {
         for each in plugin_data {
             match each {
@@ -284,9 +282,8 @@ impl GlobalLoad {
 
                         // 4️⃣ Add jobs under one write lock
                         {
-                            let mut jm = jobmanager.write();
                             for job in jobs_to_add {
-                                jm.jobs_add(scraper.clone(), job);
+                                self.jobmanager.jobs_add(scraper.clone(), job);
                             }
                         }
 
@@ -344,10 +341,9 @@ impl GlobalLoad {
         plugin_data: Vec<sharedtypes::DBPluginOutputEnum>,
         db: Main,
         scraper: &GlobalPluginScraper,
-        jobmanager: Arc<RwLock<Jobs>>,
     ) {
         //let db = self._database.lock().unwrap();
-        self.parse_plugin_output_andmain(plugin_data, db, scraper, jobmanager);
+        self.parse_plugin_output_andmain(plugin_data, db, scraper);
     }
 
     ///
@@ -687,7 +683,7 @@ impl GlobalLoad {
                         }
 
                         for job in names.jobs {
-                            self.jobmanager.write().jobs_add(scraper.clone(), job);
+                            self.jobmanager.jobs_add(scraper.clone(), job);
                             //db.jobs_add_new(job);
                         }
 
@@ -748,7 +744,7 @@ impl GlobalLoad {
         None
     }
 
-    pub fn setup_ipc(&mut self, globalload: GlobalLoad, db: Main, jobs: Arc<RwLock<Jobs>>) {
+    /* pub fn setup_ipc(&mut self, globalload: GlobalLoad, db: Main, jobs: Arc<RwLock<Jobs>>) {
         let srv = std::thread::spawn(move || {
             let mut ipc_coms = server::PluginIpcInteract::new(db.clone(), globalload, jobs);
             //let _ = rcv.recv();
@@ -764,7 +760,7 @@ impl GlobalLoad {
         });
 
         self.ipc_server = Arc::new(RwLock::new(Some(srv)));
-    }
+    }*/
 
     ///
     /// Debug function for development

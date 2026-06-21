@@ -297,7 +297,10 @@ impl Main {
     fn enclave_file_mapping_add(&self, tn: &Transaction, file_id: &u64, enclave_id: &u64) {
         let timestamp = Utc::now().timestamp_millis();
 
-        if self.enclave_file_mapping_get(file_id, enclave_id).is_some() {
+        if self
+            .enclave_file_mapping_get(tn, file_id, enclave_id)
+            .is_some()
+        {
             let mut prep = tn
             .prepare(
                 "UPDATE FileEnclaveMapping SET timestamp = ? WHERE file_id = ? AND enclave_id = ?",
@@ -318,8 +321,12 @@ impl Main {
     ///
     /// Checks if a file mapping pair exists
     ///
-    fn enclave_file_mapping_get(&self, file_id: &u64, enclave_id: &u64) -> Option<u64> {
-        let tn = self.get_database_connection();
+    fn enclave_file_mapping_get(
+        &self,
+        tn: &Transaction,
+        file_id: &u64,
+        enclave_id: &u64,
+    ) -> Option<u64> {
         tn.query_row(
             "SELECT file_id from FileEnclaveMapping where file_id = ? AND enclave_id = ? LIMIT 1",
             params![file_id, enclave_id],

@@ -6,7 +6,7 @@ edition = "2024"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-reqwest = { version = "0.12.22", features = ["cookies", "gzip",  "native-tls", "deflate", "default", "blocking"] }
+reqwest = { version = "0.12.22", features = ["cookies", "gzip",  "native-tls", "deflate", "default"] }
 url = "2.3.1"
 ratelimit = "0.10.0"
 async-std = { version = "1", features = ["attributes", "tokio1"] }
@@ -50,7 +50,7 @@ lazy_static = "1.5.0"
 ipc-channel-mux = "0.0.1"
 crossbeam-channel = "0.5.15"
 parking_lot = {version="0.12.5", features=["deadlock_detection"]}
-tokio = {version="1.48.0", features=["rt-multi-thread", "macros"]}
+tokio = {version="1.48.0", features=["rt-multi-thread", "macros", "tracing"]}
 uuid = "1.18.1"
 fuzz-search = "0.1.0"
 web_api = {path="generators/web_api"}
@@ -66,6 +66,8 @@ crossterm = {version="*", features=["event-stream"]}
 ratatui-garnish = "0.1.0"
 sharedtypes = { path = "./libs/sharedtypes" }
 futures-util = "0.3.32"
+console-subscriber = "0.5.0"
+systemstat = "0.2.7"
 
 [dev-dependencies]
 

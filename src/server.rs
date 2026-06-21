@@ -5,6 +5,7 @@ use crate::globalload::GlobalLoad;
 use crate::jobs::Jobs;
 use crate::logging;
 use anyhow::Context;
+use rayon::ThreadPool;
 
 use crate::Mutex;
 use crate::RwLock;
@@ -20,346 +21,113 @@ use std::{
     sync::mpsc::Sender,
 };
 
-pub fn main(notify: Sender<()>) -> anyhow::Result<()> {
-    // Define a function that checks for errors in incoming connections. We'll use
-    // this to filter through connections that fail on initialization for one reason
-    // or another.
-    fn handle_error(conn: io::Result<LocalSocketStream>) -> Option<LocalSocketStream> {
-        match conn {
-            Ok(c) => Some(c),
-            Err(e) => {
-                println!("Incoming connection failed: {}", e);
-                None
-            }
-        }
-    }
-
-    // Pick a name. There isn't a helper function for this, mostly because it's
-    // largely unnecessary: in Rust, `match` is your concise, readable and expressive
-    // decision making construct.
-    let socketname = types::SOCKET_NAME;
-    let name = types::SOCKET_NAME
-        .to_ns_name::<GenericNamespaced>()
-        .unwrap();
-
-    // Configures the listener
-    let opt = ListenerOptions::new().name(name);
-
-    // Bind our listener.
-    let listener = match opt.create_sync() {
-        Err(e) if e.kind() == io::ErrorKind::AddrInUse => {
-            // One important problem that is easy to handle improperly (or not at all) is the
-            // "corpse sockets" that are left when a program that uses a file-type socket name
-            // terminates its socket server without deleting the file. There's no single
-            // strategy for handling this kind of address-already-occupied error. Services
-            // that are supposed to only exist as a single instance running on a system should
-            // check if another instance is actually running, and if not, delete the socket
-            // file. In this example, we leave this up to the user, but in a real application,
-            // you usually don't want to do that.
-            eprintln!(
-                "\
-Error: could not start server because the socket file is occupied. Please check if {} is in use by \
-another process and try again.",
-                types::SOCKET_NAME
-            );
-            return Err(e.into());
-        }
-        x => x?,
-    };
-    println!("Server running at {}", types::SOCKET_NAME);
-
-    // Stand-in for the syncronization used, if any, between the client and the server.
-    let _ = notify.send(());
-
-    // Preemptively allocate a sizeable buffer for reading at a later moment. This
-    // size should be enough and should be easy to find for the allocator. Since we
-    // only have one concurrent client, there's no need to reallocate the buffer
-    // repeatedly.
-    for conn in listener.incoming().filter_map(handle_error) {
-        let buffer = &mut [b'0', b'0'];
-        let mut bufstr = String::new();
-        let coms_struct = types::Coms {
-            com_type: types::EComType::BiDirectional,
-            control: types::EControlSigs::Send,
-        };
-        let b_struct = bitcode::encode(&coms_struct);
-
-        // Wrap the connection into a buffered reader right away so that we could read a
-        // single line out of it.
-        let mut conn = BufReader::new(conn);
-        println!("Incoming connection!");
-
-        // Since our client example writes first, the server should read a line and only
-        // then send a response. Otherwise, because reading and writing on a connection
-        // cannot be simultaneous without threads or async, we can deadlock the two
-        // processes by having both sides wait for the write buffer to be emptied by the
-        // other.
-        conn.read(buffer).context("Socket receive failed").unwrap();
-
-        // Now that the read has come through and the client is waiting on the server's
-        // write, do it. (`.get_mut()` is to get the writer, `BufReader` doesn't implement
-        // a pass-through `Write`.) conn.get_mut().write_all(b"Hello from server!\n")?;
-        // Print out the result, getting the newline for free!
-        let instruct: types::Coms = bitcode::decode(&buffer[..]).unwrap();
-
-        // std::mem::forget(buffer.clone());
-        match instruct.control {
-            types::EControlSigs::Send => {
-                bufstr.clear();
-                conn.read_line(&mut bufstr)
-                    .context("Socket receive failed")
-                    .unwrap();
-
-                // bufstr.clear();
-                conn.get_mut()
-                    .write_all(&b_struct)
-                    .context("Socket send failed")
-                    .unwrap();
-                bufstr.clear();
-                conn.read_line(&mut bufstr)
-                    .context("Socket receive failed")
-                    .unwrap();
-            }
-            types::EControlSigs::Halt => {}
-            types::EControlSigs::Break => {}
-        }
-        // Let's add an exit condition to shut the server down gracefully. if buffer ==
-        // "stop\n" { break; } Clear the buffer so that the next iteration will display
-        // new data instead of messages stacking on top of one another. buffer.clear();
-    }
-    Ok(())
-}
-
-/// Storage for database interaction object for IPC
 pub struct PluginIpcInteract {
     db_interface: DbInteract,
+    heavy_processing_pool: Arc<ThreadPool>,
 }
 
-/// This is going to be the main way to talk to the plugin system and stuffins.
 impl PluginIpcInteract {
-    pub fn new(main_db: Main, globalload: GlobalLoad, jobs: Arc<RwLock<Jobs>>) -> Self {
+    pub fn new(
+        main_db: Main,
+        globalload: GlobalLoad,
+        jobs: Arc<Jobs>,
+        heavy_processing_pool: Arc<ThreadPool>,
+    ) -> Self {
         PluginIpcInteract {
             db_interface: DbInteract {
                 database: main_db,
                 globalload,
-                jobmanager: jobs.clone(),
+                jobmanager: jobs,
             },
+            heavy_processing_pool,
         }
     }
 
-    /// Spawns a listener for events.
-    pub fn spawn_listener(&mut self, main_db: Main) -> anyhow::Result<()> {
-        // Define a function that checks for errors in incoming connections. We'll use
-        // this to filter through connections that fail on initialization for one reason
-        // or another.
-        fn handle_error(conn: io::Result<LocalSocketStream>) -> Option<LocalSocketStream> {
-            match conn {
-                Ok(c) => Some(c),
-                Err(e) => {
-                    eprintln!("Incoming connection failed: {}", e);
-                    None
-                }
-            }
-        }
+    /// Spawns a clean listener context directly natively inside your existing Tokio runtime.
+    pub async fn spawn_listener(&mut self, main_db: Main) -> anyhow::Result<()> {
         use warp::Filter;
-        use warp::Rejection;
-        use warp::Reply;
 
-        async fn handle_rejection(err: Rejection) -> Result<impl Reply, warp::Rejection> {
-            if err.is_not_found() {
-                // If the route was not found, return a 404 response
-                Ok(warp::reply::with_status(
-                    "404 Not Found",
-                    warp::http::StatusCode::NOT_FOUND,
-                ))
-            } else {
-                // Handle any other errors (e.g., internal server error)
-                Ok(warp::reply::with_status(
-                    "500 Internal Server Error",
-                    warp::http::StatusCode::INTERNAL_SERVER_ERROR,
-                ))
-            }
-        }
-
-        let num_threads: u64 = 200;
-        let thread_list = Arc::new(Mutex::new(Vec::new()));
         let db = main_db.clone();
-        let mut handles = Vec::new();
 
-        for worker_id in 0..num_threads {
-            let db = db.clone();
-            let thread_list = thread_list.clone();
-            let globalload = self.db_interface.globalload.clone();
-            let jobmanager = self.db_interface.jobmanager.clone();
-            let handle = thread::spawn(move || {
-                let socketname = format!("{}_{}", types::SOCKET_NAME, worker_id);
-
-                let name = format!("{}_{}", types::SOCKET_NAME, worker_id)
-                    .to_ns_name::<GenericNamespaced>()
-                    .unwrap();
-                // Configures the listener
-                let opt = ListenerOptions::new().name(name);
-
-                // Bind our listener.
-                let listener = opt.create_sync().unwrap();
-
-                {
-                    thread_list.lock().push(worker_id);
-                }
-                for stream in listener.incoming().flatten() {
-                    let worker_id = worker_id as u64;
-                    handle_client(
-                        stream,
-                        &worker_id,
-                        db.clone(),
-                        globalload.clone(),
-                        jobmanager.clone(),
-                    );
-                    {
-                        thread_list.lock().push(worker_id.try_into().unwrap());
-                    }
-                }
-                /*  let worker_id = i.clone();
-                loop {
-                    match listener.accept() {
-                        Ok(stream) => {
-                            handle_client(stream, db_interface.clone(), &worker_id);
-                        }
-                        Err(err) => {
-                            dbg!(err);
-                        }
-                    }
-                }*/
-                //format!("Worker thread {} started", i);
-                //  for stream in listener.incoming().flatten() {
-                //      handle_client(stream, db_interface.clone(), &worker_id);
-                //  }
-            });
-            handles.push(handle);
-        }
-        let socketname = types::SOCKET_NAME;
         let name = types::SOCKET_NAME
             .to_ns_name::<GenericNamespaced>()
             .unwrap();
 
-        // Configures the listener
         let opt = ListenerOptions::new().name(name);
 
         // Bind our listener.
-        let listener = match opt.create_sync() {
-            Err(e) if e.kind() == io::ErrorKind::AddrInUse => {
-                eprintln!(
-                    "\
-Error: could not start server because the socket file is occupied. Please check if {} is in use by \
-another process and try again.",
-                    types::SOCKET_NAME
-                );
-                return Err(e.into());
+        let listener = opt.create_sync().unwrap();
+
+        logging::info_log(format!("IPC Server running at {}", types::SOCKET_NAME));
+
+        // Setup warp routes
+        let routes_with_fallback =
+            main_db
+                .clone()
+                .get_filters()
+                .recover(|err: warp::Rejection| async move {
+                    if err.is_not_found() {
+                        Ok::<_, warp::Rejection>(warp::reply::with_status(
+                            String::from("404 Not Found"), // Use an owned String here
+                            warp::http::StatusCode::NOT_FOUND,
+                        ))
+                    } else {
+                        Ok::<_, warp::Rejection>(warp::reply::with_status(
+                            String::from("500 Internal Server Error"), // Use an owned String here
+                            warp::http::StatusCode::INTERNAL_SERVER_ERROR,
+                        ))
+                    }
+                });
+
+        // Spawn API Server directly on your existing background runtime context
+        let mut api_url = db.get_api_url().url;
+        let tokio_listener = loop {
+            match tokio::net::TcpListener::bind(api_url).await {
+                Ok(l) => break l,
+                Err(e) => {
+                    logging::error_log(&format!("Failed to bind server: {}", e));
+                    api_url.set_port(api_url.port() + 1);
+                }
             }
-            x => x?,
         };
 
-        // Stand-in for the syncronization used, if any, between the client and the server.
-        logging::info_log(format!(
-            "IPC Server running at {} with {} threads",
-            types::SOCKET_NAME,
-            num_threads
-        ));
+        // Native Warp serving on standard tokio listener
+        tokio::spawn(async move {
+            warp::serve(routes_with_fallback)
+                .incoming(tokio_listener)
+                .run()
+                .await;
+        });
 
-        //listener
-        //    .set_nonblocking(interprocess::local_socket::traits::ListenerNonblockingMode::Stream)
-        //    .unwrap();
+        logging::info_log(&format!("Starting API server on {}", api_url));
 
-        let listener = Arc::new(listener);
-        let routes = main_db.clone().get_filters();
-
-        let routes_with_fallback = routes.recover(handle_rejection);
-
-        let runtime = tokio::runtime::Runtime::new().expect("Failed to create Tokio runtime");
-
-        // Gets the API URL that we should be using
-        let mut api_url = db.get_api_url();
-
-        let routes = main_db.clone().get_filters().recover(handle_rejection);
-        handles.push(std::thread::spawn(move || {
-            let main_db = Arc::new(main_db); // your shared state
-
-            // Bind (async) and find a working port
-            let mut api_url = db.get_api_url().url;
-            use tokio::net::TcpListener as TokioTcpListener;
-
-            let listener = loop {
-                match runtime.block_on(TokioTcpListener::bind(api_url)) {
-                    Ok(l) => break l,
-                    Err(e) => {
-                        logging::error_log(&format!("Failed to bind server: {}", e));
-                        api_url.set_port(api_url.port() + 1);
-                    }
-                }
-            };
-            logging::info_log(&format!("Starting API server on {}", api_url));
-            // Run warp server on the existing listener
-            runtime.block_on(warp::serve(routes_with_fallback).incoming(listener).run());
-            //  runtime.block_on(warp::serve(routes_with_fallback.clone()).incoming(TcpListener::ne)  .run(api_url.url));
-            /*loop {
-            logging::info_log(&format!("Starting API server on: {}", api_url.url));
-
-            let panic_handler = panic::catch_unwind(||{ runtime.block_on(warp::serve(routes_with_fallback).run(api_url.url))});
-            }*/
-        }));
-
-        // NOTE due to the nature of this POS if the number of requests coming in exceed the number
-        // of cpu threads we could softlock and I can't trace it.
-        // But for now this seems to work.
-        //for i in 0..2 {
-        {
-            let thread_list = thread_list.clone();
-            handles.push(std::thread::spawn(move || {
-                let cnt: u64 = 0;
-                for stream in listener.incoming().flatten() {
-                    let worker_id: u64 = {
-                        loop {
-                            let mut thread_list = thread_list.lock();
-                            if let Some(out) = thread_list.pop() {
-                                break out;
-                            } else {
-                                logging::error_log(format!("Waiting for more threads to open up"));
-                                std::thread::sleep(Duration::from_millis(10));
-                            }
-                        }
-                    };
-                    //if cnt == num_threads - 1 {
-                    //    cnt = 0;
-                    //}
-                    //let worker_id = cnt;
-                    //cnt += 1;
-                    let mut conn = BufReader::new(stream);
-                    types::send_preserialize(&data_size_to_b(&worker_id), &mut conn);
-                }
-            }));
-        }
-
-        for handle in handles {
-            handle.join().unwrap();
-        }
+        // Stream routing loop mapping automatically to tasks
+        let globalload = self.db_interface.globalload.clone();
+        let jobmanager = self.db_interface.jobmanager.clone();
+        self.heavy_processing_pool.spawn(move || {
+            for stream in listener.incoming().flatten() {
+                let db_clone = main_db.clone();
+                let global_clone = globalload.clone();
+                let job_clone = jobmanager.clone();
+                handle_client(stream, db_clone, global_clone, job_clone);
+            }
+        });
         Ok(())
     }
 }
+
 fn handle_client(
     stream: LocalSocketStream,
-    worker_id: &u64,
     db: Main,
     globalload: GlobalLoad,
-    jobmanager: Arc<RwLock<Jobs>>,
+    jobmanager: Arc<Jobs>,
 ) {
-    let worker_id = worker_id.clone();
     std::thread::spawn(move || {
         let buffer = [0u8; 1024];
         let mut conn = BufReader::new(stream);
         let plugin_supportedrequests = match types::recieve(&mut conn) {
             Ok(out) => out,
             Err(err) => {
-                dbg!(&err);
                 logging::error_log(err.to_string());
                 return;
             }
@@ -385,7 +153,7 @@ fn handle_client(
 struct DbInteract {
     database: Main,
     globalload: GlobalLoad,
-    jobmanager: Arc<RwLock<Jobs>>,
+    jobmanager: Arc<Jobs>,
 }
 
 impl DbInteract {}
@@ -404,7 +172,7 @@ pub fn dbactions_to_function(
     dbaction: types::SupportedDBRequests,
     database: Main,
     mut globalload: GlobalLoad,
-    jobmanager: Arc<RwLock<Jobs>>,
+    jobmanager: Arc<Jobs>,
 ) -> Vec<u8> {
     match dbaction {
         types::SupportedDBRequests::GetFileIdsWhereExtensionIs(file_extension_type) => {

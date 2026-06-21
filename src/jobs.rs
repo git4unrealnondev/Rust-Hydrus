@@ -6,6 +6,7 @@ use sharedtypes;
 use std::collections::BTreeMap;
 use std::collections::{HashMap, HashSet};
 //use std::sync::Mutex;
+use crate::{Arc, RwLock};
 
 ///
 /// Holds the previously seen jobs
@@ -19,31 +20,30 @@ struct PreviouslySeenObj {
     user_data: BTreeMap<String, String>,
 }
 
-#[derive(Clone)]
 pub struct Jobs {
     db: Main,
-    site_job: HashMap<sharedtypes::GlobalPluginScraper, HashSet<sharedtypes::DbJobsObj>>,
-    previously_seen: HashMap<sharedtypes::GlobalPluginScraper, HashSet<PreviouslySeenObj>>,
+    site_job: RwLock<HashMap<sharedtypes::GlobalPluginScraper, HashSet<sharedtypes::DbJobsObj>>>,
+    previously_seen: RwLock<HashMap<sharedtypes::GlobalPluginScraper, HashSet<PreviouslySeenObj>>>,
 }
 
 impl Jobs {
-    pub fn new(db: Main) -> Self {
-        Jobs {
+    pub fn new(db: Main) -> Arc<Self> {
+        Arc::new(Jobs {
             db,
-            site_job: HashMap::new(),
-            previously_seen: HashMap::new(),
-        }
+            site_job: HashMap::new().into(),
+            previously_seen: HashMap::new().into(),
+        })
     }
 
     ///
     /// Sets a job to be running
     ///
     pub fn job_set_is_running(
-        &mut self,
+        &self,
         scraper: &sharedtypes::GlobalPluginScraper,
         job: &sharedtypes::DbJobsObj,
     ) {
-        if let Some(jobs) = self.site_job.get_mut(scraper) {
+        if let Some(jobs) = self.site_job.write().get_mut(scraper) {
             if let Some(mut site_job) = jobs.take(job) {
                 if site_job.id == job.id {
                     site_job.isrunning = true;
@@ -58,7 +58,7 @@ impl Jobs {
     }
 
     pub fn jobs_add(
-        &mut self,
+        &self,
         scraper: sharedtypes::GlobalPluginScraper,
         dbjobsobj: sharedtypes::DbJobsObj,
     ) -> Option<u64> {
@@ -72,7 +72,7 @@ impl Jobs {
     /// Returns the job id number if it exists
     ///
     pub fn jobs_add_internal(
-        &mut self,
+        &self,
         tn: Option<&Transaction>,
         scraper: sharedtypes::GlobalPluginScraper,
         dbjobsobj: sharedtypes::DbJobsObj,
@@ -87,43 +87,38 @@ impl Jobs {
             user_data: dbjobsobj.user_data.clone(),
         };
 
-        // Stupid prefilter because an item can be either a scraper or a plugin. Not sure how I
-        // didn't hit this issue sooner lol
-        // Have to filter here because if a regex or something gets parsed as the "owner" of this
-        // call then the program can poop itself
         if let Some(sharedtypes::ScraperOrPlugin::Scraper(_)) = scraper.storage_type {
         } else {
             return None;
         }
 
-        if let Some(list) = self.previously_seen.get(&scraper) {
-            // If we match directly then we should be good
-            if list.contains(&obj) {
-                /*logging::info_log(&format!(
-                    "Skipping obj because I've seen it already: {:?}",
-                    &obj
-                ));*/
-                return None;
-            }
-
-            for job_to_check in list {
-                match dbjobsobj.cachechecktype {
-                    sharedtypes::JobCacheType::TimeReptimeParam => {}
-                    sharedtypes::JobCacheType::Param => {
-                        dbg!(
-                            &job_to_check.params,
-                            &dbjobsobj.param,
-                            job_to_check.params == dbjobsobj.param
-                        );
-                        if job_to_check.params == dbjobsobj.param {
-                            dbg!("SKIPPING");
-                            return None;
+        // Phase 1: Read-only check in an explicit micro-scope
+        let should_skip = {
+            let mut skip = false;
+            if let Some(list) = self.previously_seen.read().get(&scraper) {
+                if list.contains(&obj) {
+                    skip = true;
+                } else {
+                    for job_to_check in list {
+                        if let sharedtypes::JobCacheType::Param = dbjobsobj.cachechecktype {
+                            if job_to_check.params == dbjobsobj.param {
+                                skip = true;
+                                break;
+                            }
                         }
                     }
                 }
             }
+            skip
+        };
+
+        if should_skip {
+            return None;
         }
+
         let mut out = None;
+
+        // Phase 2: Compute logic and conditional execution
         if time_func::time_secs() >= dbjobsobj.time + dbjobsobj.reptime {
             if dbjobsobj.id.is_none() {
                 let mut temp = dbjobsobj.clone();
@@ -133,32 +128,42 @@ impl Jobs {
                     None => self.db.jobs_add_new(temp),
                 };
                 out = Some(id);
-                // Updates the ID field with something from the db
                 dbjobsobj.id = Some(id);
             }
 
-            match self.previously_seen.get_mut(&scraper) {
-                Some(list) => {
-                    list.insert(obj);
+            // Phase 3: Pure isolated mutations at the bottom
+            // These cannot deadlock because no read or database connections are active here!
+            {
+                let mut prev_seen_guard = self.previously_seen.write();
+                match prev_seen_guard.get_mut(&scraper) {
+                    Some(list) => {
+                        list.insert(obj);
+                    }
+                    None => {
+                        let mut temp = HashSet::new();
+                        temp.insert(obj);
+                        prev_seen_guard.insert(scraper.clone(), temp);
+                    }
                 }
-                None => {
-                    let mut temp = HashSet::new();
-                    temp.insert(obj);
-                    self.previously_seen.insert(scraper.clone(), temp);
-                }
-            }
+            } // Lock 1 drops immediately here
+
             crate::logging::info_log(format!("Adding job: {:?}", &dbjobsobj));
-            match self.site_job.get_mut(&scraper) {
-                Some(list) => {
-                    list.insert(dbjobsobj);
+
+            {
+                let mut site_job_guard = self.site_job.write();
+                match site_job_guard.get_mut(&scraper) {
+                    Some(list) => {
+                        list.insert(dbjobsobj);
+                    }
+                    None => {
+                        let mut temp = HashSet::new();
+                        temp.insert(dbjobsobj);
+                        site_job_guard.insert(scraper, temp);
+                    }
                 }
-                None => {
-                    let mut temp = HashSet::new();
-                    temp.insert(dbjobsobj);
-                    self.site_job.insert(scraper, temp);
-                }
-            }
+            } // Lock 2 drops immediately here
         }
+
         out
     }
 
@@ -170,6 +175,7 @@ impl Jobs {
         scraper: &sharedtypes::GlobalPluginScraper,
     ) -> HashSet<sharedtypes::DbJobsObj> {
         self.site_job
+            .read()
             .get(scraper)
             .cloned()
             .unwrap_or(HashSet::new())
@@ -196,21 +202,21 @@ impl Jobs {
     ///
     /// Gets all the GlobalPluginScraper objs that are loaded for jobs
     ///
-    pub fn job_scrapers_get(&self) -> HashSet<&sharedtypes::GlobalPluginScraper> {
-        self.site_job.keys().collect()
+    pub fn job_scrapers_get(&self) -> HashSet<sharedtypes::GlobalPluginScraper> {
+        self.site_job.read().keys().cloned().collect()
     }
 
     ///
     /// Removes job from internal list and removes it from the db aswell
     ///
     pub fn jobs_remove_dbjob(
-        &mut self,
+        &self,
 
         scraper: &sharedtypes::GlobalPluginScraper,
         data: &sharedtypes::DbJobsObj,
         worker_id: &u64,
     ) {
-        if let Some(job_list) = self.site_job.get_mut(scraper) {
+        if let Some(job_list) = self.site_job.write().get_mut(scraper) {
             let job_list_static = job_list.clone();
             for job in job_list_static {
                 if job.id == data.id && job_list.remove(&job) {
@@ -226,11 +232,11 @@ impl Jobs {
     /// Does not touch DB
     ///
     pub fn jobs_remove_job(
-        &mut self,
+        &self,
         scraper: &sharedtypes::GlobalPluginScraper,
         data: &sharedtypes::DbJobsObj,
     ) {
-        if let Some(job_list) = self.site_job.get_mut(scraper) {
+        if let Some(job_list) = self.site_job.write().get_mut(scraper) {
             job_list.remove(data);
         }
     }
@@ -239,13 +245,13 @@ impl Jobs {
     /// Decrements count if this is applicable to job
     ///
     pub fn jobs_decrement_count(
-        &mut self,
+        &self,
 
         data: &sharedtypes::DbJobsObj,
         scraper: &sharedtypes::GlobalPluginScraper,
         worker_id: &u64,
     ) {
-        if let Some(job_list) = self.site_job.get_mut(scraper)
+        if let Some(job_list) = self.site_job.write().get_mut(scraper)
             && let Some(job) = job_list.get(data)
             && let Some(recursion) = &job.jobmanager.recreation
         {
@@ -269,11 +275,11 @@ impl Jobs {
     /// New function to properly update a job
     ///
     pub fn jobs_update(
-        &mut self,
+        &self,
         data: sharedtypes::DbJobsObj,
         scraper: &sharedtypes::GlobalPluginScraper,
     ) {
-        if let Some(job_list) = self.site_job.get_mut(scraper) {
+        if let Some(job_list) = self.site_job.write().get_mut(scraper) {
             let mut database_updated = false;
 
             // .retain drops elements when the closure returns false
@@ -302,9 +308,9 @@ impl Jobs {
     ///
     /// Clears the previously seen cache if the site_job contains the scraper
     ///
-    pub fn clear_previously_seen_cache(&mut self, scraper: &sharedtypes::GlobalPluginScraper) {
-        if self.site_job.remove(scraper).is_some() {
-            self.previously_seen.clear();
+    pub fn clear_previously_seen_cache(&self, scraper: &sharedtypes::GlobalPluginScraper) {
+        if self.site_job.write().remove(scraper).is_some() {
+            self.previously_seen.write().clear();
         }
     }
 
@@ -318,10 +324,10 @@ impl Jobs {
     ///
     pub fn jobs_run_new(&self) {
         logging::info_log("Checking if we have any Jobs to run.".to_string());
-        if self.site_job.is_empty() {
+        if self.site_job.read().is_empty() {
             logging::info_log("No jobs to run".to_string());
         } else {
-            for (scraper, jobsobj) in self.site_job.iter() {
+            for (scraper, jobsobj) in self.site_job.read().iter() {
                 logging::info_log(format!(
                     "Scraper: {} has {} jobs to run.",
                     scraper.name,
@@ -334,10 +340,7 @@ impl Jobs {
     ///
     ///Loads jobs from DB into the internal Jobs structure
     ///
-    pub fn jobs_load(
-        &mut self,
-        globalplugin_sites: Vec<(sharedtypes::GlobalPluginScraper, String)>,
-    ) {
+    pub fn jobs_load(&self, globalplugin_sites: Vec<(sharedtypes::GlobalPluginScraper, String)>) {
         use std::collections::HashMap;
 
         let hashjobs = self.db.jobs_get_all().clone();

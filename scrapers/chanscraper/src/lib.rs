@@ -47,12 +47,29 @@ pub fn get_site(inp: &str) -> Option<Box<dyn Site>> {
 }
 
 #[no_mangle]
+pub fn on_start(_: &sharedtypes::GlobalPluginScraper) {
+    let setting_name = "scraper-chanscraper-fix-nses".to_string();
+    /*   if let Some(setting) = client::settings_get_name(setting_name.to_string()) {
+        if setting.param == Some("False".to_string()) {
+            return;
+        }
+    } else {
+        client::setting_add(
+            setting_name.clone(),
+            Some(
+                "Should chanscraper attempt to fix its namespaces? Mostly internal use".to_string(),
+            ),
+            None,
+            Some("true".to_string()),
+        );
+    }*/
+}
+#[no_mangle]
 pub fn overall_ordering(
     input: &sharedtypes::CallbackInfoInput,
 ) -> HashMap<String, Vec<sharedtypes::CallbackCustomDataReturning>> {
     let mut out = HashMap::new();
 
-    dbg!(&input);
     for name in input.data_name.iter() {
         // Returns the order of the items from catbox
         if name == "return_order" {
@@ -175,30 +192,38 @@ pub fn get_global_info() -> Vec<sharedtypes::GlobalPluginScraper> {
     fourchan.name = "4chan".into();
     fourchan.storage_type = Some(sharedtypes::ScraperOrPlugin::Scraper(
         sharedtypes::ScraperInfo {
-            ratelimit: (1, Duration::from_secs(1)),
+            ratelimit: (5, Duration::from_secs(1)),
             sites: vec!["4ch".into(), "4chan".into(), "4chan.net".into()],
             priority: DEFAULT_PRIORITY,
             num_threads: None,
-            modifiers: vec![sharedtypes::TargetModifiers {
-                target: sharedtypes::ModifierTarget::Media,
-                modifier: sharedtypes::ScraperModifiers::Header((
-                    "Referrer".into(),
-                    "boards.4chan.org".to_string(),
-                )),
-            }], /* modifiers: vec![sharedtypes::ScraperModifiers::MediaHeader((
-                    "Referrer".into(),
-                    "boards.4chan.org".to_string(),
-                ))],*/
+            modifiers: vec![
+                sharedtypes::TargetModifiers {
+                    target: sharedtypes::ModifierTarget::Media,
+                    modifier: sharedtypes::ScraperModifiers::Header((
+                        "Referrer".into(),
+                        "boards.4chan.org".to_string(),
+                    )),
+                },
+                sharedtypes::TargetModifiers {
+                    target: sharedtypes::ModifierTarget::Text,
+                    modifier: sharedtypes::ScraperModifiers::Timeout(Some(Duration::from_secs(30))),
+                },
+                sharedtypes::TargetModifiers {
+                    target: sharedtypes::ModifierTarget::Media,
+                    modifier: sharedtypes::ScraperModifiers::Timeout(Some(Duration::from_secs(60))),
+                },
+            ],
         },
     ));
-    fourchan.callbacks = vec![sharedtypes::GlobalCallbacks::Callback(
-        sharedtypes::CallbackInfo {
+    fourchan.callbacks = vec![
+        sharedtypes::GlobalCallbacks::Callback(sharedtypes::CallbackInfo {
             func: "overall_ordering".to_string(),
             vers: 0,
             data_name: vec!["return_order".to_string(), "return_styling".to_string()],
             data: vec![],
-        },
-    )];
+        }),
+        sharedtypes::GlobalCallbacks::Start(sharedtypes::StartupThreadType::Spawn),
+    ];
 
     let mut lulz = sharedtypes::return_default_globalpluginparser();
     lulz.name = "lulz.net".into();

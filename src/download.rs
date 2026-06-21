@@ -24,6 +24,8 @@ use std::io::Cursor;
 use std::io::Read;
 use std::str::FromStr;
 use std::time::Duration;
+use systemstat::Platform;
+use systemstat::System;
 use url::Url;
 
 extern crate reqwest;
@@ -88,7 +90,7 @@ pub fn get_modifiers(
 ///
 /// Waits a bit for process control
 ///
-pub fn ratelimiter_wait(ratelimit_object: &Arc<Ratelimiter>) {
+pub async fn ratelimiter_wait(ratelimit_object: &Arc<Ratelimiter>) {
     loop {
         let limit;
         {
@@ -97,7 +99,7 @@ pub fn ratelimiter_wait(ratelimit_object: &Arc<Ratelimiter>) {
         match limit {
             Ok(_) => break,
             Err(sleep) => {
-                std::thread::sleep(sleep);
+                tokio::time::sleep(sleep).await;
             }
         }
     }
@@ -200,12 +202,8 @@ pub async fn dltext_new(
             }
         };
 
-        // Async code needs this to not block
-        let limiter = Arc::clone(&ratelimiter_obj);
-        tokio::task::spawn_blocking(move || {
-            ratelimiter_wait(&limiter);
-        })
-        .await;
+        ratelimiter_wait(ratelimiter_obj).await;
+
         logging::info_log(format!(
             "Worker: {} JobId: {} -- Spawned web reach to: {}",
             worker_id, job_id, &url_string
@@ -236,7 +234,7 @@ pub async fn dltext_new(
                 if let Err(err) = res.error_for_status_ref() {
                     if err.is_timeout() {
                         let time_secs = 5;
-                        std::thread::sleep(std::time::Duration::from_secs(time_secs));
+                        tokio::time::sleep(std::time::Duration::from_secs(time_secs)).await;
                         logging::error_log(format!(
                             "Worker: {} JobId: {} -- While processing job {:?} was unable to download text. Had err {:?} sleeping for {} seconds.",
                             &worker_id, &job_id, &url_string, err, time_secs
@@ -249,6 +247,10 @@ pub async fn dltext_new(
                     let res_url = res.url().to_string();
                     match res.text().await {
                         Ok(text) => {
+                            logging::info_log(format!(
+                                "WORKER: {} JOB: {:?} : after dltext download",
+                                &worker_id, &job_id
+                            ));
                             return Ok((text, res_url));
                         }
                         Err(_) => {
@@ -261,7 +263,7 @@ pub async fn dltext_new(
             Err(err) => {
                 if err.is_timeout() {
                     let time_secs = 5;
-                    std::thread::sleep(std::time::Duration::from_secs(time_secs));
+                    tokio::time::sleep(std::time::Duration::from_secs(time_secs)).await;
                     logging::error_log(format!(
                         "Worker: {} JobId: {} -- While processing job {:?} was unable to download text. Had err {:?} sleeping for {} seconds.",
                         &worker_id, &job_id, &url_string, err, time_secs
@@ -468,13 +470,7 @@ pub async fn dlfile_new(
                 }
                 let url = url.unwrap();
 
-                // FIX: Offload synchronous ratelimiter to a blocking thread pool safely
-                let limiter = Arc::clone(ratelimiter_obj);
-                tokio::task::spawn_blocking(move || {
-                    ratelimiter_wait(&limiter);
-                })
-                .await
-                .unwrap();
+                ratelimiter_wait(&ratelimiter_obj).await;
 
                 logging::info_log(format!("Downloading: {}", &source_url));
 
@@ -521,6 +517,30 @@ pub async fn dlfile_new(
 
             // === ASYNC CHUNK PROGRESS REWRITE ===
             let total_size = response.content_length().unwrap_or(0);
+
+            {
+                let wid = workerid.clone();
+                let jid = jobid.clone();
+                // Checks if system memory is large enough plus some overage
+                let _ = tokio::task::spawn_blocking(async move || {
+                loop {
+                    let sys = System::new();
+                    if let Ok(meminfo) = sys.memory() {
+                        let freemem = (meminfo.free.as_u64() as f64) * 0.8;
+                        if freemem > total_size as f64 {
+                            break;
+                        } else {
+                            logging::info_log(format!("Worker: {wid} JobId: {jid} -- Waiting 1 sec for memory to free up."));
+                            tokio::time::sleep(Duration::from_secs(1)).await;
+                        }
+                    } else {
+                        break;
+                    }
+                }
+            })
+            .await;
+            }
+
             let mut downloaded: u64 = 0;
             let mut collected_bytes = bytes::BytesMut::with_capacity(if total_size > 0 {
                 total_size as usize
@@ -615,31 +635,33 @@ pub async fn dlfile_new(
         let ext_clone = file_ext.clone();
         let mut file_clone = file.clone(); // Assuming FileObjectMain implements Clone
         let source_url_clone = Some(source_url.clone());
+        let ctx_clone_spawn = ctx.clone();
         let ctx_clone = ctx.clone();
 
+        let (tx, rx) = tokio::sync::oneshot::channel();
+
         // 2. Offload the entire blocking operation to spawn_blocking
-        let file_id = tokio::task::spawn_blocking(move || {
-            process_bytes(
+        ctx_clone_spawn.heavy_processing_pool.spawn(move || {
+            let res = process_bytes(
                 &bytes_clone,
                 &hash_clone,
                 &ext_clone,
                 &mut file_clone,
                 source_url_clone.as_ref(),
                 ctx_clone,
-            )
-        })
-        .await
-        .unwrap();
+            );
 
-        // 3. Sync back the modified file metadata if your engine needs it
-        //*file = file_clone;
+            let _ = tx.send(res);
+        });
+
+        let file_id = rx.await.unwrap_or(None);
 
         if let Some(mut file_storage) = file_storage.clone() {
             file_storage.status = FilesStatus::Done;
             ctx.update_file(workerid, jobid, &file_storage);
         }
 
-        return FileReturnStatus::File((hash, file_ext, file_id.unwrap()));
+        return FileReturnStatus::File((hash, file_ext, file_id.unwrap_or(0)));
     }
 
     FileReturnStatus::TryLater
