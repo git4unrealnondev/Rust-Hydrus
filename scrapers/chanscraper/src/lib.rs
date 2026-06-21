@@ -398,8 +398,8 @@ fn nsout(inp: &Nsid) -> sharedtypes::GenericNamespaceObj {
             description: Some("A 4chan's post's timestamp UNIX style".to_string()),
         },
         Nsid::ThreadId => sharedtypes::GenericNamespaceObj {
-            name: "Thread_ID".to_string(),
-            description: Some("The thread ID from 4chan".to_string()),
+            name: "Thread_ID_Unique".to_string(),
+            description: Some("A unique thread_id for the site, board".to_string()),
         },
         Nsid::PostComment => sharedtypes::GenericNamespaceObj {
             name: "Thread_Comment".to_string(),
@@ -469,37 +469,35 @@ pub fn parser(
                             tag_type: sharedtypes::TagType::Normal,
                             limit_to: Some(thread_site),
                         };
-                        let thread = sharedtypes::TagObject {
-                            namespace: nsout(&Nsid::ThreadId),
-                            tag: scraperdata
+
+                        let unique_thread_identifier = format!(
+                            "{}-{}-{}",
+                            scraperdata
                                 .job
                                 .user_data
                                 .get("ThreadID")
                                 .unwrap()
                                 .to_string(),
+                            bcode,
+                            scraperdata.job.site
+                        );
+
+                        let thread = sharedtypes::TagObject {
+                            namespace: nsout(&Nsid::ThreadId),
+                            tag: unique_thread_identifier.clone(),
                             tag_type: sharedtypes::TagType::Normal,
                             relates_to: Some(boatd),
                         };
                         out.tags.insert(thread);
                         let subthread = sharedtypes::SubTag {
                             namespace: nsout(&Nsid::ThreadId),
-                            tag: scraperdata
-                                .job
-                                .user_data
-                                .get("ThreadID")
-                                .unwrap()
-                                .to_string(),
+                            tag: unique_thread_identifier.clone(),
                             tag_type: sharedtypes::TagType::Normal,
                             limit_to: None,
                         };
                         let tagthread = sharedtypes::Tag {
                             namespace: nsout(&Nsid::ThreadId),
-                            tag: scraperdata
-                                .job
-                                .user_data
-                                .get("ThreadID")
-                                .unwrap()
-                                .to_string(),
+                            tag: unique_thread_identifier,
                         };
 
                         for each in chjson["posts"].members() {
