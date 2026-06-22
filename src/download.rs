@@ -247,10 +247,6 @@ pub async fn dltext_new(
                     let res_url = res.url().to_string();
                     match res.text().await {
                         Ok(text) => {
-                            logging::info_log(format!(
-                                "WORKER: {} JOB: {:?} : after dltext download",
-                                &worker_id, &job_id
-                            ));
                             return Ok((text, res_url));
                         }
                         Err(_) => {
@@ -263,11 +259,11 @@ pub async fn dltext_new(
             Err(err) => {
                 if err.is_timeout() {
                     let time_secs = 5;
-                    tokio::time::sleep(std::time::Duration::from_secs(time_secs)).await;
                     logging::error_log(format!(
                         "Worker: {} JobId: {} -- While processing job {:?} was unable to download text. Had err {:?} sleeping for {} seconds.",
                         &worker_id, &job_id, &url_string, err, time_secs
                     ));
+                    tokio::time::sleep(std::time::Duration::from_secs(time_secs)).await;
 
                     cnt += 1;
                     continue;
@@ -463,14 +459,14 @@ pub async fn dlfile_new(
                     }
                     Some(fileurl) => fileurl,
                 };
-                let url = Url::parse(&source_url);
+                let url = Url::parse(source_url);
                 if url.is_err() {
                     error_log(format!("Error while parsing url {} {:?}", source_url, url));
                     return FileReturnStatus::DeadUrl(source_url.to_string());
                 }
                 let url = url.unwrap();
 
-                ratelimiter_wait(&ratelimiter_obj).await;
+                ratelimiter_wait(ratelimiter_obj).await;
 
                 logging::info_log(format!("Downloading: {}", &source_url));
 

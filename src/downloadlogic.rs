@@ -629,7 +629,6 @@ impl ScraperInternal {
             let mut set = JoinSet::new();
             for job in jobstorage {
                 if self.ctx.jobs.should_run_job(&self.scraper, &job) {
-                    logging::log(format!("DOWNLOADLOGIC I SEE JOB {:?}", &job));
                     let scraper_worker = Arc::clone(&self);
                     set.spawn(async move { scraper_worker.run_job(job).await });
                     spawned_any_work = true;
