@@ -168,6 +168,30 @@ impl Jobs {
     }
 
     ///
+    /// Determines if a job should be run or not
+    /// NOTE references the internal job object for values so please ensure thats updated
+    ///
+    pub fn should_run_job(
+        &self,
+        scraper: &sharedtypes::GlobalPluginScraper,
+        job: &sharedtypes::DbJobsObj,
+    ) -> bool {
+        if let Some(jobs_local) = self.site_job.read().get(scraper) {
+            for job_local in jobs_local {
+                if job_local.id == job.id {
+                    if time_func::time_secs() >= job_local.time + job_local.reptime
+                        && !job_local.isrunning
+                    {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        false
+    }
+
+    ///
     /// Gets if a job exists inside for a scraper
     ///
     pub fn jobs_get(

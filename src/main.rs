@@ -221,7 +221,7 @@ async fn main() -> io::Result<()> {
         let sites = globalload.return_all_sites().clone();
         // Checks if we need to load any jobs
         let jm = jobmanager.clone();
-        tokio::task::spawn_blocking(move || {
+        let _ = tokio::task::spawn_blocking(move || {
             jm.jobs_load(sites);
         })
         .await;

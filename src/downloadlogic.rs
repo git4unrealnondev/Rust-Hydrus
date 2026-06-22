@@ -251,12 +251,16 @@ impl ScraperInternal {
                 let mut data = job.clone();
                 data.time = crate::time_func::time_secs();
                 data.reptime = *timestamp;
+                data.isrunning = false;
                 if count.is_some() {
                     self.ctx
                         .jobs
                         .jobs_decrement_count(&data, &self.scraper, &job.id.unwrap_or(0));
                 }
-                self.ctx.db.jobs_update_db(data);
+
+                self.ctx.jobs.jobs_update(data.clone(), &self.scraper);
+
+                //self.ctx.db.jobs_update_db(data);
             }
             return true;
         }
@@ -266,11 +270,16 @@ impl ScraperInternal {
     async fn run_job(&self, job: sharedtypes::DbJobsObj) {
         let mut should_remove_job = true;
 
+        logging::info_log(format!(
+            "Worker: {} JobId: {} -- Starting Job {:?}",
+            self.id, & job.id.unwrap_or(0),
+            &job
+        ));
+
         {
             self.ctx.jobs.job_set_is_running(&self.scraper, &job);
         }
-        // FIX: Insert safely using entry to prevent erasing other parallel jobs sharing this worker ID
-        // Safely ensure the nested JobId slot exists without touching any other parallel jobs
+
         self.ctx
             .files
             .write()
@@ -335,7 +344,9 @@ impl ScraperInternal {
                     Err(err) => {
                         logging::error_log(format!(
                             "Worker: {} JobId: {} -- Parameter parsing error: {:?}",
-                            self.id, self.id, err
+                            self.id,
+                            job.id.unwrap_or(0),
+                            err
                         ));
                         self.ctx.jobs.jobs_remove_job(&scraper, &job);
                         should_remove_job = false;
@@ -435,10 +446,6 @@ impl ScraperInternal {
                 }
                 _ => break 'urlloop,
             }
-            logging::info_log(format!(
-                "WORKER: {} JOB: {:?} : after parsing ",
-                &self.id, &job.id
-            ));
 
             for scrap in scraper_return {
                 match scrap {
@@ -478,10 +485,6 @@ impl ScraperInternal {
                             }
                         });
 
-                        logging::info_log(format!(
-                            "WORKER: {} JOB: {:?} : after jobs ",
-                            &self.id, &job.id
-                        ));
                         let scrap_files = scrap_data
                             .files
                             .clone()
@@ -507,10 +510,6 @@ impl ScraperInternal {
                             files_storage,
                         );
 
-                        logging::info_log(format!(
-                            "WORKER: {} JOB: {:?} : after files ",
-                            &self.id, &job.id
-                        ));
                         let mut set = JoinSet::new();
                         for (file, file_storage) in scrap_files {
                             let file = file.clone();
@@ -535,34 +534,55 @@ impl ScraperInternal {
                             });
                         }
                         set.join_all().await;
-                        logging::info_log(format!(
-                            "WORKER: {} JOB: {:?} : after file downloading ",
-                            &self.id, &job.id
-                        ));
                     }
                     sharedtypes::ScraperReturn::Nothing => {
                         logging::info_log(format!(
-                            "Worker: {} -- Exiting loop due to Nothing.",
-                            self.id
+                            "Worker: {} JobId: {} -- Exiting loop due to Nothing.",
+                            self.id,
+                            job.id.unwrap_or(0)
                         ));
                         break 'urlloop;
                     }
                     sharedtypes::ScraperReturn::Stop(stop_string) => {
-                        logging::error_log(format!("Stopping job: {:?}", stop_string));
+                        logging::error_log(format!(
+                            "Worker: {} JobId: {} -- Stopping job: {:?}",
+                            self.id,
+                            job.id.unwrap_or(0),
+                            stop_string
+                        ));
                         break 'urlloop;
                     }
                     sharedtypes::ScraperReturn::Fatal(fatal_string) => {
-                        panic!("EMC STOP DUE TO: {}", fatal_string);
+                        panic!(
+                            "Worker: {} JobId: {} -- EMC STOP DUE TO: {}",
+                            self.id,
+                            job.id.unwrap_or(0),
+                            fatal_string
+                        );
                     }
                     sharedtypes::ScraperReturn::Timeout(timeout_time) => {
+                        logging::info_log(format!(
+                            "Worker: {} JobId: {} -- Timeout for: {:?} Seconds",
+                            self.id,
+                            job.id.unwrap_or(0),
+                            &timeout_time
+                        ));
                         tokio::time::sleep(Duration::from_secs(timeout_time)).await;
                         continue;
                     }
                     sharedtypes::ScraperReturn::RetryLater(try_later_time) => {
+                        logging::info_log(format!(
+                            "Worker: {} JobId: {} -- Retrying later for: {:?}",
+                            self.id,
+                            job.id.unwrap_or(0),
+                            &try_later_time
+                        ));
                         let mut data = job.clone();
                         data.time = crate::time_func::time_secs();
                         data.reptime = try_later_time.as_secs();
-                        self.ctx.jobs.jobs_add(self.scraper.clone(), data);
+                        data.isrunning = false;
+
+                        self.ctx.jobs.jobs_update(data.clone(), &self.scraper);
                         should_remove_job = false;
                     }
                 }
@@ -573,27 +593,26 @@ impl ScraperInternal {
             self.ctx
                 .jobs
                 .jobs_remove_dbjob(&self.scraper, &job, &self.id);
-
-            let worker_id = self.id;
-            let job_id = job.id.unwrap_or(0);
-            let uisender = self.ctx.uisender.clone();
-            let ctx_files = self.ctx.clone(); // Clone the Arc pointer to files
-
-            // Clears UI stuff
-            tokio::spawn(async move {
-                // Hold the completed state on the terminal screen for 3 seconds
-                tokio::time::sleep(std::time::Duration::from_secs(3)).await;
-
-                // Evicts data from internal structure and sends UI job
-                ctx_files
-                    .files
-                    .write()
-                    .get_mut(&worker_id)
-                    .map(|job_map| job_map.remove(&job_id));
-
-                let _ = uisender.send(UIEvent::ClearJob { worker_id, job_id });
-            });
         }
+        let worker_id = self.id;
+        let job_id = job.id.unwrap_or(0);
+        let uisender = self.ctx.uisender.clone();
+        let ctx_files = self.ctx.clone(); // Clone the Arc pointer to files
+
+        // Clears UI stuff
+        tokio::spawn(async move {
+            // Hold the completed state on the terminal screen for 3 seconds
+            tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+
+            // Evicts data from internal structure and sends UI job
+            ctx_files
+                .files
+                .write()
+                .get_mut(&worker_id)
+                .map(|job_map| job_map.remove(&job_id));
+
+            let _ = uisender.send(UIEvent::ClearJob { worker_id, job_id });
+        });
     }
 
     pub async fn start_scraper(self: Arc<Self>) {
@@ -609,7 +628,8 @@ impl ScraperInternal {
 
             let mut set = JoinSet::new();
             for job in jobstorage {
-                if !job.isrunning {
+                if self.ctx.jobs.should_run_job(&self.scraper, &job) {
+                    logging::log(format!("DOWNLOADLOGIC I SEE JOB {:?}", &job));
                     let scraper_worker = Arc::clone(&self);
                     set.spawn(async move { scraper_worker.run_job(job).await });
                     spawned_any_work = true;
@@ -617,13 +637,6 @@ impl ScraperInternal {
             }
 
             if !spawned_any_work && set.is_empty() {
-                logging::info_log("All found jobs are already running. Exiting loop safely.");
-                logging::info_log(format!(
-                    "SETSPAWNED {} SET {}",
-                    spawned_any_work,
-                    set.is_empty()
-                ));
-                //   self.finish_scraper();
                 break 'mainloop;
             }
 
